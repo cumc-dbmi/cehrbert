@@ -2,7 +2,7 @@ from os import path
 
 import pyspark.sql.functions as F
 import pyspark.sql.types as T
-from pyspark.sql import Window
+from pyspark.sql import Window as W
 
 SUB_WINDOW_SIZE = 30
 
@@ -76,16 +76,16 @@ def write_sequences_to_csv(spark, patient_sequence_path, patient_sequence_csv_pa
 # -
 def join_domain_time_span(domain_tables, span=0):
     """Standardize the format of OMOP domain tables using a time frame
-    
+
     Keyword arguments:
     domain_tables -- the array containing the OMOOP domain tabls except visit_occurrence
     span -- the span of the time window
-    
-    The the output columns of the domain table is converted to the same standard format as the following 
-    (person_id, standard_concept_id, date, lower_bound, upper_bound, domain). 
-    In this case, co-occurrence is defined as those concept ids that have co-occurred 
+
+    The the output columns of the domain table is converted to the same standard format as the following
+    (person_id, standard_concept_id, date, lower_bound, upper_bound, domain).
+    In this case, co-occurrence is defined as those concept ids that have co-occurred
     within the same time window of a patient.
-    
+
     """
     patient_event = None
 
@@ -120,15 +120,15 @@ def join_domain_time_span(domain_tables, span=0):
 
 def join_domain_tables(domain_tables):
     """Standardize the format of OMOP domain tables using a time frame
-    
+
     Keyword arguments:
     domain_tables -- the array containing the OMOOP domain tabls except visit_occurrence
-    
-    The the output columns of the domain table is converted to the same standard format as the following 
-    (person_id, standard_concept_id, date, lower_bound, upper_bound, domain). 
-    In this case, co-occurrence is defined as those concept ids that have co-occurred 
+
+    The the output columns of the domain table is converted to the same standard format as the following
+    (person_id, standard_concept_id, date, lower_bound, upper_bound, domain).
+    In this case, co-occurrence is defined as those concept ids that have co-occurred
     within the same time window of a patient.
-    
+
     """
     patient_event = None
 
@@ -191,3 +191,40 @@ def roll_up_to_drug_ingredients(drug_exposure, concept, concept_ancestor):
         .select(drug_ingredient_fields)
 
     return drug_exposure
+
+
+def create_sequence_data(spark, patient_event, date_filter=None):
+    take_first = F.udf(lambda rows: [row[0] for row in sorted(rows, key=lambda x: (x[0], x[1]))],
+                       T.ArrayType(T.IntegerType()))
+    take_second = F.udf(lambda rows: [str(row[1]) for row in sorted(rows, key=lambda x: (x[0], x[1]))],
+                        T.ArrayType(T.StringType()))
+    take_third = F.udf(lambda rows: [row[2] for row in sorted(rows, key=lambda x: (x[0], x[1]))],
+                       T.ArrayType(T.IntegerType()))
+    take_fourth = F.udf(lambda rows: [row[3] for row in sorted(rows, key=lambda x: (x[0], x[1]))],
+                        T.ArrayType(T.IntegerType()))
+
+    if date_filter:
+        patient_event = patient_event.where(F.col('date') >= date_filter)
+
+    patient_event = patient_event \
+        .withColumn('date_in_week', (F.unix_timestamp('date') / F.lit(24 * 60 * 60 * 7)).cast('int')).distinct() \
+        .withColumn('earliest_visit_date', F.min('date_in_week').over(W.partitionBy('visit_occurrence_id'))) \
+        .withColumn('visit_rank_order', F.dense_rank().over(W.partitionBy('person_id').orderBy('earliest_visit_date'))) \
+        .withColumn('concept_position', F.dense_rank().over(
+        W.partitionBy('person_id', 'visit_occurrence_id').orderBy('date_in_week', 'standard_concept_id'))) \
+        .withColumn('date_concept_id_period',
+                    F.struct(F.col('date_in_week'), F.col('standard_concept_id'), F.col('concept_position'),
+                             F.col('visit_rank_order')))
+
+    patient_event = patient_event.groupBy('person_id') \
+        .agg(F.collect_set('date_concept_id_period').alias('date_concept_id_period'),
+             F.min('earliest_visit_date').alias('earliest_visit_date'),
+             F.max('date').alias('max_event_date')) \
+        .withColumn('dates', take_first('date_concept_id_period')) \
+        .withColumn('concept_ids', take_second('date_concept_id_period')) \
+        .withColumn('concept_positions', take_third('date_concept_id_period')) \
+        .withColumn('concept_id_visit_orders', take_fourth('date_concept_id_period')) \
+        .select('person_id', 'earliest_visit_date', 'max_event_date', 'dates', 'concept_ids', 'concept_positions',
+                'concept_id_visit_orders')
+
+    return patient_event
