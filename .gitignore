@@ -1,2 +1,9 @@
 .idea/
 venv/
+
+*ipynb_checkpoints/
+*h5
+*logs
+*nohup.out
+*ipynb
+
