@@ -1,46 +1,29 @@
+from config.model_configs import BertConfig, create_bert_model_config
+from config.parse_args import create_parse_args_base_bert
+from trainers.train_time_aware_embeddings import *
+from models.bert_models import *
+from utils.utils import CosineLRSchedule
+from models.custom_layers import get_custom_objects
+from data_generators.data_generator import BertBatchGenerator
+
 from keras_transformer.bert import (masked_perplexity,
                                     MaskedPenalizedSparseCategoricalCrossentropy)
 
 from tensorflow.keras import optimizers
 from tensorflow.keras import callbacks
 
-from trainers.train_time_aware_embeddings import *
-from models.bert_models import *
-from utils.utils import CosineLRSchedule
-from models.custom_layers import get_custom_objects
-
-from data_generators.data_generator import BertBatchGenerator
-
 
 class BertTrainer(Trainer):
     confidence_penalty = 0.1
 
-    def __init__(self, input_folder,
-                 output_folder,
-                 concept_embedding_size,
-                 max_seq_length,
-                 time_window_size,
-                 depth,
-                 num_heads,
-                 batch_size,
-                 epochs,
-                 learning_rate,
-                 tf_board_log_path):
+    def __init__(self, config: BertConfig):
 
-        super(BertTrainer, self).__init__(input_folder=input_folder,
-                                          output_folder=output_folder,
-                                          concept_embedding_size=concept_embedding_size,
-                                          max_seq_length=max_seq_length,
-                                          time_window_size=time_window_size,
-                                          batch_size=batch_size,
-                                          epochs=epochs,
-                                          learning_rate=learning_rate,
-                                          tf_board_log_path=tf_board_log_path)
-        self.depth = depth
-        self.num_heads = num_heads
+        super(BertTrainer, self).__init__(config=config)
+        self.depth = config.depth
+        self.num_heads = config.num_heads
 
-    def create_tf_dataset(self, tokenizer, training_data):
-        data_generator = BertBatchGenerator(patient_event_sequence=training_data,
+    def create_tf_dataset(self, sequence_data, tokenizer):
+        data_generator = BertBatchGenerator(patient_event_sequence=sequence_data,
                                             mask_token_id=tokenizer.get_mask_token_id(),
                                             unused_token_id=tokenizer.get_unused_token_id(),
                                             max_sequence_length=self.max_seq_length,
@@ -106,39 +89,8 @@ class BertTrainer(Trainer):
         return model
 
 
-def create_parse_args_base_bert():
-    parser = create_parse_args()
-
-    parser.add_argument('-d',
-                        '--depth',
-                        dest='depth',
-                        action='store',
-                        default=5,
-                        required=False)
-
-    parser.add_argument('-nh',
-                        '--num_heads',
-                        dest='num_heads',
-                        action='store',
-                        default=8,
-                        required=False)
-    return parser
-
-
 def main(args):
-    trainer = BertTrainer(input_folder=args.input_folder,
-                          output_folder=args.output_folder,
-                          concept_embedding_size=args.concept_embedding_size,
-                          max_seq_length=args.max_seq_length,
-                          time_window_size=args.time_window_size,
-                          depth=args.depth,
-                          num_heads=args.num_heads,
-                          batch_size=args.batch_size,
-                          epochs=args.epochs,
-                          learning_rate=args.learning_rate,
-                          tf_board_log_path=args.tf_board_log_path)
-
-    trainer.run()
+    BertTrainer(create_bert_model_config(args)).run()
 
 
 if __name__ == "__main__":

@@ -19,7 +19,7 @@ def main(spark, input_folder, domain_table_list, date_filter):
     patient_event = join_domain_tables(domain_tables)
     patient_event = patient_event.where('visit_occurrence_id IS NOT NULL').distinct()
     sequence_data = create_sequence_data(spark, patient_event, date_filter)
-    sequence_data.write.mode('overwrite').parquet(os.path.join(input_folder, patient_sequence))
+    sequence_data.write.mode('overwrite').parquet(os.path.join(input_folder, PATIENT_SEQUENCE))
 
 
 if __name__ == '__main__':

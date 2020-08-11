@@ -1,3 +1,6 @@
+from config.parse_args import create_parse_args_temporal_bert
+from config.model_configs import TemporalBertConfig, create_temporal_bert_model_config
+
 from trainers.train_bert_only import *
 from models.bert_models import *
 from models.custom_layers import get_custom_objects
@@ -6,32 +9,9 @@ from models.custom_layers import get_custom_objects
 class TemporalBertTrainer(BertTrainer):
     confidence_penalty = 0.1
 
-    def __init__(self, input_folder,
-                 time_attention_folder,
-                 output_folder,
-                 concept_embedding_size,
-                 max_seq_length,
-                 time_window_size,
-                 depth,
-                 num_heads,
-                 batch_size,
-                 epochs,
-                 learning_rate,
-                 tf_board_log_path):
-
-        super(TemporalBertTrainer, self).__init__(input_folder=input_folder,
-                                                  output_folder=output_folder,
-                                                  concept_embedding_size=concept_embedding_size,
-                                                  max_seq_length=max_seq_length,
-                                                  time_window_size=time_window_size,
-                                                  depth=depth,
-                                                  num_heads=num_heads,
-                                                  batch_size=batch_size,
-                                                  epochs=epochs,
-                                                  learning_rate=learning_rate,
-                                                  tf_board_log_path=tf_board_log_path)
-        self.time_attention_folder = time_attention_folder
-        self.time_attention_model_path = os.path.join(time_attention_folder, 'model_time_aware_embeddings.h5')
+    def __init__(self, config: TemporalBertConfig):
+        super(TemporalBertTrainer, self).__init__(config)
+        self.time_attention_model_path = config.time_attention_model_path
 
     def create_model(self, vocabulary_size):
         another_strategy = tf.distribute.OneDeviceStrategy("/cpu:0")
@@ -72,31 +52,7 @@ class TemporalBertTrainer(BertTrainer):
 
 
 def main(args):
-    trainer = TemporalBertTrainer(input_folder=args.input_folder,
-                                  time_attention_folder=args.time_attention_folder,
-                                  output_folder=args.output_folder,
-                                  concept_embedding_size=args.concept_embedding_size,
-                                  max_seq_length=args.max_seq_length,
-                                  time_window_size=args.time_window_size,
-                                  depth=args.depth,
-                                  num_heads=args.num_heads,
-                                  batch_size=args.batch_size,
-                                  epochs=args.epochs,
-                                  learning_rate=args.learning_rate,
-                                  tf_board_log_path=args.tf_board_log_path)
-
-    trainer.run()
-
-
-def create_parse_args_temporal_bert():
-    parser = create_parse_args_base_bert()
-    parser.add_argument('-ti',
-                        '--time_attention_folder',
-                        dest='time_attention_folder',
-                        action='store',
-                        help='The path for your time attention input_folder where the raw data is',
-                        required=True)
-    return parser
+    TemporalBertTrainer(create_temporal_bert_model_config(args)).run()
 
 
 if __name__ == "__main__":

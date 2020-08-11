@@ -1,56 +1,42 @@
-import argparse
-
 import os
-import itertools
 import pickle
 
 import pandas as pd
+import tensorflow as tf
 
-from models.custom_layers import get_custom_objects
+from config.model_configs import Config, create_time_attention_model_config
+from config.parse_args import create_parse_args
 from data_generators.data_generator import BatchGenerator
 from data_generators.tokenizer import ConceptTokenizer
+from models.custom_layers import get_custom_objects
 from models.time_attention_models import time_attention_cbow_model
 from utils.utils import CosineLRSchedule
 
-import tensorflow as tf
-
 
 class Trainer:
-    def __init__(self,
-                 input_folder,
-                 output_folder,
-                 concept_embedding_size,
-                 max_seq_length,
-                 time_window_size,
-                 batch_size,
-                 epochs,
-                 learning_rate,
-                 tf_board_log_path):
+    def __init__(self, config: Config):
 
-        self.input_folder = input_folder
-        self.output_folder = output_folder
-        self.concept_embedding_size = concept_embedding_size
-        self.max_seq_length = max_seq_length
-        self.time_window_size = time_window_size
-        self.batch_size = batch_size
-        self.epochs = epochs
-        self.learning_rate = learning_rate
-        self.tf_board_log_path = tf_board_log_path
+        self.parquet_data_path = config.parquet_data_path
+        self.feather_data_path = config.feather_data_path
+        self.tokenizer_path = config.tokenizer_path
+        self.model_path = config.model_path
 
-        self.raw_input_data_path = os.path.join(self.input_folder, 'visit_event_sequence_v2')
-        self.training_data_path = os.path.join(self.input_folder, 'patient_event_sequence.pickle')
-        self.tokenizer_path = os.path.join(self.output_folder, 'tokenizer.pickle')
-        self.model_path = os.path.join(self.output_folder, 'model_time_aware_embeddings.h5')
+        self.concept_embedding_size = config.concept_embedding_size
+        self.max_seq_length = config.max_seq_length
+        self.time_window_size = config.time_window_size
+        self.batch_size = config.batch_size
+        self.epochs = config.epochs
+        self.learning_rate = config.learning_rate
+        self.tf_board_log_path = config.tf_board_log_path
 
     def run(self):
 
-        training_data = self.process_raw_input()
         # shuffle the training data
-        training_data = training_data.sample(frac=1).reset_index(drop=True)
+        shuffled_sequence_data = self.create_if_not_exists().sample(frac=1).reset_index(drop=True)
 
-        tokenizer, training_data = self.tokenize_concept_sequences(training_data)
+        tokenizer, shuffled_sequence_data = self.tokenize_concept_sequences(shuffled_sequence_data)
 
-        dataset, steps_per_epoch = self.create_tf_dataset(tokenizer, training_data)
+        dataset, steps_per_epoch = self.create_tf_dataset(shuffled_sequence_data, tokenizer)
 
         self.train(vocabulary_size=tokenizer.get_vocab_size(),
                    dataset=dataset,
@@ -58,10 +44,25 @@ class Trainer:
                    steps_per_epoch=steps_per_epoch + 1,
                    val_steps_per_epoch=100)
 
-    def create_tf_dataset(self, tokenizer, training_data):
+    def create_if_not_exists(self):
+        """
+        Process the raw input data
+        :return: save and return the training dataset
+        """
+        if not os.path.exists(self.feather_data_path):
+            pd.read_parquet(self.parquet_data_path).to_feather(self.feather_data_path)
+        return pd.read_feather(self.feather_data_path)
+
+    def create_tf_dataset(self, sequence_data, tokenizer):
+        """
+        Create a tensorflow dataset
+        :param sequence_data:
+        :param tokenizer:
+        :return:
+        """
 
         unused_token_id = tokenizer.get_unused_token_id()
-        batch_generator = BatchGenerator(patient_event_sequence=training_data,
+        batch_generator = BatchGenerator(patient_event_sequence=sequence_data,
                                          max_sequence_length=self.max_seq_length,
                                          batch_size=self.batch_size,
                                          unused_token_id=unused_token_id)
@@ -74,38 +75,6 @@ class Trainer:
         dataset = dataset.take(batch_generator.get_steps_per_epoch()).cache().repeat()
         dataset = dataset.shuffle(5).prefetch(tf.data.experimental.AUTOTUNE)
         return dataset, batch_generator.get_steps_per_epoch()
-
-    def process_raw_input(self):
-        """
-        Process the raw input data
-        :return: save and return the training dataset
-        """
-        if os.path.exists(self.training_data_path):
-            training_data = pd.read_pickle(self.training_data_path)
-        else:
-            visit_concepts = pd.read_parquet(self.raw_input_data_path)
-            visit_concepts['concept_id_visit_orders'] = visit_concepts['concept_ids'].apply(len) * visit_concepts[
-                'visit_rank_order'].apply(
-                lambda v: [v])
-
-            patient_concept_ids = visit_concepts.sort_values(['person_id', 'visit_rank_order']) \
-                .groupby('person_id')['concept_ids'].apply(lambda x: list(itertools.chain(*x))).reset_index()
-
-            patient_visit_ids = visit_concepts.sort_values(['person_id', 'visit_rank_order']) \
-                .groupby('person_id')['concept_id_visit_orders'].apply(
-                lambda x: list(itertools.chain(*x))).reset_index()
-
-            event_dates = visit_concepts.sort_values(['person_id', 'visit_rank_order']) \
-                .groupby('person_id')['dates'].apply(lambda x: list(itertools.chain(*x))).reset_index()
-
-            concept_positions = visit_concepts.sort_values(['person_id', 'visit_rank_order']) \
-                .groupby('person_id')['concept_positions'].apply(lambda x: list(itertools.chain(*x))).reset_index()
-
-            training_data = patient_concept_ids.merge(patient_visit_ids).merge(event_dates).merge(concept_positions)
-            training_data = training_data[training_data['concept_ids'].apply(len) > 1]
-            training_data.to_pickle(self.training_data_path)
-
-        return training_data
 
     def tokenize_concept_sequences(self, training_data):
         """
@@ -173,82 +142,7 @@ class Trainer:
 
 
 def main(args):
-    trainer = Trainer(input_folder=args.input_folder,
-                      output_folder=args.output_folder,
-                      concept_embedding_size=args.concept_embedding_size,
-                      max_seq_length=args.max_seq_length,
-                      time_window_size=args.time_window_size,
-                      batch_size=args.batch_size,
-                      epochs=args.epochs,
-                      learning_rate=args.learning_rate,
-                      tf_board_log_path=args.tf_board_log_path)
-
-    trainer.run()
-
-
-def create_parse_args():
-    parser = argparse.ArgumentParser(description='Arguments for concept embedding model')
-    parser.add_argument('-i',
-                        '--input_folder',
-                        dest='input_folder',
-                        action='store',
-                        help='The path for your input_folder where the raw data is',
-                        required=True)
-    parser.add_argument('-o',
-                        '--output_folder',
-                        dest='output_folder',
-                        action='store',
-                        help='The output folder that stores the domain tables download destination',
-                        required=True)
-    parser.add_argument('-m',
-                        '--max_seq_length',
-                        dest='max_seq_length',
-                        action='store',
-                        type=int,
-                        default=100,
-                        required=False)
-    parser.add_argument('-t',
-                        '--time_window_size',
-                        dest='time_window_size',
-                        action='store',
-                        type=int,
-                        default=100,
-                        required=False)
-    parser.add_argument('-c',
-                        '--concept_embedding_size',
-                        dest='concept_embedding_size',
-                        action='store',
-                        type=int,
-                        default=128,
-                        required=False)
-    parser.add_argument('-e',
-                        '--epochs',
-                        dest='epochs',
-                        action='store',
-                        type=int,
-                        default=50,
-                        required=False)
-    parser.add_argument('-b',
-                        '--batch_size',
-                        dest='batch_size',
-                        action='store',
-                        type=int,
-                        default=128,
-                        required=False)
-    parser.add_argument('-lr',
-                        '--learning_rate',
-                        dest='learning_rate',
-                        action='store',
-                        type=float,
-                        default=2e-4,
-                        required=False)
-    parser.add_argument('-bl',
-                        '--tf_board_log_path',
-                        dest='tf_board_log_path',
-                        action='store',
-                        default='./logs',
-                        required=False)
-    return parser
+    Trainer(create_time_attention_model_config(args)).run()
 
 
 if __name__ == "__main__":
