@@ -1,6 +1,8 @@
 parquet_data_path = 'patient_sequence'
-feather_data_path = 'patient_sequence.feather'
+feather_data_path = 'patient_sequence.pickle'
 tokenizer_path = 'tokenizer.pickle'
-time_attention_model_path = 'time_attention_model_path.h5'
-bert_model_path = 'bert_model_path.h5'
-temporal_bert_model_path = 'temporal_bert_model_path.h5'
+time_attention_model_path = 'time_aware_model.h5'
+bert_model_path = 'bert_model.h5'
+temporal_bert_model_path = 'temporal_bert_model.h5'
+
+mortality_data_path = 'mortality'

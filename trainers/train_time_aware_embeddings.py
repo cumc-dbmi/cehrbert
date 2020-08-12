@@ -50,8 +50,11 @@ class Trainer:
         :return: save and return the training dataset
         """
         if not os.path.exists(self.feather_data_path):
-            pd.read_parquet(self.parquet_data_path).to_feather(self.feather_data_path)
-        return pd.read_feather(self.feather_data_path)
+            sequence_data = pd.read_parquet(self.parquet_data_path)
+            sequence_data.concept_ids = sequence_data.concept_ids.apply(lambda concept_ids: concept_ids.tolist())
+            sequence_data = sequence_data[sequence_data['concept_ids'].apply(len) > 1]
+            sequence_data.to_pickle(self.feather_data_path)
+        return pd.read_pickle(self.feather_data_path)
 
     def create_tf_dataset(self, sequence_data, tokenizer):
         """

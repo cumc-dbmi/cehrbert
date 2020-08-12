@@ -33,7 +33,7 @@ class Config(SimpleNamespace):
 class BertConfig(Config):
 
     def __init__(self, depth, num_heads, *args, **kwargs):
-        super(BertConfig).__init__(*args, **kwargs)
+        super(BertConfig, self).__init__(*args, **kwargs)
         self.depth = depth
         self.num_heads = num_heads
 
@@ -41,7 +41,7 @@ class BertConfig(Config):
 class TemporalBertConfig(BertConfig):
 
     def __init__(self, time_attention_model_path, *args, **kwargs):
-        super(TemporalBertConfig).__init__(*args, **kwargs)
+        super(TemporalBertConfig, self).__init__(*args, **kwargs)
         self.time_attention_model_path = time_attention_model_path
 
 
