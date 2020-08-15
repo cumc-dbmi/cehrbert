@@ -36,6 +36,8 @@ class BertTrainer(Trainer):
                                                                 'concept_ids': tf.int32,
                                                                 'time_stamps': tf.int32,
                                                                 'visit_orders': tf.int32,
+                                                                'visit_segments': tf.int32,
+                                                                'concept_positions': tf.int32,
                                                                 'mask': tf.int32}, tf.int32))
         return dataset, data_generator.get_steps_per_epoch()
 

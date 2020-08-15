@@ -73,6 +73,7 @@ def create_parse_args_base_bert():
                         '--depth',
                         dest='depth',
                         action='store',
+                        type=int,
                         default=5,
                         required=False)
 
@@ -80,6 +81,7 @@ def create_parse_args_base_bert():
                         '--num_heads',
                         dest='num_heads',
                         action='store',
+                        type=int,
                         default=8,
                         required=False)
     return parser

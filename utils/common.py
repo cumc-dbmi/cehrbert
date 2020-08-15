@@ -212,10 +212,10 @@ def create_sequence_data(patient_event, date_filter=None):
         .withColumn('date_in_week', (F.unix_timestamp('date') / F.lit(24 * 60 * 60 * 7)).cast('int')).distinct() \
         .withColumn('earliest_visit_date', F.min('date_in_week').over(W.partitionBy('visit_occurrence_id'))) \
         .withColumn('visit_rank_order',
-                    F.dense_rank().over(W.partitionBy('person_id').orderBy('earliest_visit_date')) - 1) \
+                    F.dense_rank().over(W.partitionBy('person_id').orderBy('earliest_visit_date'))) \
         .withColumn('concept_position', F.dense_rank().over(
-        W.partitionBy('person_id', 'visit_occurrence_id').orderBy('date_in_week', 'standard_concept_id')) - 1) \
-        .withColumn('visit_segment', F.col('visit_rank_order') % F.lit(2)) \
+        W.partitionBy('person_id', 'visit_occurrence_id').orderBy('date_in_week', 'standard_concept_id'))) \
+        .withColumn('visit_segment', F.col('visit_rank_order') % F.lit(2) + 1) \
         .withColumn('date_concept_id_period',
                     F.struct(F.col('date_in_week'), F.col('standard_concept_id'), F.col('concept_position'),
                              F.col('visit_rank_order'), F.col('visit_segment')))

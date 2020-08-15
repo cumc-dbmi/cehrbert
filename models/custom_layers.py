@@ -242,6 +242,24 @@ class TemporalEncoder(Encoder):
         return x, temporal_context_attn_weights, attention_weights
 
 
+class PositionalEncodingLayer(tf.keras.layers.Layer):
+    def __init__(self, max_sequence_length, embedding_size, *args, **kwargs):
+        super(PositionalEncodingLayer, self).__init__(*args, **kwargs)
+        self.max_sequence_length = max_sequence_length
+        self.embedding_size = embedding_size
+        self.pos_encoding = positional_encoding(max_sequence_length, embedding_size)
+
+    def get_config(self):
+        config = super().get_config()
+        config['max_sequence_length'] = self.max_sequence_length
+        config['embedding_size'] = self.embedding_size
+        return config
+
+    def call(self, concept_embeddings, **kwargs):
+        seq_len = tf.shape(concept_embeddings)[1]
+        return concept_embeddings + self.pos_encoding[:, :seq_len, :]
+
+
 class VisitEmbeddingLayer(tf.keras.layers.Layer):
 
     def __init__(self, visit_order_size: int,
@@ -251,7 +269,8 @@ class VisitEmbeddingLayer(tf.keras.layers.Layer):
         self.embedding_size = embedding_size
 
         self.visit_embedding_layer = tf.keras.layers.Embedding(self.visit_order_size,
-                                                               self.embedding_size)
+                                                               self.embedding_size,
+                                                               mask_zero=True)
 
     def get_config(self):
         config = super().get_config()
@@ -390,5 +409,6 @@ get_custom_objects().update({
     'TimeAttention': TimeAttention,
     'TimeSelfAttention': TimeSelfAttention,
     'PairwiseTimeAttention': TimeSelfAttention,
-    'VisitEmbeddingLayer': VisitEmbeddingLayer
+    'VisitEmbeddingLayer': VisitEmbeddingLayer,
+    'PositionalEncodingLayer': PositionalEncodingLayer
 })

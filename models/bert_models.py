@@ -4,7 +4,17 @@ import tensorflow as tf
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 
 from models.custom_layers import (VisitEmbeddingLayer, TimeSelfAttention, Encoder,
-                                  TemporalEncoder)
+                                  TemporalEncoder, PositionalEncodingLayer)
+
+
+def create_concept_mask(mask, max_seq_length):
+    # mask the third dimension
+    concept_mask_1 = tf.tile(tf.expand_dims(tf.expand_dims(mask, axis=1), axis=-1), [1, 1, 1, max_seq_length])
+    # mask the fourth dimension
+    concept_mask_2 = tf.expand_dims(tf.expand_dims(mask, axis=1), axis=1)
+    concept_mask = tf.cast(
+        (concept_mask_1 + concept_mask_2) > 0, dtype=tf.int32, name='concept_mask')
+    return concept_mask
 
 
 # -
@@ -34,9 +44,7 @@ def transformer_bert_model(
 
     mask = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='mask')
 
-    concept_mask = tf.cast(
-        (tf.tile(tf.expand_dims(tf.expand_dims(mask, axis=1), axis=-1), [1, 1, 1, max_seq_length]) + tf.expand_dims(
-            tf.expand_dims(mask, axis=1), axis=1)) > 0, dtype=tf.int32)
+    concept_mask = create_concept_mask(mask, max_seq_length)
 
     l2_regularizer = (tf.keras.regularizers.l2(l2_reg_penalty) if l2_reg_penalty else None)
 
@@ -49,7 +57,10 @@ def transformer_bert_model(
         # https://arxiv.org/pdf/1508.03721.pdf
         embeddings_regularizer=l2_regularizer)
 
-    visit_segment_layer = VisitEmbeddingLayer(visit_order_size=2, embedding_size=concept_embedding_size)
+    visit_segment_layer = VisitEmbeddingLayer(visit_order_size=3, embedding_size=concept_embedding_size)
+
+    positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
+                                                        embedding_size=concept_embedding_size)
 
     encoder = Encoder(name='encoder',
                       num_layers=depth,
@@ -66,6 +77,7 @@ def transformer_bert_model(
 
     next_step_input, embedding_matrix = embedding_layer(masked_concept_ids)
 
+    next_step_input = positional_encoding_layer(next_step_input)
     # Building a Vanilla Transformer (described in
     # "Attention is all you need", 2017)
     next_step_input = visit_segment_layer([visit_segments, next_step_input])
