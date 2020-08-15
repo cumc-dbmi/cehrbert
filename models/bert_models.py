@@ -30,13 +30,13 @@ def transformer_bert_model(
     """
     masked_concept_ids = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='masked_concept_ids')
 
-    concept_ids = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='concept_ids')
-
-    visit_orders = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='visit_orders')
+    visit_segments = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='visit_segments')
 
     mask = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='mask')
 
-    concept_mask = tf.expand_dims(tf.expand_dims(mask, axis=1), axis=1)
+    concept_mask = tf.cast(
+        (tf.tile(tf.expand_dims(tf.expand_dims(mask, axis=1), axis=-1), [1, 1, 1, max_seq_length]) + tf.expand_dims(
+            tf.expand_dims(mask, axis=1), axis=1)) > 0, dtype=tf.int32)
 
     l2_regularizer = (tf.keras.regularizers.l2(l2_reg_penalty) if l2_reg_penalty else None)
 
@@ -49,8 +49,7 @@ def transformer_bert_model(
         # https://arxiv.org/pdf/1508.03721.pdf
         embeddings_regularizer=l2_regularizer)
 
-    visit_embedding_layer = VisitEmbeddingLayer(visit_order_size=max_seq_length,
-                                                embedding_size=concept_embedding_size)
+    visit_segment_layer = VisitEmbeddingLayer(visit_order_size=2, embedding_size=concept_embedding_size)
 
     encoder = Encoder(name='encoder',
                       num_layers=depth,
@@ -69,7 +68,7 @@ def transformer_bert_model(
 
     # Building a Vanilla Transformer (described in
     # "Attention is all you need", 2017)
-    next_step_input = visit_embedding_layer([visit_orders, next_step_input])
+    next_step_input = visit_segment_layer([visit_segments, next_step_input])
 
     next_step_input, _ = encoder(next_step_input, concept_mask)
 
@@ -77,7 +76,7 @@ def transformer_bert_model(
         output_layer([next_step_input, embedding_matrix]))
 
     model = tf.keras.Model(
-        inputs=[masked_concept_ids, concept_ids, visit_orders, mask],
+        inputs=[masked_concept_ids, visit_segments, mask],
         outputs=[concept_predictions])
 
     return model
