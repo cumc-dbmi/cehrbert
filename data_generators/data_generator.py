@@ -239,3 +239,36 @@ class BertBatchGenerator(BatchGenerator):
 
     def estimate_data_size(self):
         return len(self.patient_event_sequence)
+
+
+class BertFineTuningBatchGenerator(BertBatchGenerator):
+
+    def batch_generator(self):
+        training_example_generator = self.data_generator()
+        while True:
+            sequence, masked_sequence, time_stamp_sequence, visit_order_sequence, labels = zip(
+                *list(islice(training_example_generator, self.batch_size)))
+
+            sequence = pad_sequences(np.asarray(sequence), maxlen=self.max_sequence_length, padding='post',
+                                     value=self.unused_token_id, dtype='int32')
+            masked_sequence = pad_sequences(np.asarray(masked_sequence), maxlen=self.max_sequence_length,
+                                            padding='post', value=self.unused_token_id, dtype='int32')
+            time_stamp_sequence = pad_sequences(np.asarray(time_stamp_sequence), maxlen=self.max_sequence_length,
+                                                padding='post', value=0, dtype='int32')
+            visit_order_sequence = pad_sequences(np.asarray(visit_order_sequence), maxlen=self.max_sequence_length,
+                                                 padding='post', value=0, dtype='int32')
+            mask = (sequence == self.unused_token_id).astype(int)
+
+            yield ({'masked_concept_ids': masked_sequence,
+                    'concept_ids': sequence,
+                    'time_stamps': time_stamp_sequence,
+                    'visit_orders': visit_order_sequence,
+                    'mask': mask}, labels)
+
+    def data_generator(self):
+        while True:
+            for tup in self.patient_event_sequence.itertuples():
+                concept_ids, dates, concept_id_visit_orders = zip(
+                    *sorted(zip(tup.token_ids, tup.dates, tup.concept_id_visit_orders), key=lambda tup2: (tup2[1],
+                                                                                                          tup2[2])))
+                yield (concept_ids, concept_ids, dates, concept_id_visit_orders, tup.labels)

@@ -3,23 +3,21 @@ import argparse
 import datetime
 
 from pyspark.sql import SparkSession
-from pyspark.sql import Window as W
-import pyspark.sql.functions as F
-import pyspark.sql.types as T
 
 from utils.common import *
 import spark_apps.parameters as p
 
 
-def main(spark, input_folder, domain_table_list, date_filter):
+def main(input_folder, output_folder, domain_table_list, date_filter):
+    spark = SparkSession.builder.appName('Generate Bert Training Data').getOrCreate()
     domain_tables = []
     for domain_table_name in domain_table_list:
         domain_tables.append(preprocess_domain_table(spark, input_folder, domain_table_name))
 
     patient_event = join_domain_tables(domain_tables)
     patient_event = patient_event.where('visit_occurrence_id IS NOT NULL').distinct()
-    sequence_data = create_sequence_data(spark, patient_event, date_filter)
-    sequence_data.write.mode('overwrite').parquet(os.path.join(input_folder, p.parquet_data_path))
+    sequence_data = create_sequence_data(patient_event, date_filter)
+    sequence_data.write.mode('overwrite').parquet(os.path.join(output_folder, p.parquet_data_path))
 
 
 if __name__ == '__main__':
@@ -29,6 +27,13 @@ if __name__ == '__main__':
                         dest='input_folder',
                         action='store',
                         help='The path for your input_folder where the raw data is',
+                        required=True)
+
+    parser.add_argument('-o',
+                        '--output_folder',
+                        dest='output_folder',
+                        action='store',
+                        help='The path for your output_folder',
                         required=True)
 
     parser.add_argument('-tc',
@@ -48,5 +53,4 @@ if __name__ == '__main__':
                         default='2018-01-01')
     ARGS = parser.parse_args()
 
-    spark = SparkSession.builder.appName('Generate Bert Training Data').getOrCreate()
-    main(spark, ARGS.input_folder, ARGS.domain_table_list, ARGS.date_filter)
+    main(ARGS.input_folder, ARGS.output_folder, ARGS.domain_table_list, ARGS.date_filter)
