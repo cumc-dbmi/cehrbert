@@ -262,7 +262,7 @@ class BertFineTuningBatchGenerator(BertBatchGenerator):
     def batch_generator(self):
         training_example_generator = self.data_generator()
         while True:
-            sequence, masked_sequence, time_stamp_sequence, visit_order_sequence, labels = zip(
+            sequence, masked_sequence, time_stamp_sequence, visit_order_sequence, visit_segment_sequence, concept_position_sequence, labels = zip(
                 *list(islice(training_example_generator, self.batch_size)))
 
             sequence = pad_sequences(np.asarray(sequence), maxlen=self.max_sequence_length, padding='post',
@@ -273,18 +273,25 @@ class BertFineTuningBatchGenerator(BertBatchGenerator):
                                                 padding='post', value=0, dtype='int32')
             visit_order_sequence = pad_sequences(np.asarray(visit_order_sequence), maxlen=self.max_sequence_length,
                                                  padding='post', value=0, dtype='int32')
+            visit_segment_sequence = pad_sequences(np.asarray(visit_segment_sequence), maxlen=self.max_sequence_length,
+                                                   padding='post', value=0, dtype='int32')
+            concept_position_sequence = pad_sequences(np.asarray(concept_position_sequence),
+                                                      maxlen=self.max_sequence_length,
+                                                      padding='post', value=0, dtype='int32')
             mask = (sequence == self.unused_token_id).astype(int)
 
             yield ({'masked_concept_ids': masked_sequence,
                     'concept_ids': sequence,
                     'time_stamps': time_stamp_sequence,
                     'visit_orders': visit_order_sequence,
+                    'visit_segments': visit_segment_sequence,
+                    'concept_positions': concept_position_sequence,
                     'mask': mask}, labels)
 
     def data_generator(self):
         while True:
             for tup in self.patient_event_sequence.itertuples():
-                concept_ids, dates, concept_id_visit_orders = zip(
-                    *sorted(zip(tup.token_ids, tup.dates, tup.concept_id_visit_orders), key=lambda tup2: (tup2[1],
+                concept_ids, dates, concept_id_visit_orders, visit_segments, concept_positions = zip(
+                    *sorted(zip(tup.token_ids, tup.dates, tup.concept_id_visit_orders, tup.visit_segments, tup.concept_positions), key=lambda tup2: (tup2[1],
                                                                                                           tup2[2])))
-                yield (concept_ids, concept_ids, dates, concept_id_visit_orders, tup.labels)
+                yield (concept_ids, concept_ids, dates, concept_id_visit_orders, visit_segments, concept_positions, tup.labels)
