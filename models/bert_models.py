@@ -123,11 +123,11 @@ def transformer_temporal_bert_model(
 
     time_stamps = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='time_stamps')
 
-    visit_orders = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='visit_orders')
+    visit_segments = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='visit_segments')
 
     mask = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='mask')
 
-    concept_mask = tf.expand_dims(tf.expand_dims(mask, axis=1), axis=1)
+    concept_mask = create_concept_mask(mask, max_seq_length)
 
     l2_regularizer = (tf.keras.regularizers.l2(l2_reg_penalty) if l2_reg_penalty else None)
 
@@ -140,7 +140,7 @@ def transformer_temporal_bert_model(
         # https://arxiv.org/pdf/1508.03721.pdf
         embeddings_regularizer=l2_regularizer)
 
-    visit_embedding_layer = VisitEmbeddingLayer(visit_order_size=max_seq_length,
+    visit_embedding_layer = VisitEmbeddingLayer(visit_order_size=3,
                                                 embedding_size=concept_embedding_size)
 
     time_attention_layer = TimeSelfAttention(vocab_size=vocabulary_size,
@@ -168,7 +168,7 @@ def transformer_temporal_bert_model(
 
     # Building a Vanilla Transformer (described in
     # "Attention is all you need", 2017)
-    next_step_input = visit_embedding_layer([visit_orders, next_step_input])
+    next_step_input = visit_embedding_layer([visit_segments, next_step_input])
     # shape = (batch_size, seq_len, seq_len)
     time_attention = time_attention_layer([concept_ids, time_stamps, mask])
     # pad a dimension to accommodate the head split
@@ -180,7 +180,7 @@ def transformer_temporal_bert_model(
         output_layer([next_step_input, embedding_matrix]))
 
     model = tf.keras.Model(
-        inputs=[masked_concept_ids, concept_ids, time_stamps, visit_orders, mask],
+        inputs=[masked_concept_ids, concept_ids, time_stamps, visit_segments, mask],
         outputs=[concept_predictions])
 
     return model

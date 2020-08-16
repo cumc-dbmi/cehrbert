@@ -1,13 +1,9 @@
-import os
 import argparse
+import os
+
+from pyspark.sql import SparkSession
 
 import spark_apps.parameters as p
-
-import pyspark.sql.functions as F
-import pyspark.sql.types as T
-from pyspark.sql import SparkSession
-from pyspark.sql import Window as W
-
 from utils.common import *
 
 
