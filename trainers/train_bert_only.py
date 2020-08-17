@@ -4,7 +4,7 @@ from trainers.train_time_aware_embeddings import *
 from models.bert_models import *
 from utils.utils import CosineLRSchedule
 from models.custom_layers import get_custom_objects
-from data_generators.data_generator import BertBatchGenerator
+from data_generators.data_generator import BertDataGenerator
 
 from keras_transformer.bert import (masked_perplexity,
                                     MaskedPenalizedSparseCategoricalCrossentropy)
@@ -23,13 +23,13 @@ class BertTrainer(Trainer):
         self.num_heads = config.num_heads
 
     def create_tf_dataset(self, sequence_data, tokenizer):
-        data_generator = BertBatchGenerator(patient_event_sequence=sequence_data,
-                                            mask_token_id=tokenizer.get_mask_token_id(),
-                                            unused_token_id=tokenizer.get_unused_token_id(),
-                                            max_sequence_length=self.max_seq_length,
-                                            batch_size=self.batch_size,
-                                            first_token_id=tokenizer.get_first_token_index(),
-                                            last_token_id=tokenizer.get_last_token_index())
+        data_generator = BertDataGenerator(patient_event_sequence=sequence_data,
+                                           mask_token_id=tokenizer.get_mask_token_id(),
+                                           unused_token_id=tokenizer.get_unused_token_id(),
+                                           max_sequence_length=self.max_seq_length,
+                                           batch_size=self.batch_size,
+                                           first_token_id=tokenizer.get_first_token_index(),
+                                           last_token_id=tokenizer.get_last_token_index())
 
         dataset = tf.data.Dataset.from_generator(data_generator.batch_generator,
                                                  output_types=({'masked_concept_ids': tf.int32,

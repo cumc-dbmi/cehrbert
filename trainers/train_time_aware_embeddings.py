@@ -6,7 +6,7 @@ import tensorflow as tf
 
 from config.model_configs import Config, create_time_attention_model_config
 from config.parse_args import create_parse_args
-from data_generators.data_generator import BatchGenerator
+from data_generators.data_generator import TimeAttentionDataGenerator
 from data_generators.tokenizer import ConceptTokenizer
 from models.custom_layers import get_custom_objects
 from models.time_attention_models import time_attention_cbow_model
@@ -65,10 +65,10 @@ class Trainer:
         """
 
         unused_token_id = tokenizer.get_unused_token_id()
-        batch_generator = BatchGenerator(patient_event_sequence=sequence_data,
-                                         max_sequence_length=self.max_seq_length,
-                                         batch_size=self.batch_size,
-                                         unused_token_id=unused_token_id)
+        batch_generator = TimeAttentionDataGenerator(patient_event_sequence=sequence_data,
+                                                     max_sequence_length=self.max_seq_length,
+                                                     batch_size=self.batch_size,
+                                                     unused_token_id=unused_token_id)
         dataset = tf.data.Dataset.from_generator(batch_generator.batch_generator,
                                                  output_types=({'target_concepts': tf.int32,
                                                                 'target_time_stamps': tf.float32,
