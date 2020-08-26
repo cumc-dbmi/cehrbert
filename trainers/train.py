@@ -13,7 +13,7 @@ from models.bert_models import *
 from utils.utils import CosineLRSchedule
 from models.custom_layers import get_custom_objects
 
-from data_generators.data_generator import BertDataGenerator
+from data_generators.data_generator import TemporalBertDataGenerator
 from data_generators.tokenizer import ConceptTokenizer
 
 CONFIDENCE_PENALTY = 0.1
@@ -63,13 +63,13 @@ encoded_sequences = tokenizer.encode(training_data.concept_ids)
 training_data['token_ids'] = encoded_sequences
 pickle.dump(tokenizer, open(tokenizer_path, 'wb'))
 
-data_generator = BertDataGenerator(patient_event_sequence=training_data,
-                                   mask_token_id=tokenizer.get_mask_token_id(),
-                                   unused_token_id=tokenizer.get_unused_token_id(),
-                                   max_sequence_length=MAX_LEN,
-                                   batch_size=BATCH_SIZE,
-                                   first_token_id=tokenizer.get_first_token_index(),
-                                   last_token_id=tokenizer.get_last_token_index())
+data_generator = TemporalBertDataGenerator(patient_event_sequence=training_data,
+                                           mask_token_id=tokenizer.get_mask_token_id(),
+                                           unused_token_id=tokenizer.get_unused_token_id(),
+                                           max_sequence_length=MAX_LEN,
+                                           batch_size=BATCH_SIZE,
+                                           first_token_id=tokenizer.get_first_token_index(),
+                                           last_token_id=tokenizer.get_last_token_index())
 
 dataset = tf.data.Dataset.from_generator(data_generator.batch_generator,
                                          output_types=({'masked_concept_ids': tf.int32,

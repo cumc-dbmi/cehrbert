@@ -61,7 +61,7 @@ class TimeAttentionDataGenerator:
                             [concept_id], [dates[i]], context_concepts,
                             context_time_stamps, [concept_id])
 
-    def generate_inputs(self, i, qualified_indexes, sorted_tup):
+    def generate_inputs(self, i, sorted_tup, qualified_indexes):
 
         concept_ids, dates = sorted_tup
         sequence = self.get_inputs_for_index(concept_ids, i)
@@ -142,7 +142,7 @@ class NegativeSamplingBatchGenerator(TimeAttentionDataGenerator):
         return super().estimate_data_size() * (1 + self.num_of_negative_samples)
 
 
-class BertDataGenerator(TimeAttentionDataGenerator):
+class TemporalBertDataGenerator(TimeAttentionDataGenerator):
     """
     This class generates batches for a BERT-based language model
     in an abstract way, by using an external function sampling
@@ -154,7 +154,7 @@ class BertDataGenerator(TimeAttentionDataGenerator):
                  first_token_id: int,
                  last_token_id: int,
                  *args, **kwargs):
-        super(BertDataGenerator, self).__init__(*args, **kwargs)
+        super(TemporalBertDataGenerator, self).__init__(*args, **kwargs)
         self.mask_token_id = mask_token_id
         self.first_token_id = first_token_id
         self.last_token_id = last_token_id
@@ -188,8 +188,12 @@ class BertDataGenerator(TimeAttentionDataGenerator):
 
         while True:
             for tup in self.patient_event_sequence.itertuples():
-                # Randomly get an index
-                i = random.randint(0, len(tup.concept_ids) - 1)
+                # If the length of concept ids is less than the maximum allowed length
+                if len(tup.concept_ids) <= self.max_sequence_length:
+                    i = len(tup.concept_ids) // 2
+                else:
+                    # Randomly get an index
+                    i = random.randint(0, len(tup.concept_ids) - 1)
                 # Get the indexes that fall within the time window given the random index
                 time_window_qualified_indexes = self.get_time_window_qualified_indexes(i, tup.dates)
                 # Check if the number of indexes exceeds the minimum number of concepts
@@ -259,7 +263,33 @@ class BertDataGenerator(TimeAttentionDataGenerator):
                              value=pad_value, dtype='int32')
 
 
-class BertFineTuningDataGenerator(BertDataGenerator):
+class BertDataGenerator(TemporalBertDataGenerator):
+
+    def data_generator(self):
+
+        while True:
+            for tup in self.patient_event_sequence.itertuples():
+                # If the length of concept ids is less than the maximum allowed length
+                if len(tup.concept_ids) <= self.max_sequence_length:
+                    i = len(tup.concept_ids) // 2
+                else:
+                    # Randomly get an index
+                    i = random.randint(0, len(tup.concept_ids) - 1)
+
+                concepts = self.get_inputs_for_index(tup.concepts, i)
+                time_stamps = self.get_inputs_for_index(tup.dates, i)
+                visit_orders = self.get_inputs_for_index(tup.concept_id_visit_orders, i)
+                visit_segments = self.get_inputs_for_index(tup.visit_segments, i)
+                concept_positions = self.get_inputs_for_index(tup.concept_positions, i)
+
+                # Create the masked concepts and the corresponding mask
+                masked_concepts, output_mask = self.mask_concepts(concepts)
+
+                yield (output_mask, concepts, masked_concepts, time_stamps, visit_orders,
+                       visit_segments, concept_positions)
+
+
+class BertFineTuningDataGenerator(TemporalBertDataGenerator):
 
     def batch_generator(self):
         training_example_generator = self.data_generator()
