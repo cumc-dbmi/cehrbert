@@ -297,14 +297,14 @@ class BertFineTuningDataGenerator(TemporalBertDataGenerator):
             concepts, masked_concepts, time_stamps, visit_orders, visit_segments, concept_positions, labels = zip(
                 *list(islice(training_example_generator, self.batch_size)))
 
-            concepts = self.pad_input(concepts, self.unused_token_id)
-            masked_concepts = self.pad_input(masked_concepts, self.unused_token_id)
+            concepts = self.pad_input(concepts, 0)
+            masked_concepts = self.pad_input(masked_concepts, 0)
             time_stamps = self.pad_input(time_stamps, 0)
             visit_orders = self.pad_input(visit_orders, 0)
             visit_segments = self.pad_input(visit_segments, 0)
             concept_positions = self.pad_input(concept_positions, 0)
 
-            mask = (concepts == self.unused_token_id).astype(int)
+            mask = (concepts == 0).astype(int)
 
             yield ({'masked_concept_ids': masked_concepts,
                     'concept_ids': concepts,
