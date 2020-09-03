@@ -276,7 +276,7 @@ class BertDataGenerator(TemporalBertDataGenerator):
                     # Randomly get an index
                     i = random.randint(0, len(tup.concept_ids) - 1)
 
-                concepts = self.get_inputs_for_index(tup.concepts, i)
+                concepts = self.get_inputs_for_index(tup.token_ids, i)
                 time_stamps = self.get_inputs_for_index(tup.dates, i)
                 visit_orders = self.get_inputs_for_index(tup.concept_id_visit_orders, i)
                 visit_segments = self.get_inputs_for_index(tup.visit_segments, i)
