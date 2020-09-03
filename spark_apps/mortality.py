@@ -7,7 +7,7 @@ import spark_apps.parameters as p
 from utils.common import *
 
 
-def main(spark, input_folder, output_folder):
+def main(input_folder, output_folder):
     sequence_data = spark.read.parquet(os.path.join(input_folder, p.parquet_data_path))
     death = preprocess_domain_table(spark, input_folder, 'death')
     death = death.groupby('person_id').agg(F.max(F.col('death_date')).alias('death_date'))

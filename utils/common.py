@@ -233,3 +233,12 @@ def create_sequence_data(patient_event, date_filter=None):
                 'concept_id_visit_orders', 'visit_segments')
 
     return patient_event
+
+
+def extract_ehr_records(spark, input_folder, domain_table_list):
+    domain_tables = []
+    for domain_table_name in domain_table_list:
+        domain_tables.append(preprocess_domain_table(spark, input_folder, domain_table_name))
+    patient_ehr_records = join_domain_tables(domain_tables)
+    patient_ehr_records = patient_ehr_records.where('visit_occurrence_id IS NOT NULL').distinct()
+    return patient_ehr_records
