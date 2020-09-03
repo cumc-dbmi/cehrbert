@@ -22,10 +22,6 @@ HEART_FAILURE_CONCEPTS = [45773075, 45766964, 45766167, 45766166, 45766165, 4576
                           762002, 444101, 444031, 443587, 443580, 442310, 439846, 439698, 439696, 439694, 319835,
                           316994, 316139, 314378, 312927]
 
-AGE_LOWER_BOUND = 10
-AGE_UPPER_BOUND = 80
-BUFFER_PERIOD_IN_DAYS = 90
-
 DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure', 'procedure_occurrence']
 
 PERSON = 'person'
@@ -33,7 +29,8 @@ VISIT_OCCURRENCE = 'visit_occurrence'
 CONDITION_OCCURRENCE = 'condition_occurrence'
 
 
-def main(spark, input_folder, output_folder, date_filter):
+def main(input_folder, output_folder, date_filter, lower_bound, upper_bound, buffer_window):
+    spark = SparkSession.builder.appName('Generate Mortality labels').getOrCreate()
     patient_ehr_records = extract_ehr_records(spark, input_folder, DOMAIN_TABLE_LIST)
 
     person = spark.read.parquet(os.path.join(input_folder, PERSON))
@@ -70,12 +67,12 @@ def main(spark, input_folder, output_folder, date_filter):
 
     fh_cohort = fh_cohort.join(person, 'person_id') \
         .withColumn('age', F.year('visit_start_date') - F.col('year_of_birth')) \
-        .where(F.col('age').between(AGE_LOWER_BOUND, AGE_UPPER_BOUND)) \
+        .where(F.col('age').between(lower_bound, upper_bound)) \
         .select([F.col(field_name) for field_name in fh_cohort.schema.fieldNames()] + [F.col('age')])
 
     fh_cohort_ehr_records = patient_ehr_records.join(fh_cohort,
                                                      patient_ehr_records['person_id'] == fh_cohort['person_id']) \
-        .where((patient_ehr_records['date'] <= F.date_sub(fh_cohort['visit_start_date'], BUFFER_PERIOD_IN_DAYS)) & (
+        .where((patient_ehr_records['date'] <= F.date_sub(fh_cohort['visit_start_date'], buffer_window)) & (
             patient_ehr_records['visit_occurrence_id'] != fh_cohort['visit_occurrence_id'])) \
         .select(patient_ehr_records['person_id'], patient_ehr_records['standard_concept_id'],
                 patient_ehr_records['date'], patient_ehr_records['visit_occurrence_id'], patient_ehr_records['domain'])
@@ -115,8 +112,33 @@ if __name__ == '__main__':
                         help='The path for your output_folder',
                         required=True,
                         type=valid_date)
+    parser.add_argument('-l',
+                        '--lower_bound',
+                        dest='lower_bound',
+                        action='store',
+                        help='The age lower bound',
+                        required=False,
+                        default=0)
+    parser.add_argument('-u',
+                        '--upper_bound',
+                        dest='upper_bound',
+                        action='store',
+                        help='The age upper bound',
+                        required=False,
+                        default=100)
+    parser.add_argument('-b',
+                        '--buffer_window',
+                        dest='buffer_window',
+                        action='store',
+                        help='The buffer window in days prior the index date excludes the EHR records',
+                        required=False,
+                        default=90)
 
     ARGS = parser.parse_args()
 
-    spark = SparkSession.builder.appName('Generate Mortality labels').getOrCreate()
-    main(spark, ARGS.input_folder, ARGS.output_folder, ARGS.date_filter)
+    main(ARGS.input_folder,
+         ARGS.output_folder,
+         ARGS.date_filter,
+         ARGS.lower_bound,
+         ARGS.upper_bound,
+         ARGS.buffer_window)
