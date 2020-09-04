@@ -294,7 +294,7 @@ class BertFineTuningDataGenerator(TemporalBertDataGenerator):
     def batch_generator(self):
         training_example_generator = self.data_generator()
         while True:
-            concepts, masked_concepts, time_stamps, visit_orders, visit_segments, concept_positions, labels = zip(
+            concepts, masked_concepts, time_stamps, visit_orders, visit_segments, concept_positions, ages, labels = zip(
                 *list(islice(training_example_generator, self.batch_size)))
 
             concepts = self.pad_input(concepts, 0)
@@ -312,6 +312,7 @@ class BertFineTuningDataGenerator(TemporalBertDataGenerator):
                     'visit_orders': visit_orders,
                     'visit_segments': visit_segments,
                     'concept_positions': concept_positions,
+                    'ages': ages,
                     'mask': mask}, labels)
 
     def data_generator(self):
@@ -322,5 +323,5 @@ class BertFineTuningDataGenerator(TemporalBertDataGenerator):
                                 tup.concept_positions), key=lambda tup2: (tup2[1],
                                                                           tup2[2])))
                 yield (
-                    concept_ids, concept_ids, dates, concept_id_visit_orders, visit_segments, concept_positions,
+                    concept_ids, concept_ids, dates, concept_id_visit_orders, visit_segments, concept_positions, tup.age,
                     tup.labels)

@@ -30,7 +30,7 @@ CONDITION_OCCURRENCE = 'condition_occurrence'
 
 
 def main(input_folder, output_folder, date_filter, lower_bound, upper_bound, buffer_window):
-    spark = SparkSession.builder.appName('Generate Mortality labels').getOrCreate()
+    spark = SparkSession.builder.appName('Generate Heart Failure Cohort').getOrCreate()
     patient_ehr_records = extract_ehr_records(spark, input_folder, DOMAIN_TABLE_LIST)
 
     person = spark.read.parquet(os.path.join(input_folder, PERSON))
@@ -44,42 +44,51 @@ def main(input_folder, output_folder, date_filter, lower_bound, upper_bound, buf
         'visit_occurrence_id']).select(
         visits['visit_occurrence_id'], visits['person_id'], visits['visit_start_date']).distinct()
 
-    positive_hf_cases = positive_hf_cases \
-        .withColumn('visit_start_date', F.to_date('visit_start_date', 'yyyy-MM-dd')) \
-        .where(F.col('visit_start_date') >= date_filter).withColumn('visit_order', F.dense_rank().over(
-        W.partitionBy('person_id').orderBy('visit_start_date', 'visit_occurrence_id'))) \
-        .where(F.col('visit_order') == 1).select('visit_occurrence_id', 'person_id', 'visit_start_date') \
-        .withColumn('label', F.lit(1))
-
     hf_person_ids = positive_hf_cases.select(F.col('person_id').alias('positive_person_id')).distinct()
-
+    
+    qualified_positive_hf_cases = positive_hf_cases \
+        .withColumn('visit_start_date', F.to_date('visit_start_date', 'yyyy-MM-dd')) \
+        .withColumn('earliest_visit_start_date', F.first('visit_start_date').over(W.partitionBy('person_id').orderBy('visit_start_date'))) \
+        .withColumn('earliest_visit_occurrence_id', F.first('visit_occurrence_id').over(W.partitionBy('person_id').orderBy('visit_start_date'))) \
+        .select(F.col('person_id'), 
+                F.col('earliest_visit_start_date').alias('visit_start_date'), 
+                F.col('earliest_visit_occurrence_id').alias('visit_occurrence_id')) \
+        .where(F.col('visit_start_date') >= date_filter) \
+        .distinct().withColumn('label', F.lit(1))
+    
     negative_hf_cases = visits.join(hf_person_ids, F.col('person_id') == F.col('positive_person_id'), 'left') \
         .where(F.col('positive_person_id').isNull()) \
         .select(visits['visit_occurrence_id'], visits['person_id'], visits['visit_start_date']).distinct() \
         .withColumn('visit_start_date', F.to_date('visit_start_date', 'yyyy-MM-dd')) \
         .where(F.col('visit_start_date') >= date_filter) \
-        .withColumn('visit_order', F.dense_rank().over(
-        W.partitionBy('person_id').orderBy(F.desc('visit_start_date'), 'visit_occurrence_id'))) \
-        .where(F.col('visit_order') == 1).select('visit_occurrence_id', 'person_id', 'visit_start_date') \
-        .withColumn('label', F.lit(0))
+        .withColumn('latest_visit_start_date', F.last('visit_start_date').over(W.partitionBy('person_id').orderBy('visit_start_date'))) \
+        .withColumn('latest_visit_occurrence_id', F.last('visit_occurrence_id').over(W.partitionBy('person_id').orderBy('visit_start_date'))) \
+        .select(F.col('person_id'), 
+                F.col('latest_visit_start_date').alias('visit_start_date'), 
+                F.col('latest_visit_occurrence_id').alias('visit_occurrence_id')) \
+        .distinct().withColumn('label', F.lit(0))
 
-    fh_cohort = positive_hf_cases.union(negative_hf_cases)
+    fh_cohort = qualified_positive_hf_cases.union(negative_hf_cases)
 
     fh_cohort = fh_cohort.join(person, 'person_id') \
         .withColumn('age', F.year('visit_start_date') - F.col('year_of_birth')) \
         .where(F.col('age').between(lower_bound, upper_bound)) \
-        .select([F.col(field_name) for field_name in fh_cohort.schema.fieldNames()] + [F.col('age')])
+        .select([F.col(field_name) for field_name in fh_cohort.schema.fieldNames()] + [F.col('age'),
+                                                                                       person['gender_concept_id'],
+                                                                                       person['race_concept_id']])
 
     fh_cohort_ehr_records = patient_ehr_records.join(fh_cohort,
                                                      patient_ehr_records['person_id'] == fh_cohort['person_id']) \
         .where((patient_ehr_records['date'] <= F.date_sub(fh_cohort['visit_start_date'], buffer_window)) & (
             patient_ehr_records['visit_occurrence_id'] != fh_cohort['visit_occurrence_id'])) \
         .select(patient_ehr_records['person_id'], patient_ehr_records['standard_concept_id'],
-                patient_ehr_records['date'], patient_ehr_records['visit_occurrence_id'], patient_ehr_records['domain'])
+                patient_ehr_records['date'], patient_ehr_records['visit_occurrence_id'],
+                patient_ehr_records['domain'])
 
     sequence_data = create_sequence_data(fh_cohort_ehr_records, date_filter)
-
-    sequence_data.join(fh_cohort.select(['person_id', 'label']), 'person_id') \
+    
+    fh_cohort.select('person_id', 'label', 'age', 'gender_concept_id', 'race_concept_id') \
+        .join(sequence_data, 'person_id') \
         .write.mode('overwrite').parquet(os.path.join(output_folder, p.heart_failure_data_path))
 
 
@@ -118,6 +127,7 @@ if __name__ == '__main__':
                         action='store',
                         help='The age lower bound',
                         required=False,
+                        type=int,
                         default=0)
     parser.add_argument('-u',
                         '--upper_bound',
@@ -125,6 +135,7 @@ if __name__ == '__main__':
                         action='store',
                         help='The age upper bound',
                         required=False,
+                        type=int,
                         default=100)
     parser.add_argument('-b',
                         '--buffer_window',
@@ -132,6 +143,7 @@ if __name__ == '__main__':
                         action='store',
                         help='The buffer window in days prior the index date excludes the EHR records',
                         required=False,
+                        type=int,
                         default=90)
 
     ARGS = parser.parse_args()
