@@ -7,3 +7,4 @@ venv/
 *nohup.out
 *ipynb
 
+*__pycache__/
