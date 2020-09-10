@@ -16,7 +16,8 @@ VISIT_OCCURRENCE = 'visit_occurrence'
 CONDITION_OCCURRENCE = 'condition_occurrence'
 
 
-def main(input_folder, output_folder, date_filter, age_lower_bound, age_upper_bound, observation_window,
+def main(input_folder, output_folder, date_filter, age_lower_bound, age_upper_bound,
+         observation_window,
          prediction_window):
     spark = SparkSession.builder.appName('Generate Hospitalization Cohort').getOrCreate()
 
@@ -37,11 +38,11 @@ def main(input_folder, output_folder, date_filter, age_lower_bound, age_upper_bo
         .withColumn('visit_start_date', F.to_date('visit_start_date', 'yyyy-MM-dd')) \
         .where(F.col('visit_concept_id') != 0) \
         .where(F.col('visit_start_date') >= F.lit(date_filter).cast('date')) \
-        .where(F.col('visit_start_date') <= F.date_add(F.lit(date_filter).cast('date'), 360)) \
         .join(visit_occurrence_copy, 'person_id') \
         .where(F.col('visit_occurrence_id') != F.col('prev_visit_occurrence_id')) \
         .where(F.col('visit_start_date') > F.col('prev_visit_start_date')) \
-        .withColumn('days_gap', F.datediff(F.col('visit_start_date'), F.col('prev_visit_start_date'))) \
+        .withColumn('days_gap',
+                    F.datediff(F.col('visit_start_date'), F.col('prev_visit_start_date'))) \
         .where(F.col('days_gap') >= prediction_window) \
         .where(F.col('days_gap') <= total_window)
 
@@ -52,20 +53,26 @@ def main(input_folder, output_folder, date_filter, age_lower_bound, age_upper_bo
         .withColumn('label', F.col('visit_concept_id').isin(VISIT_CONCEPT_IDS).cast('int')) \
         .withColumn('visit_order',
                     F.row_number().over(
-                        W.partitionBy('person_id').orderBy(F.desc('label'), 'visit_start_date', 'visit_occurrence_id'))) \
-        .where(F.col('visit_order') == 1)
+                        W.partitionBy('person_id').orderBy(F.desc('label'), 'visit_start_date',
+                                                           'visit_occurrence_id'))) \
+        .where(F.col('visit_order') == 1) \
+        .where(F.col('num_prior_visits') >= 3)
 
     cohort = cohort.join(person, 'person_id') \
         .withColumn('age', F.year('visit_start_date') - F.col('year_of_birth')) \
         .where(F.col('age').between(age_lower_bound, age_upper_bound)) \
         .select([F.col(field_name) for field_name in cohort.schema.fieldNames()] + [F.col('age'),
-                                                                                    person['gender_concept_id'],
-                                                                                    person['race_concept_id']])
+                                                                                    person[
+                                                                                        'gender_concept_id'],
+                                                                                    person[
+                                                                                        'race_concept_id']])
 
     fh_cohort_ehr_records = patient_ehr_records.join(cohort,
-                                                     patient_ehr_records['person_id'] == cohort['person_id']) \
+                                                     patient_ehr_records['person_id'] == cohort[
+                                                         'person_id']) \
         .where(patient_ehr_records['visit_occurrence_id'] != cohort['visit_occurrence_id']) \
-        .where(patient_ehr_records['date'] <= F.date_sub(cohort['visit_start_date'], prediction_window)) \
+        .where(
+        patient_ehr_records['date'] <= F.date_sub(cohort['visit_start_date'], prediction_window)) \
         .where(patient_ehr_records['date'] >= F.date_sub(cohort['visit_start_date'], total_window)) \
         .select(patient_ehr_records['person_id'], patient_ehr_records['standard_concept_id'],
                 patient_ehr_records['date'], patient_ehr_records['visit_occurrence_id'],
