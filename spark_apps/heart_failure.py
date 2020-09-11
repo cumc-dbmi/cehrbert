@@ -68,7 +68,7 @@ class HeartFailureCohortBuilder(CohortBuilderBase):
                             F.count('visit_occurrence_id').over(W.partitionBy('person_id'))) \
             .withColumn('age', F.year('earliest_visit_start_date') - F.col('year_of_birth')) \
             .where(F.col('earliest_visit_start_date') <= F.col('earliest_condition_start_date')) \
-            .where(F.col('earliest_visit_start_date') >= self._date_filter) \
+            .where(F.col('earliest_visit_start_date') >= self._date_lower_bound) \
             .where(F.col('num_of_diagnosis') >= NUM_OF_DIAGNOSIS_CODES) \
             .select(F.col('person_id'),
                     F.col('age'),
@@ -109,7 +109,7 @@ class HeartFailureCohortBuilder(CohortBuilderBase):
             .where(
             F.col('visit_start_date') >= F.date_sub(F.col('latest_visit_start_date'),
                                                     self.get_total_window())) \
-            .where(F.col('latest_visit_start_date') >= self._date_filter) \
+            .where(F.col('latest_visit_start_date') >= self._date_lower_bound) \
             .withColumn('num_of_visits',
                         F.count('visit_occurrence_id').over(W.partitionBy('person_id'))) \
             .withColumn('age', F.year('latest_visit_start_date') - F.col('year_of_birth')) \
@@ -127,13 +127,15 @@ class HeartFailureCohortBuilder(CohortBuilderBase):
         return negative_hf_cases
 
 
-def main(input_folder, output_folder, date_filter, age_lower_bound, age_upper_bound,
+def main(input_folder, output_folder, date_lower_bound, date_upper_bound,
+         age_lower_bound, age_upper_bound,
          observation_window,
          prediction_window):
     cohort_builder = HeartFailureCohortBuilder(COHORT_NAME,
                                                input_folder,
                                                output_folder,
-                                               date_filter,
+                                               date_lower_bound,
+                                               date_upper_bound,
                                                age_lower_bound,
                                                age_upper_bound,
                                                observation_window,
@@ -148,7 +150,8 @@ if __name__ == '__main__':
 
     main(spark_args.input_folder,
          spark_args.output_folder,
-         spark_args.date_filter,
+         spark_args.date_lower_bound,
+         spark_args.date_upper_bound,
          spark_args.lower_bound,
          spark_args.upper_bound,
          spark_args.observation_window,

@@ -36,11 +36,18 @@ def create_spark_args():
                         action='store',
                         help='The path for your output_folder',
                         required=True)
-    parser.add_argument('-f',
-                        '--date_filter',
-                        dest='date_filter',
+    parser.add_argument('-dl',
+                        '--date_lower_bound',
+                        dest='date_lower_bound',
                         action='store',
-                        help='The path for your output_folder',
+                        help='The date filter lower bound for filtering training data',
+                        required=True,
+                        type=valid_date)
+    parser.add_argument('-du',
+                        '--date_upper_bound',
+                        dest='date_upper_bound',
+                        action='store',
+                        help='The date filter upper bound for filtering training data',
                         required=True,
                         type=valid_date)
     parser.add_argument('-l',

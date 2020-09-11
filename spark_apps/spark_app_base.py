@@ -15,17 +15,20 @@ class CohortBuilderBase(ABC):
                  cohort_name: str,
                  input_folder: str,
                  output_folder: str,
-                 date_filter: str,
+                 date_lower_bound: str,
+                 date_upper_bound: str,
                  age_lower_bound: int,
                  age_upper_bound: int,
                  observation_window: int,
                  prediction_window: int,
                  ehr_table_list: List[str],
                  dependency_list: List[str]):
+
         self._cohort_name = cohort_name
         self._input_folder = input_folder
         self._output_folder = output_folder
-        self._date_filter = date_filter
+        self._date_lower_bound = date_lower_bound
+        self._date_upper_bound = date_upper_bound
         self._age_lower_bound = age_lower_bound
         self._age_upper_bound = age_upper_bound
         self._observation_window = observation_window
@@ -144,7 +147,7 @@ class CohortBuilderBase(ABC):
         return dependency_dict
 
     def _destroy_dependencies(self):
-        for domain_table_name in self._dependency_list:
+        for domain_table_name in self._dependency_dict:
             self.spark.sql(f'DROP VIEW global_temp.{domain_table_name}')
 
     def get_total_window(self):

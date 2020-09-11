@@ -5,71 +5,72 @@ from spark_apps.parameters import create_spark_args
 from utils.common import *
 
 COHORT_QUERY_TEMPLATE = """
-        SELECT
-            v.person_id,
-            v.first_visit_occurrence_id,
-            v.first_visit_start_date,
-            CASE 
-                WHEN num_of_hospitalizations IS NULL THEN 0
-                ELSE 1
-            END AS label
-        FROM
-        (
-            SELECT
-                v.first_visit_occurrence_id,
-                v.first_visit_start_date,
-                v.person_id,
-                SUM(CASE WHEN v3.visit_concept_id IN {visit_concept_ids} THEN 1 END) AS num_of_hospitalizations
-            FROM global_temp.first_qualified_visit_occurrence AS v
-            JOIN global_temp.visit_occurrence AS v3
-                ON v.person_id = v3.person_id
-            WHERE v.num_of_hospitalizations IS NULL
-                AND DATEDIFF(v3.visit_start_date, v.first_visit_start_date) > {total_window}
-            GROUP BY v.first_visit_occurrence_id, v.person_id, v.first_visit_start_date
-        ) v
-        """
+SELECT
+    v.person_id,
+    v.first_visit_occurrence_id,
+    v.first_visit_start_date,
+    CASE 
+        WHEN num_of_hospitalizations IS NULL THEN 0
+        ELSE 1
+    END AS label
+FROM
+(
+    SELECT
+        v.first_visit_occurrence_id,
+        v.first_visit_start_date,
+        v.person_id,
+        SUM(CASE WHEN v3.visit_concept_id IN {visit_concept_ids} THEN 1 END) AS num_of_hospitalizations
+    FROM global_temp.first_qualified_visit_occurrence AS v
+    JOIN global_temp.visit_occurrence AS v3
+        ON v.person_id = v3.person_id
+    WHERE v.num_of_hospitalizations IS NULL
+        AND DATEDIFF(v3.visit_start_date, v.first_visit_start_date) > {total_window}
+    GROUP BY v.first_visit_occurrence_id, v.person_id, v.first_visit_start_date
+) v
+"""
 
 FIRST_QUALIFIED_VISIT_QUERY_TEMPLATE = """
-        SELECT
-            v.first_visit_occurrence_id,
-            v.first_visit_start_date,
-            v.person_id,
-            SUM(CASE WHEN v.visit_concept_id IN {visit_concept_ids} THEN 1 END) AS num_of_hospitalizations
-        FROM
-        (
-            SELECT DISTINCT
-                v1.person_id,
-                v1.first_visit_concept_id,
-                v1.first_visit_start_date,
-                v1.first_visit_occurrence_id,
-                v2.visit_concept_id,
-                v2.visit_start_date,
-                v2.visit_occurrence_id
-            FROM global_temp.first_visit_occurrence AS v1
-            JOIN global_temp.visit_occurrence AS v2
-                ON v1.person_id = v2.person_id
-            WHERE v1.first_visit_start_date < v2.visit_start_date
-                AND v1.first_visit_occurrence_id <> v2.visit_occurrence_id
-                AND DATEDIFF(v2.visit_start_date, v1.first_visit_start_date) <= {total_window}
-                AND v1.first_visit_start_date >= '{date_filter}'
-        ) v
-        GROUP BY v.first_visit_occurrence_id, v.person_id, v.first_visit_start_date
-        """
+SELECT
+    v.first_visit_occurrence_id,
+    v.first_visit_start_date,
+    v.person_id,
+    SUM(CASE WHEN v.visit_concept_id IN {visit_concept_ids} THEN 1 END) AS num_of_hospitalizations
+FROM
+(
+    SELECT DISTINCT
+        v1.person_id,
+        v1.first_visit_concept_id,
+        v1.first_visit_start_date,
+        v1.first_visit_occurrence_id,
+        v2.visit_concept_id,
+        v2.visit_start_date,
+        v2.visit_occurrence_id
+    FROM global_temp.first_visit_occurrence AS v1
+    JOIN global_temp.visit_occurrence AS v2
+        ON v1.person_id = v2.person_id
+    WHERE v1.first_visit_start_date < v2.visit_start_date
+        AND v1.first_visit_occurrence_id <> v2.visit_occurrence_id
+        AND DATEDIFF(v2.visit_start_date, v1.first_visit_start_date) <= {total_window}
+        AND v1.first_visit_start_date >= '{date_lower_bound}'
+        AND v1.first_visit_start_date <= '{date_upper_bound}'
+) v
+GROUP BY v.first_visit_occurrence_id, v.person_id, v.first_visit_start_date
+"""
 
 FIRST_VISIT_QUERY_TEMPLATE = """
-        SELECT
-            *
-        FROM
-        (
-            SELECT DISTINCT
-                v1.person_id,
-                FIRST(visit_concept_id) OVER (PARTITION BY person_id ORDER BY visit_start_date, visit_occurrence_id) AS first_visit_concept_id,
-                FIRST(visit_start_date) OVER (PARTITION BY person_id ORDER BY visit_start_date, visit_occurrence_id) AS first_visit_start_date,
-                FIRST(visit_occurrence_id) OVER (PARTITION BY person_id ORDER BY visit_start_date, visit_occurrence_id) AS first_visit_occurrence_id
-            FROM global_temp.visit_occurrence AS v1
-        ) v
-        WHERE v.first_visit_concept_id NOT IN {visit_concept_ids}
-        """
+SELECT
+    *
+FROM
+(
+    SELECT DISTINCT
+        v1.person_id,
+        FIRST(visit_concept_id) OVER (PARTITION BY person_id ORDER BY visit_start_date, visit_occurrence_id) AS first_visit_concept_id,
+        FIRST(visit_start_date) OVER (PARTITION BY person_id ORDER BY visit_start_date, visit_occurrence_id) AS first_visit_start_date,
+        FIRST(visit_occurrence_id) OVER (PARTITION BY person_id ORDER BY visit_start_date, visit_occurrence_id) AS first_visit_occurrence_id
+    FROM global_temp.visit_occurrence AS v1
+) v
+WHERE v.first_visit_concept_id NOT IN {visit_concept_ids}
+"""
 
 COHORT_TABLE = 'cohort'
 FIRST_VISIT_TABLE = 'first_visit_occurrence'
@@ -94,7 +95,8 @@ class HospitalizationCohortBuilder(CohortBuilderBase):
 
         first_qualified_visit_query = FIRST_QUALIFIED_VISIT_QUERY_TEMPLATE.format(
             visit_concept_ids=VISIT_CONCEPT_IDS,
-            date_filter=self._date_filter,
+            date_lower_bound=self._date_lower_bound,
+            date_upper_bound=self._date_upper_bound,
             total_window=self.get_total_window())
 
         self.spark.sql(first_qualified_visit_query).createOrReplaceGlobalTempView(
@@ -161,13 +163,14 @@ class HospitalizationCohortBuilder(CohortBuilderBase):
         return create_sequence_data(cohort_ehr_records, None)
 
 
-def main(input_folder, output_folder, date_filter, age_lower_bound, age_upper_bound,
-         observation_window,
-         prediction_window):
+def main(input_folder, output_folder, date_lower_bound, date_upper_bound,
+         age_lower_bound, age_upper_bound,
+         observation_window, prediction_window):
     cohort_builder = HospitalizationCohortBuilder(COHORT_NAME,
                                                   input_folder,
                                                   output_folder,
-                                                  date_filter,
+                                                  date_lower_bound,
+                                                  date_upper_bound,
                                                   age_lower_bound,
                                                   age_upper_bound,
                                                   observation_window,
@@ -183,7 +186,8 @@ if __name__ == '__main__':
 
     main(spark_args.input_folder,
          spark_args.output_folder,
-         spark_args.date_filter,
+         spark_args.date_lower_bound,
+         spark_args.date_upper_bound,
          spark_args.lower_bound,
          spark_args.upper_bound,
          spark_args.observation_window,
