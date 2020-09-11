@@ -34,7 +34,6 @@ class CohortBuilderBase(ABC):
         self._dependency_list = dependency_list
         self._output_data_folder = os.path.join(self._output_folder,
                                                 re.sub('[^a-z]+', '_', self._cohort_name.lower()))
-        self._dependency_dict = self._instantiate_dependencies()
 
         # Validate the input and output folders
         self._validate_folder(self._input_folder)
@@ -46,6 +45,8 @@ class CohortBuilderBase(ABC):
         self._validate_date_folder(self._dependency_list)
 
         self.spark = SparkSession.builder.appName(f'Generate {self._cohort_name}').getOrCreate()
+
+        self._dependency_dict = self._instantiate_dependencies()
 
     def build(self):
 
