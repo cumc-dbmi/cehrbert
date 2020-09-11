@@ -121,7 +121,7 @@ class CohortBuilderBase(ABC):
         return matched_negative_hf_cases
 
     def _validate_int_inputs(self):
-        assert self._age_lower_bound > 0
+        assert self._age_lower_bound >= 0
         assert self._age_upper_bound > 0
         assert self._age_lower_bound < self._age_upper_bound
 

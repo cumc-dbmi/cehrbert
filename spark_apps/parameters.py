@@ -24,6 +24,12 @@ def valid_date(s):
 def create_spark_args():
     parser = argparse.ArgumentParser(
         description='Arguments for spark applications for generating cohort definitions')
+    parser.add_argument('-c',
+                        '--cohort_name',
+                        dest='cohort_name',
+                        action='store',
+                        help='The cohort name',
+                        required=True)
     parser.add_argument('-i',
                         '--input_folder',
                         dest='input_folder',

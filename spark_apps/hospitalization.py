@@ -76,7 +76,6 @@ COHORT_TABLE = 'cohort'
 FIRST_VISIT_TABLE = 'first_visit_occurrence'
 FIRST_QUALIFIED_VISIT_TABLE = 'first_qualified_visit_occurrence'
 
-COHORT_NAME = 'hospitalization'
 VISIT_CONCEPT_IDS = (9201, 262)
 
 DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure', 'procedure_occurrence']
@@ -163,10 +162,10 @@ class HospitalizationCohortBuilder(CohortBuilderBase):
         return create_sequence_data(cohort_ehr_records, None)
 
 
-def main(input_folder, output_folder, date_lower_bound, date_upper_bound,
+def main(cohort_name, input_folder, output_folder, date_lower_bound, date_upper_bound,
          age_lower_bound, age_upper_bound,
          observation_window, prediction_window):
-    cohort_builder = HospitalizationCohortBuilder(COHORT_NAME,
+    cohort_builder = HospitalizationCohortBuilder(cohort_name,
                                                   input_folder,
                                                   output_folder,
                                                   date_lower_bound,
@@ -184,7 +183,8 @@ def main(input_folder, output_folder, date_lower_bound, date_upper_bound,
 if __name__ == '__main__':
     spark_args = create_spark_args()
 
-    main(spark_args.input_folder,
+    main(spark_args.cohort_name,
+         spark_args.input_folder,
          spark_args.output_folder,
          spark_args.date_lower_bound,
          spark_args.date_upper_bound,

@@ -1,5 +1,3 @@
-from pyspark.sql import DataFrame
-
 from spark_apps.spark_app_base import CohortBuilderBase
 from spark_apps.parameters import create_spark_args
 
@@ -32,7 +30,6 @@ HEART_FAILURE_CONCEPTS = [45773075, 45766964, 45766167, 45766166, 45766165, 4576
 DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure', 'procedure_occurrence']
 DEPENDENCY_LIST = ['person', 'condition_occurrence', 'visit_occurrence']
 
-COHORT_NAME = 'heart failure'
 PERSON = 'person'
 VISIT_OCCURRENCE = 'visit_occurrence'
 CONDITION_OCCURRENCE = 'condition_occurrence'
@@ -127,11 +124,11 @@ class HeartFailureCohortBuilder(CohortBuilderBase):
         return negative_hf_cases
 
 
-def main(input_folder, output_folder, date_lower_bound, date_upper_bound,
+def main(cohort_name, input_folder, output_folder, date_lower_bound, date_upper_bound,
          age_lower_bound, age_upper_bound,
          observation_window,
          prediction_window):
-    cohort_builder = HeartFailureCohortBuilder(COHORT_NAME,
+    cohort_builder = HeartFailureCohortBuilder(cohort_name,
                                                input_folder,
                                                output_folder,
                                                date_lower_bound,
@@ -148,7 +145,8 @@ def main(input_folder, output_folder, date_lower_bound, date_upper_bound,
 if __name__ == '__main__':
     spark_args = create_spark_args()
 
-    main(spark_args.input_folder,
+    main(spark_args.cohort_name,
+         spark_args.input_folder,
          spark_args.output_folder,
          spark_args.date_lower_bound,
          spark_args.date_upper_bound,
