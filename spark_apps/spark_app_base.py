@@ -34,6 +34,7 @@ class CohortBuilderBase(ABC):
         self._dependency_list = dependency_list
         self._output_data_folder = os.path.join(self._output_folder,
                                                 re.sub('[^a-z]+', '_', self._cohort_name.lower()))
+        self._dependency_dict = self._instantiate_dependencies()
 
         # Validate the input and output folders
         self._validate_folder(self._input_folder)
@@ -45,7 +46,6 @@ class CohortBuilderBase(ABC):
         self._validate_date_folder(self._dependency_list)
 
         self.spark = SparkSession.builder.appName(f'Generate {self._cohort_name}').getOrCreate()
-        self._instantiate_dependencies()
 
     def build(self):
 
@@ -97,9 +97,24 @@ class CohortBuilderBase(ABC):
     def create_control_cases(self):
         pass
 
-    @abstractmethod
-    def create_matching_control_cases(self, incident_cases, control_cases):
-        pass
+    def create_matching_control_cases(self, incident_cases: DataFrame, control_cases: DataFrame):
+        incident_cases.createOrReplaceGlobalTempView('positives')
+        control_cases.createOrReplaceGlobalTempView('negatives')
+
+        matched_negative_hf_cases = self.spark.sql("""
+            SELECT DISTINCT
+                n.*
+            FROM global_temp.positives AS p
+            JOIN global_temp.negatives AS n
+                ON p.gender_concept_id = n.gender_concept_id
+                    AND p.age = n.age
+                    AND p.visit_start_date BETWEEN DATE_SUB(n.visit_start_date, 15) AND DATE_ADD(n.visit_start_date, 15)
+            """)
+
+        self.spark.sql(f'DROP VIEW global_temp.positives')
+        self.spark.sql(f'DROP VIEW global_temp.negatives')
+
+        return matched_negative_hf_cases
 
     def _validate_int_inputs(self):
         assert self._age_lower_bound > 0
@@ -120,9 +135,12 @@ class CohortBuilderBase(ABC):
             raise FileExistsError(f'{folder} does not exist')
 
     def _instantiate_dependencies(self):
+        dependency_dict = dict()
         for domain_table_name in self._dependency_list:
             table = self.spark.read.parquet(os.path.join(self._input_folder, domain_table_name))
             table.createOrReplaceGlobalTempView(domain_table_name)
+            dependency_dict[domain_table_name] = table
+        return dependency_dict
 
     def _destroy_dependencies(self):
         for domain_table_name in self._dependency_list:

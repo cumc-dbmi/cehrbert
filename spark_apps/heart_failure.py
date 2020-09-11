@@ -1,4 +1,3 @@
-import pyspark.sql.functions as F
 from pyspark.sql import DataFrame
 
 from spark_apps.spark_app_base import CohortBuilderBase
@@ -126,25 +125,6 @@ class HeartFailureCohortBuilder(CohortBuilderBase):
                     F.lit(0).alias('label')).distinct()
 
         return negative_hf_cases
-
-    def create_matching_control_cases(self, incident_cases: DataFrame, control_cases: DataFrame):
-        incident_cases.createOrReplaceGlobalTempView('positives')
-        control_cases.createOrReplaceGlobalTempView('negatives')
-
-        matched_negative_hf_cases = self.spark.sql("""
-            SELECT DISTINCT
-                n.*
-            FROM global_temp.positives AS p
-            JOIN global_temp.negatives AS n
-                ON p.gender_concept_id = n.gender_concept_id
-                    AND p.age = n.age
-                    AND p.visit_start_date BETWEEN DATE_SUB(n.visit_start_date, 15) AND DATE_ADD(n.visit_start_date, 15)
-            """)
-
-        self.spark.sql(f'DROP VIEW global_temp.positives')
-        self.spark.sql(f'DROP VIEW global_temp.negatives')
-
-        return matched_negative_hf_cases
 
 
 def main(input_folder, output_folder, date_filter, age_lower_bound, age_upper_bound,
