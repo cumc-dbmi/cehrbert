@@ -36,7 +36,7 @@ class CohortBuilderBase(ABC):
         self._ehr_table_list = ehr_table_list
         self._dependency_list = dependency_list
         self._output_data_folder = os.path.join(self._output_folder,
-                                                re.sub('[^a-z]+', '_', self._cohort_name.lower()))
+                                                re.sub('[^a-z0-9]+', '_', self._cohort_name.lower()))
 
         # Validate the input and output folders
         self._validate_folder(self._input_folder)
