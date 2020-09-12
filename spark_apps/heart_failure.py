@@ -1,4 +1,4 @@
-from spark_apps.spark_app_base import CohortBuilderBase
+from spark_apps.spark_app_base import ReversedCohortBuilderBase
 from spark_apps.parameters import create_spark_args
 
 from utils.common import *
@@ -37,7 +37,7 @@ CONDITION_OCCURRENCE = 'condition_occurrence'
 NUM_OF_DIAGNOSIS_CODES = 3
 
 
-class HeartFailureCohortBuilder(CohortBuilderBase):
+class HeartFailureCohortBuilder(ReversedCohortBuilderBase):
 
     def preprocess_dependency(self):
         condition_occurrence = self.spark.sql("SELECT * FROM global_temp.condition_occurrence") \

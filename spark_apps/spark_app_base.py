@@ -9,7 +9,7 @@ from pyspark.sql import SparkSession
 from utils.common import *
 
 
-class CohortBuilderBase(ABC):
+class AbstractCohortBuilderBase(ABC):
 
     def __init__(self,
                  cohort_name: str,
@@ -36,7 +36,8 @@ class CohortBuilderBase(ABC):
         self._ehr_table_list = ehr_table_list
         self._dependency_list = dependency_list
         self._output_data_folder = os.path.join(self._output_folder,
-                                                re.sub('[^a-z0-9]+', '_', self._cohort_name.lower()))
+                                                re.sub('[^a-z0-9]+', '_',
+                                                       self._cohort_name.lower()))
 
         # Validate the input and output folders
         self._validate_folder(self._input_folder)
@@ -71,23 +72,9 @@ class CohortBuilderBase(ABC):
 
         self._destroy_dependencies()
 
+    @abstractmethod
     def add_ehr_records_to_cohort(self, cohort: DataFrame):
-        ehr_records = extract_ehr_records(self.spark,
-                                          self._input_folder,
-                                          self._ehr_table_list)
-
-        cohort_ehr_records = ehr_records.join(cohort, 'person_id') \
-            .where(ehr_records['visit_occurrence_id'] != cohort['visit_occurrence_id']) \
-            .where(
-            ehr_records['date'] <= F.date_sub(cohort['visit_start_date'],
-                                              self._prediction_window)).where(
-            ehr_records['date'] >= F.date_sub(cohort['visit_start_date'],
-                                              self.get_total_window())).select(
-            ehr_records['person_id'], ehr_records['standard_concept_id'],
-            ehr_records['date'], ehr_records['visit_occurrence_id'],
-            ehr_records['domain'])
-
-        return create_sequence_data(cohort_ehr_records, None)
+        pass
 
     @abstractmethod
     def preprocess_dependency(self):
@@ -152,3 +139,67 @@ class CohortBuilderBase(ABC):
 
     def get_total_window(self):
         return self._observation_window + self._prediction_window
+
+
+class ReversedCohortBuilderBase(AbstractCohortBuilderBase):
+
+    def add_ehr_records_to_cohort(self, cohort: DataFrame):
+        ehr_records = extract_ehr_records(self.spark,
+                                          self._input_folder,
+                                          self._ehr_table_list)
+
+        cohort_ehr_records = ehr_records.join(cohort, 'person_id') \
+            .where(ehr_records['visit_occurrence_id'] != cohort['visit_occurrence_id']) \
+            .where(
+            ehr_records['date'] <= F.date_sub(cohort['visit_start_date'],
+                                              self._prediction_window)).where(
+            ehr_records['date'] >= F.date_sub(cohort['visit_start_date'],
+                                              self.get_total_window())).select(
+            ehr_records['person_id'], ehr_records['standard_concept_id'],
+            ehr_records['date'], ehr_records['visit_occurrence_id'],
+            ehr_records['domain'])
+
+        return create_sequence_data(cohort_ehr_records, None)
+
+    @abstractmethod
+    def preprocess_dependency(self):
+        pass
+
+    @abstractmethod
+    def create_incident_cases(self):
+        pass
+
+    @abstractmethod
+    def create_control_cases(self):
+        pass
+
+
+class CohortBuilderBase(AbstractCohortBuilderBase):
+
+    def add_ehr_records_to_cohort(self, cohort: DataFrame):
+        ehr_records = extract_ehr_records(self.spark,
+                                          self._input_folder,
+                                          self._ehr_table_list)
+
+        cohort_ehr_records = ehr_records.join(cohort, 'person_id') \
+            .where(ehr_records['visit_occurrence_id'] != cohort['visit_occurrence_id']) \
+            .where(ehr_records['date'] >= cohort['visit_start_date']) \
+            .where(
+            ehr_records['date'] <= F.date_add(cohort['visit_start_date'], self._observation_window)) \
+            .select(ehr_records['person_id'], ehr_records['standard_concept_id'],
+                    ehr_records['date'], ehr_records['visit_occurrence_id'],
+                    ehr_records['domain'])
+
+        return create_sequence_data(cohort_ehr_records, None)
+
+    @abstractmethod
+    def preprocess_dependency(self):
+        pass
+
+    @abstractmethod
+    def create_incident_cases(self):
+        pass
+
+    @abstractmethod
+    def create_control_cases(self):
+        pass

@@ -145,22 +145,6 @@ class HospitalizationCohortBuilder(CohortBuilderBase):
 
         return control_cases
 
-    def add_ehr_records_to_cohort(self, cohort: DataFrame):
-        ehr_records = extract_ehr_records(self.spark,
-                                          self._input_folder,
-                                          self._ehr_table_list)
-
-        cohort_ehr_records = ehr_records.join(cohort, 'person_id') \
-            .where(ehr_records['visit_occurrence_id'] != cohort['visit_occurrence_id']) \
-            .where(ehr_records['date'] >= cohort['visit_start_date']) \
-            .where(
-            ehr_records['date'] <= F.date_add(cohort['visit_start_date'], self._observation_window)) \
-            .select(ehr_records['person_id'], ehr_records['standard_concept_id'],
-                    ehr_records['date'], ehr_records['visit_occurrence_id'],
-                    ehr_records['domain'])
-
-        return create_sequence_data(cohort_ehr_records, None)
-
 
 def main(cohort_name, input_folder, output_folder, date_lower_bound, date_upper_bound,
          age_lower_bound, age_upper_bound,
