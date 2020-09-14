@@ -1,40 +1,97 @@
-import argparse
-import os
+import pyspark.sql.functions as F
 
-from pyspark.sql import SparkSession
+from spark_apps.spark_app_base import ReversedCohortBuilderBase
+from spark_apps.parameters import create_spark_args
 
-import spark_apps.parameters as p
-from utils.common import *
+QUALIFIED_DEATH_DATE_QUERY = """
+WITH max_death_date_cte AS 
+(
+    SELECT 
+        person_id,
+        MAX(death_date) AS death_date
+    FROM global_temp.death
+    GROUP BY person_id
+)
+
+SELECT
+    dv.person_id,
+    dv.death_date
+FROM
+(
+    SELECT DISTINCT
+        d.person_id,
+        d.death_date,
+        FIRST(DATE(v.visit_start_date)) OVER(PARTITION BY v.person_id ORDER BY DATE(v.visit_start_date) DESC) AS last_visit_start_date
+    FROM max_death_date_cte AS d
+    JOIN global_temp.visit_occurrence AS v
+        ON d.person_id = v.person_id
+) dv
+WHERE dv.last_visit_start_date <= dv.death_date
+"""
+
+COHORT_QUERY_TEMPLATE = """
+WITH last_visit_cte AS (
+    SELECT DISTINCT
+        v.person_id,
+        FIRST(v.visit_occurrence_id) OVER(PARTITION BY v.person_id ORDER BY DATE(v.visit_start_date) DESC) AS last_visit_occurrence_id,
+        FIRST(DATE(v.visit_start_date)) OVER(PARTITION BY v.person_id ORDER BY DATE(v.visit_start_date) DESC) AS last_visit_start_date
+    FROM global_temp.visit_occurrence AS v
+    WHERE v.visit_start_date >= '2015-01-01'
+)
+
+SELECT
+    p.person_id,
+    p.last_visit_occurrence_id AS visit_occurrence_id,
+    p.last_visit_start_date AS visit_start_date,
+    CAST(ISNOTNULL(d.person_id) AS INT) AS label
+FROM last_visit_cte AS p
+LEFT JOIN global_temp.death AS d
+    ON p.person_id = d.person_id
+"""
+
+DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure', 'procedure_occurrence']
+
+COHORT_TABLE = 'cohort'
+DEATH = 'death'
+PERSON = 'person'
+VISIT_OCCURRENCE = 'visit_occurrence'
+DEPENDENCY_LIST = [DEATH, PERSON, VISIT_OCCURRENCE]
 
 
-def main(input_folder, output_folder):
-    sequence_data = spark.read.parquet(os.path.join(input_folder, p.parquet_data_path))
-    death = preprocess_domain_table(spark, input_folder, 'death')
-    death = death.groupby('person_id').agg(F.max(F.col('death_date')).alias('death_date'))
+class MortalityCohortBuilder(ReversedCohortBuilderBase):
 
-    sequence_data.join(death, 'person_id', 'left') \
-        .where('death_date IS NULL OR death_date >= max_event_date') \
-        .withColumn('mortality', F.col('death_date').isNotNull().cast('int')) \
-        .select('person_id', 'mortality').write.mode('overwrite') \
-        .parquet(os.path.join(output_folder, p.mortality_data_path))
+    def preprocess_dependency(self):
+        self.spark.sql(QUALIFIED_DEATH_DATE_QUERY).createOrReplaceGlobalTempView(DEATH)
+        self.spark.sql(COHORT_QUERY_TEMPLATE).createOrReplaceGlobalTempView(COHORT_TABLE)
+
+
+def main(cohort_name, input_folder, output_folder, date_lower_bound, date_upper_bound,
+         age_lower_bound, age_upper_bound,
+         observation_window, prediction_window):
+    cohort_builder = MortalityCohortBuilder(cohort_name,
+                                            input_folder,
+                                            output_folder,
+                                            date_lower_bound,
+                                            date_upper_bound,
+                                            age_lower_bound,
+                                            age_upper_bound,
+                                            observation_window,
+                                            prediction_window,
+                                            DOMAIN_TABLE_LIST,
+                                            DEPENDENCY_LIST)
+
+    cohort_builder.build()
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Arguments for generating mortality labels')
-    parser.add_argument('-i',
-                        '--input_folder',
-                        dest='input_folder',
-                        action='store',
-                        help='The path for your input_folder where the sequence data is',
-                        required=True)
-    parser.add_argument('-o',
-                        '--output_folder',
-                        dest='output_folder',
-                        action='store',
-                        help='The path for your output_folder',
-                        required=True)
+    spark_args = create_spark_args()
 
-    ARGS = parser.parse_args()
-
-    spark = SparkSession.builder.appName('Generate Mortality labels').getOrCreate()
-    main(spark, ARGS.input_folder, ARGS.output_folder)
+    main(spark_args.cohort_name,
+         spark_args.input_folder,
+         spark_args.output_folder,
+         spark_args.date_lower_bound,
+         spark_args.date_upper_bound,
+         spark_args.lower_bound,
+         spark_args.upper_bound,
+         spark_args.observation_window,
+         spark_args.prediction_window)

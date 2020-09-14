@@ -1,5 +1,3 @@
-from pyspark.sql import DataFrame
-
 from spark_apps.spark_app_base import CohortBuilderBase
 from spark_apps.parameters import create_spark_args
 from utils.common import *
