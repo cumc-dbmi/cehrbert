@@ -8,6 +8,16 @@ from pyspark.sql import SparkSession
 
 from utils.common import *
 
+NEGATIVE_CONTROL_MATCH_QUERY_TEMPLATE = """
+            SELECT DISTINCT
+                n.*
+            FROM global_temp.positives AS p
+            JOIN global_temp.negatives AS n
+                ON p.gender_concept_id = n.gender_concept_id
+                    AND p.age = n.age
+                    AND p.index_date BETWEEN DATE_SUB(n.index_date, {match_window}) AND DATE_ADD(n.index_date, {match_window})
+            """
+
 
 class AbstractCohortBuilderBase(ABC):
 
@@ -21,6 +31,7 @@ class AbstractCohortBuilderBase(ABC):
                  age_upper_bound: int,
                  observation_window: int,
                  prediction_window: int,
+                 index_date_match_window: int,
                  ehr_table_list: List[str],
                  dependency_list: List[str]):
 
@@ -33,6 +44,7 @@ class AbstractCohortBuilderBase(ABC):
         self._age_upper_bound = age_upper_bound
         self._observation_window = observation_window
         self._prediction_window = prediction_window
+        self._index_date_match_window = index_date_match_window
         self._ehr_table_list = ehr_table_list
         self._dependency_list = dependency_list
         self._output_data_folder = os.path.join(self._output_folder,
@@ -92,15 +104,10 @@ class AbstractCohortBuilderBase(ABC):
         incident_cases.createOrReplaceGlobalTempView('positives')
         control_cases.createOrReplaceGlobalTempView('negatives')
 
-        matched_negative_hf_cases = self.spark.sql("""
-            SELECT DISTINCT
-                n.*
-            FROM global_temp.positives AS p
-            JOIN global_temp.negatives AS n
-                ON p.gender_concept_id = n.gender_concept_id
-                    AND p.age = n.age
-                    AND p.index_date BETWEEN DATE_SUB(n.index_date, 15) AND DATE_ADD(n.index_date, 15)
-            """)
+        negative_control_match_query = NEGATIVE_CONTROL_MATCH_QUERY_TEMPLATE.format(
+            match_window=self._index_date_match_window // 2)
+
+        matched_negative_hf_cases = self.spark.sql(negative_control_match_query)
 
         self.spark.sql(f'DROP VIEW global_temp.positives')
         self.spark.sql(f'DROP VIEW global_temp.negatives')

@@ -88,4 +88,12 @@ def create_spark_args():
                         required=False,
                         type=int,
                         default=180)
+    parser.add_argument('-im',
+                        '--index_date_match_window',
+                        dest='index_date_match_window',
+                        action='store',
+                        help='The window for matching index dates of the incident and control cases',
+                        required=False,
+                        type=int,
+                        default=30)
     return parser.parse_args()
