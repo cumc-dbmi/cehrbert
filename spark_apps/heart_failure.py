@@ -72,7 +72,7 @@ class HeartFailureCohortBuilder(ReversedCohortBuilderBase):
                     F.col('gender_concept_id'),
                     F.col('race_concept_id'),
                     F.col('year_of_birth'),
-                    F.col('earliest_visit_start_date').alias('visit_start_date'),
+                    F.col('earliest_visit_start_date').alias('index_date'),
                     F.col('earliest_visit_occurrence_id').alias('visit_occurrence_id'),
                     F.lit(1).alias('label')).distinct() \
             .where(F.col('age').between(self._age_lower_bound, self._age_upper_bound))
@@ -117,7 +117,7 @@ class HeartFailureCohortBuilder(ReversedCohortBuilderBase):
                     F.col('gender_concept_id'),
                     F.col('race_concept_id'),
                     F.col('year_of_birth'),
-                    F.col('latest_visit_start_date').alias('visit_start_date'),
+                    F.col('latest_visit_start_date').alias('index_date'),
                     F.col('latest_visit_occurrence_id').alias('visit_occurrence_id'),
                     F.lit(0).alias('label')).distinct()
 

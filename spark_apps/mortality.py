@@ -1,6 +1,6 @@
 import pyspark.sql.functions as F
 
-from spark_apps.spark_app_base import ReversedCohortBuilderBase
+from spark_apps.spark_app_base import LastVisitCohortBuilderBase
 from spark_apps.parameters import create_spark_args
 
 QUALIFIED_DEATH_DATE_QUERY = """
@@ -36,17 +36,17 @@ WITH last_visit_cte AS (
         FIRST(v.visit_occurrence_id) OVER(PARTITION BY v.person_id ORDER BY DATE(v.visit_start_date) DESC) AS last_visit_occurrence_id,
         FIRST(DATE(v.visit_start_date)) OVER(PARTITION BY v.person_id ORDER BY DATE(v.visit_start_date) DESC) AS last_visit_start_date
     FROM global_temp.visit_occurrence AS v
-    WHERE v.visit_start_date >= '2015-01-01'
 )
 
 SELECT
     p.person_id,
     p.last_visit_occurrence_id AS visit_occurrence_id,
-    p.last_visit_start_date AS visit_start_date,
+    COALESCE(d.death_date, p.last_visit_start_date) AS index_date,
     CAST(ISNOTNULL(d.person_id) AS INT) AS label
 FROM last_visit_cte AS p
 LEFT JOIN global_temp.death AS d
     ON p.person_id = d.person_id
+WHERE v.last_visit_start_date >= '{date_lower_bound}' AND v.last_visit_start_date <= '{date_upper_bound}'
 """
 
 DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure', 'procedure_occurrence']
@@ -58,11 +58,18 @@ VISIT_OCCURRENCE = 'visit_occurrence'
 DEPENDENCY_LIST = [DEATH, PERSON, VISIT_OCCURRENCE]
 
 
-class MortalityCohortBuilder(ReversedCohortBuilderBase):
+class MortalityCohortBuilder(LastVisitCohortBuilderBase):
 
     def preprocess_dependency(self):
         self.spark.sql(QUALIFIED_DEATH_DATE_QUERY).createOrReplaceGlobalTempView(DEATH)
-        self.spark.sql(COHORT_QUERY_TEMPLATE).createOrReplaceGlobalTempView(COHORT_TABLE)
+
+        cohort_query = COHORT_QUERY_TEMPLATE.format(date_lower_bound=self._date_lower_bound,
+                                                    date_upper_bound=self._date_upper_bound)
+
+        cohort = self.spark.sql(cohort_query)
+        cohort.createOrReplaceGlobalTempView(COHORT_TABLE)
+
+        self._dependency_dict[COHORT_TABLE] = cohort
 
     def create_incident_cases(self):
         cohort = self._dependency_dict[COHORT_TABLE]
@@ -70,7 +77,7 @@ class MortalityCohortBuilder(ReversedCohortBuilderBase):
 
         incident_cases = cohort.where(F.col('label') == 1) \
             .join(person, 'person_id') \
-            .withColumn('age', F.year('visit_start_date') - F.col('year_of_birth')) \
+            .withColumn('age', F.year('index_date') - F.col('year_of_birth')) \
             .select(F.col('person_id'),
                     F.col('age'),
                     F.col('gender_concept_id'),

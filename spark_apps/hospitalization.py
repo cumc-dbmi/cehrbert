@@ -5,8 +5,8 @@ from utils.common import *
 COHORT_QUERY_TEMPLATE = """
 SELECT
     v.person_id,
-    v.first_visit_occurrence_id,
-    v.first_visit_start_date,
+    v.first_visit_occurrence_id AS visit_occurrence_id,
+    v.first_visit_start_date AS index_date,
     CASE 
         WHEN num_of_hospitalizations IS NULL THEN 0
         ELSE 1
@@ -113,14 +113,14 @@ class HospitalizationCohortBuilder(CohortBuilderBase):
 
         incident_cases = cohort.where(F.col('label') == 1) \
             .join(person, 'person_id') \
-            .withColumn('age', F.year('first_visit_start_date') - F.col('year_of_birth')) \
+            .withColumn('age', F.year('index_date') - F.col('year_of_birth')) \
             .select(F.col('person_id'),
                     F.col('age'),
                     F.col('gender_concept_id'),
                     F.col('race_concept_id'),
                     F.col('year_of_birth'),
-                    F.col('first_visit_start_date').alias('visit_start_date'),
-                    F.col('first_visit_occurrence_id').alias('visit_occurrence_id'),
+                    F.col('index_date'),
+                    F.col('visit_occurrence_id'),
                     F.col('label')).distinct()
 
         return incident_cases
@@ -131,14 +131,14 @@ class HospitalizationCohortBuilder(CohortBuilderBase):
 
         control_cases = cohort.where(F.col('label') == 0) \
             .join(person, 'person_id') \
-            .withColumn('age', F.year('first_visit_start_date') - F.col('year_of_birth')) \
+            .withColumn('age', F.year('index_date') - F.col('year_of_birth')) \
             .select(F.col('person_id'),
                     F.col('age'),
                     F.col('gender_concept_id'),
                     F.col('race_concept_id'),
                     F.col('year_of_birth'),
-                    F.col('first_visit_start_date').alias('visit_start_date'),
-                    F.col('first_visit_occurrence_id').alias('visit_occurrence_id'),
+                    F.col('index_date'),
+                    F.col('visit_occurrence_id'),
                     F.col('label')).distinct()
 
         return control_cases
