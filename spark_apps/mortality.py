@@ -64,6 +64,42 @@ class MortalityCohortBuilder(ReversedCohortBuilderBase):
         self.spark.sql(QUALIFIED_DEATH_DATE_QUERY).createOrReplaceGlobalTempView(DEATH)
         self.spark.sql(COHORT_QUERY_TEMPLATE).createOrReplaceGlobalTempView(COHORT_TABLE)
 
+    def create_incident_cases(self):
+        cohort = self._dependency_dict[COHORT_TABLE]
+        person = self._dependency_dict[PERSON]
+
+        incident_cases = cohort.where(F.col('label') == 1) \
+            .join(person, 'person_id') \
+            .withColumn('age', F.year('visit_start_date') - F.col('year_of_birth')) \
+            .select(F.col('person_id'),
+                    F.col('age'),
+                    F.col('gender_concept_id'),
+                    F.col('race_concept_id'),
+                    F.col('year_of_birth'),
+                    F.col('visit_start_date'),
+                    F.col('visit_occurrence_id'),
+                    F.col('label')).distinct()
+
+        return incident_cases
+
+    def create_control_cases(self):
+        cohort = self._dependency_dict[COHORT_TABLE]
+        person = self._dependency_dict[PERSON]
+
+        control_cases = cohort.where(F.col('label') == 0) \
+            .join(person, 'person_id') \
+            .withColumn('age', F.year('visit_start_date') - F.col('year_of_birth')) \
+            .select(F.col('person_id'),
+                    F.col('age'),
+                    F.col('gender_concept_id'),
+                    F.col('race_concept_id'),
+                    F.col('year_of_birth'),
+                    F.col('visit_start_date'),
+                    F.col('visit_occurrence_id'),
+                    F.col('label')).distinct()
+
+        return control_cases
+
 
 def main(cohort_name, input_folder, output_folder, date_lower_bound, date_upper_bound,
          age_lower_bound, age_upper_bound,
