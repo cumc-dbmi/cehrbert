@@ -9,14 +9,13 @@ from pyspark.sql import SparkSession
 from utils.common import *
 
 NEGATIVE_CONTROL_MATCH_QUERY_TEMPLATE = """
-            SELECT DISTINCT
-                n.*
-            FROM global_temp.positives AS p
-            JOIN global_temp.negatives AS n
-                ON p.gender_concept_id = n.gender_concept_id
-                    AND p.age = n.age
-                    AND p.index_date BETWEEN DATE_SUB(n.index_date, {match_window}) AND DATE_ADD(n.index_date, {match_window})
-            """
+SELECT DISTINCT
+    n.*
+FROM global_temp.positives AS p
+JOIN global_temp.negatives AS n
+    ON p.gender_concept_id = n.gender_concept_id
+        AND p.age BETWEEN n.age - {age_match_window} AND n.age + {age_match_window}
+"""
 
 
 class AbstractCohortBuilderBase(ABC):
@@ -100,17 +99,19 @@ class AbstractCohortBuilderBase(ABC):
     def create_control_cases(self):
         pass
 
+    def get_matching_control_query(self):
+        return NEGATIVE_CONTROL_MATCH_QUERY_TEMPLATE.format(
+            age_match_window=self._index_date_match_window)
+
     def create_matching_control_cases(self, incident_cases: DataFrame, control_cases: DataFrame):
+
         incident_cases.createOrReplaceGlobalTempView('positives')
         control_cases.createOrReplaceGlobalTempView('negatives')
 
-        negative_control_match_query = NEGATIVE_CONTROL_MATCH_QUERY_TEMPLATE.format(
-            match_window=self._index_date_match_window // 2)
+        matched_negative_hf_cases = self.spark.sql(self.get_matching_control_query())
 
-        matched_negative_hf_cases = self.spark.sql(negative_control_match_query)
-
-        self.spark.sql(f'DROP VIEW global_temp.positives')
-        self.spark.sql(f'DROP VIEW global_temp.negatives')
+        self.spark.sql('DROP VIEW global_temp.positives')
+        self.spark.sql('DROP VIEW global_temp.negatives')
 
         return matched_negative_hf_cases
 
