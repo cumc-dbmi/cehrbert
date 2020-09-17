@@ -160,6 +160,10 @@ def join_domain_tables(domain_tables):
 
 def preprocess_domain_table(spark, input_folder, domain_table_name):
     domain_table = spark.read.parquet(create_file_path(input_folder, domain_table_name))
+
+    if 'concept' in domain_table_name.lower():
+        return domain_table
+
     # lowercase the schema fields
     domain_table = domain_table.select(
         [F.col(f_n).alias(f_n.lower()) for f_n in domain_table.schema.fieldNames()])

@@ -7,6 +7,11 @@ from utils.common import *
 
 DIURETIC_CONCEPT_ID = 4186999
 
+PACEMAKER_CONCEPT_IDS = [4244395, 4051938, 2107005, 2313863, 4142917, 2106987, 2107003, 4232614,
+                         2106988, 2313861, 2313855, 4204395, 42738824, 42742524, 2001980, 35622031,
+                         42738822, 2107027, 4215909, 2211371, 4049403, 42738819, 42738820, 2313948,
+                         2313860]
+
 HEART_FAILURE_CONCEPTS = [45773075, 45766964, 45766167, 45766166, 45766165, 45766164, 44784442,
                           44784345, 44782733,
                           44782728, 44782719, 44782718, 44782713, 44782655, 44782428, 43530961,
@@ -32,8 +37,8 @@ HEART_FAILURE_CONCEPTS = [45773075, 45766964, 45766167, 45766166, 45766165, 4576
                           316994, 316139, 314378, 312927]
 
 DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure', 'procedure_occurrence']
-DEPENDENCY_LIST = ['person', 'condition_occurrence', 'visit_occurrence', 'drug_exposure', 'concept',
-                   'concept_relationship']
+DEPENDENCY_LIST = ['person', 'condition_occurrence', 'visit_occurrence', 'drug_exposure',
+                   'procedure_occurrence', 'concept', 'concept_relationship', 'concept_ancestor']
 
 PERSON = 'person'
 VISIT_OCCURRENCE = 'visit_occurrence'
@@ -87,7 +92,8 @@ class HeartFailureCohortBuilder(ReversedCohortBuilderBase):
                     F.lit(1).alias('label')).distinct() \
             .where(F.col('age').between(self._age_lower_bound, self._age_upper_bound))
 
-        return self._exclude_cases_with_prior_diuretics(positive_hf_cases)
+        return self._exclude_cases_with_prior_pacemakers(
+            self._exclude_cases_with_prior_diuretics(positive_hf_cases))
 
     def create_control_cases(self):
         negative_hf_cases = self.spark.sql("""
@@ -131,10 +137,11 @@ class HeartFailureCohortBuilder(ReversedCohortBuilderBase):
                     F.col('latest_visit_occurrence_id').alias('visit_occurrence_id'),
                     F.lit(0).alias('label')).distinct()
 
-        return self._exclude_cases_with_prior_diuretics(negative_hf_cases)
+        return self._exclude_cases_with_prior_pacemakers(
+            self._exclude_cases_with_prior_diuretics(negative_hf_cases))
 
     def _build_diuretic_concepts(self):
-        build_ancestry_table_for([DIURETIC_CONCEPT_ID]).createOrReplaceGlobalTempView(
+        build_ancestry_table_for(self.spark, [DIURETIC_CONCEPT_ID]).createOrReplaceGlobalTempView(
             'ancestry_table')
         diuretics_concepts = self.spark.sql("""
         SELECT DISTINCT
@@ -157,18 +164,43 @@ class HeartFailureCohortBuilder(ReversedCohortBuilderBase):
         WITH diuretics_user AS (
             SELECT DISTINCT
                 de.person_id,
-                DATE(drug_exposure_start_date) AS drug_exposure_start_date
+                FIRST(DATE(drug_exposure_start_date)) AS drug_exposure_start_date
             FROM global_temp.drug_exposure AS de 
             JOIN global_temp.diuretics_concepts AS dc
                 ON de.drug_concept_id = dc.concept_id
+            GROUP BY de.person_id
         )
         SELECT DISTINCT
             c.*
         FROM global_temp.cohort_group AS c 
         LEFT JOIN diuretics_user AS du
-            ON c.person_id = du.person_id AND c.index_date >= du.drug_exposure_start_date
+            ON c.person_id = du.person_id AND c.index_date > du.drug_exposure_start_date
         WHERE du.person_id IS NULL
         """)
+
+        self.spark.sql("DROP VIEW global_temp.cohort_group")
+
+        return cohort_group
+
+    def _exclude_cases_with_prior_pacemakers(self, cohort_group: DataFrame):
+        cohort_group.createOrReplaceGlobalTempView('cohort_group')
+
+        cohort_group = self.spark.sql("""
+        WITH pacemaker_user AS (
+            SELECT DISTINCT
+                de.person_id,
+                FIRST(DATE(de.procedure_date)) AS procedure_date
+            FROM global_temp.procedure_occurrence AS de 
+            WHERE de.procedure_concept_id IN ({procedure_concept_ids})
+            GROUP BY de.person_id
+        )
+        SELECT DISTINCT
+            c.*
+        FROM global_temp.cohort_group AS c 
+        LEFT JOIN pacemaker_user AS pu
+            ON c.person_id = pu.person_id AND c.index_date > pu.procedure_date
+        WHERE pu.person_id IS NULL
+        """.format(procedure_concept_ids=','.join([str(c) for c in PACEMAKER_CONCEPT_IDS])))
 
         self.spark.sql("DROP VIEW global_temp.cohort_group")
 
