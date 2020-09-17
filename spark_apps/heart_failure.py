@@ -1,7 +1,11 @@
+from pyspark.sql import DataFrame
+
 from spark_apps.spark_app_base import ReversedCohortBuilderBase
 from spark_apps.parameters import create_spark_args
 
 from utils.common import *
+
+DIURETIC_CONCEPT_ID = 4186999
 
 HEART_FAILURE_CONCEPTS = [45773075, 45766964, 45766167, 45766166, 45766165, 45766164, 44784442,
                           44784345, 44782733,
@@ -28,11 +32,13 @@ HEART_FAILURE_CONCEPTS = [45773075, 45766964, 45766167, 45766166, 45766165, 4576
                           316994, 316139, 314378, 312927]
 
 DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure', 'procedure_occurrence']
-DEPENDENCY_LIST = ['person', 'condition_occurrence', 'visit_occurrence']
+DEPENDENCY_LIST = ['person', 'condition_occurrence', 'visit_occurrence', 'drug_exposure', 'concept',
+                   'concept_relationship']
 
 PERSON = 'person'
 VISIT_OCCURRENCE = 'visit_occurrence'
 CONDITION_OCCURRENCE = 'condition_occurrence'
+DIURETICS_CONCEPT = 'diuretics_concepts'
 
 NUM_OF_DIAGNOSIS_CODES = 3
 
@@ -40,9 +46,13 @@ NUM_OF_DIAGNOSIS_CODES = 3
 class HeartFailureCohortBuilder(ReversedCohortBuilderBase):
 
     def preprocess_dependency(self):
+        diuretics_concepts = self._build_diuretic_concepts()
+        diuretics_concepts.createOrReplaceGlobalTempView('diuretics_concepts')
+        self._dependency_dict[DIURETICS_CONCEPT] = diuretics_concepts
+
         condition_occurrence = self.spark.sql("SELECT * FROM global_temp.condition_occurrence") \
             .where(F.col('condition_concept_id').isin(HEART_FAILURE_CONCEPTS))
-        condition_occurrence.createOrReplaceGlobalTempView('condition_occurrence')
+        condition_occurrence.createOrReplaceGlobalTempView('hf_condition_occurrence')
 
     def create_incident_cases(self):
         positive_hf_cases = self.spark.sql("""
@@ -59,7 +69,7 @@ class HeartFailureCohortBuilder(ReversedCohortBuilderBase):
             FROM global_temp.visit_occurrence AS v
             JOIN global_temp.person AS pe
                 ON v.person_id = pe.person_id
-            JOIN global_temp.condition_occurrence AS c
+            JOIN global_temp.hf_condition_occurrence AS c
                 ON v.visit_occurrence_id = c.visit_occurrence_id
             """).withColumn('num_of_diagnosis',
                             F.count('visit_occurrence_id').over(W.partitionBy('person_id'))) \
@@ -77,7 +87,7 @@ class HeartFailureCohortBuilder(ReversedCohortBuilderBase):
                     F.lit(1).alias('label')).distinct() \
             .where(F.col('age').between(self._age_lower_bound, self._age_upper_bound))
 
-        return positive_hf_cases
+        return self._exclude_cases_with_prior_diuretics(positive_hf_cases)
 
     def create_control_cases(self):
         negative_hf_cases = self.spark.sql("""
@@ -97,7 +107,7 @@ class HeartFailureCohortBuilder(ReversedCohortBuilderBase):
             (
                 SELECT DISTINCT 
                     person_id 
-                FROM global_temp.condition_occurrence
+                FROM global_temp.hf_condition_occurrence
             ) p
                 ON v.person_id = p.person_id
             WHERE p.person_id IS NULL
@@ -121,7 +131,48 @@ class HeartFailureCohortBuilder(ReversedCohortBuilderBase):
                     F.col('latest_visit_occurrence_id').alias('visit_occurrence_id'),
                     F.lit(0).alias('label')).distinct()
 
-        return negative_hf_cases
+        return self._exclude_cases_with_prior_diuretics(negative_hf_cases)
+
+    def _build_diuretic_concepts(self):
+        build_ancestry_table_for([DIURETIC_CONCEPT_ID]).createOrReplaceGlobalTempView(
+            'ancestry_table')
+        diuretics_concepts = self.spark.sql("""
+        SELECT DISTINCT
+            c.*
+        FROM global_temp.ancestry_table AS a
+        JOIN global_temp.concept_relationship AS cr
+            ON a.descendant_concept_id = cr.concept_id_1 AND cr.relationship_id = 'Maps to'
+        JOIN global_temp.concept_ancestor AS ca
+            ON cr.concept_id_2 = ca.descendant_concept_id
+        JOIN global_temp.concept AS c
+            ON ca.ancestor_concept_id = c.concept_id
+        WHERE c.concept_class_id = 'Ingredient'
+        """)
+        return diuretics_concepts
+
+    def _exclude_cases_with_prior_diuretics(self, cohort_group: DataFrame):
+        cohort_group.createOrReplaceGlobalTempView('cohort_group')
+
+        cohort_group = self.spark.sql("""
+        WITH diuretics_user AS (
+            SELECT DISTINCT
+                de.person_id,
+                DATE(drug_exposure_start_date) AS drug_exposure_start_date
+            FROM global_temp.drug_exposure AS de 
+            JOIN global_temp.diuretics_concepts AS dc
+                ON de.drug_concept_id = dc.concept_id
+        )
+        SELECT DISTINCT
+            c.*
+        FROM global_temp.cohort_group AS c 
+        LEFT JOIN diuretics_user AS du
+            ON c.person_id = du.person_id AND c.index_date >= du.drug_exposure_start_date
+        WHERE du.person_id IS NULL
+        """)
+
+        self.spark.sql("DROP VIEW global_temp.cohort_group")
+
+        return cohort_group
 
 
 def main(cohort_name, input_folder, output_folder, date_lower_bound, date_upper_bound,

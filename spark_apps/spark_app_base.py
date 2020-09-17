@@ -136,7 +136,7 @@ class AbstractCohortBuilderBase(ABC):
     def _instantiate_dependencies(self):
         dependency_dict = dict()
         for domain_table_name in self._dependency_list:
-            table = self.spark.read.parquet(os.path.join(self._input_folder, domain_table_name))
+            table = preprocess_domain_table(self.spark, self._input_folder, domain_table_name)
             table.createOrReplaceGlobalTempView(domain_table_name)
             dependency_dict[domain_table_name] = table
         return dependency_dict
