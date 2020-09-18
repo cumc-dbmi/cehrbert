@@ -61,7 +61,7 @@ DEPENDENCY_LIST = [DEATH, PERSON, VISIT_OCCURRENCE]
 
 class MortalityCohortBuilder(RetrospectiveCohortBuilderBase):
 
-    def preprocess_dependency(self):
+    def preprocess_dependencies(self):
         self.spark.sql(QUALIFIED_DEATH_DATE_QUERY).createOrReplaceGlobalTempView(DEATH)
 
         cohort_query = COHORT_QUERY_TEMPLATE.format(date_lower_bound=self._date_lower_bound,

@@ -85,7 +85,7 @@ DEPENDENCY_LIST = [PERSON, VISIT_OCCURRENCE]
 
 class HospitalizationCohortBuilder(ProspectiveCohortBuilderBase):
 
-    def preprocess_dependency(self):
+    def preprocess_dependencies(self):
         first_visit_query = FIRST_VISIT_QUERY_TEMPLATE.format(visit_concept_ids=VISIT_CONCEPT_IDS,
                                                               total_window=self.get_total_window())
         self.spark.sql(first_visit_query).createOrReplaceGlobalTempView(FIRST_VISIT_TABLE)

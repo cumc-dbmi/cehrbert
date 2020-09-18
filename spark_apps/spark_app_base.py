@@ -18,20 +18,23 @@ JOIN global_temp.negatives AS n
 """
 
 
-def cohort_validator(required_columns):
+def cohort_validator(required_columns_attribute):
     """
     Decorator for validating the cohort dataframe returned by create_cohort function in
     AbstractCohortBuilderBase
-    :param required_columns:
+    :param required_columns_attribute: attribute for storing cohort_required_columns
+    in :class:`spark_apps.spark_app_base.AbstractCohortBuilderBase`
     :return:
     """
 
     def cohort_validator_decorator(function):
-        def wrapper(*args, **kwargs):
-            cohort = function(args, **kwargs)
+        def wrapper(self, *args, **kwargs):
+            cohort = function(self, *args, **kwargs)
+            required_columns = getattr(self, required_columns_attribute)
             for required_column in required_columns:
-                if not required_column not in cohort.columns:
+                if required_column not in cohort.columns:
                     raise AssertionError(f'{required_column} is a required column in the cohort')
+            return cohort
 
         return wrapper
 
@@ -39,8 +42,7 @@ def cohort_validator(required_columns):
 
 
 class AbstractCohortBuilderBase(ABC):
-    cohort_required_columns = ['person_id', 'label', 'index_date',
-                               'age', 'gender_concept_id', 'race_concept_id']
+    cohort_required_columns = ['person_id', 'index_date']
 
     def __init__(self,
                  cohort_name: str,
@@ -91,7 +93,7 @@ class AbstractCohortBuilderBase(ABC):
         """
         Build the cohort and write the dataframe as parquet files to _output_data_folder
         """
-        self.preprocess_dependency()
+        self.preprocess_dependencies()
 
         cohort = self.create_cohort()
 
@@ -104,7 +106,9 @@ class AbstractCohortBuilderBase(ABC):
 
         self._destroy_dependencies()
 
-    @cohort_validator(cohort_required_columns)
+        return self
+
+    @cohort_validator('cohort_required_columns')
     @abstractmethod
     def create_cohort(self):
         pass
@@ -114,7 +118,7 @@ class AbstractCohortBuilderBase(ABC):
         pass
 
     @abstractmethod
-    def preprocess_dependency(self):
+    def preprocess_dependencies(self):
         pass
 
     def _validate_integer_inputs(self):
@@ -158,6 +162,9 @@ class AbstractCohortBuilderBase(ABC):
 
     def get_total_window(self):
         return self._observation_window + self._prediction_window
+
+    def load_cohort(self):
+        return self.spark.read.parquet(self._output_data_folder)
 
 
 class AbstractCaseControlCohortBuilderBase(AbstractCohortBuilderBase):
@@ -225,7 +232,7 @@ class RetrospectiveCohortBuilderBase(AbstractCaseControlCohortBuilderBase):
         return create_sequence_data(cohort_ehr_records, None)
 
     @abstractmethod
-    def preprocess_dependency(self):
+    def preprocess_dependencies(self):
         pass
 
     @abstractmethod
@@ -270,7 +277,7 @@ class NestedCohortBuilderBase(RetrospectiveCohortBuilderBase):
         self._target_cohort = target_cohort
 
     @abstractmethod
-    def preprocess_dependency(self):
+    def preprocess_dependencies(self):
         pass
 
     @abstractmethod

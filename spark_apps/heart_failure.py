@@ -1,6 +1,8 @@
 from pyspark.sql import DataFrame
 
-from spark_apps.spark_app_base import RetrospectiveCohortBuilderBase
+from spark_apps.spark_app_base import NestedCohortBuilderBase
+from spark_apps.type_two_diabietes import TypeTwoDiabetesCohortBuilder
+from spark_apps.type_two_diabietes import DEPENDENCY_LIST as t2dm_dependency_list
 from spark_apps.parameters import create_spark_args
 
 from utils.common import *
@@ -40,6 +42,8 @@ DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure', 'procedure_occurre
 DEPENDENCY_LIST = ['person', 'condition_occurrence', 'visit_occurrence', 'drug_exposure',
                    'procedure_occurrence', 'concept', 'concept_relationship', 'concept_ancestor']
 
+TARGET_COHORT_NAME = 'target_cohort'
+DEFAULT_COHORT_NAME = 'heart_failure'
 PERSON = 'person'
 VISIT_OCCURRENCE = 'visit_occurrence'
 CONDITION_OCCURRENCE = 'condition_occurrence'
@@ -48,9 +52,9 @@ DIURETICS_CONCEPT = 'diuretics_concepts'
 NUM_OF_DIAGNOSIS_CODES = 3
 
 
-class HeartFailureCohortBuilder(RetrospectiveCohortBuilderBase):
+class HeartFailureCohortBuilder(NestedCohortBuilderBase):
 
-    def preprocess_dependency(self):
+    def preprocess_dependencies(self):
         diuretics_concepts = self._build_diuretic_concepts()
         diuretics_concepts.createOrReplaceGlobalTempView('diuretics_concepts')
         self._dependency_dict[DIURETICS_CONCEPT] = diuretics_concepts
@@ -58,6 +62,9 @@ class HeartFailureCohortBuilder(RetrospectiveCohortBuilderBase):
         condition_occurrence = self.spark.sql("SELECT * FROM global_temp.condition_occurrence") \
             .where(F.col('condition_concept_id').isin(HEART_FAILURE_CONCEPTS))
         condition_occurrence.createOrReplaceGlobalTempView('hf_condition_occurrence')
+
+        self._target_cohort.createOrReplaceGlobalTempView(TARGET_COHORT_NAME)
+        self._dependency_dict[TARGET_COHORT_NAME] = self._target_cohort
 
     def create_incident_cases(self):
         positive_hf_cases = self.spark.sql("""
@@ -74,6 +81,8 @@ class HeartFailureCohortBuilder(RetrospectiveCohortBuilderBase):
             FROM global_temp.visit_occurrence AS v
             JOIN global_temp.person AS pe
                 ON v.person_id = pe.person_id
+            JOIN global_temp.target_cohort AS tc
+                ON pe.person_id = tc.person_id
             JOIN global_temp.hf_condition_occurrence AS c
                 ON v.visit_occurrence_id = c.visit_occurrence_id
             """).withColumn('num_of_diagnosis',
@@ -109,6 +118,8 @@ class HeartFailureCohortBuilder(RetrospectiveCohortBuilderBase):
             FROM global_temp.visit_occurrence AS v
             JOIN global_temp.person AS pe
                 ON v.person_id = pe.person_id
+            JOIN global_temp.target_cohort AS tc
+                ON pe.person_id = tc.person_id
             LEFT JOIN 
             (
                 SELECT DISTINCT 
@@ -210,7 +221,22 @@ class HeartFailureCohortBuilder(RetrospectiveCohortBuilderBase):
 def main(cohort_name, input_folder, output_folder, date_lower_bound, date_upper_bound,
          age_lower_bound, age_upper_bound, observation_window, prediction_window,
          index_date_match_window):
-    cohort_builder = HeartFailureCohortBuilder(cohort_name,
+    type_2_diabetes = TypeTwoDiabetesCohortBuilder(f'{DEFAULT_COHORT_NAME}_for_{cohort_name}',
+                                                   input_folder,
+                                                   output_folder,
+                                                   date_lower_bound,
+                                                   date_upper_bound,
+                                                   age_lower_bound,
+                                                   age_upper_bound,
+                                                   observation_window,
+                                                   prediction_window,
+                                                   index_date_match_window,
+                                                   DOMAIN_TABLE_LIST,
+                                                   t2dm_dependency_list,
+                                                   False).build().load_cohort()
+
+    cohort_builder = HeartFailureCohortBuilder(type_2_diabetes,
+                                               cohort_name,
                                                input_folder,
                                                output_folder,
                                                date_lower_bound,
