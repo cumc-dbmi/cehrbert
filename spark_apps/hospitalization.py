@@ -1,4 +1,4 @@
-from spark_apps.spark_app_base import CohortBuilderBase
+from spark_apps.spark_app_base import ProspectiveCohortBuilderBase
 from spark_apps.parameters import create_spark_args
 from utils.common import *
 
@@ -83,7 +83,7 @@ VISIT_OCCURRENCE = 'visit_occurrence'
 DEPENDENCY_LIST = [PERSON, VISIT_OCCURRENCE]
 
 
-class HospitalizationCohortBuilder(CohortBuilderBase):
+class HospitalizationCohortBuilder(ProspectiveCohortBuilderBase):
 
     def preprocess_dependency(self):
         first_visit_query = FIRST_VISIT_QUERY_TEMPLATE.format(visit_concept_ids=VISIT_CONCEPT_IDS,

@@ -322,3 +322,21 @@ def build_ancestry_table_for(spark, concept_ids):
     """)
 
     return ancestry_table
+
+
+def get_descendant_concept_ids(spark, concept_ids):
+    """
+    Query concept_ancestor table to get all descendant_concept_ids for the given list of concept_ids
+    :param spark:
+    :param concept_ids:
+    :return:
+    """
+    descendant_concept_ids = spark.sql("""
+        SELECT DISTINCT
+            c.*
+        FROM global_temp.concept_ancestor AS ca
+        JOIN global_temp.concept AS c 
+            ON ca.descendant_concept_id = c.concept_id
+        WHERE ca.ancestor_concept_id IN ({concept_ids})
+    """.format(concept_ids=','.join([str(c) for c in concept_ids])))
+    return descendant_concept_ids

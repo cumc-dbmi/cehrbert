@@ -1,6 +1,6 @@
 from pyspark.sql import DataFrame
 
-from spark_apps.spark_app_base import ReversedCohortBuilderBase
+from spark_apps.spark_app_base import RetrospectiveCohortBuilderBase
 from spark_apps.parameters import create_spark_args
 
 from utils.common import *
@@ -48,7 +48,7 @@ DIURETICS_CONCEPT = 'diuretics_concepts'
 NUM_OF_DIAGNOSIS_CODES = 3
 
 
-class HeartFailureCohortBuilder(ReversedCohortBuilderBase):
+class HeartFailureCohortBuilder(RetrospectiveCohortBuilderBase):
 
     def preprocess_dependency(self):
         diuretics_concepts = self._build_diuretic_concepts()

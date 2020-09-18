@@ -1,7 +1,7 @@
 import pyspark.sql.functions as F
 from pyspark.sql import DataFrame
 
-from spark_apps.spark_app_base import ReversedCohortBuilderBase
+from spark_apps.spark_app_base import RetrospectiveCohortBuilderBase
 from spark_apps.parameters import create_spark_args
 
 QUALIFIED_DEATH_DATE_QUERY = """
@@ -59,7 +59,7 @@ VISIT_OCCURRENCE = 'visit_occurrence'
 DEPENDENCY_LIST = [DEATH, PERSON, VISIT_OCCURRENCE]
 
 
-class MortalityCohortBuilder(ReversedCohortBuilderBase):
+class MortalityCohortBuilder(RetrospectiveCohortBuilderBase):
 
     def preprocess_dependency(self):
         self.spark.sql(QUALIFIED_DEATH_DATE_QUERY).createOrReplaceGlobalTempView(DEATH)

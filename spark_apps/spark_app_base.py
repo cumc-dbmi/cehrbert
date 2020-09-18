@@ -18,7 +18,29 @@ JOIN global_temp.negatives AS n
 """
 
 
+def cohort_validator(required_columns):
+    """
+    Decorator for validating the cohort dataframe returned by create_cohort function in
+    AbstractCohortBuilderBase
+    :param required_columns:
+    :return:
+    """
+
+    def cohort_validator_decorator(function):
+        def wrapper(*args, **kwargs):
+            cohort = function(args, **kwargs)
+            for required_column in required_columns:
+                if not required_column not in cohort.columns:
+                    raise AssertionError(f'{required_column} is a required column in the cohort')
+
+        return wrapper
+
+    return cohort_validator_decorator
+
+
 class AbstractCohortBuilderBase(ABC):
+    cohort_required_columns = ['person_id', 'label', 'index_date',
+                               'age', 'gender_concept_id', 'race_concept_id']
 
     def __init__(self,
                  cohort_name: str,
@@ -32,7 +54,8 @@ class AbstractCohortBuilderBase(ABC):
                  prediction_window: int,
                  index_date_match_window: int,
                  ehr_table_list: List[str],
-                 dependency_list: List[str]):
+                 dependency_list: List[str],
+                 include_ehr_records: bool = True):
 
         self._cohort_name = cohort_name
         self._input_folder = input_folder
@@ -49,12 +72,13 @@ class AbstractCohortBuilderBase(ABC):
         self._output_data_folder = os.path.join(self._output_folder,
                                                 re.sub('[^a-z0-9]+', '_',
                                                        self._cohort_name.lower()))
+        self._include_ehr_records = include_ehr_records
 
         # Validate the input and output folders
         self._validate_folder(self._input_folder)
         self._validate_folder(self._output_folder)
         # Validate the age range, observation_window and prediction_window
-        self._validate_int_inputs()
+        self._validate_integer_inputs()
         # Validate if the data folders exist
         self._validate_date_folder(self._ehr_table_list)
         self._validate_date_folder(self._dependency_list)
@@ -64,58 +88,36 @@ class AbstractCohortBuilderBase(ABC):
         self._dependency_dict = self._instantiate_dependencies()
 
     def build(self):
-
+        """
+        Build the cohort and write the dataframe as parquet files to _output_data_folder
+        """
         self.preprocess_dependency()
 
-        incident_cases = self.create_incident_cases()
+        cohort = self.create_cohort()
 
-        control_cases = self.create_control_cases()
+        if self._include_ehr_records:
+            ehr_records_for_cohorts = self.extract_ehr_records_for_cohort(cohort)
+            cohort = cohort.select('person_id', 'label', 'age', 'gender_concept_id',
+                                   'race_concept_id').join(ehr_records_for_cohorts, 'person_id')
 
-        matched_control_cases = self.create_matching_control_cases(incident_cases, control_cases)
-
-        cohort = incident_cases.union(matched_control_cases)
-
-        cohort_with_ehr_records = self.add_ehr_records_to_cohort(cohort)
-
-        cohort.select('person_id', 'label', 'age', 'gender_concept_id', 'race_concept_id') \
-            .join(cohort_with_ehr_records, 'person_id') \
-            .write.mode('overwrite').parquet(self._output_data_folder)
+        cohort.write.mode('overwrite').parquet(self._output_data_folder)
 
         self._destroy_dependencies()
 
+    @cohort_validator(cohort_required_columns)
     @abstractmethod
-    def add_ehr_records_to_cohort(self, cohort: DataFrame):
+    def create_cohort(self):
+        pass
+
+    @abstractmethod
+    def extract_ehr_records_for_cohort(self, cohort: DataFrame):
         pass
 
     @abstractmethod
     def preprocess_dependency(self):
         pass
 
-    @abstractmethod
-    def create_incident_cases(self):
-        pass
-
-    @abstractmethod
-    def create_control_cases(self):
-        pass
-
-    def get_matching_control_query(self):
-        return NEGATIVE_CONTROL_MATCH_QUERY_TEMPLATE.format(
-            age_match_window=self._index_date_match_window)
-
-    def create_matching_control_cases(self, incident_cases: DataFrame, control_cases: DataFrame):
-
-        incident_cases.createOrReplaceGlobalTempView('positives')
-        control_cases.createOrReplaceGlobalTempView('negatives')
-
-        matched_negative_hf_cases = self.spark.sql(self.get_matching_control_query())
-
-        self.spark.sql('DROP VIEW global_temp.positives')
-        self.spark.sql('DROP VIEW global_temp.negatives')
-
-        return matched_negative_hf_cases
-
-    def _validate_int_inputs(self):
+    def _validate_integer_inputs(self):
         assert self._age_lower_bound >= 0
         assert self._age_upper_bound > 0
         assert self._age_lower_bound < self._age_upper_bound
@@ -129,9 +131,18 @@ class AbstractCohortBuilderBase(ABC):
             if not os.path.exists(parquet_file_path):
                 raise FileExistsError(f'{parquet_file_path} does not exist')
 
-    def _validate_folder(self, folder):
-        if not os.path.exists(folder):
-            raise FileExistsError(f'{folder} does not exist')
+    def _validate_folder(self, folder_path):
+        if not os.path.exists(folder_path):
+            raise FileExistsError(f'{folder_path} does not exist')
+
+    def _validate_cohort_columns(self, cohort: DataFrame):
+        """
+        Validate the target cohort to see if it has all required columns
+        :return:
+        """
+        for required_column in self.cohort_required_columns:
+            if not required_column not in cohort.columns:
+                raise AssertionError(f'{required_column} is a required column in the cohort')
 
     def _instantiate_dependencies(self):
         dependency_dict = dict()
@@ -149,9 +160,54 @@ class AbstractCohortBuilderBase(ABC):
         return self._observation_window + self._prediction_window
 
 
-class ReversedCohortBuilderBase(AbstractCohortBuilderBase):
+class AbstractCaseControlCohortBuilderBase(AbstractCohortBuilderBase):
 
-    def add_ehr_records_to_cohort(self, cohort: DataFrame):
+    def create_cohort(self):
+        """
+        Create the cohort using a case-control design
+        :return:
+        """
+        incident_cases = self.create_incident_cases()
+
+        control_cases = self.create_control_cases()
+
+        matched_control_cases = self.create_matching_control_cases(incident_cases, control_cases)
+
+        cohort = incident_cases.union(matched_control_cases)
+
+        return cohort
+
+    @abstractmethod
+    def extract_ehr_records_for_cohort(self, cohort: DataFrame):
+        pass
+
+    def create_matching_control_cases(self, incident_cases: DataFrame, control_cases: DataFrame):
+        """
+        Match control cases for the corresponding incident cases using the query provided by
+        :func:`get_matching_control_query`
+
+        :param incident_cases:
+        :param control_cases:
+        :return:
+        """
+        incident_cases.createOrReplaceGlobalTempView('positives')
+        control_cases.createOrReplaceGlobalTempView('negatives')
+
+        matched_negative_hf_cases = self.spark.sql(self.get_matching_control_query())
+
+        self.spark.sql('DROP VIEW global_temp.positives')
+        self.spark.sql('DROP VIEW global_temp.negatives')
+
+        return matched_negative_hf_cases
+
+    def get_matching_control_query(self):
+        return NEGATIVE_CONTROL_MATCH_QUERY_TEMPLATE.format(
+            age_match_window=self._index_date_match_window)
+
+
+class RetrospectiveCohortBuilderBase(AbstractCaseControlCohortBuilderBase):
+
+    def extract_ehr_records_for_cohort(self, cohort: DataFrame):
         ehr_records = extract_ehr_records(self.spark,
                                           self._input_folder,
                                           self._ehr_table_list)
@@ -181,9 +237,9 @@ class ReversedCohortBuilderBase(AbstractCohortBuilderBase):
         pass
 
 
-class CohortBuilderBase(AbstractCohortBuilderBase):
+class ProspectiveCohortBuilderBase(AbstractCaseControlCohortBuilderBase):
 
-    def add_ehr_records_to_cohort(self, cohort: DataFrame):
+    def extract_ehr_records_for_cohort(self, cohort: DataFrame):
         ehr_records = extract_ehr_records(self.spark,
                                           self._input_folder,
                                           self._ehr_table_list)
@@ -199,10 +255,6 @@ class CohortBuilderBase(AbstractCohortBuilderBase):
         return create_sequence_data(cohort_ehr_records, None)
 
     @abstractmethod
-    def preprocess_dependency(self):
-        pass
-
-    @abstractmethod
     def create_incident_cases(self):
         pass
 
@@ -211,19 +263,11 @@ class CohortBuilderBase(AbstractCohortBuilderBase):
         pass
 
 
-class LastVisitCohortBuilderBase(AbstractCohortBuilderBase):
+class NestedCohortBuilderBase(RetrospectiveCohortBuilderBase):
 
-    def add_ehr_records_to_cohort(self, cohort: DataFrame):
-        ehr_records = extract_ehr_records(self.spark,
-                                          self._input_folder,
-                                          self._ehr_table_list)
-
-        cohort_ehr_records = ehr_records.join(cohort, 'visit_occurrence_id') \
-            .select(ehr_records['person_id'], ehr_records['standard_concept_id'],
-                    ehr_records['date'], ehr_records['visit_occurrence_id'],
-                    ehr_records['domain'])
-
-        return create_sequence_data(cohort_ehr_records, None)
+    def __init__(self, target_cohort: DataFrame, *args, **kwargs):
+        super(NestedCohortBuilderBase, self).__init__(*args, **kwargs)
+        self._target_cohort = target_cohort
 
     @abstractmethod
     def preprocess_dependency(self):
