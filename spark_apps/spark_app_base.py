@@ -127,7 +127,7 @@ class AbstractCohortBuilderBase(ABC):
         assert self._age_lower_bound < self._age_upper_bound
 
         assert self._observation_window > 0
-        assert self._prediction_window > 0
+        assert self._prediction_window >= 0
 
     def _validate_date_folder(self, table_list):
         for domain_table_name in table_list:
