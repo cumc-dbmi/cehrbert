@@ -68,39 +68,40 @@ class HeartFailureCohortBuilder(NestedCohortBuilderBase):
 
     def create_incident_cases(self):
         positive_hf_cases = self.spark.sql("""
-            WITH hf_patients AS (
+            WITH hf_patients AS 
+            (
                 SELECT
                     c.person_id,
                     c.earliest_visit_start_date,
-                    c.earliest_visit_occurrence_id
+                    c.earliest_visit_occurrence_id,
+                    COUNT(c.visit_occurrence_id) OVER(PARTITION BY c.person_id) AS num_of_diagnosis
                 FROM
                 (
                     SELECT DISTINCT
                         v.person_id,
+                        v.visit_occurrence_id,
                         first(DATE(c.condition_start_date)) OVER (PARTITION BY v.person_id 
                             ORDER BY DATE(c.condition_start_date)) AS earliest_condition_start_date,
                         first(DATE(v.visit_start_date)) OVER (PARTITION BY v.person_id 
                             ORDER BY DATE(v.visit_start_date)) AS earliest_visit_start_date,
-                        first(v.visit_occurrence_id) OVER (PARTITION BY v.person_id 
-                            ORDER BY DATE(v.visit_start_date)) AS earliest_visit_occurrence_id,
-                        COUNT(DISTINCT v.visit_occurrence_id) OVER(PARTITION BY v.person_id 
-                            ORDER ORDER BY DATE(v.visit_start_date)) AS num_of_diagnosis
+                        first(v.visit_occurrence_id) OVER (PARTITION BY v.person_id
+                            ORDER BY DATE(v.visit_start_date)) AS earliest_visit_occurrence_id
                     FROM global_temp.visit_occurrence AS v
                     JOIN global_temp.hf_condition_occurrence AS c
                         ON v.visit_occurrence_id = c.visit_occurrence_id
                 ) c
                 WHERE c.earliest_visit_start_date <= c.earliest_condition_start_date
-                    AND c.num_of_diagnosis >= {num_of_diagnosis}
             )
-            
+
             SELECT
                 tc.*,
                 1 AS label
             FROM hf_patients AS hf 
             JOIN global_temp.target_cohort AS tc
-                ON hf.person_id = tc.person_id AND DATEADD(hf.index_date, 30) <= hf.earliest_visit_start_date
+                ON hf.person_id = tc.person_id AND DATE_ADD(tc.index_date, 30) <= hf.earliest_visit_start_date
             JOIN global_temp.person AS p
                 ON tc.person_id = p.person_id
+            WHERE hf.num_of_diagnosis  >= {num_of_diagnosis}
         """.format(num_of_diagnosis=NUM_OF_DIAGNOSIS_CODES))
 
         return self._exclude_cases_with_prior_pacemakers(
@@ -118,7 +119,7 @@ class HeartFailureCohortBuilder(NestedCohortBuilderBase):
                     person_id 
                 FROM global_temp.hf_condition_occurrence
             ) p
-                ON v.person_id = p.person_id
+                ON tc.person_id = p.person_id
             WHERE p.person_id IS NULL
         """)
 
