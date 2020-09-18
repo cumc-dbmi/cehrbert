@@ -68,38 +68,40 @@ class HeartFailureCohortBuilder(NestedCohortBuilderBase):
 
     def create_incident_cases(self):
         positive_hf_cases = self.spark.sql("""
-            SELECT DISTINCT
-                v.person_id,
-                v.visit_occurrence_id,
-                DATE(v.visit_start_date) AS visit_start_date,
-                first(DATE(c.condition_start_date)) OVER (PARTITION BY v.person_id ORDER BY DATE(c.condition_start_date)) AS earliest_condition_start_date,
-                first(DATE(v.visit_start_date)) OVER (PARTITION BY v.person_id ORDER BY DATE(v.visit_start_date)) AS earliest_visit_start_date,
-                first(v.visit_occurrence_id) OVER (PARTITION BY v.person_id ORDER BY DATE(v.visit_start_date)) AS earliest_visit_occurrence_id,
-                pe.gender_concept_id,
-                pe.race_concept_id,
-                pe.year_of_birth
-            FROM global_temp.visit_occurrence AS v
-            JOIN global_temp.person AS pe
-                ON v.person_id = pe.person_id
+            WITH hf_patients AS (
+                SELECT
+                    c.person_id,
+                    c.earliest_visit_start_date,
+                    c.earliest_visit_occurrence_id
+                FROM
+                (
+                    SELECT DISTINCT
+                        v.person_id,
+                        first(DATE(c.condition_start_date)) OVER (PARTITION BY v.person_id 
+                            ORDER BY DATE(c.condition_start_date)) AS earliest_condition_start_date,
+                        first(DATE(v.visit_start_date)) OVER (PARTITION BY v.person_id 
+                            ORDER BY DATE(v.visit_start_date)) AS earliest_visit_start_date,
+                        first(v.visit_occurrence_id) OVER (PARTITION BY v.person_id 
+                            ORDER BY DATE(v.visit_start_date)) AS earliest_visit_occurrence_id,
+                        COUNT(DISTINCT v.visit_occurrence_id) OVER(PARTITION BY v.person_id 
+                            ORDER ORDER BY DATE(v.visit_start_date)) AS num_of_diagnosis
+                    FROM global_temp.visit_occurrence AS v
+                    JOIN global_temp.hf_condition_occurrence AS c
+                        ON v.visit_occurrence_id = c.visit_occurrence_id
+                ) c
+                WHERE c.earliest_visit_start_date <= c.earliest_condition_start_date
+                    AND c.num_of_diagnosis >= {num_of_diagnosis}
+            )
+            
+            SELECT
+                tc.*,
+                1 AS label
+            FROM hf_patients AS hf 
             JOIN global_temp.target_cohort AS tc
-                ON pe.person_id = tc.person_id
-            JOIN global_temp.hf_condition_occurrence AS c
-                ON v.visit_occurrence_id = c.visit_occurrence_id
-            """).withColumn('num_of_diagnosis',
-                            F.count('visit_occurrence_id').over(W.partitionBy('person_id'))) \
-            .withColumn('age', F.year('earliest_visit_start_date') - F.col('year_of_birth')) \
-            .where(F.col('earliest_visit_start_date') <= F.col('earliest_condition_start_date')) \
-            .where(F.col('earliest_visit_start_date') >= self._date_lower_bound) \
-            .where(F.col('num_of_diagnosis') >= NUM_OF_DIAGNOSIS_CODES) \
-            .select(F.col('person_id'),
-                    F.col('age'),
-                    F.col('gender_concept_id'),
-                    F.col('race_concept_id'),
-                    F.col('year_of_birth'),
-                    F.col('earliest_visit_start_date').alias('index_date'),
-                    F.col('earliest_visit_occurrence_id').alias('visit_occurrence_id'),
-                    F.lit(1).alias('label')).distinct() \
-            .where(F.col('age').between(self._age_lower_bound, self._age_upper_bound))
+                ON hf.person_id = tc.person_id AND DATEADD(hf.index_date, 30) <= hf.earliest_visit_start_date
+            JOIN global_temp.person AS p
+                ON tc.person_id = p.person_id
+        """.format(num_of_diagnosis=NUM_OF_DIAGNOSIS_CODES))
 
         return self._exclude_cases_with_prior_pacemakers(
             self._exclude_cases_with_prior_diuretics(positive_hf_cases))
@@ -107,19 +109,9 @@ class HeartFailureCohortBuilder(NestedCohortBuilderBase):
     def create_control_cases(self):
         negative_hf_cases = self.spark.sql("""
             SELECT DISTINCT
-                v.person_id,
-                v.visit_occurrence_id,
-                DATE(v.visit_start_date) AS visit_start_date,
-                first(DATE(v.visit_start_date)) OVER (PARTITION BY v.person_id ORDER BY DATE(v.visit_start_date) DESC) AS latest_visit_start_date,
-                first(v.visit_occurrence_id) OVER (PARTITION BY v.person_id ORDER BY DATE(v.visit_start_date) DESC) AS latest_visit_occurrence_id,
-                pe.gender_concept_id,
-                pe.race_concept_id,
-                pe.year_of_birth
-            FROM global_temp.visit_occurrence AS v
-            JOIN global_temp.person AS pe
-                ON v.person_id = pe.person_id
-            JOIN global_temp.target_cohort AS tc
-                ON pe.person_id = tc.person_id
+                tc.*,
+                0 AS label
+            FROM global_temp.target_cohort AS tc
             LEFT JOIN 
             (
                 SELECT DISTINCT 
@@ -128,28 +120,19 @@ class HeartFailureCohortBuilder(NestedCohortBuilderBase):
             ) p
                 ON v.person_id = p.person_id
             WHERE p.person_id IS NULL
-            """).where(F.col('visit_start_date') <= F.date_sub(F.col('latest_visit_start_date'),
-                                                               self._prediction_window)) \
-            .where(
-            F.col('visit_start_date') >= F.date_sub(F.col('latest_visit_start_date'),
-                                                    self.get_total_window())) \
-            .where(F.col('latest_visit_start_date') >= self._date_lower_bound) \
-            .withColumn('num_of_visits',
-                        F.count('visit_occurrence_id').over(W.partitionBy('person_id'))) \
-            .withColumn('age', F.year('latest_visit_start_date') - F.col('year_of_birth')) \
-            .where(F.col('num_of_visits') >= NUM_OF_DIAGNOSIS_CODES) \
-            .where(F.col('age').between(self._age_lower_bound, self._age_upper_bound)) \
-            .select(F.col('person_id'),
-                    F.col('age'),
-                    F.col('gender_concept_id'),
-                    F.col('race_concept_id'),
-                    F.col('year_of_birth'),
-                    F.col('latest_visit_start_date').alias('index_date'),
-                    F.col('latest_visit_occurrence_id').alias('visit_occurrence_id'),
-                    F.lit(0).alias('label')).distinct()
+        """)
 
         return self._exclude_cases_with_prior_pacemakers(
             self._exclude_cases_with_prior_diuretics(negative_hf_cases))
+
+    def create_matching_control_cases(self, incident_cases: DataFrame, control_cases: DataFrame):
+        """
+        Do not match for control and simply what's in the control cases
+        :param incident_cases:
+        :param control_cases:
+        :return:
+        """
+        return control_cases
 
     def _build_diuretic_concepts(self):
         build_ancestry_table_for(self.spark, [DIURETIC_CONCEPT_ID]).createOrReplaceGlobalTempView(

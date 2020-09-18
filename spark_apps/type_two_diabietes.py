@@ -41,7 +41,7 @@ FROM
 JOIN global_temp.person AS p 
     ON c.person_id = p.person_id
 WHERE YEAR(c.index_date) - p.year_of_birth >= {age_lower_bound}
-    AND c.index_date >= {date_lower_bound}
+    AND c.index_date >= '{date_lower_bound}'
 """
 
 DIABETES_INCLUSION = [443238, 201820, 442793]
