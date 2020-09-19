@@ -270,6 +270,33 @@ class ProspectiveCohortBuilderBase(AbstractCaseControlCohortBuilderBase):
         pass
 
 
+class LastVisitCohortBuilderBase(AbstractCaseControlCohortBuilderBase):
+
+    def extract_ehr_records_for_cohort(self, cohort: DataFrame):
+        ehr_records = extract_ehr_records(self.spark,
+                                          self._input_folder,
+                                          self._ehr_table_list)
+
+        cohort_ehr_records = ehr_records.join(cohort, 'visit_occurrence_id') \
+            .select(ehr_records['person_id'], ehr_records['standard_concept_id'],
+                    ehr_records['date'], ehr_records['visit_occurrence_id'],
+                    ehr_records['domain'])
+
+        return create_sequence_data(cohort_ehr_records, None)
+
+    @abstractmethod
+    def preprocess_dependencies(self):
+        pass
+
+    @abstractmethod
+    def create_incident_cases(self):
+        pass
+
+    @abstractmethod
+    def create_control_cases(self):
+        pass
+
+
 class NestedCohortBuilderBase(RetrospectiveCohortBuilderBase):
 
     def __init__(self, target_cohort: DataFrame, *args, **kwargs):

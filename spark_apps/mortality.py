@@ -1,7 +1,7 @@
-import pyspark.sql.functions as F
+import pyspark.sql.functions as f
 from pyspark.sql import DataFrame
 
-from spark_apps.spark_app_base import RetrospectiveCohortBuilderBase
+from spark_apps.spark_app_base import LastVisitCohortBuilderBase
 from spark_apps.parameters import create_spark_args
 
 QUALIFIED_DEATH_DATE_QUERY = """
@@ -69,7 +69,7 @@ VISIT_OCCURRENCE = 'visit_occurrence'
 DEPENDENCY_LIST = [DEATH, PERSON, VISIT_OCCURRENCE]
 
 
-class MortalityCohortBuilder(RetrospectiveCohortBuilderBase):
+class MortalityCohortBuilder(LastVisitCohortBuilderBase):
 
     def preprocess_dependencies(self):
         self.spark.sql(QUALIFIED_DEATH_DATE_QUERY).createOrReplaceGlobalTempView(DEATH)
@@ -84,11 +84,11 @@ class MortalityCohortBuilder(RetrospectiveCohortBuilderBase):
 
     def create_incident_cases(self):
         cohort = self._dependency_dict[COHORT_TABLE]
-        return cohort.where(F.col('label') == 1)
+        return cohort.where(f.col('label') == 1)
 
     def create_control_cases(self):
         cohort = self._dependency_dict[COHORT_TABLE]
-        return cohort.where(F.col('label') == 0)
+        return cohort.where(f.col('label') == 0)
 
     def create_matching_control_cases(self, incident_cases: DataFrame, control_cases: DataFrame):
         """
