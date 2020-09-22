@@ -32,18 +32,32 @@ WHERE dv.last_visit_start_date <= dv.death_date
 
 COHORT_QUERY_TEMPLATE = """
 WITH last_visit_cte AS (
-    SELECT DISTINCT
-        v.person_id,
-        FIRST(v.visit_occurrence_id) OVER(PARTITION BY v.person_id 
-            ORDER BY DATE(v.visit_start_date) DESC) AS visit_occurrence_id,
-        FIRST(DATE(v.visit_start_date)) OVER(PARTITION BY v.person_id 
-            ORDER BY DATE(v.visit_start_date) DESC) AS index_date,
-        FIRST(v.discharge_to_concept_id) OVER(PARTITION BY v.person_id 
-            ORDER BY DATE(v.visit_start_date) DESC) AS discharge_to_concept_id
-    FROM global_temp.visit_occurrence AS v
+    SELECT
+        v.*,
+        COUNT(CASE WHEN DATE(v.visit_start_date) >= DATE_SUB(index_date, {observation_period}) 
+            AND DATE(v.visit_start_date) < index_date
+            THEN 1 ELSE NULL END) OVER (PARTITION BY v.person_id) AS num_of_visits
+    FROM
+    (
+        SELECT DISTINCT
+            v.person_id,
+            v.visit_start_date,
+            FIRST(v.visit_occurrence_id) OVER(PARTITION BY v.person_id 
+                ORDER BY DATE(v.visit_start_date) DESC) AS visit_occurrence_id,
+            FIRST(DATE(v.visit_start_date)) OVER(PARTITION BY v.person_id 
+                ORDER BY DATE(v.visit_start_date) DESC) AS index_date,
+            FIRST(v.discharge_to_concept_id) OVER(PARTITION BY v.person_id 
+                ORDER BY DATE(v.visit_start_date) DESC) AS discharge_to_concept_id,
+            FIRST(DATE(v.visit_start_date)) OVER(PARTITION BY v.person_id 
+                ORDER BY DATE(v.visit_start_date)) AS earliest_visit_start_date
+        FROM global_temp.visit_occurrence AS v
+        -- Need to make sure the there is enough observation for the observation window.
+        -- 1) the earliest visit_start_date needs to occur before the observation period.
+        -- 2) there needs to be at least 2 visit_occurrences for every 360 days (1 year)
+    ) v
 )
 
-SELECT
+SELECT DISTINCT
     v.person_id,
     v.visit_occurrence_id,
     v.index_date,
@@ -58,6 +72,8 @@ LEFT JOIN global_temp.death AS d
     ON v.person_id = d.person_id
 WHERE v.index_date BETWEEN '{date_lower_bound}' AND '{date_upper_bound}'
     AND v.discharge_to_concept_id = 8536 --discharge to home
+    AND YEAR(v.earliest_visit_start_date) <= YEAR(DATE_SUB(index_date, {observation_period}))
+    --AND v.num_of_visits >= {num_of_visits}
 """
 
 DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure', 'procedure_occurrence']
@@ -74,8 +90,12 @@ class MortalityCohortBuilder(LastVisitCohortBuilderBase):
     def preprocess_dependencies(self):
         self.spark.sql(QUALIFIED_DEATH_DATE_QUERY).createOrReplaceGlobalTempView(DEATH)
 
+        num_of_visits = ((self._observation_window // 360) + 1)
+
         cohort_query = COHORT_QUERY_TEMPLATE.format(date_lower_bound=self._date_lower_bound,
-                                                    date_upper_bound=self._date_upper_bound)
+                                                    date_upper_bound=self._date_upper_bound,
+                                                    observation_period=self._observation_window,
+                                                    num_of_visits=num_of_visits)
 
         cohort = self.spark.sql(cohort_query)
         cohort.createOrReplaceGlobalTempView(COHORT_TABLE)
