@@ -23,7 +23,7 @@ setup(
     ],
     keywords='development',
     packages=find_packages(where='.'),
-    install_requires=['Keras>=2.0.8', 'numpy', 'tqdm', 'tensorflow', 'pandas'],
+    install_requires=['Keras>=2.0.8', 'numpy', 'tqdm', 'tensorflow', 'pandas', 'scikit-learn'],
     tests_require=['pytest'],
     include_package_data=True,
 )

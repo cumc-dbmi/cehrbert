@@ -42,7 +42,7 @@ def cohort_validator(required_columns_attribute):
 
 
 class AbstractCohortBuilderBase(ABC):
-    cohort_required_columns = ['person_id', 'index_date']
+    cohort_required_columns = ['person_id', 'label', 'age', 'gender_concept_id', 'race_concept_id']
 
     def __init__(self,
                  cohort_name: str,
@@ -57,7 +57,8 @@ class AbstractCohortBuilderBase(ABC):
                  index_date_match_window: int,
                  ehr_table_list: List[str],
                  dependency_list: List[str],
-                 include_ehr_records: bool = True):
+                 include_ehr_records: bool = True,
+                 is_feature_concept_frequency: bool = False):
 
         self._cohort_name = cohort_name
         self._input_folder = input_folder
@@ -75,6 +76,7 @@ class AbstractCohortBuilderBase(ABC):
                                                 re.sub('[^a-z0-9]+', '_',
                                                        self._cohort_name.lower()))
         self._include_ehr_records = include_ehr_records
+        self._is_feature_concept_frequency = is_feature_concept_frequency
 
         # Validate the input and output folders
         self._validate_folder(self._input_folder)
@@ -217,17 +219,19 @@ class RetrospectiveCohortBuilderBase(AbstractCaseControlCohortBuilderBase):
     def extract_ehr_records_for_cohort(self, cohort: DataFrame):
         ehr_records = extract_ehr_records(self.spark,
                                           self._input_folder,
-                                          self._ehr_table_list)
+                                          self._ehr_table_list,
+                                          include_visit_type=True)
 
         cohort_ehr_records = ehr_records.join(cohort, 'person_id') \
             .where(
             ehr_records['date'] <= F.date_sub(cohort['index_date'],
                                               self._prediction_window)).where(
             ehr_records['date'] >= F.date_sub(cohort['index_date'],
-                                              self.get_total_window())).select(
-            ehr_records['person_id'], ehr_records['standard_concept_id'],
-            ehr_records['date'], ehr_records['visit_occurrence_id'],
-            ehr_records['domain'])
+                                              self.get_total_window())) \
+            .select([ehr_records[field_name] for field_name in ehr_records.schema.fieldNames()])
+
+        if self._is_feature_concept_frequency:
+            return create_concept_frequency_data(cohort_ehr_records, None)
 
         return create_sequence_data(cohort_ehr_records, None)
 
@@ -249,15 +253,17 @@ class ProspectiveCohortBuilderBase(AbstractCaseControlCohortBuilderBase):
     def extract_ehr_records_for_cohort(self, cohort: DataFrame):
         ehr_records = extract_ehr_records(self.spark,
                                           self._input_folder,
-                                          self._ehr_table_list)
+                                          self._ehr_table_list,
+                                          include_visit_type=True)
 
         cohort_ehr_records = ehr_records.join(cohort, 'person_id') \
             .where(ehr_records['date'] >= cohort['index_date']) \
             .where(
             ehr_records['date'] <= F.date_add(cohort['index_date'], self._observation_window)) \
-            .select(ehr_records['person_id'], ehr_records['standard_concept_id'],
-                    ehr_records['date'], ehr_records['visit_occurrence_id'],
-                    ehr_records['domain'])
+            .select([ehr_records[field_name] for field_name in ehr_records.schema.fieldNames()])
+
+        if self._is_feature_concept_frequency:
+            return create_concept_frequency_data(cohort_ehr_records, None)
 
         return create_sequence_data(cohort_ehr_records, None)
 
@@ -275,12 +281,14 @@ class LastVisitCohortBuilderBase(AbstractCaseControlCohortBuilderBase):
     def extract_ehr_records_for_cohort(self, cohort: DataFrame):
         ehr_records = extract_ehr_records(self.spark,
                                           self._input_folder,
-                                          self._ehr_table_list)
+                                          self._ehr_table_list,
+                                          include_visit_type=True)
 
         cohort_ehr_records = ehr_records.join(cohort, 'visit_occurrence_id') \
-            .select(ehr_records['person_id'], ehr_records['standard_concept_id'],
-                    ehr_records['date'], ehr_records['visit_occurrence_id'],
-                    ehr_records['domain'])
+            .select([ehr_records[field_name] for field_name in ehr_records.schema.fieldNames()])
+
+        if self._is_feature_concept_frequency:
+            return create_concept_frequency_data(cohort_ehr_records, None)
 
         return create_sequence_data(cohort_ehr_records, None)
 

@@ -32,8 +32,9 @@ class Config(SimpleNamespace):
 
 class BertConfig(Config):
 
-    def __init__(self, depth, num_heads, *args, **kwargs):
+    def __init__(self, visit_tokenizer_path, depth, num_heads, *args, **kwargs):
         super(BertConfig, self).__init__(*args, **kwargs)
+        self.visit_tokenizer_path = visit_tokenizer_path
         self.depth = depth
         self.num_heads = num_heads
 
@@ -78,11 +79,13 @@ def create_bert_model_config(args):
     parquet_data_path = os.path.join(args.input_folder, p.parquet_data_path)
     feather_data_path = os.path.join(args.input_folder, p.feather_data_path)
     tokenizer_path = os.path.join(args.output_folder, p.tokenizer_path)
+    visit_tokenizer_path = os.path.join(args.output_folder, p.visit_tokenizer_path)
     model_path = os.path.join(args.output_folder, p.bert_model_path)
 
     return BertConfig(parquet_data_path=parquet_data_path,
                       feather_data_path=feather_data_path,
                       tokenizer_path=tokenizer_path,
+                      visit_tokenizer_path=visit_tokenizer_path,
                       model_path=model_path,
                       tf_board_log_path=args.tf_board_log_path,
                       concept_embedding_size=args.concept_embedding_size,
@@ -104,12 +107,15 @@ def create_temporal_bert_model_config(args):
     parquet_data_path = os.path.join(args.input_folder, p.parquet_data_path)
     feather_data_path = os.path.join(args.input_folder, p.feather_data_path)
     tokenizer_path = os.path.join(args.output_folder, p.tokenizer_path)
+    visit_tokenizer_path = os.path.join(args.output_folder, p.visit_tokenizer_path)
     model_path = os.path.join(args.output_folder, p.temporal_bert_model_path)
-    time_attention_model_path = os.path.join(args.time_attention_folder, p.time_attention_model_path)
+    time_attention_model_path = os.path.join(args.time_attention_folder,
+                                             p.time_attention_model_path)
 
     return TemporalBertConfig(parquet_data_path=parquet_data_path,
                               feather_data_path=feather_data_path,
                               tokenizer_path=tokenizer_path,
+                              visit_tokenizer_path=visit_tokenizer_path,
                               model_path=model_path,
                               tf_board_log_path=args.tf_board_log_path,
                               time_attention_model_path=time_attention_model_path,

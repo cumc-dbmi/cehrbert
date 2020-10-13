@@ -61,11 +61,13 @@ def scaled_dot_product_attention(q, k, v, mask, time_attention_logits):
         scaled_attention_logits += (tf.cast(mask, dtype='float32') * -1e9)
 
     if time_attention_logits is not None:
-        scaled_attention_logits = tf.concat([scaled_attention_logits, time_attention_logits], axis=1)
+        scaled_attention_logits = tf.concat([scaled_attention_logits, time_attention_logits],
+                                            axis=1)
 
     # softmax is normalized on the last axis (seq_len_k) so that the scores
     # add up to 1.
-    attention_weights = tf.nn.softmax(scaled_attention_logits, axis=-1)  # (..., seq_len_q, seq_len_k)
+    attention_weights = tf.nn.softmax(scaled_attention_logits,
+                                      axis=-1)  # (..., seq_len_q, seq_len_k)
 
     output = tf.matmul(attention_weights, v)  # (..., seq_len_q, depth_v)
 
@@ -119,13 +121,16 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
         # scaled_attention.shape == (batch_size, num_heads, seq_len_q, depth)
         # attention_weights.shape == (batch_size, num_heads, seq_len_q, seq_len_k)
-        scaled_attention, attention_weights = scaled_dot_product_attention(q, k, v, mask, time_attention_logits)
+        scaled_attention, attention_weights = scaled_dot_product_attention(q, k, v, mask,
+                                                                           time_attention_logits)
 
         scaled_attention = tf.transpose(scaled_attention,
-                                        perm=[0, 2, 1, 3])  # (batch_size, seq_len_q, num_heads, depth)
+                                        perm=[0, 2, 1,
+                                              3])  # (batch_size, seq_len_q, num_heads, depth)
 
         concat_attention = tf.reshape(scaled_attention,
-                                      (batch_size, -1, self.d_model))  # (batch_size, seq_len_q, d_model)
+                                      (batch_size, -1,
+                                       self.d_model))  # (batch_size, seq_len_q, d_model)
 
         output = self.dense(concat_attention)  # (batch_size, seq_len_q, d_model)
 
@@ -135,7 +140,8 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 class TemporalContextAttention(MultiHeadAttention):
 
     def __init__(self, d_model, num_heads, **kwargs):
-        super(TemporalContextAttention, self).__init__(d_model=d_model, num_heads=num_heads, **kwargs)
+        super(TemporalContextAttention, self).__init__(d_model=d_model, num_heads=num_heads,
+                                                       **kwargs)
         assert num_heads == 2
 
     def split_heads_query_key_value(self, batch_size, k, q, v):
@@ -143,7 +149,8 @@ class TemporalContextAttention(MultiHeadAttention):
         q = tf.expand_dims(q, axis=1)
         k = tf.expand_dims(k, axis=1)
         # (batch_size, 2, seq_len, depth)
-        v = tf.transpose(tf.reshape(v, (batch_size, -1, self.num_heads, self.depth)), perm=[0, 2, 1, 3])
+        v = tf.transpose(tf.reshape(v, (batch_size, -1, self.num_heads, self.depth)),
+                         perm=[0, 2, 1, 3])
         return k, q, v
 
 
@@ -190,7 +197,8 @@ class TemporalEncoderLayer(EncoderLayer):
     default_num_of_heads = 2
 
     def __init__(self, d_model, dff, rate=0.1, *args, **kwargs):
-        super(TemporalEncoderLayer, self).__init__(d_model=d_model, num_heads=self.default_num_of_heads, dff=dff,
+        super(TemporalEncoderLayer, self).__init__(d_model=d_model,
+                                                   num_heads=self.default_num_of_heads, dff=dff,
                                                    rate=rate,
                                                    *args, **kwargs)
         self.mha = TemporalContextAttention(d_model, self.default_num_of_heads)
@@ -231,15 +239,68 @@ class Encoder(tf.keras.layers.Layer):
 class TemporalEncoder(Encoder):
     def __init__(self, num_layers, d_model, num_heads, dff=2148, dropout_rate=0.1, *args,
                  **kwargs):
-        super(TemporalEncoder, self).__init__(num_layers=num_layers, d_model=d_model, num_heads=num_heads, dff=dff,
+        super(TemporalEncoder, self).__init__(num_layers=num_layers, d_model=d_model,
+                                              num_heads=num_heads, dff=dff,
                                               dropout_rate=dropout_rate, *args, **kwargs)
         self.temporal_context_enc_layer = TemporalEncoderLayer(d_model, dff, dropout_rate,
                                                                name='temporal_context_encoder')
 
     def call(self, x, mask, time_attention_logits, **kwargs):
-        x, temporal_context_attn_weights = self.temporal_context_enc_layer(x, mask, time_attention_logits, **kwargs)
+        x, temporal_context_attn_weights = self.temporal_context_enc_layer(x, mask,
+                                                                           time_attention_logits,
+                                                                           **kwargs)
         x, attention_weights = super().call(x, mask, **kwargs)
         return x, temporal_context_attn_weights, attention_weights
+
+
+class DecoderLayer(tf.keras.layers.Layer):
+    def __init__(self, d_model, num_heads, dff, rate=0.1, *args, **kwargs):
+        super(DecoderLayer, self).__init__(*args, **kwargs)
+        
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.dff = dff
+        self.rate = rate
+        
+        self.mha1 = MultiHeadAttention(d_model, num_heads)
+        self.mha2 = MultiHeadAttention(d_model, num_heads)
+
+        self.ffn = point_wise_feed_forward_network(d_model, dff)
+
+        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm3 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+
+        self.dropout1 = tf.keras.layers.Dropout(rate)
+        self.dropout2 = tf.keras.layers.Dropout(rate)
+        self.dropout3 = tf.keras.layers.Dropout(rate)
+    
+    def get_config(self):
+        config = super().get_config()
+        config['d_model'] = self.d_model
+        config['num_heads'] = self.num_heads
+        config['dff'] = self.dff
+        config['rate'] = self.rate
+        return config
+    
+    def call(self, x, enc_output, decoder_mask, encoder_mask, **kwargs):
+        # enc_output.shape == (batch_size, input_seq_len, d_model)
+
+        attn1, attn_weights_block1 = self.mha1(x, x, x, decoder_mask,
+                                               None)  # (batch_size, target_seq_len, d_model)
+        attn1 = self.dropout1(attn1)
+        out1 = self.layernorm1(attn1 + x)
+
+        attn2, attn_weights_block2 = self.mha2(enc_output, enc_output, out1, encoder_mask,
+                                               None)  # (batch_size, target_seq_len, d_model)
+        attn2 = self.dropout2(attn2, **kwargs)
+        out2 = self.layernorm2(attn2 + out1)  # (batch_size, target_seq_len, d_model)
+
+        ffn_output = self.ffn(out2)  # (batch_size, target_seq_len, d_model)
+        ffn_output = self.dropout3(ffn_output, **kwargs)
+        out3 = self.layernorm3(ffn_output + out2)  # (batch_size, target_seq_len, d_model)
+
+        return out3, attn_weights_block1, attn_weights_block2
 
 
 class PositionalEncodingLayer(tf.keras.layers.Layer):
@@ -338,15 +399,18 @@ class TimeAttention(tf.keras.layers.Layer):
                                                  tf.constant([1, 1, self.target_seq_len]))
 
         # shape = (batch_size, target_seq_length, context_seq_length)
-        time_delta = tf.transpose(multiplied_context_time_stamps - tf.expand_dims(target_time_stamps, axis=1),
-                                  perm=[0, 2, 1])
+        time_delta = tf.transpose(
+            multiplied_context_time_stamps - tf.expand_dims(target_time_stamps, axis=1),
+            perm=[0, 2, 1])
 
-        # Clip the time deltas to fit the time window. E.g. if the time window is 101, the allowed time delta values
-        # are between -50 to 50
-        time_delta_value_clipped = tf.clip_by_value(time_delta, clip_value_min=-self.half_time_window_size,
+        # Clip the time deltas to fit the time window. E.g. if the time window is 101,
+        # the allowed time delta values are between -50 to 50
+        time_delta_value_clipped = tf.clip_by_value(time_delta,
+                                                    clip_value_min=-self.half_time_window_size,
                                                     clip_value_max=self.half_time_window_size)
         # shape = (batch_size, target_seq_length, context_seq_length, full_time_window_size)
-        time_delta_one_hot = tf.one_hot(time_delta_value_clipped + self.half_time_window_size, self.time_window_size)
+        time_delta_one_hot = tf.one_hot(time_delta_value_clipped + self.half_time_window_size,
+                                        self.time_window_size)
 
         # shape = (batch_size, target_seq_length, time_window_size, 1)
         concept_time_embeddings_expanded = tf.expand_dims(concept_time_embeddings, axis=-1)
@@ -396,15 +460,62 @@ class TimeSelfAttention(TimeAttention):
 
         # add the mask to the scaled tensor.
         if time_mask is not None:
-            self_attention_logits += (tf.cast(tf.expand_dims(time_mask, axis=1), dtype='float32') * -1e9)
+            self_attention_logits += (
+                    tf.cast(tf.expand_dims(time_mask, axis=1), dtype='float32') * -1e9)
 
-        return self_attention_logits if self.self_attention_return_logits else self.softmax_layer(self_attention_logits)
+        return self_attention_logits if self.self_attention_return_logits else self.softmax_layer(
+            self_attention_logits)
+
+
+class GraphEmbeddingLayer(tf.keras.layers.Layer):
+    def __init__(self, vocab_size: int, embedding_size: int, unit: int = 64, *args, **kwargs):
+        super(GraphEmbeddingLayer, self).__init__(*args, **kwargs)
+        self._embedding_size = embedding_size
+        self._vocab_size = vocab_size
+        self._unit = unit
+
+        self._embedding_layer = tf.keras.layers.Embedding(self._vocab_size,
+                                                          self._embedding_size,
+                                                          name='graph_embedding')
+
+        self._dense_layer_1 = tf.keras.layers.Dense(self._unit, activation='tanh')
+        self._dense_layer_2 = tf.keras.layers.Dense(1, use_bias=False)
+
+    def get_config(self):
+        config = super().get_config()
+        config['embedding_size'] = self._embedding_size
+        config['vocab_size'] = self._vocab_size
+        config['unit'] = self._unit
+        return config
+
+    def call(self, concept_ids, **kwargs):
+        """
+
+        :param concept_ids:
+        :param kwargs:
+        :return:
+        """
+        _, seq_length = tf.shape(concept_ids)
+        concept_embeddings = self._embedding_layer(concept_ids)
+        first_concept_embeddings = tf.tile(tf.expand_dims(concept_embeddings[:, 0, :], axis=1),
+                                           [1, seq_length, 1])
+
+        next_input = tf.concat([first_concept_embeddings, concept_embeddings], axis=2)
+
+        next_input = self._dense_layer_1(next_input)
+        next_input = self._dense_layer_2(next_input)
+        attention = tf.nn.softmax(tf.squeezen(next_input))
+        combined_concept_embeddings = tf.reduce_sum(
+            concept_embeddings * tf.expand_dims(attention, axis=1), axis=-1)
+
+        return combined_concept_embeddings
 
 
 get_custom_objects().update({
     'MultiHeadAttention': MultiHeadAttention,
     'Encoder': Encoder,
     'EncoderLayer': EncoderLayer,
+    'DecoderLayer': DecoderLayer,
     'TemporalEncoder': TemporalEncoder,
     'TimeAttention': TimeAttention,
     'TimeSelfAttention': TimeSelfAttention,

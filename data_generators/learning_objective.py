@@ -1,0 +1,376 @@
+import random
+from abc import ABC, abstractmethod
+from itertools import islice
+from typing import List
+
+import numpy as np
+from tensorflow.python.keras.preprocessing.sequence import pad_sequences
+from tensorflow.dtypes import int32
+
+from data_generators.data_classes import RowSlicer
+
+from data_generators.tokenizer import ConceptTokenizer
+
+
+def validate_columns_decorator(function):
+    """
+    A decorator to validate whether the parameter rows passed to LearningObjective.process_batch
+    contain the required columns. It raises AttributeError if any of the required columns is
+    missing from the rows
+
+    :param function:
+    :return:
+    """
+
+    def wrapper(self, rows: List[RowSlicer], *args, **kwargs):
+        required_columns = self.get_required_columns()
+        for row_slicer in rows:
+            for column in required_columns:
+                if not hasattr(row_slicer.row, column):
+                    raise AttributeError(
+                        f'The required column {column} is missing for {self.__name__}')
+            break
+
+        return function(self, rows, *args, **kwargs)
+
+    return wrapper
+
+
+def post_pad_pre_truncate(inputs, pad_value, max_seq_len, d_type='int32'):
+    """
+    Post pad and pre-truncate the sequence
+
+    :param inputs:
+    :param pad_value:
+    :param max_seq_len:
+    :param d_type:
+    :return:
+    """
+    return pad_sequences(np.asarray(inputs),
+                         maxlen=max_seq_len, padding='post',
+                         value=pad_value, dtype=d_type)
+
+
+class LearningObjective(ABC):
+
+    @property
+    def required_columns(self):
+        raise NotImplementedError
+
+    @validate_columns_decorator
+    @abstractmethod
+    def process_batch(self, rows: List[RowSlicer]):
+        """
+        Process a batch of rows to generate input and output data for the learning objective
+        :param rows:
+        :return:
+        """
+        pass
+
+    @abstractmethod
+    def get_tf_dataset_schema(self):
+        """
+        Get the schema for the input and output to the tensorflow Dataset
+        :return:
+        """
+        pass
+
+    @classmethod
+    def get_required_columns(cls):
+        """
+        Get the required columns for this learning objective
+        :return:
+        """
+        return cls.required_columns
+
+
+class BertFineTuningLearningObjective(LearningObjective):
+    required_columns = ['label']
+
+    def get_tf_dataset_schema(self):
+        output_dict_schema = {'label': int32}
+        return {}, output_dict_schema
+
+    @validate_columns_decorator
+    def process_batch(self, rows: List[RowSlicer]):
+        """
+        Process a batch of rows to generate input and output data for the learning objective
+        :param rows:
+        :return:
+        """
+        labels = []
+        for row_slicer in rows:
+            labels.append(row_slicer.row.label)
+
+        output_dict = {'label': labels}
+        return {}, output_dict
+
+
+class DemographicsLearningObjective(LearningObjective):
+    required_columns = ['age', 'gender_concept_id']
+
+    def get_tf_dataset_schema(self):
+        input_dict_schema = {
+            'age': int32,
+            'gender': int32
+        }
+        return input_dict_schema, {}
+
+    @validate_columns_decorator
+    def process_batch(self, rows: List[RowSlicer]):
+        """
+        Process a batch of rows to generate input and output data for the learning objective
+        :param rows:
+        :return:
+        """
+        age_input = []
+        gender_input = []
+        for row_slicer in rows:
+            age_input.append(row_slicer.row.age)
+            gender_input.append(row_slicer.row.gender_concept_id)
+
+        input_dict = {
+            'age': age_input,
+            'gender': gender_input
+        }
+
+        return input_dict, {}
+
+
+class VisitPredictionLearningObjective(LearningObjective):
+    required_columns = ['visit_token_ids', 'dates']
+
+    def __init__(self,
+                 visit_tokenizer: ConceptTokenizer,
+                 max_seq_len: int):
+        self._max_seq_len = max_seq_len
+        self._visit_tokenizer = visit_tokenizer
+
+    def get_tf_dataset_schema(self):
+        input_dict_schema = {
+            'masked_visit_concepts': int32,
+            'mask_visit': int32
+        }
+        output_dict_schema = {'visit_predictions': int32}
+        return input_dict_schema, output_dict_schema
+
+    @validate_columns_decorator
+    def process_batch(self, rows: List[RowSlicer]):
+        (output_mask, masked_visit_concepts, visit_concepts) = zip(
+            *list(map(self._make_record, rows)))
+
+        unused_token_id = self._visit_tokenizer.get_unused_token_id()
+
+        visit_concepts = post_pad_pre_truncate(visit_concepts,
+                                               unused_token_id,
+                                               self._max_seq_len)
+        masked_visit_concepts = post_pad_pre_truncate(masked_visit_concepts,
+                                                      unused_token_id,
+                                                      self._max_seq_len)
+        visit_mask = (visit_concepts == unused_token_id).astype(int)
+
+        combined_label = np.stack([visit_concepts, output_mask], axis=-1)
+
+        input_dict = {
+            'masked_visit_concepts': masked_visit_concepts,
+            'mask_visit': visit_mask
+        }
+
+        output_dict = {'visit_predictions': combined_label}
+
+        return input_dict, output_dict
+
+    def _make_record(self, row_slicer: RowSlicer):
+        """
+        A method for making a bert record for the bert data generator to yield
+
+        :param row_slicer: a namedtuple containing a pandas row,
+        left_index and right_index for slicing the sequences such as concepts
+
+        :return:
+        """
+
+        row, left_index, right_index, _ = row_slicer
+
+        iterator = zip(row.dates, row.visit_token_ids)
+        sorted_list = sorted(iterator, key=lambda tup2: (tup2[0], tup2[1]))
+
+        (dates, visit_concept_ids) = zip(*list(islice(sorted_list, left_index, right_index)))
+
+        masked_visit_concepts, output_mask = self._mask_visit_concepts(
+            visit_concept_ids)
+
+        return output_mask, masked_visit_concepts, visit_concept_ids
+
+    def _mask_visit_concepts(self, visit_concepts):
+        """
+        Randomly one visit in a list of visits
+        :param visit_concepts:
+        :return:
+        """
+        masked_visit_concepts = np.asarray(visit_concepts).copy()
+        random_choice_for_masking = np.random.choice(range(len(visit_concepts)))
+        output_mask = np.zeros((self._max_seq_len,), dtype=int)
+        output_mask[random_choice_for_masking] = 1
+        masked_visit_concepts[random_choice_for_masking] = self._visit_tokenizer.get_mask_token_id()
+
+        return masked_visit_concepts, output_mask
+
+
+class MaskedLanguageModelLearningObjective(LearningObjective):
+    required_columns = ['token_ids', 'dates', 'visit_segments']
+
+    def __init__(self, concept_tokenizer: ConceptTokenizer, max_seq_len: int):
+        self._max_seq_len = max_seq_len
+        self._concept_tokenizer = concept_tokenizer
+
+    def get_tf_dataset_schema(self):
+        input_dict_schema = {
+            'masked_concept_ids': int32,
+            'concept_ids': int32,
+            'mask': int32,
+            'time_stamps': int32,
+            'visit_segments': int32
+        }
+        output_dict_schema = {'concept_predictions': int32}
+        return input_dict_schema, output_dict_schema
+
+    @validate_columns_decorator
+    def process_batch(self, rows: List[RowSlicer]):
+
+        (output_mask, masked_concepts, concepts, time_stamps, visit_segments) = zip(
+            *list(map(self._make_record, rows)))
+
+        unused_token_id = self._concept_tokenizer.get_unused_token_id()
+
+        # The main inputs for bert
+        masked_concepts = post_pad_pre_truncate(masked_concepts, unused_token_id, self._max_seq_len)
+        concepts = post_pad_pre_truncate(concepts, unused_token_id, self._max_seq_len)
+        mask = (concepts == unused_token_id).astype(int)
+
+        # The auxiliary inputs for bert
+        visit_segments = post_pad_pre_truncate(visit_segments, 0, self._max_seq_len)
+        time_stamps = post_pad_pre_truncate(time_stamps, 0, self._max_seq_len)
+
+        input_dict = {'masked_concept_ids': masked_concepts,
+                      'concept_ids': concepts,
+                      'mask': mask,
+                      'time_stamps': time_stamps,
+                      'visit_segments': visit_segments}
+
+        output_dict = {'concept_predictions': np.stack([concepts, output_mask], axis=-1)}
+
+        return input_dict, output_dict
+
+    def _make_record(self, row_slicer: RowSlicer):
+        """
+        A method for making a bert record for the bert data generator to yield
+
+        :param row_slicer: a tuple containing a pandas row,
+        left_index and right_index for slicing the sequences such as concepts
+
+        :return:
+        """
+
+        row, left_index, right_index, _ = row_slicer
+
+        iterator = zip(row.dates, row.token_ids, row.visit_segments)
+        sorted_list = sorted(iterator, key=lambda tup2: (tup2[0], tup2[1]))
+
+        (dates, concepts, visit_segments) = zip(*list(islice(sorted_list, left_index, right_index)))
+
+        masked_concepts, output_mask = self._mask_concepts(concepts)
+
+        return output_mask, masked_concepts, concepts, dates, visit_segments
+
+    def _mask_concepts(self, concepts):
+        """
+        Mask out 15% of the concepts
+        :param concepts:
+        :return:
+        """
+        masked_concepts = np.asarray(concepts).copy()
+        output_mask = np.zeros((self._max_seq_len,), dtype=int)
+        for word_pos in range(0, len(concepts)):
+            if concepts[word_pos] == self._concept_tokenizer.get_unused_token_id():
+                break
+
+            if random.random() < 0.15:
+                dice = random.random()
+                if dice < 0.8:
+                    masked_concepts[word_pos] = self._concept_tokenizer.get_mask_token_id()
+                elif dice < 0.9:
+                    masked_concepts[word_pos] = random.randint(
+                        self._concept_tokenizer.get_first_token_index(),
+                        self._concept_tokenizer.get_last_token_index())
+                # else: 10% of the time we just leave the word as is
+                output_mask[word_pos] = 1
+        return masked_concepts, output_mask
+
+
+class TimeAttentionLearningObjective(LearningObjective):
+    required_columns = ['token_ids', 'dates']
+
+    def __init__(self, concept_tokenizer: ConceptTokenizer, max_seq_len: int,
+                 time_window_size: int):
+        super(TimeAttentionLearningObjective, self).__init__()
+        self._concept_tokenizer = concept_tokenizer
+        self._max_seq_len = max_seq_len
+        self._time_window_size = time_window_size
+
+    def get_tf_dataset_schema(self):
+        input_dict_schema = {
+            'target_concepts': int32,
+            'target_time_stamps': int32,
+            'context_concepts': int32,
+            'context_time_stamps': int32,
+            'mask': int32
+        }
+        output_dict_schema = {'concept_predictions': int32}
+        return input_dict_schema, output_dict_schema
+
+    @validate_columns_decorator
+    def process_batch(self, rows: List[RowSlicer]):
+        (target_concepts, target_dates, context_concepts, context_time_stamps) = zip(
+            *list(map(self._make_record, rows)))
+
+        target_concepts = np.asarray(target_concepts)
+        target_time_stamps = np.asarray(target_dates)
+
+        context_concepts = post_pad_pre_truncate(context_concepts,
+                                                 self._concept_tokenizer.get_unused_token_id(),
+                                                 self._max_seq_len)
+
+        context_time_stamps = post_pad_pre_truncate(context_time_stamps, 0, self._max_seq_len)
+        mask = (context_concepts == self._concept_tokenizer.get_unused_token_id()).astype(int)
+
+        input_dict = {'target_concepts': target_concepts,
+                      'target_time_stamps': target_time_stamps,
+                      'context_concepts': context_concepts,
+                      'context_time_stamps': context_time_stamps,
+                      'mask': mask}
+
+        output_dict = {'concept_predictions': target_concepts}
+
+        return input_dict, output_dict
+
+    def _make_record(self, row_slicer: RowSlicer):
+        """
+        A method for making a bert record for the time attention data generator to yield
+
+        :param row_slicer: a tuple containing a pandas row,
+        left_index and right_index for slicing the sequences such as concepts
+
+        :return:
+        """
+
+        target_index = row_slicer.target_index
+        start_index = row_slicer.start_index
+        end_index = row_slicer.end_index
+        concepts = np.asarray(row_slicer.row.token_ids)
+        dates = np.asarray(row_slicer.row.dates)
+
+        indexes = np.asarray(list(range(start_index, end_index + 1)))
+        indexes = indexes[indexes != target_index]
+
+        return [concepts[target_index]], [dates[target_index]], concepts[indexes], dates[indexes]
