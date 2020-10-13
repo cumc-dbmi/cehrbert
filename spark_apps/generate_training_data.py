@@ -4,7 +4,7 @@ import datetime
 
 from pyspark.sql import SparkSession
 
-from utils.common import *
+from utils.spark_utils import *
 import spark_apps.parameters as p
 
 VISIT_OCCURRENCE = 'visit_occurrence'

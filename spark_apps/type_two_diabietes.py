@@ -3,7 +3,7 @@ from pyspark.sql import DataFrame
 from spark_apps.spark_app_base import AbstractCohortBuilderBase, cohort_validator
 from spark_apps.parameters import create_spark_args
 
-from utils.common import *
+from utils.spark_utils import *
 
 COHORT_QUERY_TEMPLATE = """
 WITH person_ids_to_exclude AS 

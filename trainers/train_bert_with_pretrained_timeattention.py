@@ -1,5 +1,3 @@
-import numpy as np
-
 from config.parse_args import create_parse_args_temporal_bert
 from config.model_configs import create_temporal_bert_model_config
 
@@ -13,10 +11,15 @@ class TemporalBertTrainer(VanillaBertTrainer):
 
     def __init__(self, time_attention_model_path, *args, **kwargs):
 
-        super(TemporalBertTrainer, self).__init__(*args, **kwargs)
         self._time_attention_model_path = time_attention_model_path
         self._time_attention_weights = self._load_time_attention_model()
         self._time_window_size = np.shape(self._time_attention_weights[0])[1] - 1
+
+        super(TemporalBertTrainer, self).__init__(*args, **kwargs)
+
+        self.get_logger().info(
+            f'time_attention_model_path: {time_attention_model_path}\n'
+            f'time_window_size: {self._time_window_size}\n')
 
     def _load_time_attention_model(self):
 
@@ -35,7 +38,7 @@ class TemporalBertTrainer(VanillaBertTrainer):
 
         return extract_time_attention_weights()
 
-    def create_model(self):
+    def _create_model(self):
         strategy = tf.distribute.MirroredStrategy()
         print('Number of devices: {}'.format(strategy.num_replicas_in_sync))
         with strategy.scope():

@@ -1,6 +1,6 @@
 from spark_apps.spark_app_base import ProspectiveCohortBuilderBase
 from spark_apps.parameters import create_spark_args
-from utils.common import *
+from utils.spark_utils import *
 
 COHORT_QUERY_TEMPLATE = """
 SELECT

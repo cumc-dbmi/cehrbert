@@ -1,54 +1,53 @@
 from abc import ABC, abstractmethod
 import os
-import pickle
-import inspect
+from pathlib import Path
 import pandas as pd
-import datetime
 
 import tensorflow as tf
+from tensorflow.keras.models import Model
 
-from data_generators.tokenizer import ConceptTokenizer
 from utils.logging_utils import *
-from utils.utils import CosineLRSchedule
+from utils.model_utils import log_function_decorator, create_folder_if_not_exist, \
+    save_training_history
+from models.loss_schedulers import CosineLRSchedule
 
 
-def log_function_decorator(function):
-    def wrapper(self, *args, **kwargs):
-        class_name = type(self).__name__
-        function_name = function.__name__
-        module_name = inspect.getmodule(function).__name__
-        line_no = inspect.getsourcelines(function)[1]
+class AbstractModel(ABC):
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+        self._model = self._create_model(*args, **kwargs)
 
-        beginning = datetime.datetime.now()
-        logging.getLogger(function.__name__).info(
-            f'Started running {module_name}: {class_name}.{function_name} at line {line_no}')
-        output = function(self, *args, **kwargs)
-        ending = datetime.datetime.now()
-        logging.getLogger(function.__name__).info(
-            f'Took {ending - beginning} to run {module_name}: {class_name}.{function_name}.')
-        return output
+    @abstractmethod
+    def _create_model(self, *args, **kwargs) -> Model:
+        pass
 
-    return wrapper
+    @abstractmethod
+    def train_model(self, *args, **kwargs):
+        pass
+
+    @abstractmethod
+    def eval_model(self, *args, **kwargs):
+        pass
+
+    @abstractmethod
+    def get_model_folder(self):
+        pass
+
+    def get_model_metrics_folder(self):
+        return create_folder_if_not_exist(self.get_model_folder(), 'metrics')
+
+    def get_model_history_folder(self):
+        return create_folder_if_not_exist(self.get_model_folder(), 'history')
+
+    @classmethod
+    def get_logger(cls):
+        return logging.getLogger(cls.__name__)
+
+    def __str__(self):
+        return str(self.__class__.__name__)
 
 
-@log_function_decorator
-def tokenize_concepts(training_data, column_name, tokenized_column_name, tokenizer_path,
-                      oov_token='0'):
-    """
-    Tokenize the concept sequence and save the tokenizer as a pickle file
-    :return:
-    """
-    tokenizer = ConceptTokenizer(oov_token=oov_token)
-    training_data[column_name] = training_data[column_name].apply(
-        lambda concept_ids: concept_ids.tolist())
-    tokenizer.fit_on_concept_sequences(training_data[column_name])
-    encoded_sequences = tokenizer.encode(training_data[column_name])
-    training_data[tokenized_column_name] = encoded_sequences
-    pickle.dump(tokenizer, open(tokenizer_path, 'wb'))
-    return tokenizer
-
-
-class AbstractModelTrainer(ABC):
+class AbstractConceptEmbeddingTrainer(AbstractModel):
     min_num_of_concepts = 5
 
     def __init__(self,
@@ -60,7 +59,7 @@ class AbstractModelTrainer(ABC):
                  tf_board_log_path: str = None,
                  shuffle_training_data: bool = True,
                  *args, **kwargs):
-        super().__init__(*args, **kwargs)
+
         self._training_data_parquet_path = training_data_parquet_path
         self._model_path = model_path
         self._tf_board_log_path = tf_board_log_path
@@ -68,12 +67,15 @@ class AbstractModelTrainer(ABC):
         self._epochs = epochs
         self._learning_rate = learning_rate
         self._shuffle_training_data = shuffle_training_data
-
         self._training_data = self._load_training_data()
 
         # shuffle the training data
         if self._shuffle_training_data:
             self._training_data = self._training_data.sample(frac=1).reset_index(drop=True)
+
+        self._load_dependencies()
+
+        super(AbstractConceptEmbeddingTrainer, self).__init__(*args, **kwargs)
 
         self.get_logger().info(
             f'training_data_parquet_path: {training_data_parquet_path}\n'
@@ -83,6 +85,10 @@ class AbstractModelTrainer(ABC):
             f'learning_rate: {learning_rate}\n'
             f'tf_board_log_path: {tf_board_log_path}\n'
             f'shuffle_training_data: {shuffle_training_data}\n')
+
+    @abstractmethod
+    def _load_dependencies(self):
+        pass
 
     @log_function_decorator
     def _load_training_data(self):
@@ -99,37 +105,20 @@ class AbstractModelTrainer(ABC):
         """
         pass
 
-    @abstractmethod
-    def create_model(self):
-        pass
-
     def train_model(self):
         """
-        Train the model
+        Train the model and save the history metrics into the model folder
         :return:
         """
         dataset, steps_per_epoch = self.create_dataset()
-        model = self.create_model()
 
-        model.fit(
-            dataset,
-            steps_per_epoch=steps_per_epoch,
-            epochs=self._epochs,
-            callbacks=self.get_callbacks()
-        )
+        history = self._model.fit(dataset,
+                                  steps_per_epoch=steps_per_epoch,
+                                  epochs=self._epochs,
+                                  callbacks=self._get_callbacks())
+        save_training_history(history, self.get_model_history_folder())
 
-    @abstractmethod
-    def eval_model(self):
-        pass
-
-    @classmethod
-    def get_logger(cls):
-        return logging.getLogger(cls.__name__)
-
-    def __str__(self):
-        return str(self.__class__.__name__)
-
-    def get_callbacks(self):
+    def _get_callbacks(self):
         tensor_board_callback = tf.keras.callbacks.TensorBoard(log_dir=self._tf_board_log_path)
         model_checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath=self._model_path,
                                                               save_best_only=True, monitor='loss',
@@ -142,3 +131,10 @@ class AbstractModelTrainer(ABC):
             model_checkpoint,
             learning_rate_scheduler
         ]
+
+    def get_model_folder(self):
+        """
+        Infer the model folder from the property model_path
+        :return:
+        """
+        return str(Path(self._model_path).parent)
