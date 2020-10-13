@@ -4,7 +4,8 @@ import tensorflow as tf
 
 from config.model_configs import create_bert_model_config
 from config.parse_args import create_parse_args_base_bert
-from trainers.model_trainer import AbstractModelTrainer, tokenize_concepts
+from trainers.model_trainer import AbstractConceptEmbeddingTrainer
+from utils.model_utils import tokenize_concepts
 from models.bert_models_visit_prediction import transformer_bert_model_visit_prediction
 from models.bert_models import transformer_bert_model
 from models.custom_layers import get_custom_objects
@@ -16,7 +17,7 @@ from keras_transformer.bert import (masked_perplexity,
 from tensorflow.keras import optimizers
 
 
-class VanillaBertTrainer(AbstractModelTrainer):
+class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
     confidence_penalty = 0.1
 
     def __init__(self,
@@ -29,7 +30,6 @@ class VanillaBertTrainer(AbstractModelTrainer):
                  include_visit_prediction: bool,
                  *args, **kwargs):
 
-        super(VanillaBertTrainer, self).__init__(*args, **kwargs)
         self._tokenizer_path = tokenizer_path
         self._visit_tokenizer_path = visit_tokenizer_path
         self._embedding_size = embedding_size
@@ -37,6 +37,8 @@ class VanillaBertTrainer(AbstractModelTrainer):
         self._depth = depth
         self._num_heads = num_heads
         self._include_visit_prediction = include_visit_prediction
+
+        super(VanillaBertTrainer, self).__init__(*args, **kwargs)
 
         self.get_logger().info(
             f'{self} will be trained with the following parameters:\n'
@@ -47,6 +49,8 @@ class VanillaBertTrainer(AbstractModelTrainer):
             f'depth: {depth}\n'
             f'num_heads: {num_heads}\n'
             f'include_visit_prediction: {include_visit_prediction}\n')
+
+    def _load_dependencies(self):
 
         self._tokenizer = tokenize_concepts(self._training_data, 'concept_ids', 'token_ids',
                                             self._tokenizer_path)
@@ -84,7 +88,7 @@ class VanillaBertTrainer(AbstractModelTrainer):
 
         return dataset, data_generator.get_steps_per_epoch()
 
-    def create_model(self):
+    def _create_model(self):
         strategy = tf.distribute.MirroredStrategy()
         self.get_logger().info('Number of devices: {}'.format(strategy.num_replicas_in_sync))
         with strategy.scope():

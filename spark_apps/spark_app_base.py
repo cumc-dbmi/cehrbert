@@ -6,7 +6,7 @@ from typing import List
 from pyspark.sql import DataFrame
 from pyspark.sql import SparkSession
 
-from utils.common import *
+from utils.spark_utils import *
 
 NEGATIVE_CONTROL_MATCH_QUERY_TEMPLATE = """
 SELECT DISTINCT

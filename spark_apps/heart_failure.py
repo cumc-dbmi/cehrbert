@@ -5,7 +5,7 @@ from spark_apps.type_two_diabietes import TypeTwoDiabetesCohortBuilder
 from spark_apps.type_two_diabietes import DEPENDENCY_LIST as t2dm_dependency_list
 from spark_apps.parameters import create_spark_args
 
-from utils.common import *
+from utils.spark_utils import *
 
 DIURETIC_CONCEPT_ID = 4186999
 

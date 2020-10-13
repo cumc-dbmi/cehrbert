@@ -3,7 +3,7 @@ from pyspark.sql import DataFrame
 from spark_apps.spark_app_base import AbstractCohortBuilderBase
 from spark_apps.parameters import create_spark_args
 
-from utils.common import *
+from utils.spark_utils import *
 
 PERSON = 'person'
 VISIT_OCCURRENCE = 'visit_occurrence'
