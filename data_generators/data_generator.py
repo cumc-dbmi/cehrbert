@@ -4,6 +4,7 @@ import random
 from itertools import islice
 
 import numpy as np
+import pandas as pd
 
 from keras.preprocessing.sequence import pad_sequences
 
@@ -33,9 +34,11 @@ class TimeAttentionDataGenerator:
 
             target_concepts = np.asarray(target_concepts)
             target_time_stamps = np.asarray(target_time_stamps)
-            context_concepts = pad_sequences(context_concepts, maxlen=self.max_sequence_length, padding='post',
+            context_concepts = pad_sequences(context_concepts, maxlen=self.max_sequence_length,
+                                             padding='post',
                                              value=self.unused_token_id)
-            context_time_stamps = pad_sequences(context_time_stamps, maxlen=self.max_sequence_length, padding='post',
+            context_time_stamps = pad_sequences(context_time_stamps,
+                                                maxlen=self.max_sequence_length, padding='post',
                                                 value=0, dtype='float32')
             mask = (context_concepts == self.unused_token_id).astype(int)
 
@@ -49,7 +52,8 @@ class TimeAttentionDataGenerator:
 
         while True:
             for tup in self.patient_event_sequence.itertuples():
-                concept_ids, dates = zip(*sorted(zip(tup.token_ids, tup.dates), key=lambda tup2: tup2[1]))
+                concept_ids, dates = zip(
+                    *sorted(zip(tup.token_ids, tup.dates), key=lambda tup2: tup2[1]))
                 sorted_tup = (concept_ids, dates)
                 for i, concept_id in enumerate(concept_ids):
                     time_window_qualified_indexes = self.get_time_window_qualified_indexes(i, dates)
@@ -131,12 +135,14 @@ class NegativeSamplingBatchGenerator(TimeAttentionDataGenerator):
         all_token_ids = list(range(self.first_token_id, self.last_token_id + 1))
         samples = set()
         while len(samples) < self.num_of_negative_samples:
-            candidates = np.random.choice(all_token_ids, self.num_of_negative_samples, False, self.token_prob_dist)
+            candidates = np.random.choice(all_token_ids, self.num_of_negative_samples, False,
+                                          self.token_prob_dist)
             samples.update(np.setdiff1d(candidates, target_concepts + context_concepts))
 
         # yield the negative examples
         for negative_sample in samples:
-            yield ([negative_sample], target_time_stamps, context_concepts, context_time_stamps, [0])
+            yield (
+                [negative_sample], target_time_stamps, context_concepts, context_time_stamps, [0])
 
     def estimate_data_size(self):
         return super().estimate_data_size() * (1 + self.num_of_negative_samples)
@@ -153,18 +159,29 @@ class TemporalBertDataGenerator(TimeAttentionDataGenerator):
                  mask_token_id: int,
                  first_token_id: int,
                  last_token_id: int,
+                 visit_max_sequence_length: int,
+                 visit_mask_token_id: int,
+                 visit_first_token_id: int,
+                 visit_last_token_id: int,
+                 visit_unused_token_id: int,
                  *args, **kwargs):
         super(TemporalBertDataGenerator, self).__init__(*args, **kwargs)
         self.mask_token_id = mask_token_id
         self.first_token_id = first_token_id
         self.last_token_id = last_token_id
+        self.visit_max_sequence_length = visit_max_sequence_length
+        self.visit_mask_token_id = visit_mask_token_id
+        self.visit_first_token_id = visit_first_token_id
+        self.visit_last_token_id = visit_last_token_id
+        self.visit_unused_token_id = visit_unused_token_id
 
     def batch_generator(self):
         training_data_generator = self.data_generator()
         while True:
             next_batch = islice(training_data_generator, self.batch_size)
-            output_mask, concepts, masked_concepts, time_stamps, visit_orders, visit_segments, concept_positions = zip(
-                *list(next_batch))
+            (output_mask, concepts, masked_concepts, time_stamps, visit_orders, visit_segments,
+             concept_positions, visit_concept_ids, masked_visit_concepts,
+             output_mask_visit_concepts) = zip(*list(next_batch))
 
             concepts = self.pad_input(concepts, self.unused_token_id)
             masked_concepts = self.pad_input(masked_concepts, self.unused_token_id)
@@ -173,8 +190,15 @@ class TemporalBertDataGenerator(TimeAttentionDataGenerator):
             visit_segments = self.pad_input(visit_segments, 0)
             concept_positions = self.pad_input(concept_positions, 0)
 
+            visit_concept_ids = self.pad_input(visit_concept_ids, self.visit_unused_token_id)
+            masked_visit_concepts = self.pad_input(masked_visit_concepts,
+                                                   self.visit_unused_token_id)
+            mask_visit = (visit_concept_ids == self.visit_unused_token_id).astype(int)
+
             mask = (concepts == self.unused_token_id).astype(int)
             combined_label = np.stack([concepts, output_mask], axis=-1)
+            combined_label_visit = np.stack([visit_concept_ids, output_mask_visit_concepts],
+                                            axis=-1)
 
             yield ({'masked_concept_ids': masked_concepts,
                     'concept_ids': concepts,
@@ -182,7 +206,11 @@ class TemporalBertDataGenerator(TimeAttentionDataGenerator):
                     'visit_orders': visit_orders,
                     'visit_segments': visit_segments,
                     'concept_positions': concept_positions,
-                    'mask': mask}, combined_label)
+                    'masked_visit_concepts': masked_visit_concepts,
+                    'mask': mask,
+                    'mask_visit': mask_visit}, 
+                   {'concept_predictions': combined_label, 
+                    'visit_predictions': combined_label_visit})
 
     def data_generator(self):
 
@@ -199,50 +227,87 @@ class TemporalBertDataGenerator(TimeAttentionDataGenerator):
                 # Check if the number of indexes exceeds the minimum number of concepts
                 if len(time_window_qualified_indexes) > self.minimum_num_of_concepts:
                     (concepts, time_stamps, visit_orders, visit_segments,
-                     concept_positions) = self.generate_inputs(i, tup, time_window_qualified_indexes)
+                     concept_positions, visit_concept_ids) = self.generate_inputs(i, tup,
+                                                                                  time_window_qualified_indexes)
 
                     # Create the masked concepts and the corresponding mask
-                    masked_concepts, output_mask = self.mask_concepts(concepts)
+                    masked_concepts, output_mask = self.mask_concepts(concepts,
+                                                                      self.max_sequence_length,
+                                                                      self.first_token_id,
+                                                                      self.last_token_id,
+                                                                      self.unused_token_id,
+                                                                      self.mask_token_id)
+                    masked_visit_concepts, output_mask_visit_concepts = self.mask_visit_concepts(
+                        visit_concept_ids)
 
                     yield (output_mask, concepts, masked_concepts, time_stamps, visit_orders,
-                           visit_segments, concept_positions)
+                           visit_segments, concept_positions, visit_concept_ids,
+                           masked_visit_concepts,
+                           output_mask_visit_concepts)
 
-    def mask_concepts(self, concepts):
+    def mask_visit_concepts(self, visit_concepts):
+
+        masked_visit_concepts = visit_concepts.copy()
+        random_choice_for_masking = np.random.choice(range(len(visit_concepts)))
+        output_mask = np.zeros((self.visit_max_sequence_length,), dtype=int)
+        output_mask[random_choice_for_masking] = 1
+        masked_visit_concepts[random_choice_for_masking] = self.visit_mask_token_id
+        return masked_visit_concepts, output_mask
+
+    @staticmethod
+    def mask_concepts(concepts, max_sequence_length, first_token_id, last_token_id, unused_token_id,
+                      mask_token_id):
         """
-        Mask out 15% of the concepts
+
         :param concepts:
+        :param max_sequence_length:
+        :param first_token_id:
+        :param last_token_id:
+        :param unused_token_id:
+        :param mask_token_id:
         :return:
         """
         masked_concepts = concepts.copy()
-        output_mask = np.zeros((self.max_sequence_length,), dtype=int)
+        output_mask = np.zeros((max_sequence_length,), dtype=int)
         for word_pos in range(0, len(concepts)):
-            if concepts[word_pos] == self.unused_token_id:
+            if concepts[word_pos] == unused_token_id:
                 break
 
             if random.random() < 0.15:
                 dice = random.random()
                 if dice < 0.8:
-                    masked_concepts[word_pos] = self.mask_token_id
+                    masked_concepts[word_pos] = mask_token_id
                 elif dice < 0.9:
                     masked_concepts[word_pos] = random.randint(
-                        self.first_token_id, self.last_token_id)
+                        first_token_id, last_token_id)
                 # else: 10% of the time we just leave the word as is
                 output_mask[word_pos] = 1
         return masked_concepts, output_mask
 
     def generate_inputs(self, i, tup, time_window_qualified_indexes):
 
-        iterator = zip(tup.token_ids, tup.dates, tup.concept_id_visit_orders, tup.visit_segments, tup.concept_positions)
-        concept_ids, dates, visit_orders, visit_segments, concept_positions = zip(
+        iterator = zip(tup.token_ids, tup.dates, tup.concept_id_visit_orders, tup.visit_segments,
+                       tup.concept_positions, tup.visit_token_ids)
+        concept_ids, dates, visit_orders, visit_segments, concept_positions, visit_concept_ids = zip(
             *sorted(iterator, key=lambda tup2: (tup2[1], tup2[2])))
 
-        concepts = np.asarray(self.get_inputs_for_index(concept_ids, i))[time_window_qualified_indexes]
+        concepts = np.asarray(self.get_inputs_for_index(concept_ids, i))[
+            time_window_qualified_indexes]
         time_stamps = np.asarray(self.get_inputs_for_index(dates, i))[time_window_qualified_indexes]
-        visit_orders = np.asarray(self.get_inputs_for_index(visit_orders, i))[time_window_qualified_indexes]
-        visit_segments = np.asarray(self.get_inputs_for_index(visit_segments, i))[time_window_qualified_indexes]
-        concept_positions = np.asarray(self.get_inputs_for_index(concept_positions, i))[time_window_qualified_indexes]
+        visit_orders = np.asarray(self.get_inputs_for_index(visit_orders, i))[
+            time_window_qualified_indexes]
+        visit_segments = np.asarray(self.get_inputs_for_index(visit_segments, i))[
+            time_window_qualified_indexes]
+        concept_positions = np.asarray(self.get_inputs_for_index(concept_positions, i))[
+            time_window_qualified_indexes]
 
-        return concepts, time_stamps, visit_orders, visit_segments, concept_positions
+        # Take the unique set of visit_concept_ids in the original order
+        visit_concept_ids = pd.unique(np.asarray(self.get_inputs_for_index(visit_concept_ids, i))[
+                                          time_window_qualified_indexes])
+
+        return (
+            concepts, time_stamps, visit_orders, visit_segments, concept_positions,
+            visit_concept_ids)
 
     def get_inputs_for_index(self, inputs, i):
         left_index, right_index = self.compute_index_range(i)
@@ -281,12 +346,24 @@ class BertDataGenerator(TemporalBertDataGenerator):
                 visit_orders = self.get_inputs_for_index(tup.concept_id_visit_orders, i)
                 visit_segments = self.get_inputs_for_index(tup.visit_segments, i)
                 concept_positions = self.get_inputs_for_index(tup.concept_positions, i)
+                visit_concept_ids = self.get_inputs_for_index(tup.visit_token_ids, i)
+
+                # Take the unique set of visit_concept_ids in the original order
+                visit_concept_ids = pd.unique(np.asarray(visit_concept_ids))
 
                 # Create the masked concepts and the corresponding mask
-                masked_concepts, output_mask = self.mask_concepts(concepts)
+                masked_concepts, output_mask = self.mask_concepts(concepts,
+                                                                  self.max_sequence_length,
+                                                                  self.first_token_id,
+                                                                  self.last_token_id,
+                                                                  self.unused_token_id,
+                                                                  self.mask_token_id)
+                masked_visit_concepts, output_mask_visit_concepts = self.mask_visit_concepts(
+                    visit_concept_ids)
 
                 yield (output_mask, concepts, masked_concepts, time_stamps, visit_orders,
-                       visit_segments, concept_positions)
+                       visit_segments, concept_positions, visit_concept_ids, masked_visit_concepts,
+                       output_mask_visit_concepts)
 
 
 class BertFineTuningDataGenerator(TemporalBertDataGenerator):
@@ -319,9 +396,11 @@ class BertFineTuningDataGenerator(TemporalBertDataGenerator):
         while True:
             for tup in self.patient_event_sequence.itertuples():
                 concept_ids, dates, concept_id_visit_orders, visit_segments, concept_positions = zip(
-                    *sorted(zip(tup.token_ids, tup.dates, tup.concept_id_visit_orders, tup.visit_segments,
+                    *sorted(zip(tup.token_ids, tup.dates, tup.concept_id_visit_orders,
+                                tup.visit_segments,
                                 tup.concept_positions), key=lambda tup2: (tup2[1],
                                                                           tup2[2])))
                 yield (
-                    concept_ids, concept_ids, dates, concept_id_visit_orders, visit_segments, concept_positions, tup.age,
+                    concept_ids, concept_ids, dates, concept_id_visit_orders, visit_segments,
+                    concept_positions, tup.age,
                     tup.labels)

@@ -7,6 +7,8 @@ from pyspark.sql import SparkSession
 from utils.common import *
 import spark_apps.parameters as p
 
+VISIT_OCCURRENCE = 'visit_occurrence'
+
 
 def main(input_folder, output_folder, domain_table_list, date_filter):
     spark = SparkSession.builder.appName('Generate Bert Training Data').getOrCreate()
@@ -14,8 +16,13 @@ def main(input_folder, output_folder, domain_table_list, date_filter):
     for domain_table_name in domain_table_list:
         domain_tables.append(preprocess_domain_table(spark, input_folder, domain_table_name))
 
+    visit_occurrence = preprocess_domain_table(spark, input_folder, VISIT_OCCURRENCE)
     patient_event = join_domain_tables(domain_tables)
     patient_event = patient_event.where('visit_occurrence_id IS NOT NULL').distinct()
+    patient_event = patient_event.join(visit_occurrence, 'visit_occurrence_id') \
+        .select(patient_event['person_id'], patient_event['standard_concept_id'],
+                patient_event['date'], patient_event['visit_occurrence_id'],
+                patient_event['domain'], visit_occurrence['visit_concept_id'])
     sequence_data = create_sequence_data(patient_event, date_filter)
     sequence_data.write.mode('overwrite').parquet(os.path.join(output_folder, p.parquet_data_path))
 

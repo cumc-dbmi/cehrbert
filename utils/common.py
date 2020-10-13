@@ -8,6 +8,8 @@ SUB_WINDOW_SIZE = 30
 
 NUM_OF_PARTITIONS = 600
 
+VISIT_OCCURRENCE = 'visit_occurrence'
+
 DOMAIN_KEY_FIELDS = {
     'condition_occurrence_id': ('condition_concept_id', 'condition_start_date', 'condition'),
     'procedure_occurrence_id': ('procedure_concept_id', 'procedure_date', 'procedure'),
@@ -167,16 +169,21 @@ def preprocess_domain_table(spark, input_folder, domain_table_name):
     # lowercase the schema fields
     domain_table = domain_table.select(
         [F.col(f_n).alias(f_n.lower()) for f_n in domain_table.schema.fieldNames()])
-    _, _, domain_field = get_key_fields(domain_table)
 
-    if domain_field == 'drug' \
-            and path.exists(create_file_path(input_folder, 'concept')) \
-            and path.exists(create_file_path(input_folder, 'concept_ancestor')):
-        concept = spark.read.parquet(create_file_path(input_folder, 'concept'))
-        concept_ancestor = spark.read.parquet(create_file_path(input_folder, 'concept_ancestor'))
-        domain_table = roll_up_to_drug_ingredients(domain_table, concept, concept_ancestor)
+    try:
+        _, _, domain_field = get_key_fields(domain_table)
 
-    return domain_table
+        if domain_field == 'drug' \
+                and path.exists(create_file_path(input_folder, 'concept')) \
+                and path.exists(create_file_path(input_folder, 'concept_ancestor')):
+            concept = spark.read.parquet(create_file_path(input_folder, 'concept'))
+            concept_ancestor = spark.read.parquet(
+                create_file_path(input_folder, 'concept_ancestor'))
+            domain_table = roll_up_to_drug_ingredients(domain_table, concept, concept_ancestor)
+    except AttributeError as err:
+        print(f'Can not extract the domain field for {domain_table_name} due to {err}')
+    finally:
+        return domain_table
 
 
 def roll_up_to_drug_ingredients(drug_exposure, concept, concept_ancestor):
@@ -204,6 +211,13 @@ def roll_up_to_drug_ingredients(drug_exposure, concept, concept_ancestor):
 
 
 def create_sequence_data(patient_event, date_filter=None):
+    """
+    Create a sequence of the events associated with one patient in a chronological order
+
+    :param patient_event:
+    :param date_filter:
+    :return:
+    """
     take_dates_udf = F.udf(
         lambda rows: [row[0] for row in sorted(rows, key=lambda x: (x[0], x[1]))],
         T.ArrayType(T.IntegerType()))
@@ -219,6 +233,9 @@ def create_sequence_data(patient_event, date_filter=None):
     take_visit_segments_udf = F.udf(
         lambda rows: [row[4] for row in sorted(rows, key=lambda x: (x[0], x[1]))],
         T.ArrayType(T.IntegerType()))
+    take_visit_concept_ids_udf = F.udf(
+        lambda rows: [str(row[5]) for row in sorted(rows, key=lambda x: (x[0], x[1]))],
+        T.ArrayType(T.StringType()))
 
     if date_filter:
         patient_event = patient_event.where(F.col('date') >= date_filter)
@@ -236,8 +253,8 @@ def create_sequence_data(patient_event, date_filter=None):
         .withColumn('visit_segment', F.col('visit_rank_order') % F.lit(2) + 1) \
         .withColumn('date_concept_id_period',
                     F.struct(F.col('date_in_week'), F.col('standard_concept_id'),
-                             F.col('concept_position'),
-                             F.col('visit_rank_order'), F.col('visit_segment')))
+                             F.col('concept_position'), F.col('visit_rank_order'),
+                             F.col('visit_segment'), F.col('visit_concept_id')))
 
     patient_event = patient_event.groupBy('person_id') \
         .agg(F.collect_set('date_concept_id_period').alias('date_concept_id_period'),
@@ -248,19 +265,53 @@ def create_sequence_data(patient_event, date_filter=None):
         .withColumn('concept_positions', take_concept_positions_udf('date_concept_id_period')) \
         .withColumn('concept_id_visit_orders', take_visit_orders_udf('date_concept_id_period')) \
         .withColumn('visit_segments', take_visit_segments_udf('date_concept_id_period')) \
+        .withColumn('visit_concept_ids', take_visit_concept_ids_udf('date_concept_id_period')) \
         .select('person_id', 'earliest_visit_date', 'max_event_date', 'dates', 'concept_ids',
-                'concept_positions',
-                'concept_id_visit_orders', 'visit_segments')
+                'concept_positions', 'concept_id_visit_orders', 'visit_segments',
+                'visit_concept_ids')
 
     return patient_event
 
 
-def extract_ehr_records(spark, input_folder, domain_table_list):
+def create_concept_frequency_data(patient_event, date_filter=None):
+    if date_filter:
+        patient_event = patient_event.where(F.col('date') >= date_filter)
+
+    take_concept_ids_udf = F.udf(lambda rows: [row[0] for row in rows], T.ArrayType(T.StringType()))
+    take_freqs_udf = F.udf(lambda rows: [row[1] for row in rows], T.ArrayType(T.IntegerType()))
+
+    patient_event = patient_event.groupBy('person_id', 'standard_concept_id').count() \
+        .withColumn('concept_id_freq', F.struct('standard_concept_id', 'count')) \
+        .groupBy('person_id').agg(F.collect_list('concept_id_freq').alias('sequence')) \
+        .withColumn('concept_ids', take_concept_ids_udf('sequence')) \
+        .withColumn('frequencies', take_freqs_udf('sequence')) \
+        .select('person_id', 'concept_ids', 'frequencies')
+
+    return patient_event
+
+
+def extract_ehr_records(spark, input_folder, domain_table_list, include_visit_type=False):
+    """
+    Extract the ehr records for domain_table_list from input_folder.
+
+    :param spark:
+    :param input_folder:
+    :param domain_table_list:
+    :param include_visit_type: whether or not to include the visit type to the ehr records
+    :return:
+    """
     domain_tables = []
     for domain_table_name in domain_table_list:
         domain_tables.append(preprocess_domain_table(spark, input_folder, domain_table_name))
     patient_ehr_records = join_domain_tables(domain_tables)
     patient_ehr_records = patient_ehr_records.where('visit_occurrence_id IS NOT NULL').distinct()
+
+    if include_visit_type:
+        visit_occurrence = preprocess_domain_table(spark, input_folder, VISIT_OCCURRENCE)
+        patient_ehr_records = patient_ehr_records.join(visit_occurrence, 'visit_occurrence_id') \
+            .select(patient_ehr_records['person_id'], patient_ehr_records['standard_concept_id'],
+                    patient_ehr_records['date'], patient_ehr_records['visit_occurrence_id'],
+                    patient_ehr_records['domain'], visit_occurrence['visit_concept_id'])
     return patient_ehr_records
 
 
@@ -340,3 +391,15 @@ def get_descendant_concept_ids(spark, concept_ids):
         WHERE ca.ancestor_concept_id IN ({concept_ids})
     """.format(concept_ids=','.join([str(c) for c in concept_ids])))
     return descendant_concept_ids
+
+
+def get_standard_concept_ids(spark, concept_ids):
+    standard_concept_ids = spark.sql("""
+            SELECT DISTINCT
+                c.*
+            FROM global_temp.concept_relationship AS cr
+            JOIN global_temp.concept AS c 
+                ON ca.concept_id_2 = c.concept_id AND cr.relationship_id = 'Maps to'
+            WHERE ca.concept_id_1 IN ({concept_ids})
+        """.format(concept_ids=','.join([str(c) for c in concept_ids])))
+    return standard_concept_ids

@@ -4,6 +4,7 @@ import datetime
 parquet_data_path = 'patient_sequence'
 feather_data_path = 'patient_sequence.pickle'
 tokenizer_path = 'tokenizer.pickle'
+visit_tokenizer_path = 'visit_tokenizer.pickle'
 time_attention_model_path = 'time_aware_model.h5'
 bert_model_path = 'bert_model.h5'
 temporal_bert_model_path = 'temporal_bert_model.h5'
@@ -96,4 +97,13 @@ def create_spark_args():
                         required=False,
                         type=int,
                         default=30)
+
+    parser.add_argument('-f',
+                        '--is_feature_concept_frequency',
+                        dest='is_feature_concept_frequency',
+                        action='store_true',
+                        required=False,
+                        default=False,
+                        help='Specify whether the features are concept counts or not')
+
     return parser.parse_args()
