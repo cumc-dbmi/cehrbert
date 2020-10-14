@@ -6,6 +6,7 @@ import pandas as pd
 import tensorflow as tf
 from tensorflow.keras.models import Model
 
+from data_generators.data_generator_base import AbstractDataGeneratorBase
 from utils.logging_utils import *
 from utils.model_utils import log_function_decorator, create_folder_if_not_exist, \
     save_training_history
@@ -58,6 +59,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
                  learning_rate: float,
                  tf_board_log_path: str = None,
                  shuffle_training_data: bool = True,
+                 cache_dataset: bool = False,
                  *args, **kwargs):
 
         self._training_data_parquet_path = training_data_parquet_path
@@ -67,6 +69,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         self._epochs = epochs
         self._learning_rate = learning_rate
         self._shuffle_training_data = shuffle_training_data
+        self._cache_dataset = cache_dataset
         self._training_data = self._load_training_data()
 
         # shuffle the training data
@@ -98,7 +101,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         return parquet
 
     @abstractmethod
-    def create_dataset(self):
+    def create_data_generator(self) -> AbstractDataGeneratorBase:
         """
         Prepare _training_data for the model such as tokenize concepts.
         :return:
@@ -110,12 +113,21 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         Train the model and save the history metrics into the model folder
         :return:
         """
-        dataset, steps_per_epoch = self.create_dataset()
+        data_generator = self.create_data_generator()
+        steps_per_epoch = data_generator.get_steps_per_epoch()
+        dataset = tf.data.Dataset.from_generator(data_generator.create_batch_generator,
+                                                 output_types=(
+                                                     data_generator.get_tf_dataset_schema()))
+
+        if self._cache_dataset:
+            dataset = dataset.take(data_generator.get_steps_per_epoch()).cache().repeat()
+            dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
         history = self._model.fit(dataset,
                                   steps_per_epoch=steps_per_epoch,
                                   epochs=self._epochs,
                                   callbacks=self._get_callbacks())
+
         save_training_history(history, self.get_model_history_folder())
 
     def _get_callbacks(self):
