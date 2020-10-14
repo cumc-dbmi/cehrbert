@@ -95,7 +95,7 @@ class TemporalBertTrainer(VanillaBertTrainer):
                         self._time_attention_weights)
         return model
 
-    def create_dataset(self):
+    def create_data_generator(self) -> TemporalBertDataGenerator:
 
         if self._include_visit_prediction:
             data_generator_class = TemporalVisitPredictionBertDataGenerator
@@ -111,11 +111,7 @@ class TemporalBertTrainer(VanillaBertTrainer):
             visit_tokenizer=self._visit_tokenizer,
             time_window_size=self._time_window_size)
 
-        dataset = tf.data.Dataset.from_generator(data_generator.create_batch_generator,
-                                                 output_types=(
-                                                     data_generator.get_tf_dataset_schema()))
-
-        return dataset, data_generator.get_steps_per_epoch()
+        return data_generator
 
 
 def main(args):

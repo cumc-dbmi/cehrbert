@@ -58,7 +58,7 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
                                                   'visit_token_ids', self._visit_tokenizer_path,
                                                   oov_token='-1')
 
-    def create_dataset(self):
+    def create_data_generator(self) -> BertDataGenerator:
 
         if self._include_visit_prediction:
             data_generator_class = BertVisitPredictionDataGenerator
@@ -72,11 +72,7 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
                                               concept_tokenizer=self._tokenizer,
                                               visit_tokenizer=self._visit_tokenizer)
 
-        dataset = tf.data.Dataset.from_generator(data_generator.create_batch_generator,
-                                                 output_types=(
-                                                     data_generator.get_tf_dataset_schema()))
-
-        return dataset, data_generator.get_steps_per_epoch()
+        return data_generator
 
     def _create_model(self):
         strategy = tf.distribute.MirroredStrategy()

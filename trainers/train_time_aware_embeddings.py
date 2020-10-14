@@ -38,7 +38,7 @@ class TimeAttentionConceptEmbeddingTrainer(AbstractConceptEmbeddingTrainer):
         self._tokenizer = tokenize_concepts(self._training_data, 'concept_ids', 'token_ids',
                                             self._tokenizer_path)
 
-    def create_dataset(self):
+    def create_data_generator(self) -> TimeAttentionDataGenerator:
         data_generator = TimeAttentionDataGenerator(training_data=self._training_data,
                                                     time_window_size=self._time_window_size,
                                                     max_seq_len=self._context_window_size,
@@ -46,14 +46,7 @@ class TimeAttentionConceptEmbeddingTrainer(AbstractConceptEmbeddingTrainer):
                                                     batch_size=self._batch_size,
                                                     min_num_of_concepts=self.min_num_of_concepts)
 
-        dataset = tf.data.Dataset.from_generator(data_generator.create_batch_generator,
-                                                 output_types=data_generator.get_tf_dataset_schema()
-                                                 )
-
-        dataset = dataset.take(data_generator.get_steps_per_epoch()).cache().repeat()
-        dataset = dataset.shuffle(5).prefetch(tf.data.experimental.AUTOTUNE)
-
-        return dataset, data_generator.get_steps_per_epoch()
+        return data_generator
 
     def _create_model(self) -> Model:
 
@@ -94,7 +87,8 @@ def main(args):
                                          time_window_size=config.time_window_size,
                                          batch_size=config.batch_size, epochs=config.epochs,
                                          learning_rate=config.learning_rate,
-                                         tf_board_log_path=config.tf_board_log_path).train_model()
+                                         tf_board_log_path=config.tf_board_log_path,
+                                         cache_dataset=True).train_model()
 
 
 if __name__ == "__main__":
