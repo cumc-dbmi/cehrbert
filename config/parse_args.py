@@ -84,6 +84,14 @@ def create_parse_args_base_bert():
                         type=int,
                         default=8,
                         required=False)
+
+    parser.add_argument('-iv',
+                        '--include_visit',
+                        dest='include_visit_prediction',
+                        action='store_true',
+                        default=False,
+                        required=False)
+
     return parser
 
 

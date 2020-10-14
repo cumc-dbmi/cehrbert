@@ -61,26 +61,16 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
     def create_dataset(self):
 
         if self._include_visit_prediction:
-            data_generator = BertVisitPredictionDataGenerator(training_data=self._training_data,
-                                                              batch_size=self._batch_size,
-                                                              max_seq_len=self._context_window_size,
-                                                              min_num_of_concepts=self.min_num_of_concepts,
-                                                              concept_tokenizer=self._tokenizer,
-                                                              visit_tokenizer=self._visit_tokenizer)
+            data_generator_class = BertVisitPredictionDataGenerator
         else:
-            data_generator = GenericBertDataGenerator(training_data=self._training_data,
-                                                      batch_size=self._batch_size,
-                                                      max_seq_len=self._context_window_size,
-                                                      min_num_of_concepts=self.min_num_of_concepts,
-                                                      concept_tokenizer=self._tokenizer,
-                                                      visit_tokenizer=self._visit_tokenizer)
+            data_generator_class = BertDataGenerator
 
-            learning_objectives = [
-                MaskedLanguageModelLearningObjective(concept_tokenizer=self._tokenizer,
-                                                     max_seq_len=self._context_window_size),
-            ]
-
-            data_generator.set_learning_objectives(learning_objectives)
+        data_generator = data_generator_class(training_data=self._training_data,
+                                              batch_size=self._batch_size,
+                                              max_seq_len=self._context_window_size,
+                                              min_num_of_concepts=self.min_num_of_concepts,
+                                              concept_tokenizer=self._tokenizer,
+                                              visit_tokenizer=self._visit_tokenizer)
 
         dataset = tf.data.Dataset.from_generator(data_generator.create_batch_generator,
                                                  output_types=(
@@ -119,8 +109,8 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
                 else:
                     model = transformer_bert_model(
                         max_seq_length=self._context_window_size,
-                        vocabulary_size=self._tokenizer.get_vocab_size(),
-                        concept_embedding_size=self._embedding_size,
+                        vocab_size=self._tokenizer.get_vocab_size(),
+                        embedding_size=self._embedding_size,
                         depth=self._depth,
                         num_heads=self._num_heads)
 
@@ -147,10 +137,10 @@ def main(args):
                        context_window_size=config.max_seq_length,
                        depth=config.depth,
                        num_heads=config.num_heads,
-                       include_visit_prediction=False,
                        batch_size=config.batch_size,
                        epochs=config.epochs,
                        learning_rate=config.learning_rate,
+                       include_visit_prediction=config.include_visit_prediction,
                        tf_board_log_path=config.tf_board_log_path).train_model()
 
 

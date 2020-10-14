@@ -21,8 +21,8 @@ def create_concept_mask(mask, max_seq_length):
 # -
 def transformer_bert_model(
         max_seq_length: int,
-        vocabulary_size: int,
-        concept_embedding_size: int,
+        vocab_size: int,
+        embedding_size: int,
         depth: int,
         num_heads: int,
         transformer_dropout: float = 0.1,
@@ -52,7 +52,7 @@ def transformer_bert_model(
     l2_regularizer = (tf.keras.regularizers.l2(l2_reg_penalty) if l2_reg_penalty else None)
 
     embedding_layer = ReusableEmbedding(
-        vocabulary_size, concept_embedding_size,
+        vocab_size, embedding_size,
         input_length=max_seq_length,
         name='bpe_embeddings',
         # Regularization is based on paper "A Comparative Study on
@@ -61,14 +61,14 @@ def transformer_bert_model(
         embeddings_regularizer=l2_regularizer)
 
     visit_segment_layer = VisitEmbeddingLayer(visit_order_size=3,
-                                              embedding_size=concept_embedding_size)
+                                              embedding_size=embedding_size)
 
     positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
-                                                        embedding_size=concept_embedding_size)
+                                                        embedding_size=embedding_size)
 
     encoder = Encoder(name='encoder',
                       num_layers=depth,
-                      d_model=concept_embedding_size,
+                      d_model=embedding_size,
                       num_heads=num_heads,
                       dropout_rate=transformer_dropout)
 
@@ -102,8 +102,8 @@ def transformer_bert_model(
 def transformer_temporal_bert_model(
         max_seq_length: int,
         time_window_size: int,
-        vocabulary_size: int,
-        concept_embedding_size: int,
+        vocab_size: int,
+        embedding_size: int,
         depth: int,
         num_heads: int,
         transformer_dropout: float = 0.1,
@@ -138,7 +138,7 @@ def transformer_temporal_bert_model(
     l2_regularizer = (tf.keras.regularizers.l2(l2_reg_penalty) if l2_reg_penalty else None)
 
     embedding_layer = ReusableEmbedding(
-        vocabulary_size, concept_embedding_size,
+        vocab_size, embedding_size,
         input_length=max_seq_length,
         name='bpe_embeddings',
         # Regularization is based on paper "A Comparative Study on
@@ -147,12 +147,12 @@ def transformer_temporal_bert_model(
         embeddings_regularizer=l2_regularizer)
 
     positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
-                                                        embedding_size=concept_embedding_size)
+                                                        embedding_size=embedding_size)
 
     visit_embedding_layer = VisitEmbeddingLayer(visit_order_size=3,
-                                                embedding_size=concept_embedding_size)
+                                                embedding_size=embedding_size)
 
-    time_attention_layer = TimeSelfAttention(vocab_size=vocabulary_size,
+    time_attention_layer = TimeSelfAttention(vocab_size=vocab_size,
                                              target_seq_len=max_seq_length,
                                              context_seq_len=max_seq_length,
                                              time_window_size=time_window_size,
@@ -162,7 +162,7 @@ def transformer_temporal_bert_model(
 
     temporal_encoder = TemporalEncoder(name='temporal_encoder',
                                        num_layers=depth,
-                                       d_model=concept_embedding_size,
+                                       d_model=embedding_size,
                                        num_heads=num_heads,
                                        dropout_rate=transformer_dropout)
 
