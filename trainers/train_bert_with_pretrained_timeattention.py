@@ -2,7 +2,8 @@ from config.parse_args import create_parse_args_temporal_bert
 from config.model_configs import create_temporal_bert_model_config
 
 from trainers.train_bert_only import *
-from models.bert_models_visit_prediction import *
+from models.bert_models_visit_prediction import transformer_temporal_bert_model_visit_prediction
+from models.bert_models import transformer_temporal_bert_model
 from models.custom_layers import get_custom_objects
 
 
@@ -48,25 +49,41 @@ class TemporalBertTrainer(VanillaBertTrainer):
                 model = tf.keras.models.load_model(self._model_path,
                                                    custom_objects=get_custom_objects())
             else:
-                model = transformer_temporal_bert_model_visit_prediction(
-                    max_seq_length=self._context_window_size,
-                    time_window_size=self._time_window_size,
-                    concept_vocab_size=self._tokenizer.get_vocab_size(),
-                    visit_vocab_size=self._visit_tokenizer.get_vocab_size(),
-                    embedding_size=self._embedding_size,
-                    depth=self._depth,
-                    num_heads=self._num_heads,
-                    time_attention_trainable=False)
 
                 optimizer = optimizers.Adam(
                     lr=self._learning_rate, beta_1=0.9, beta_2=0.999)
 
-                losses = {
-                    'concept_predictions': MaskedPenalizedSparseCategoricalCrossentropy(
-                        self.confidence_penalty),
-                    'visit_predictions': MaskedPenalizedSparseCategoricalCrossentropy(
-                        self.confidence_penalty)
-                }
+                if self._include_visit_prediction:
+                    model = transformer_temporal_bert_model_visit_prediction(
+                        max_seq_length=self._context_window_size,
+                        time_window_size=self._time_window_size,
+                        concept_vocab_size=self._tokenizer.get_vocab_size(),
+                        visit_vocab_size=self._visit_tokenizer.get_vocab_size(),
+                        embedding_size=self._embedding_size,
+                        depth=self._depth,
+                        num_heads=self._num_heads,
+                        time_attention_trainable=False)
+
+                    losses = {
+                        'concept_predictions': MaskedPenalizedSparseCategoricalCrossentropy(
+                            self.confidence_penalty),
+                        'visit_predictions': MaskedPenalizedSparseCategoricalCrossentropy(
+                            self.confidence_penalty)
+                    }
+                else:
+                    model = transformer_temporal_bert_model(
+                        max_seq_length=self._context_window_size,
+                        time_window_size=self._time_window_size,
+                        vocab_size=self._tokenizer.get_vocab_size(),
+                        embedding_size=self._embedding_size,
+                        depth=self._depth,
+                        num_heads=self._num_heads,
+                        time_attention_trainable=False)
+
+                    losses = {
+                        'concept_predictions': MaskedPenalizedSparseCategoricalCrossentropy(
+                            self.confidence_penalty)
+                    }
 
                 model.compile(optimizer, loss=losses,
                               metrics={'concept_predictions': masked_perplexity})
@@ -80,7 +97,12 @@ class TemporalBertTrainer(VanillaBertTrainer):
 
     def create_dataset(self):
 
-        data_generator = TemporalBertVisitPredictionDataGenerator(
+        if self._include_visit_prediction:
+            data_generator_class = TemporalVisitPredictionBertDataGenerator
+        else:
+            data_generator_class = TemporalBertDataGenerator
+
+        data_generator = data_generator_class(
             training_data=self._training_data,
             batch_size=self._batch_size,
             max_seq_len=self._context_window_size,
@@ -110,7 +132,7 @@ def main(args):
                         batch_size=config.batch_size,
                         epochs=config.epochs,
                         learning_rate=config.learning_rate,
-                        include_visit_prediction=True,
+                        include_visit_prediction=config.include_visit_prediction,
                         tf_board_log_path=config.tf_board_log_path).train_model()
 
 

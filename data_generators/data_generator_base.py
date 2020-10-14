@@ -158,6 +158,15 @@ class AbstractDataGeneratorBase(ABC):
 
             yield dict(ChainMap(*input_dicts)), dict(ChainMap(*output_dicts))
 
+    def set_learning_objectives(self, learning_objectives: List[LearningObjective]):
+        """
+        Overwrite the default learning objectives
+
+        :param learning_objectives:
+        :return:
+        """
+        self._learning_objectives = learning_objectives
+
     @abstractmethod
     def _create_iterator(self) -> RowSlicer:
         pass
@@ -196,21 +205,21 @@ class AbstractDataGeneratorBase(ABC):
         return dict(ChainMap(*input_dict_schemas)), dict(ChainMap(*output_dict_schemas))
 
 
-class BertVisitPredictionDataGenerator(AbstractDataGeneratorBase):
+class BertDataGenerator(AbstractDataGeneratorBase):
 
     def __init__(self,
                  concept_tokenizer: ConceptTokenizer,
                  visit_tokenizer: ConceptTokenizer,
                  *args,
                  **kwargs):
-        super(BertVisitPredictionDataGenerator, self).__init__(concept_tokenizer=concept_tokenizer,
-                                                               visit_tokenizer=visit_tokenizer,
-                                                               *args, **kwargs)
+        super(BertDataGenerator, self).__init__(concept_tokenizer=concept_tokenizer,
+                                                visit_tokenizer=visit_tokenizer,
+                                                *args, **kwargs)
         self._concept_tokenizer = concept_tokenizer
         self._visit_tokenizer = visit_tokenizer
 
     def _get_learning_objective_classes(self):
-        return [MaskedLanguageModelLearningObjective, VisitPredictionLearningObjective]
+        return [MaskedLanguageModelLearningObjective]
 
     def _create_iterator(self):
         """
@@ -239,10 +248,15 @@ class BertVisitPredictionDataGenerator(AbstractDataGeneratorBase):
         return len(self._training_data.index)
 
 
-class TemporalBertVisitPredictionDataGenerator(BertVisitPredictionDataGenerator):
+class BertVisitPredictionDataGenerator(BertDataGenerator):
+    def _get_learning_objective_classes(self):
+        return [MaskedLanguageModelLearningObjective, VisitPredictionLearningObjective]
+
+
+class TemporalBertDataGenerator(BertDataGenerator):
 
     def __init__(self, time_window_size, *args, **kwargs):
-        super(TemporalBertVisitPredictionDataGenerator, self).__init__(*args, **kwargs)
+        super(TemporalBertDataGenerator, self).__init__(*args, **kwargs)
         self._time_window_size = time_window_size
 
     def _create_iterator(self):
@@ -269,12 +283,9 @@ class TemporalBertVisitPredictionDataGenerator(BertVisitPredictionDataGenerator)
                     yield RowSlicer(row, 0, seq_length)
 
 
-class GenericBertDataGenerator(BertVisitPredictionDataGenerator):
+class TemporalVisitPredictionBertDataGenerator(TemporalBertDataGenerator):
     def _get_learning_objective_classes(self):
-        return []
-
-    def set_learning_objectives(self, learning_objectives: List[LearningObjective]):
-        self._learning_objectives = learning_objectives
+        return [MaskedLanguageModelLearningObjective, VisitPredictionLearningObjective]
 
 
 class TimeAttentionDataGenerator(AbstractDataGeneratorBase):
