@@ -32,18 +32,17 @@ def create_folder_if_not_exist(folder, sub_folder_name):
 
 def log_function_decorator(function):
     def wrapper(self, *args, **kwargs):
-        class_name = type(self).__name__
         function_name = function.__name__
         module_name = inspect.getmodule(function).__name__
         line_no = inspect.getsourcelines(function)[1]
 
         beginning = datetime.datetime.now()
         logging.getLogger(function.__name__).info(
-            f'Started running {module_name}: {class_name}.{function_name} at line {line_no}')
+            f'Started running {module_name}: {function_name} at line {line_no}')
         output = function(self, *args, **kwargs)
         ending = datetime.datetime.now()
         logging.getLogger(function.__name__).info(
-            f'Took {ending - beginning} to run {module_name}: {class_name}.{function_name}.')
+            f'Took {ending - beginning} to run {module_name}: {function_name}.')
         return output
 
     return wrapper
