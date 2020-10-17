@@ -87,7 +87,8 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             f'epochs: {epochs}\n'
             f'learning_rate: {learning_rate}\n'
             f'tf_board_log_path: {tf_board_log_path}\n'
-            f'shuffle_training_data: {shuffle_training_data}\n')
+            f'shuffle_training_data: {shuffle_training_data}\n'
+            f'cache_dataset: {cache_dataset}\n')
 
     @abstractmethod
     def _load_dependencies(self):
