@@ -191,9 +191,6 @@ def transformer_temporal_bert_model_visit_prediction(
         name='visit_embeddings',
         embeddings_regularizer=l2_regularizer)
 
-    positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
-                                                        embedding_size=embedding_size)
-
     visit_segment_layer = VisitEmbeddingLayer(visit_order_size=3,
                                               embedding_size=embedding_size)
 
@@ -228,8 +225,6 @@ def transformer_temporal_bert_model_visit_prediction(
     visit_softmax_layer = tf.keras.layers.Softmax(name='visit_predictions')
 
     next_step_input, embedding_matrix = concept_embedding_layer(masked_concept_ids)
-
-    next_step_input = positional_encoding_layer(next_step_input)
 
     # Building a Vanilla Transformer (described in
     # "Attention is all you need", 2017)
