@@ -8,7 +8,6 @@ from models.custom_layers import get_custom_objects
 
 
 class TemporalBertTrainer(VanillaBertTrainer):
-    confidence_penalty = 0.1
 
     def __init__(self, time_attention_model_path, *args, **kwargs):
 
