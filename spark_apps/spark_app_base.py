@@ -7,6 +7,7 @@ from pyspark.sql import DataFrame
 from pyspark.sql import SparkSession
 
 from utils.spark_utils import *
+from utils.logging_utils import *
 
 NEGATIVE_CONTROL_MATCH_QUERY_TEMPLATE = """
 SELECT DISTINCT
@@ -58,7 +59,9 @@ class AbstractCohortBuilderBase(ABC):
                  ehr_table_list: List[str],
                  dependency_list: List[str],
                  include_ehr_records: bool = True,
-                 is_feature_concept_frequency: bool = False):
+                 include_visit_type: bool = True,
+                 is_feature_concept_frequency: bool = False,
+                 is_roll_up_concept: bool = False):
 
         self._cohort_name = cohort_name
         self._input_folder = input_folder
@@ -76,7 +79,25 @@ class AbstractCohortBuilderBase(ABC):
                                                 re.sub('[^a-z0-9]+', '_',
                                                        self._cohort_name.lower()))
         self._include_ehr_records = include_ehr_records
+        self._include_visit_type = include_visit_type
         self._is_feature_concept_frequency = is_feature_concept_frequency
+        self._is_roll_up_concept = is_roll_up_concept
+
+        self.get_logger().info(f'cohort_name: {cohort_name}\n'
+                               f'input_folder: {input_folder}\n'
+                               f'output_folder: {output_folder}\n'
+                               f'date_lower_bound: {date_lower_bound}\n'
+                               f'date_upper_bound: {date_upper_bound}\n'
+                               f'age_lower_bound: {age_lower_bound}\n'
+                               f'age_upper_bound: {age_upper_bound}\n'
+                               f'observation_window: {observation_window}\n'
+                               f'prediction_window: {prediction_window}\n'
+                               f'index_date_match_window: {index_date_match_window}\n'
+                               f'ehr_table_list: {ehr_table_list}\n'
+                               f'include_ehr_records: {include_ehr_records}\n'
+                               f'include_visit_type: {include_visit_type}\n'
+                               f'is_feature_concept_frequency: {is_feature_concept_frequency}\n'
+                               f'is_roll_up_concept: {is_roll_up_concept}\n')
 
         # Validate the input and output folders
         self._validate_folder(self._input_folder)
@@ -168,6 +189,10 @@ class AbstractCohortBuilderBase(ABC):
     def load_cohort(self):
         return self.spark.read.parquet(self._output_data_folder)
 
+    @classmethod
+    def get_logger(cls):
+        return logging.getLogger(cls.__name__)
+
 
 class AbstractCaseControlCohortBuilderBase(AbstractCohortBuilderBase):
 
@@ -217,10 +242,8 @@ class AbstractCaseControlCohortBuilderBase(AbstractCohortBuilderBase):
 class RetrospectiveCohortBuilderBase(AbstractCaseControlCohortBuilderBase):
 
     def extract_ehr_records_for_cohort(self, cohort: DataFrame):
-        ehr_records = extract_ehr_records(self.spark,
-                                          self._input_folder,
-                                          self._ehr_table_list,
-                                          include_visit_type=True)
+        ehr_records = extract_ehr_records(self.spark, self._input_folder, self._ehr_table_list,
+                                          self._include_visit_type, self._is_roll_up_concept)
 
         cohort_ehr_records = ehr_records.join(cohort, 'person_id') \
             .where(
@@ -251,10 +274,8 @@ class RetrospectiveCohortBuilderBase(AbstractCaseControlCohortBuilderBase):
 class ProspectiveCohortBuilderBase(AbstractCaseControlCohortBuilderBase):
 
     def extract_ehr_records_for_cohort(self, cohort: DataFrame):
-        ehr_records = extract_ehr_records(self.spark,
-                                          self._input_folder,
-                                          self._ehr_table_list,
-                                          include_visit_type=True)
+        ehr_records = extract_ehr_records(self.spark, self._input_folder, self._ehr_table_list,
+                                          self._include_visit_type, self._is_roll_up_concept)
 
         cohort_ehr_records = ehr_records.join(cohort, 'person_id') \
             .where(ehr_records['date'] >= cohort['index_date']) \
@@ -279,10 +300,8 @@ class ProspectiveCohortBuilderBase(AbstractCaseControlCohortBuilderBase):
 class LastVisitCohortBuilderBase(AbstractCaseControlCohortBuilderBase):
 
     def extract_ehr_records_for_cohort(self, cohort: DataFrame):
-        ehr_records = extract_ehr_records(self.spark,
-                                          self._input_folder,
-                                          self._ehr_table_list,
-                                          include_visit_type=True)
+        ehr_records = extract_ehr_records(self.spark, self._input_folder, self._ehr_table_list,
+                                          self._include_visit_type, self._is_roll_up_concept)
 
         cohort_ehr_records = ehr_records.join(cohort, 'visit_occurrence_id') \
             .select([ehr_records[field_name] for field_name in ehr_records.schema.fieldNames()])

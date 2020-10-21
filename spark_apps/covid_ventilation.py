@@ -12,7 +12,8 @@ VENT = 'vent'
 MEASUREMENT = 'measurement'
 CONCEPT = 'concept'
 DEATH = 'death'
-DEPENDENCY_LIST = [PERSON, VISIT_OCCURRENCE, VENT, MEASUREMENT, CONDITION_OCCURRENCE, DEATH, CONCEPT]
+DEPENDENCY_LIST = [PERSON, VISIT_OCCURRENCE, VENT, MEASUREMENT, CONDITION_OCCURRENCE, DEATH,
+                   CONCEPT]
 DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure', 'procedure_occurrence']
 
 COHORT_QUERY = """
@@ -69,9 +70,7 @@ class CovidVentilationCohortBuilder(AbstractCohortBuilderBase):
         return self.spark.sql(COHORT_QUERY)
 
     def extract_ehr_records_for_cohort(self, cohort: DataFrame):
-        ehr_records = extract_ehr_records(self.spark,
-                                          self._input_folder,
-                                          self._ehr_table_list)
+        ehr_records = extract_ehr_records(self.spark, self._input_folder, self._ehr_table_list)
 
         visit_occurrence = self._dependency_dict[VISIT_OCCURRENCE]
 
@@ -87,7 +86,8 @@ class CovidVentilationCohortBuilder(AbstractCohortBuilderBase):
 
 def main(cohort_name, input_folder, output_folder, date_lower_bound, date_upper_bound,
          age_lower_bound, age_upper_bound, observation_window, prediction_window,
-         index_date_match_window):
+         index_date_match_window, include_visit_type, is_feature_concept_frequency,
+         is_roll_up_concept):
     cohort_builder = CovidVentilationCohortBuilder(cohort_name,
                                                    input_folder,
                                                    output_folder,
@@ -99,7 +99,11 @@ def main(cohort_name, input_folder, output_folder, date_lower_bound, date_upper_
                                                    prediction_window,
                                                    index_date_match_window,
                                                    DOMAIN_TABLE_LIST,
-                                                   DEPENDENCY_LIST)
+                                                   DEPENDENCY_LIST,
+                                                   True,
+                                                   include_visit_type,
+                                                   is_feature_concept_frequency,
+                                                   is_roll_up_concept)
 
     cohort_builder.build()
 
@@ -116,4 +120,7 @@ if __name__ == '__main__':
          spark_args.upper_bound,
          spark_args.observation_window,
          spark_args.prediction_window,
-         spark_args.index_date_match_window)
+         spark_args.index_date_match_window,
+         spark_args.include_visit_type,
+         spark_args.is_feature_concept_frequency,
+         spark_args.is_roll_up_concept)
