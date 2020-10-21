@@ -28,7 +28,7 @@ def validate_columns_decorator(function):
             for column in required_columns:
                 if not hasattr(row_slicer.row, column):
                     raise AttributeError(
-                        f'The required column {column} is missing for {self.__name__}')
+                        f'The required column {column} is missing for {self}')
             break
 
         return function(self, rows, *args, **kwargs)
@@ -82,6 +82,9 @@ class LearningObjective(ABC):
         :return:
         """
         return cls.required_columns
+
+    def __str__(self):
+        return str(self.__class__.__name__)
 
 
 class BertFineTuningLearningObjective(LearningObjective):
