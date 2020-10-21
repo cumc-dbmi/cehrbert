@@ -86,21 +86,24 @@ DEPENDENCY_LIST = [PERSON, VISIT_OCCURRENCE]
 class HospitalizationCohortBuilder(ProspectiveCohortBuilderBase):
 
     def preprocess_dependencies(self):
-        first_visit_query = FIRST_VISIT_QUERY_TEMPLATE.format(visit_concept_ids=VISIT_CONCEPT_IDS,
-                                                              total_window=self.get_total_window())
+        first_visit_query = FIRST_VISIT_QUERY_TEMPLATE.format(visit_concept_ids=VISIT_CONCEPT_IDS)
         self.spark.sql(first_visit_query).createOrReplaceGlobalTempView(FIRST_VISIT_TABLE)
+
+        # The qualifying patients can't have any hospitalization record before observation_window
+        # plus hold_off_window
+        total_window = self._observation_window + self._hold_off_window
 
         first_qualified_visit_query = FIRST_QUALIFIED_VISIT_QUERY_TEMPLATE.format(
             visit_concept_ids=VISIT_CONCEPT_IDS,
             date_lower_bound=self._date_lower_bound,
             date_upper_bound=self._date_upper_bound,
-            total_window=self.get_total_window())
+            total_window=total_window)
 
         self.spark.sql(first_qualified_visit_query).createOrReplaceGlobalTempView(
             FIRST_QUALIFIED_VISIT_TABLE)
 
         cohort_query = COHORT_QUERY_TEMPLATE.format(visit_concept_ids=VISIT_CONCEPT_IDS,
-                                                    total_window=self.get_total_window())
+                                                    total_window=total_window)
         cohort = self.spark.sql(cohort_query)
 
         cohort.createOrReplaceGlobalTempView(COHORT_TABLE)
@@ -145,7 +148,7 @@ class HospitalizationCohortBuilder(ProspectiveCohortBuilderBase):
 
 
 def main(cohort_name, input_folder, output_folder, date_lower_bound, date_upper_bound,
-         age_lower_bound, age_upper_bound, observation_window, prediction_window,
+         age_lower_bound, age_upper_bound, observation_window, prediction_window, hold_off_window,
          index_date_match_window, include_visit_type, is_feature_concept_frequency,
          is_roll_up_concept):
     cohort_builder = HospitalizationCohortBuilder(cohort_name,
@@ -157,6 +160,7 @@ def main(cohort_name, input_folder, output_folder, date_lower_bound, date_upper_
                                                   age_upper_bound,
                                                   observation_window,
                                                   prediction_window,
+                                                  hold_off_window,
                                                   index_date_match_window,
                                                   DOMAIN_TABLE_LIST,
                                                   DEPENDENCY_LIST,
@@ -180,6 +184,7 @@ if __name__ == '__main__':
          spark_args.upper_bound,
          spark_args.observation_window,
          spark_args.prediction_window,
+         spark_args.hold_off_window,
          spark_args.index_date_match_window,
          spark_args.include_visit_type,
          spark_args.is_feature_concept_frequency,

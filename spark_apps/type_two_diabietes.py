@@ -81,7 +81,7 @@ class TypeTwoDiabetesCohortBuilder(AbstractCohortBuilderBase):
 
 
 def main(cohort_name, input_folder, output_folder, date_lower_bound, date_upper_bound,
-         age_lower_bound, age_upper_bound, observation_window, prediction_window,
+         age_lower_bound, age_upper_bound, observation_window, prediction_window, hold_off_window,
          index_date_match_window, is_feature_concept_frequency):
     cohort_builder = TypeTwoDiabetesCohortBuilder(cohort_name,
                                                   input_folder,
@@ -92,6 +92,7 @@ def main(cohort_name, input_folder, output_folder, date_lower_bound, date_upper_
                                                   age_upper_bound,
                                                   observation_window,
                                                   prediction_window,
+                                                  hold_off_window,
                                                   index_date_match_window,
                                                   DOMAIN_TABLE_LIST,
                                                   DEPENDENCY_LIST,
@@ -112,5 +113,6 @@ if __name__ == '__main__':
          spark_args.upper_bound,
          spark_args.observation_window,
          spark_args.prediction_window,
+         spark_args.hold_off_window,
          spark_args.index_date_match_window,
          spark_args.is_feature_concept_frequency)

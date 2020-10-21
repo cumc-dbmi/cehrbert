@@ -85,10 +85,18 @@ def create_spark_args():
                         '--prediction_window',
                         dest='prediction_window',
                         action='store',
-                        help='The prediction window in days prior the index date',
+                        help='The prediction window in which the prediction is made',
                         required=False,
                         type=int,
                         default=180)
+    parser.add_argument('-hw',
+                        '--hold_off_window',
+                        dest='hold_off_window',
+                        action='store',
+                        help='The hold off window for excluding the features',
+                        required=False,
+                        type=int,
+                        default=0)
     parser.add_argument('-im',
                         '--index_date_match_window',
                         dest='index_date_match_window',
@@ -98,20 +106,17 @@ def create_spark_args():
                         required=False,
                         type=int,
                         default=30)
-
     parser.add_argument('-iv',
                         '--include_visit_type',
                         dest='include_visit_type',
                         action='store_true',
                         help='Specify whether to include visit types for '
                              'generating the training data')
-
     parser.add_argument('-f',
                         '--is_feature_concept_frequency',
                         dest='is_feature_concept_frequency',
                         action='store_true',
                         help='Specify whether the features are concept counts or not')
-
     parser.add_argument('-ir',
                         '--is_roll_up_concept',
                         dest='is_roll_up_concept',

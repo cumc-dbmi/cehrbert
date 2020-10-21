@@ -81,11 +81,11 @@ class CovidVentilationCohortBuilder(AbstractCohortBuilderBase):
         cohort_ehr_records = ehr_records.join(cohort, 'person_id') \
             .select([ehr_records[field_name] for field_name in ehr_records.schema.fieldNames()])
 
-        return create_sequence_data(cohort_ehr_records, None)
+        return create_sequence_data(cohort_ehr_records, None, self._include_visit_type)
 
 
 def main(cohort_name, input_folder, output_folder, date_lower_bound, date_upper_bound,
-         age_lower_bound, age_upper_bound, observation_window, prediction_window,
+         age_lower_bound, age_upper_bound, observation_window, prediction_window, hold_off_window,
          index_date_match_window, include_visit_type, is_feature_concept_frequency,
          is_roll_up_concept):
     cohort_builder = CovidVentilationCohortBuilder(cohort_name,
@@ -97,6 +97,7 @@ def main(cohort_name, input_folder, output_folder, date_lower_bound, date_upper_
                                                    age_upper_bound,
                                                    observation_window,
                                                    prediction_window,
+                                                   hold_off_window,
                                                    index_date_match_window,
                                                    DOMAIN_TABLE_LIST,
                                                    DEPENDENCY_LIST,
@@ -120,6 +121,7 @@ if __name__ == '__main__':
          spark_args.upper_bound,
          spark_args.observation_window,
          spark_args.prediction_window,
+         spark_args.hold_off_window,
          spark_args.index_date_match_window,
          spark_args.include_visit_type,
          spark_args.is_feature_concept_frequency,

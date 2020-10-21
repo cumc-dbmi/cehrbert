@@ -390,12 +390,13 @@ def roll_up_procedure(procedure_occurrence, concept, concept_ancestor):
     return procedure_occurrence
 
 
-def create_sequence_data(patient_event, date_filter=None):
+def create_sequence_data(patient_event, date_filter=None, include_visit_type=False):
     """
     Create a sequence of the events associated with one patient in a chronological order
 
     :param patient_event:
     :param date_filter:
+    :param include_visit_type:
     :return:
     """
     take_dates_udf = F.udf(
@@ -413,29 +414,37 @@ def create_sequence_data(patient_event, date_filter=None):
     take_visit_segments_udf = F.udf(
         lambda rows: [row[4] for row in sorted(rows, key=lambda x: (x[0], x[1]))],
         T.ArrayType(T.IntegerType()))
-    take_visit_concept_ids_udf = F.udf(
-        lambda rows: [str(row[5]) for row in sorted(rows, key=lambda x: (x[0], x[1]))],
-        T.ArrayType(T.StringType()))
 
     if date_filter:
         patient_event = patient_event.where(F.col('date') >= date_filter)
 
-    patient_event = patient_event \
-        .withColumn('date_in_week',
-                    (F.unix_timestamp('date') / F.lit(24 * 60 * 60 * 7)).cast('int')).distinct() \
-        .withColumn('earliest_visit_date',
-                    F.min('date_in_week').over(W.partitionBy('visit_occurrence_id'))) \
-        .withColumn('visit_rank_order',
-                    F.dense_rank().over(W.partitionBy('person_id').orderBy('earliest_visit_date'))) \
-        .withColumn('concept_position', F.dense_rank().over(
-        W.partitionBy('person_id', 'visit_occurrence_id').orderBy('date_in_week',
-                                                                  'standard_concept_id'))) \
-        .withColumn('visit_segment', F.col('visit_rank_order') % F.lit(2) + 1) \
-        .withColumn('date_concept_id_period',
-                    F.struct(F.col('date_in_week'), F.col('standard_concept_id'),
-                             F.col('concept_position'), F.col('visit_rank_order'),
-                             F.col('visit_segment'), F.col('visit_concept_id')))
+    columns_for_sorting = ['date_in_week', 'standard_concept_id', 'concept_position',
+                           'visit_rank_order', 'visit_segment']
 
+    columns_for_output = ['person_id', 'earliest_visit_date', 'max_event_date', 'dates',
+                          'concept_ids', 'concept_positions', 'concept_id_visit_orders',
+                          'visit_segments']
+
+    if include_visit_type:
+        columns_for_sorting.append('visit_concept_id')
+        columns_for_output.append('visit_concept_ids')
+
+    date_conversion_udf = (F.unix_timestamp('date') / F.lit(24 * 60 * 60 * 7)).cast('int')
+    earliest_visit_date_udf = F.min('date_in_week').over(W.partitionBy('visit_occurrence_id'))
+    visit_rank_udf = F.dense_rank().over(W.partitionBy('person_id').orderBy('earliest_visit_date'))
+    concept_position_udf = F.dense_rank().over(W.partitionBy('person_id', 'visit_occurrence_id')
+                                               .orderBy('date_in_week', 'standard_concept_id'))
+    visit_segment_udf = F.col('visit_rank_order') % F.lit(2) + 1
+
+    # Derive columns
+    patient_event = patient_event.withColumn('date_in_week', date_conversion_udf).distinct() \
+        .withColumn('earliest_visit_date', earliest_visit_date_udf) \
+        .withColumn('visit_rank_order', visit_rank_udf) \
+        .withColumn('concept_position', concept_position_udf) \
+        .withColumn('visit_segment', visit_segment_udf) \
+        .withColumn('date_concept_id_period', F.struct(columns_for_sorting))
+
+    # Group the data into sequences
     patient_event = patient_event.groupBy('person_id') \
         .agg(F.collect_set('date_concept_id_period').alias('date_concept_id_period'),
              F.min('earliest_visit_date').alias('earliest_visit_date'),
@@ -444,13 +453,16 @@ def create_sequence_data(patient_event, date_filter=None):
         .withColumn('concept_ids', take_concept_ids_udf('date_concept_id_period')) \
         .withColumn('concept_positions', take_concept_positions_udf('date_concept_id_period')) \
         .withColumn('concept_id_visit_orders', take_visit_orders_udf('date_concept_id_period')) \
-        .withColumn('visit_segments', take_visit_segments_udf('date_concept_id_period')) \
-        .withColumn('visit_concept_ids', take_visit_concept_ids_udf('date_concept_id_period')) \
-        .select('person_id', 'earliest_visit_date', 'max_event_date', 'dates', 'concept_ids',
-                'concept_positions', 'concept_id_visit_orders', 'visit_segments',
-                'visit_concept_ids')
+        .withColumn('visit_segments', take_visit_segments_udf('date_concept_id_period'))
 
-    return patient_event
+    if include_visit_type:
+        take_visit_concept_ids_udf = F.udf(
+            lambda rows: [str(row[5]) for row in sorted(rows, key=lambda x: (x[0], x[1]))],
+            T.ArrayType(T.StringType()))
+        patient_event = patient_event.withColumn('visit_concept_ids', take_visit_concept_ids_udf(
+            'date_concept_id_period'))
+
+    return patient_event.select(columns_for_output)
 
 
 def create_concept_frequency_data(patient_event, date_filter=None):

@@ -203,23 +203,27 @@ class HeartFailureCohortBuilder(NestedCohortBuilderBase):
 
 
 def main(cohort_name, input_folder, output_folder, date_lower_bound, date_upper_bound,
-         age_lower_bound, age_upper_bound, observation_window, prediction_window,
+         age_lower_bound, age_upper_bound, observation_window, prediction_window, hold_off_window,
          index_date_match_window, include_visit_type, is_feature_concept_frequency,
          is_roll_up_concept):
-    type_2_diabetes = TypeTwoDiabetesCohortBuilder(f'{DEFAULT_DIABETES_COHORT_NAME}_for_{cohort_name}',
-                                                   input_folder,
-                                                   output_folder,
-                                                   date_lower_bound,
-                                                   date_upper_bound,
-                                                   age_lower_bound,
-                                                   age_upper_bound,
-                                                   observation_window,
-                                                   prediction_window,
-                                                   index_date_match_window,
-                                                   DOMAIN_TABLE_LIST,
-                                                   t2dm_dependency_list,
-                                                   False).build().load_cohort()
+    # Generate the target cohort
+    type_2_diabetes = TypeTwoDiabetesCohortBuilder(
+        f'{DEFAULT_DIABETES_COHORT_NAME}_for_{cohort_name}',
+        input_folder,
+        output_folder,
+        date_lower_bound,
+        date_upper_bound,
+        age_lower_bound,
+        age_upper_bound,
+        observation_window,
+        prediction_window,
+        hold_off_window,
+        index_date_match_window,
+        DOMAIN_TABLE_LIST,
+        t2dm_dependency_list,
+        False).build().load_cohort()
 
+    # Generate the outcome cohort
     cohort_builder = HeartFailureCohortBuilder(type_2_diabetes,
                                                cohort_name,
                                                input_folder,
@@ -230,6 +234,7 @@ def main(cohort_name, input_folder, output_folder, date_lower_bound, date_upper_
                                                age_upper_bound,
                                                observation_window,
                                                prediction_window,
+                                               hold_off_window,
                                                index_date_match_window,
                                                DOMAIN_TABLE_LIST,
                                                DEPENDENCY_LIST,
@@ -252,6 +257,7 @@ if __name__ == '__main__':
          spark_args.upper_bound,
          spark_args.observation_window,
          spark_args.prediction_window,
+         spark_args.hold_off_window,
          spark_args.index_date_match_window,
          spark_args.include_visit_type,
          spark_args.is_feature_concept_frequency,
