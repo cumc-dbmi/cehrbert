@@ -43,7 +43,7 @@ DEPENDENCY_LIST = ['person', 'condition_occurrence', 'visit_occurrence', 'drug_e
                    'procedure_occurrence', 'concept', 'concept_relationship', 'concept_ancestor']
 
 TARGET_COHORT_NAME = 'target_cohort'
-DEFAULT_COHORT_NAME = 'heart_failure'
+DEFAULT_DIABETES_COHORT_NAME = 'type_two_diabetes'
 PERSON = 'person'
 VISIT_OCCURRENCE = 'visit_occurrence'
 CONDITION_OCCURRENCE = 'condition_occurrence'
@@ -204,8 +204,9 @@ class HeartFailureCohortBuilder(NestedCohortBuilderBase):
 
 def main(cohort_name, input_folder, output_folder, date_lower_bound, date_upper_bound,
          age_lower_bound, age_upper_bound, observation_window, prediction_window,
-         index_date_match_window, is_feature_concept_frequency):
-    type_2_diabetes = TypeTwoDiabetesCohortBuilder(f'{DEFAULT_COHORT_NAME}_for_{cohort_name}',
+         index_date_match_window, include_visit_type, is_feature_concept_frequency,
+         is_roll_up_concept):
+    type_2_diabetes = TypeTwoDiabetesCohortBuilder(f'{DEFAULT_DIABETES_COHORT_NAME}_for_{cohort_name}',
                                                    input_folder,
                                                    output_folder,
                                                    date_lower_bound,
@@ -233,7 +234,9 @@ def main(cohort_name, input_folder, output_folder, date_lower_bound, date_upper_
                                                DOMAIN_TABLE_LIST,
                                                DEPENDENCY_LIST,
                                                True,
-                                               is_feature_concept_frequency)
+                                               include_visit_type,
+                                               is_feature_concept_frequency,
+                                               is_roll_up_concept)
     cohort_builder.build()
 
 
@@ -250,4 +253,6 @@ if __name__ == '__main__':
          spark_args.observation_window,
          spark_args.prediction_window,
          spark_args.index_date_match_window,
-         spark_args.is_feature_concept_frequency)
+         spark_args.include_visit_type,
+         spark_args.is_feature_concept_frequency,
+         spark_args.is_roll_up_concept)

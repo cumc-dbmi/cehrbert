@@ -122,7 +122,8 @@ class MortalityCohortBuilder(LastVisitCohortBuilderBase):
 
 def main(cohort_name, input_folder, output_folder, date_lower_bound, date_upper_bound,
          age_lower_bound, age_upper_bound, observation_window, prediction_window,
-         index_date_match_window, is_feature_concept_frequency):
+         index_date_match_window, include_visit_type, is_feature_concept_frequency,
+         is_roll_up_concept):
     cohort_builder = MortalityCohortBuilder(cohort_name,
                                             input_folder,
                                             output_folder,
@@ -136,7 +137,9 @@ def main(cohort_name, input_folder, output_folder, date_lower_bound, date_upper_
                                             DOMAIN_TABLE_LIST,
                                             DEPENDENCY_LIST,
                                             True,
-                                            is_feature_concept_frequency)
+                                            include_visit_type,
+                                            is_feature_concept_frequency,
+                                            is_roll_up_concept)
 
     cohort_builder.build()
 
@@ -154,4 +157,6 @@ if __name__ == '__main__':
          spark_args.observation_window,
          spark_args.prediction_window,
          spark_args.index_date_match_window,
-         spark_args.is_feature_concept_frequency)
+         spark_args.include_visit_type,
+         spark_args.is_feature_concept_frequency,
+         spark_args.is_roll_up_concept)

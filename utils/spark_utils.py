@@ -4,6 +4,8 @@ import pyspark.sql.functions as F
 import pyspark.sql.types as T
 from pyspark.sql import Window as W
 
+from utils.logging_utils import *
+
 SUB_WINDOW_SIZE = 30
 
 NUM_OF_PARTITIONS = 600
@@ -17,8 +19,9 @@ DOMAIN_KEY_FIELDS = {
     'measurement_id': ('measurement_concept_id', 'measurement_date', 'measurement')
 }
 
+LOGGER = logging.getLogger(__name__)
 
-# +
+
 def get_key_fields(domain_table):
     field_names = domain_table.schema.fieldNames()
     for k, v in DOMAIN_KEY_FIELDS.items():
@@ -41,7 +44,6 @@ def get_domain_field(domain_table):
     return get_concept_id_field(domain_table).replace('_concept_id', '')
 
 
-# +
 def create_file_path(input_folder, table_name):
     if input_folder[-1] == '/':
         file_path = input_folder + table_name
@@ -76,7 +78,6 @@ def write_sequences_to_csv(spark, patient_sequence_path, patient_sequence_csv_pa
         .write.mode('overwrite').option('header', 'false').csv(patient_sequence_csv_path)
 
 
-# -
 def join_domain_time_span(domain_tables, span=0):
     """Standardize the format of OMOP domain tables using a time frame
 
@@ -160,7 +161,7 @@ def join_domain_tables(domain_tables):
     return patient_event
 
 
-def preprocess_domain_table(spark, input_folder, domain_table_name):
+def preprocess_domain_table(spark, input_folder, domain_table_name, with_rollup=False):
     domain_table = spark.read.parquet(create_file_path(input_folder, domain_table_name))
 
     if 'concept' in domain_table_name.lower():
@@ -170,20 +171,33 @@ def preprocess_domain_table(spark, input_folder, domain_table_name):
     domain_table = domain_table.select(
         [F.col(f_n).alias(f_n.lower()) for f_n in domain_table.schema.fieldNames()])
 
-    try:
-        _, _, domain_field = get_key_fields(domain_table)
+    # Always roll up the drug concepts to the ingredient level
+    if domain_table_name == 'drug_exposure' \
+            and path.exists(create_file_path(input_folder, 'concept')) \
+            and path.exists(create_file_path(input_folder, 'concept_ancestor')):
+        concept = spark.read.parquet(create_file_path(input_folder, 'concept'))
+        concept_ancestor = spark.read.parquet(
+            create_file_path(input_folder, 'concept_ancestor'))
+        domain_table = roll_up_to_drug_ingredients(domain_table, concept, concept_ancestor)
 
-        if domain_field == 'drug' \
+    if with_rollup:
+        if domain_table_name == 'condition_occurrence' \
+                and path.exists(create_file_path(input_folder, 'concept')) \
+                and path.exists(create_file_path(input_folder, 'concept_relationship')):
+            concept = spark.read.parquet(create_file_path(input_folder, 'concept'))
+            concept_relationship = spark.read.parquet(
+                create_file_path(input_folder, 'concept_relationship'))
+            domain_table = roll_up_diagnosis(domain_table, concept, concept_relationship)
+
+        if domain_table_name == 'procedure_occurrence' \
                 and path.exists(create_file_path(input_folder, 'concept')) \
                 and path.exists(create_file_path(input_folder, 'concept_ancestor')):
             concept = spark.read.parquet(create_file_path(input_folder, 'concept'))
             concept_ancestor = spark.read.parquet(
                 create_file_path(input_folder, 'concept_ancestor'))
-            domain_table = roll_up_to_drug_ingredients(domain_table, concept, concept_ancestor)
-    except AttributeError as err:
-        print(f'Can not extract the domain field for {domain_table_name} due to {err}')
-    finally:
-        return domain_table
+            domain_table = roll_up_procedure(domain_table, concept, concept_ancestor)
+
+    return domain_table
 
 
 def roll_up_to_drug_ingredients(drug_exposure, concept, concept_ancestor):
@@ -208,6 +222,172 @@ def roll_up_to_drug_ingredients(drug_exposure, concept, concept_ancestor):
         .select(drug_ingredient_fields)
 
     return drug_exposure
+
+
+def roll_up_diagnosis(condition_occurrence, concept, concept_relationship):
+    list_3dig_code = ['3-char nonbill code', '3-dig nonbill code', '3-char billing code',
+                      '3-dig billing code',
+                      '3-dig billing E code', '3-dig billing V code', '3-dig nonbill E code',
+                      '3-dig nonbill V code']
+
+    condition_occurrence = condition_occurrence.select(
+        [F.col(f_n).alias(f_n.lower()) for f_n in condition_occurrence.schema.fieldNames()])
+
+    condition_icd = condition_occurrence.select('condition_source_concept_id').distinct() \
+        .join(concept, (F.col('condition_source_concept_id') == F.col('concept_id'))) \
+        .where(concept['domain_id'] == 'Condition') \
+        .where(concept['vocabulary_id'] != 'SNOMED') \
+        .select(F.col('condition_source_concept_id'),
+                F.col('vocabulary_id').alias('child_vocabulary_id'),
+                F.col('concept_class_id').alias('child_concept_class_id'))
+
+    condition_icd_hierarchy = condition_icd.join(concept_relationship,
+                                                 F.col('condition_source_concept_id') == F.col(
+                                                     'concept_id_1')) \
+        .join(concept, (F.col('concept_id_2') == F.col('concept_id')) & (
+        F.col('concept_class_id').isin(list_3dig_code)), how='left') \
+        .select(F.col('condition_source_concept_id').alias('source_concept_id'),
+                F.col('child_concept_class_id'), F.col('concept_id').alias('parent_concept_id'),
+                F.col('concept_name').alias('parent_concept_name'),
+                F.col('vocabulary_id').alias('parent_vocabulary_id'),
+                F.col('concept_class_id').alias('parent_concept_class_id')).distinct()
+
+    condition_icd_hierarchy = condition_icd_hierarchy.withColumn('ancestor_concept_id', F.when(
+        F.col('child_concept_class_id').isin(list_3dig_code), F.col('source_concept_id')).otherwise(
+        F.col('parent_concept_id'))) \
+        .dropna(subset='ancestor_concept_id')
+
+    condition_occurrence_fields = [F.col(f_n).alias(f_n.lower()) for f_n in
+                                   condition_occurrence.schema.fieldNames() if
+                                   f_n != 'condition_source_concept_id']
+    condition_occurrence_fields.append(F.coalesce(F.col('ancestor_concept_id'),
+                                                  F.col('condition_source_concept_id')).alias(
+        'condition_source_concept_id'))
+
+    condition_occurrence = condition_occurrence.join(condition_icd_hierarchy, condition_occurrence[
+        'condition_source_concept_id'] == condition_icd_hierarchy['source_concept_id'], how='left') \
+        .select(condition_occurrence_fields).withColumn('condition_concept_id',
+                                                        F.col('condition_source_concept_id'))
+    return condition_occurrence
+
+
+def roll_up_procedure(procedure_occurrence, concept, concept_ancestor):
+    def extract_parent_code(concept_code):
+        return concept_code.split('.')[0]
+
+    parent_code_udf = F.udf(lambda code: extract_parent_code(code), T.StringType())
+
+    procedure_code = procedure_occurrence.select('procedure_source_concept_id').distinct() \
+        .join(concept, F.col('procedure_source_concept_id') == F.col('concept_id')) \
+        .where(concept['domain_id'] == 'Procedure') \
+        .select(F.col('procedure_source_concept_id').alias('source_concept_id'),
+                F.col('vocabulary_id').alias('child_vocabulary_id'),
+                F.col('concept_class_id').alias('child_concept_class_id'),
+                F.col('concept_code').alias('child_concept_code'))
+
+    # cpt code rollup
+    cpt_code = procedure_code.where(F.col('child_vocabulary_id') == 'CPT4')
+
+    cpt_hierarchy = cpt_code.join(concept_ancestor,
+                                  cpt_code['source_concept_id'] == concept_ancestor[
+                                      'descendant_concept_id']) \
+        .join(concept, concept_ancestor['ancestor_concept_id'] == concept['concept_id']) \
+        .where(concept['vocabulary_id'] == 'CPT4') \
+        .select(F.col('source_concept_id'), F.col('child_concept_class_id'),
+                F.col('ancestor_concept_id').alias('parent_concept_id'),
+                F.col('min_levels_of_separation'),
+                F.col('concept_class_id').alias('parent_concept_class_id'))
+
+    cpt_hierarchy_level_1 = cpt_hierarchy.where(F.col('min_levels_of_separation') == 1) \
+        .where(F.col('child_concept_class_id') == 'CPT4') \
+        .where(F.col('parent_concept_class_id') == 'CPT4 Hierarchy') \
+        .select(F.col('source_concept_id'), F.col('parent_concept_id'))
+
+    cpt_hierarchy_level_1 = cpt_hierarchy_level_1.join(concept_ancestor, (
+            cpt_hierarchy_level_1['source_concept_id'] == concept_ancestor['descendant_concept_id'])
+                                                       & (concept_ancestor[
+                                                              'min_levels_of_separation'] == 1),
+                                                       how='left') \
+        .select(F.col('source_concept_id'), F.col('parent_concept_id'),
+                F.col('ancestor_concept_id').alias('root_concept_id'))
+
+    cpt_hierarchy_level_1 = cpt_hierarchy_level_1.withColumn('isroot', F.when(
+        cpt_hierarchy_level_1['root_concept_id'] == 45889197,
+        cpt_hierarchy_level_1['source_concept_id']) \
+                                                             .otherwise(
+        cpt_hierarchy_level_1['parent_concept_id'])) \
+        .select(F.col('source_concept_id'), F.col('isroot').alias('ancestor_concept_id'))
+
+    cpt_hierarchy_level_0 = cpt_hierarchy.groupby('source_concept_id').max() \
+        .where(F.col('max(min_levels_of_separation)') == 0) \
+        .select(F.col('source_concept_id').alias('cpt_level_0_concept_id'))
+
+    cpt_hierarchy_level_0 = cpt_hierarchy.join(cpt_hierarchy_level_0,
+                                               cpt_hierarchy['source_concept_id'] ==
+                                               cpt_hierarchy_level_0['cpt_level_0_concept_id']) \
+        .select(F.col('source_concept_id'), F.col('parent_concept_id').alias('ancestor_concept_id'))
+
+    cpt_hierarchy_rollup_all = cpt_hierarchy_level_1.union(cpt_hierarchy_level_0).drop_duplicates()
+
+    # ICD code rollup
+    icd_list = ['ICD9CM', 'ICD9Proc', 'ICD10CM']
+
+    procedure_icd = procedure_code.where(F.col('vocabulary_id').isin(icd_list))
+
+    procedure_icd = procedure_icd.withColumn('parent_concept_code',
+                                             parent_code_udf(F.col('child_concept_code'))) \
+        .withColumnRenamed('procedure_source_concept_id', 'source_concept_id') \
+        .withColumnRenamed('concept_name', 'child_concept_name') \
+        .withColumnRenamed('vocabulary_id', 'child_vocabulary_id') \
+        .withColumnRenamed('concept_code', 'child_concept_code') \
+        .withColumnRenamed('concept_class_id', 'child_concept_class_id')
+
+    procedure_icd_map = procedure_icd.join(concept, (
+            procedure_icd['parent_concept_code'] == concept['concept_code'])
+                                           & (procedure_icd['child_vocabulary_id'] == concept[
+        'vocabulary_id']), how='left') \
+        .select('source_concept_id', F.col('concept_id').alias('ancestor_concept_id')).distinct()
+
+    # ICD10PCS rollup
+    procedure_10pcs = procedure_code.where(F.col('vocabulary_id') == 'ICD10PCS')
+
+    procedure_10pcs = procedure_10pcs.withColumn('parent_concept_code',
+                                                 F.substring(F.col('child_concept_code'), 1, 3)) \
+        .withColumnRenamed('procedure_source_concept_id', 'source_concept_id') \
+        .withColumnRenamed('concept_name', 'child_concept_name') \
+        .withColumnRenamed('vocabulary_id', 'child_vocabulary_id') \
+        .withColumnRenamed('concept_code', 'child_concept_code') \
+        .withColumnRenamed('concept_class_id', 'child_concept_class_id')
+
+    procedure_10pcs_map = procedure_10pcs.join(concept, (
+            procedure_10pcs['parent_concept_code'] == concept['concept_code'])
+                                               & (procedure_10pcs['child_vocabulary_id'] == concept[
+        'vocabulary_id']), how='left') \
+        .select('source_concept_id', F.col('concept_id').alias('ancestor_concept_id')).distinct()
+
+    # HCPCS rollup --- keep the concept_id itself
+    procedure_hcpcs = procedure_code.where(F.col('child_vocabulary_id') == 'HCPCS')
+    procedure_hcpcs_map = procedure_hcpcs.withColumn('ancestor_concept_id',
+                                                     F.col('source_concept_id')) \
+        .select('source_concept_id', 'ancestor_concept_id').distinct()
+
+    procedure_hierarchy = cpt_hierarchy_rollup_all \
+        .union(procedure_icd_map) \
+        .union(procedure_10pcs_map) \
+        .union(procedure_hcpcs_map) \
+        .distinct()
+    procedure_occurrence_fields = [F.col(f_n).alias(f_n.lower()) for f_n in
+                                   procedure_occurrence.schema.fieldNames() if
+                                   f_n != 'procedure_source_concept_id']
+    procedure_occurrence_fields.append(F.coalesce(F.col('ancestor_concept_id'),
+                                                  F.col('procedure_source_concept_id')).alias(
+        'procedure_source_concept_id'))
+
+    procedure_occurrence = procedure_occurrence.join(procedure_hierarchy, procedure_occurrence[
+        'procedure_source_concept_id'] == procedure_hierarchy['source_concept_id'], how='left') \
+        .select(procedure_occurrence_fields) \
+        .withColumn('procedure_concept_id', F.col('procedure_source_concept_id'))
+    return procedure_occurrence
 
 
 def create_sequence_data(patient_event, date_filter=None):
@@ -290,7 +470,8 @@ def create_concept_frequency_data(patient_event, date_filter=None):
     return patient_event
 
 
-def extract_ehr_records(spark, input_folder, domain_table_list, include_visit_type=False):
+def extract_ehr_records(spark, input_folder, domain_table_list, include_visit_type=False,
+                        with_rollup=False):
     """
     Extract the ehr records for domain_table_list from input_folder.
 
@@ -298,11 +479,13 @@ def extract_ehr_records(spark, input_folder, domain_table_list, include_visit_ty
     :param input_folder:
     :param domain_table_list:
     :param include_visit_type: whether or not to include the visit type to the ehr records
+    :param with_rollup: whether ot not to roll up the concepts to the parent levels
     :return:
     """
     domain_tables = []
     for domain_table_name in domain_table_list:
-        domain_tables.append(preprocess_domain_table(spark, input_folder, domain_table_name))
+        domain_tables.append(
+            preprocess_domain_table(spark, input_folder, domain_table_name, with_rollup))
     patient_ehr_records = join_domain_tables(domain_tables)
     patient_ehr_records = patient_ehr_records.where('visit_occurrence_id IS NOT NULL').distinct()
 
