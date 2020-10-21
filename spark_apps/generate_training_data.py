@@ -23,7 +23,7 @@ def main(input_folder, output_folder, domain_table_list, date_filter):
         .select(patient_event['person_id'], patient_event['standard_concept_id'],
                 patient_event['date'], patient_event['visit_occurrence_id'],
                 patient_event['domain'], visit_occurrence['visit_concept_id'])
-    sequence_data = create_sequence_data(patient_event, date_filter)
+    sequence_data = create_sequence_data(patient_event, date_filter, include_visit_type=True)
     sequence_data.write.mode('overwrite').parquet(os.path.join(output_folder, p.parquet_data_path))
 
 

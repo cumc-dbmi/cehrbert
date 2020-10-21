@@ -55,6 +55,7 @@ class AbstractCohortBuilderBase(ABC):
                  age_upper_bound: int,
                  observation_window: int,
                  prediction_window: int,
+                 hold_off_window: int,
                  index_date_match_window: int,
                  ehr_table_list: List[str],
                  dependency_list: List[str],
@@ -72,6 +73,7 @@ class AbstractCohortBuilderBase(ABC):
         self._age_upper_bound = age_upper_bound
         self._observation_window = observation_window
         self._prediction_window = prediction_window
+        self._hold_off_window = hold_off_window
         self._index_date_match_window = index_date_match_window
         self._ehr_table_list = ehr_table_list
         self._dependency_list = dependency_list
@@ -92,6 +94,7 @@ class AbstractCohortBuilderBase(ABC):
                                f'age_upper_bound: {age_upper_bound}\n'
                                f'observation_window: {observation_window}\n'
                                f'prediction_window: {prediction_window}\n'
+                               f'hold_off_window: {hold_off_window}\n'
                                f'index_date_match_window: {index_date_match_window}\n'
                                f'ehr_table_list: {ehr_table_list}\n'
                                f'include_ehr_records: {include_ehr_records}\n'
@@ -151,6 +154,7 @@ class AbstractCohortBuilderBase(ABC):
 
         assert self._observation_window > 0
         assert self._prediction_window >= 0
+        assert self._hold_off_window >= 0
 
     def _validate_date_folder(self, table_list):
         for domain_table_name in table_list:
@@ -184,7 +188,7 @@ class AbstractCohortBuilderBase(ABC):
             self.spark.sql(f'DROP VIEW global_temp.{domain_table_name}')
 
     def get_total_window(self):
-        return self._observation_window + self._prediction_window
+        return self._observation_window + self._prediction_window + self._hold_off_window
 
     def load_cohort(self):
         return self.spark.read.parquet(self._output_data_folder)
@@ -245,18 +249,20 @@ class RetrospectiveCohortBuilderBase(AbstractCaseControlCohortBuilderBase):
         ehr_records = extract_ehr_records(self.spark, self._input_folder, self._ehr_table_list,
                                           self._include_visit_type, self._is_roll_up_concept)
 
+        # exclude EHR records from these two windows
+        exclusion_window = self._prediction_window + self._hold_off_window
+        # the boundary in the past for including ehr records
+        total_window = self.get_total_window()
+
         cohort_ehr_records = ehr_records.join(cohort, 'person_id') \
-            .where(
-            ehr_records['date'] <= F.date_sub(cohort['index_date'],
-                                              self._prediction_window)).where(
-            ehr_records['date'] >= F.date_sub(cohort['index_date'],
-                                              self.get_total_window())) \
+            .where(ehr_records['date'] <= F.date_sub(cohort['index_date'], exclusion_window)) \
+            .where(ehr_records['date'] >= F.date_sub(cohort['index_date'], total_window)) \
             .select([ehr_records[field_name] for field_name in ehr_records.schema.fieldNames()])
 
         if self._is_feature_concept_frequency:
             return create_concept_frequency_data(cohort_ehr_records, None)
 
-        return create_sequence_data(cohort_ehr_records, None)
+        return create_sequence_data(cohort_ehr_records, None, self._include_visit_type)
 
     @abstractmethod
     def preprocess_dependencies(self):
@@ -277,6 +283,7 @@ class ProspectiveCohortBuilderBase(AbstractCaseControlCohortBuilderBase):
         ehr_records = extract_ehr_records(self.spark, self._input_folder, self._ehr_table_list,
                                           self._include_visit_type, self._is_roll_up_concept)
 
+        # only include the ehr data within the observation_window since the index data
         cohort_ehr_records = ehr_records.join(cohort, 'person_id') \
             .where(ehr_records['date'] >= cohort['index_date']) \
             .where(
@@ -286,7 +293,7 @@ class ProspectiveCohortBuilderBase(AbstractCaseControlCohortBuilderBase):
         if self._is_feature_concept_frequency:
             return create_concept_frequency_data(cohort_ehr_records, None)
 
-        return create_sequence_data(cohort_ehr_records, None)
+        return create_sequence_data(cohort_ehr_records, None, self._include_visit_type)
 
     @abstractmethod
     def create_incident_cases(self):
@@ -309,7 +316,7 @@ class LastVisitCohortBuilderBase(AbstractCaseControlCohortBuilderBase):
         if self._is_feature_concept_frequency:
             return create_concept_frequency_data(cohort_ehr_records, None)
 
-        return create_sequence_data(cohort_ehr_records, None)
+        return create_sequence_data(cohort_ehr_records, None, self._include_visit_type)
 
     @abstractmethod
     def preprocess_dependencies(self):
@@ -324,15 +331,26 @@ class LastVisitCohortBuilderBase(AbstractCaseControlCohortBuilderBase):
         pass
 
 
-class NestedCohortBuilderBase(RetrospectiveCohortBuilderBase):
+class NestedCohortBuilderBase(AbstractCaseControlCohortBuilderBase):
 
     def __init__(self, target_cohort: DataFrame, *args, **kwargs):
         super(NestedCohortBuilderBase, self).__init__(*args, **kwargs)
         self._target_cohort = target_cohort
 
-    @abstractmethod
-    def preprocess_dependencies(self):
-        pass
+    def extract_ehr_records_for_cohort(self, cohort: DataFrame):
+        ehr_records = extract_ehr_records(self.spark, self._input_folder, self._ehr_table_list,
+                                          self._include_visit_type, self._is_roll_up_concept)
+
+        cohort_ehr_records = ehr_records.join(cohort, 'person_id') \
+            .where(ehr_records['date'] <= cohort['index_date']) \
+            .where(
+            ehr_records['date'] >= F.date_sub(cohort['index_date'], self._observation_window)) \
+            .select([ehr_records[field_name] for field_name in ehr_records.schema.fieldNames()])
+
+        if self._is_feature_concept_frequency:
+            return create_concept_frequency_data(cohort_ehr_records, None)
+
+        return create_sequence_data(cohort_ehr_records, None, self._include_visit_type)
 
     @abstractmethod
     def create_incident_cases(self):
