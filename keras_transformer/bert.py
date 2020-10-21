@@ -59,8 +59,8 @@ class MaskedPenalizedSparseCategoricalCrossentropy(object):
         self.penalty_weight = penalty_weight
 
     def __call__(self, y_true, y_pred):
-        y_true_val = y_true[:, :, 0]
-        mask = y_true[:, :, 1]
+        y_true_val = K.cast(y_true[:, :, 0], dtype='float32')
+        mask = K.cast(y_true[:, :, 1], dtype='float32')
 
         # masked per-sample means of each loss
         num_items_masked = K.sum(mask, axis=-1) + 1e-6
