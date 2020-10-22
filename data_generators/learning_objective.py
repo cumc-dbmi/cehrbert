@@ -223,9 +223,10 @@ class VisitPredictionLearningObjective(LearningObjective):
 class MaskedLanguageModelLearningObjective(LearningObjective):
     required_columns = ['token_ids', 'dates', 'visit_segments']
 
-    def __init__(self, concept_tokenizer: ConceptTokenizer, max_seq_len: int):
+    def __init__(self, concept_tokenizer: ConceptTokenizer, max_seq_len: int, is_training: bool):
         self._max_seq_len = max_seq_len
         self._concept_tokenizer = concept_tokenizer
+        self._is_training = is_training
 
     def get_tf_dataset_schema(self):
         input_dict_schema = {
@@ -294,20 +295,23 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
         """
         masked_concepts = np.asarray(concepts).copy()
         output_mask = np.zeros((self._max_seq_len,), dtype=int)
-        for word_pos in range(0, len(concepts)):
-            if concepts[word_pos] == self._concept_tokenizer.get_unused_token_id():
-                break
 
-            if random.random() < 0.15:
-                dice = random.random()
-                if dice < 0.8:
-                    masked_concepts[word_pos] = self._concept_tokenizer.get_mask_token_id()
-                elif dice < 0.9:
-                    masked_concepts[word_pos] = random.randint(
-                        self._concept_tokenizer.get_first_token_index(),
-                        self._concept_tokenizer.get_last_token_index())
-                # else: 10% of the time we just leave the word as is
-                output_mask[word_pos] = 1
+        if self._is_training:
+            for word_pos in range(0, len(concepts)):
+                if concepts[word_pos] == self._concept_tokenizer.get_unused_token_id():
+                    break
+
+                if random.random() < 0.15:
+                    dice = random.random()
+                    if dice < 0.8:
+                        masked_concepts[word_pos] = self._concept_tokenizer.get_mask_token_id()
+                    elif dice < 0.9:
+                        masked_concepts[word_pos] = random.randint(
+                            self._concept_tokenizer.get_first_token_index(),
+                            self._concept_tokenizer.get_last_token_index())
+                    # else: 10% of the time we just leave the word as is
+                    output_mask[word_pos] = 1
+
         return masked_concepts, output_mask
 
 
