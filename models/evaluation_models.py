@@ -7,6 +7,8 @@ from models.custom_layers import get_custom_objects
 
 
 def create_bi_lstm_model(max_seq_length, vocab_size, embedding_size, concept_embeddings):
+    age_of_visit_input = tf.keras.layers.Input(name='ages', shape=(1,))
+
     concept_ids = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='concept_ids')
 
     if concept_embeddings is not None:
@@ -34,11 +36,13 @@ def create_bi_lstm_model(max_seq_length, vocab_size, embedding_size, concept_emb
 
     next_input = dropout_lstm_layer(bi_lstm_layer(next_input))
 
+    next_input = tf.keras.layers.concatenate([next_input, age_of_visit_input])
+
     next_input = dropout_dense_layer(dense_layer(next_input))
 
     output = output_layer(next_input)
 
-    model = Model(inputs=concept_ids, outputs=output, name='Vanilla_BI_LSTM')
+    model = Model(inputs=[concept_ids, age_of_visit_input], outputs=output, name='Vanilla_BI_LSTM')
 
     return model
 
