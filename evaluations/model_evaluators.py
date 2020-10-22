@@ -183,4 +183,9 @@ class VanillaBertBiLstmModelEvaluator(ModelEvaluator):
             return model
 
     def _preprocess_dataset(self, dataset):
-        return dataset
+        if isinstance(dataset, tf.data.Dataset):
+            return dataset.map(lambda x, y: (x, y['label']))
+        elif isinstance(dataset, np.ndarray):
+            raise NotImplemented('Support for numpy.ndarray is not implemented.')
+        else:
+            raise TypeError('Only numpy array and tensorflow Dataset are supported types.')
