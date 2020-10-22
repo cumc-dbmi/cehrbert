@@ -153,7 +153,8 @@ class BiLstmModelEvaluator(ModelEvaluator):
 
     def _preprocess_dataset(self, dataset):
         if isinstance(dataset, tf.data.Dataset):
-            return dataset.map(lambda x, y: (x['concept_ids'], y['label']))
+            return dataset.map(
+                lambda x, y: ({k: x.get(k, None) for k in ('concept_ids', 'age')}, y['label']))
         elif isinstance(dataset, np.ndarray):
             raise NotImplemented('Support for numpy.ndarray is not implemented.')
         else:
