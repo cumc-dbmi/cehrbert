@@ -66,6 +66,7 @@ class AbstractDataGeneratorBase(ABC):
         self._is_training = is_training
 
         self._learning_objectives = self._initialize_learning_objectives(max_seq_len=max_seq_len,
+                                                                         is_training=is_training,
                                                                          **kwargs)
         # validate the required columns in the training data
         self._validate_data_frame_columns()
