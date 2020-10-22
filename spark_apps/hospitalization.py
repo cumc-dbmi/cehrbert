@@ -19,10 +19,10 @@ FROM
         v.person_id,
         SUM(CASE WHEN v3.visit_concept_id IN {visit_concept_ids} THEN 1 END) AS num_of_hospitalizations
     FROM global_temp.first_qualified_visit_occurrence AS v
-    JOIN global_temp.visit_occurrence AS v3
-        ON v.person_id = v3.person_id
+    LEFT JOIN global_temp.visit_occurrence AS v3
+        ON v.person_id = v3.person_id 
+            AND DATEDIFF(v3.visit_start_date, v.first_visit_start_date) BETWEEN {total_window} AND {prediction_window}
     WHERE v.num_of_hospitalizations IS NULL
-        AND DATEDIFF(v3.visit_start_date, v.first_visit_start_date) > {total_window}
     GROUP BY v.first_visit_occurrence_id, v.person_id, v.first_visit_start_date
 ) v
 """
@@ -92,6 +92,7 @@ class HospitalizationCohortBuilder(ProspectiveCohortBuilderBase):
         # The qualifying patients can't have any hospitalization record before observation_window
         # plus hold_off_window
         total_window = self._observation_window + self._hold_off_window
+        prediction_window = total_window + self._prediction_window
 
         first_qualified_visit_query = FIRST_QUALIFIED_VISIT_QUERY_TEMPLATE.format(
             visit_concept_ids=VISIT_CONCEPT_IDS,
@@ -103,7 +104,8 @@ class HospitalizationCohortBuilder(ProspectiveCohortBuilderBase):
             FIRST_QUALIFIED_VISIT_TABLE)
 
         cohort_query = COHORT_QUERY_TEMPLATE.format(visit_concept_ids=VISIT_CONCEPT_IDS,
-                                                    total_window=total_window)
+                                                    total_window=total_window,
+                                                    prediction_window=prediction_window)
         cohort = self.spark.sql(cohort_query)
 
         cohort.createOrReplaceGlobalTempView(COHORT_TABLE)
