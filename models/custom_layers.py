@@ -2,6 +2,8 @@ import tensorflow as tf
 import numpy as np
 
 from keras.utils import get_custom_objects
+from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
+from keras_transformer.bert import MaskedPenalizedSparseCategoricalCrossentropy
 
 
 def get_angles(pos, i, d_model):
@@ -256,12 +258,12 @@ class TemporalEncoder(Encoder):
 class DecoderLayer(tf.keras.layers.Layer):
     def __init__(self, d_model, num_heads, dff, rate=0.1, *args, **kwargs):
         super(DecoderLayer, self).__init__(*args, **kwargs)
-        
+
         self.d_model = d_model
         self.num_heads = num_heads
         self.dff = dff
         self.rate = rate
-        
+
         self.mha1 = MultiHeadAttention(d_model, num_heads)
         self.mha2 = MultiHeadAttention(d_model, num_heads)
 
@@ -274,7 +276,7 @@ class DecoderLayer(tf.keras.layers.Layer):
         self.dropout1 = tf.keras.layers.Dropout(rate)
         self.dropout2 = tf.keras.layers.Dropout(rate)
         self.dropout3 = tf.keras.layers.Dropout(rate)
-    
+
     def get_config(self):
         config = super().get_config()
         config['d_model'] = self.d_model
@@ -282,7 +284,7 @@ class DecoderLayer(tf.keras.layers.Layer):
         config['dff'] = self.dff
         config['rate'] = self.rate
         return config
-    
+
     def call(self, x, enc_output, decoder_mask, encoder_mask, **kwargs):
         # enc_output.shape == (batch_size, input_seq_len, d_model)
 
@@ -521,5 +523,8 @@ get_custom_objects().update({
     'TimeSelfAttention': TimeSelfAttention,
     'PairwiseTimeAttention': TimeSelfAttention,
     'VisitEmbeddingLayer': VisitEmbeddingLayer,
-    'PositionalEncodingLayer': PositionalEncodingLayer
+    'PositionalEncodingLayer': PositionalEncodingLayer,
+    'ReusableEmbedding': ReusableEmbedding,
+    'TiedOutputEmbedding': TiedOutputEmbedding,
+    'MaskedPenalizedSparseCategoricalCrossentropy': MaskedPenalizedSparseCategoricalCrossentropy
 })
