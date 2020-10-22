@@ -169,7 +169,7 @@ class VanillaBertBiLstmModelEvaluator(ModelEvaluator):
         self._max_seq_length = max_seq_length
         self._vanilla_bert_model_path = vanilla_bert_model_path
 
-        super(BiLstmModelEvaluator, self).__init__(*args, **kwargs)
+        super(VanillaBertBiLstmModelEvaluator, self).__init__(*args, **kwargs)
 
     def _create_model(self) -> Model:
         strategy = tf.distribute.MirroredStrategy()
