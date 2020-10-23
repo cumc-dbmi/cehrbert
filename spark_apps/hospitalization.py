@@ -7,22 +7,18 @@ SELECT
     v.person_id,
     v.first_visit_occurrence_id AS visit_occurrence_id,
     v.first_visit_start_date AS index_date,
-    CASE 
-        WHEN num_of_hospitalizations IS NULL THEN 0
-        ELSE 1
-    END AS label
+    CAST(num_of_hospitalizations > 0 AS INT) AS label
 FROM
 (
     SELECT
         v.first_visit_occurrence_id,
         v.first_visit_start_date,
         v.person_id,
-        SUM(CASE WHEN v3.visit_concept_id IN {visit_concept_ids} THEN 1 END) AS num_of_hospitalizations
+        SUM(CASE WHEN v3.visit_concept_id IN {visit_concept_ids} THEN 1 ELSE 0 END) AS num_of_hospitalizations
     FROM global_temp.first_qualified_visit_occurrence AS v
     LEFT JOIN global_temp.visit_occurrence AS v3
         ON v.person_id = v3.person_id 
             AND DATEDIFF(v3.visit_start_date, v.first_visit_start_date) BETWEEN {total_window} AND {prediction_window}
-    WHERE v.num_of_hospitalizations IS NULL
     GROUP BY v.first_visit_occurrence_id, v.person_id, v.first_visit_start_date
 ) v
 """
@@ -31,28 +27,34 @@ FIRST_QUALIFIED_VISIT_QUERY_TEMPLATE = """
 SELECT
     v.first_visit_occurrence_id,
     v.first_visit_start_date,
-    v.person_id,
-    SUM(CASE WHEN v.visit_concept_id IN {visit_concept_ids} THEN 1 END) AS num_of_hospitalizations
+    v.person_id
 FROM
 (
-    SELECT DISTINCT
-        v1.person_id,
-        v1.first_visit_concept_id,
-        v1.first_visit_start_date,
-        v1.first_visit_occurrence_id,
-        v2.visit_concept_id,
-        v2.visit_start_date,
-        v2.visit_occurrence_id
-    FROM global_temp.first_visit_occurrence AS v1
-    JOIN global_temp.visit_occurrence AS v2
-        ON v1.person_id = v2.person_id
-    WHERE v1.first_visit_start_date < v2.visit_start_date
-        AND v1.first_visit_occurrence_id <> v2.visit_occurrence_id
-        AND DATEDIFF(v2.visit_start_date, v1.first_visit_start_date) <= {total_window}
-        AND v1.first_visit_start_date >= '{date_lower_bound}'
-        AND v1.first_visit_start_date <= '{date_upper_bound}'
+    SELECT
+        v.first_visit_occurrence_id,
+        v.first_visit_start_date,
+        v.person_id,
+        SUM(CASE WHEN v.visit_concept_id IN {visit_concept_ids} THEN 1 ELSE 0 END) AS num_of_hospitalizations
+    FROM
+    (
+        SELECT DISTINCT
+            v1.person_id,
+            v1.first_visit_concept_id,
+            v1.first_visit_start_date,
+            v1.first_visit_occurrence_id,
+            v2.visit_concept_id,
+            v2.visit_start_date,
+            v2.visit_occurrence_id
+        FROM global_temp.first_visit_occurrence AS v1
+        LEFT JOIN global_temp.visit_occurrence AS v2
+            ON v1.person_id = v2.person_id
+                AND v1.first_visit_start_date < v2.visit_start_date
+                AND v1.first_visit_occurrence_id <> v2.visit_occurrence_id
+                AND DATEDIFF(v2.visit_start_date, v1.first_visit_start_date) <= {total_window}
+    ) v
+    GROUP BY v.first_visit_occurrence_id, v.person_id, v.first_visit_start_date
 ) v
-GROUP BY v.first_visit_occurrence_id, v.person_id, v.first_visit_start_date
+WHERE v.num_of_hospitalizations = 0
 """
 
 FIRST_VISIT_QUERY_TEMPLATE = """
@@ -67,7 +69,9 @@ FROM
         FIRST(visit_occurrence_id) OVER (PARTITION BY person_id ORDER BY visit_start_date, visit_occurrence_id) AS first_visit_occurrence_id
     FROM global_temp.visit_occurrence AS v1
 ) v
-WHERE v.first_visit_concept_id NOT IN {visit_concept_ids}
+WHERE v.first_visit_concept_id NOT IN {visit_concept_ids} 
+    AND v.first_visit_start_date >= '{date_lower_bound}'
+    AND v.first_visit_start_date <= '{date_upper_bound}'
 """
 
 COHORT_TABLE = 'cohort'
@@ -86,7 +90,10 @@ DEPENDENCY_LIST = [PERSON, VISIT_OCCURRENCE]
 class HospitalizationCohortBuilder(ProspectiveCohortBuilderBase):
 
     def preprocess_dependencies(self):
-        first_visit_query = FIRST_VISIT_QUERY_TEMPLATE.format(visit_concept_ids=VISIT_CONCEPT_IDS)
+        first_visit_query = FIRST_VISIT_QUERY_TEMPLATE.format(
+            date_lower_bound=self._date_lower_bound,
+            date_upper_bound=self._date_upper_bound,
+            visit_concept_ids=VISIT_CONCEPT_IDS)
         self.spark.sql(first_visit_query).createOrReplaceGlobalTempView(FIRST_VISIT_TABLE)
 
         # The qualifying patients can't have any hospitalization record before observation_window
@@ -96,8 +103,6 @@ class HospitalizationCohortBuilder(ProspectiveCohortBuilderBase):
 
         first_qualified_visit_query = FIRST_QUALIFIED_VISIT_QUERY_TEMPLATE.format(
             visit_concept_ids=VISIT_CONCEPT_IDS,
-            date_lower_bound=self._date_lower_bound,
-            date_upper_bound=self._date_upper_bound,
             total_window=total_window)
 
         self.spark.sql(first_qualified_visit_query).createOrReplaceGlobalTempView(
