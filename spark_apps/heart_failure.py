@@ -135,6 +135,9 @@ class HeartFailureCohortBuilder(NestedCohortBuilderBase):
         """
         return control_cases
 
+    def create_matching_control_cases(self, incident_cases: DataFrame, control_cases: DataFrame):
+        return control_cases
+
     def _build_diuretic_concepts(self):
         build_ancestry_table_for(self.spark, [DIURETIC_CONCEPT_ID]).createOrReplaceGlobalTempView(
             'ancestry_table')
