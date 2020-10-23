@@ -265,10 +265,6 @@ class RetrospectiveCohortBuilderBase(AbstractCaseControlCohortBuilderBase):
         return create_sequence_data(cohort_ehr_records, None, self._include_visit_type)
 
     @abstractmethod
-    def preprocess_dependencies(self):
-        pass
-
-    @abstractmethod
     def create_incident_cases(self):
         pass
 

@@ -1,3 +1,4 @@
+from pyspark.sql import DataFrame
 from spark_apps.spark_app_base import ProspectiveCohortBuilderBase
 from spark_apps.parameters import create_spark_args
 from utils.spark_utils import *
@@ -151,6 +152,15 @@ class HospitalizationCohortBuilder(ProspectiveCohortBuilderBase):
                     F.col('visit_occurrence_id'),
                     F.col('label')).distinct()
 
+        return control_cases
+
+    def create_matching_control_cases(self, incident_cases: DataFrame, control_cases: DataFrame):
+        """
+        Do not match for control and simply what's in the control cases
+        :param incident_cases:
+        :param control_cases:
+        :return:
+        """
         return control_cases
 
 
