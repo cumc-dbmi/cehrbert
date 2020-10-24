@@ -49,7 +49,7 @@ VISIT_OCCURRENCE = 'visit_occurrence'
 CONDITION_OCCURRENCE = 'condition_occurrence'
 DIURETICS_CONCEPT = 'diuretics_concepts'
 
-NUM_OF_DIAGNOSIS_CODES = 3
+NUM_OF_DIAGNOSIS_CODES = 1
 
 
 class HeartFailureCohortBuilder(NestedCohortBuilderBase):
@@ -98,30 +98,37 @@ class HeartFailureCohortBuilder(NestedCohortBuilderBase):
                 1 AS label
             FROM hf_patients AS hf 
             JOIN global_temp.target_cohort AS tc
-                ON hf.person_id = tc.person_id AND DATE_ADD(tc.index_date, 30) <= hf.earliest_visit_start_date
+                ON hf.person_id = tc.person_id 
+                    AND hf.earliest_visit_start_date BETWEEN DATE_ADD(tc.index_date, 30) AND DATE_ADD(tc.index_date, {prediction_window})
             JOIN global_temp.person AS p
                 ON tc.person_id = p.person_id
             WHERE hf.num_of_diagnosis  >= {num_of_diagnosis}
-        """.format(num_of_diagnosis=NUM_OF_DIAGNOSIS_CODES))
+        """.format(num_of_diagnosis=NUM_OF_DIAGNOSIS_CODES,
+                   prediction_window=self._prediction_window))
 
         return self._exclude_cases_with_prior_pacemakers(
             self._exclude_cases_with_prior_diuretics(positive_hf_cases))
 
     def create_control_cases(self):
         negative_hf_cases = self.spark.sql("""
+            WITH hf_visits AS (
+                SELECT
+                    v.person_id,
+                    v.visit_start_date
+                FROM global_temp.visit_occurrence AS v
+                JOIN global_temp.hf_condition_occurrence AS c
+                    ON v.visit_occurrence_id = c.visit_occurrence_id
+            )
+            
             SELECT DISTINCT
                 tc.*,
                 0 AS label
             FROM global_temp.target_cohort AS tc
-            LEFT JOIN 
-            (
-                SELECT DISTINCT 
-                    person_id 
-                FROM global_temp.hf_condition_occurrence
-            ) p
-                ON tc.person_id = p.person_id
-            WHERE p.person_id IS NULL
-        """)
+            LEFT JOIN hf_visits AS v
+                ON tc.person_id = v.person_id
+                    AND v.visit_start_date <= DATE_ADD(tc.index_date, {prediction_window})
+            WHERE v.person_id IS NULL
+        """.format(prediction_window=self._prediction_window))
 
         return self._exclude_cases_with_prior_pacemakers(
             self._exclude_cases_with_prior_diuretics(negative_hf_cases))
