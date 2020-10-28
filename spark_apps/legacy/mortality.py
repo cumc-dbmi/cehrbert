@@ -1,7 +1,7 @@
 import pyspark.sql.functions as f
 from pyspark.sql import DataFrame
 
-from spark_apps.spark_app_base import LastVisitCohortBuilderBase
+from spark_apps.cohorts.spark_app_base import LastVisitCohortBuilderBase
 from spark_apps.parameters import create_spark_args
 
 QUALIFIED_DEATH_DATE_QUERY = """
