@@ -58,16 +58,16 @@ def create_spark_args():
                         required=True,
                         type=valid_date)
     parser.add_argument('-l',
-                        '--lower_bound',
-                        dest='lower_bound',
+                        '--age_lower_bound',
+                        dest='age_lower_bound',
                         action='store',
                         help='The age lower bound',
                         required=False,
                         type=int,
                         default=0)
     parser.add_argument('-u',
-                        '--upper_bound',
-                        dest='upper_bound',
+                        '--age_upper_bound',
+                        dest='age_upper_bound',
                         action='store',
                         help='The age upper bound',
                         required=False,
@@ -89,6 +89,14 @@ def create_spark_args():
                         required=False,
                         type=int,
                         default=180)
+    parser.add_argument('-ps',
+                        '--prediction_start_days',
+                        dest='prediction_start_days',
+                        action='store',
+                        help='The prediction start days in which the prediction is made',
+                        required=False,
+                        type=int,
+                        default=0)
     parser.add_argument('-hw',
                         '--hold_off_window',
                         dest='hold_off_window',
@@ -97,15 +105,11 @@ def create_spark_args():
                         required=False,
                         type=int,
                         default=0)
-    parser.add_argument('-im',
-                        '--index_date_match_window',
-                        dest='index_date_match_window',
-                        action='store',
-                        help='The window for matching index dates of '
-                             'the incident and control cases',
-                        required=False,
-                        type=int,
-                        default=30)
+    parser.add_argument('-iw',
+                        '--is_window_post_index',
+                        dest='is_window_post_index',
+                        action='store_true',
+                        help='Indicate if the observation window is pre/post the index date')
     parser.add_argument('-iv',
                         '--include_visit_type',
                         dest='include_visit_type',

@@ -1,6 +1,6 @@
 from pyspark.sql import DataFrame
 
-from spark_apps.spark_app_base import AbstractCohortBuilderBase
+from spark_apps.cohorts.spark_app_base import BaseCohortBuilder
 from spark_apps.parameters import create_spark_args
 
 from utils.spark_utils import *
@@ -61,7 +61,7 @@ LEFT JOIN global_temp.vent AS vent
 """
 
 
-class CovidVentilationCohortBuilder(AbstractCohortBuilderBase):
+class CovidVentilationCohortBuilder(BaseCohortBuilder):
 
     def preprocess_dependencies(self):
         pass
