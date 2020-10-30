@@ -39,7 +39,7 @@ FROM
         first(v.visit_occurrence_id) OVER (PARTITION BY v.person_id
             ORDER BY DATE(v.visit_start_date)) AS earliest_visit_occurrence_id
     FROM global_temp.visit_occurrence AS v
-    JOIN global_temp.hf_conditions AS c
+    JOIN hf_conditions AS c
         ON v.visit_occurrence_id = c.visit_occurrence_id
 ) c
 WHERE c.earliest_visit_start_date <= c.earliest_condition_start_date
