@@ -10,13 +10,14 @@ FROM
     SELECT DISTINCT
         v.person_id,
         FIRST(v.visit_occurrence_id) OVER(PARTITION BY v.person_id 
-            ORDER BY DATE(v.visit_start_date) DESC) AS visit_occurrence_id,
-        FIRST(DATE(v.visit_start_date)) OVER(PARTITION BY v.person_id 
-            ORDER BY DATE(v.visit_start_date) DESC) AS index_date,
+            ORDER BY DATE(v.visit_end_date) DESC) AS visit_occurrence_id,
+        FIRST(DATE(v.visit_end_date)) OVER(PARTITION BY v.person_id 
+            ORDER BY DATE(v.visit_end_date) DESC) AS index_date,
         FIRST(v.discharge_to_concept_id) OVER(PARTITION BY v.person_id 
-            ORDER BY DATE(v.visit_start_date) DESC) AS discharge_to_concept_id
+            ORDER BY DATE(v.visit_end_date) DESC) AS discharge_to_concept_id
     FROM global_temp.visit_occurrence AS v
     WHERE v.discharge_to_concept_id = 8536 --discharge to home
+        AND  v.visit_concept_id IN (9201, 262) --inpatient, er-inpatient
 ) AS v
 """
 
