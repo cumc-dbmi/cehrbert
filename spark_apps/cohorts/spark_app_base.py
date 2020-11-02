@@ -268,7 +268,7 @@ class NestedCohortBuilder:
             prediction_window += self._observation_window + self._hold_off_window
 
         cohort = self.spark.sql("""
-            SELECT
+            SELECT DISTINCT
                 t.*,
                 CAST(ISNOTNULL(o.person_id) AS INT) AS label
             FROM global_temp.target_cohort AS t 
