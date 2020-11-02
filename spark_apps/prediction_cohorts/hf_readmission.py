@@ -13,13 +13,14 @@ WITH hf_concepts AS (
 SELECT DISTINCT
     v.person_id,
     v.visit_occurrence_id,
-    v.visit_start_date AS index_date
+    v.visit_end_date AS index_date
 FROM global_temp.visit_occurrence AS v
 JOIN global_temp.condition_occurrence AS co
     ON v.visit_occurrence_id = co.visit_occurrence_id
 JOIN hf_concepts AS hf
     ON co.condition_concept_id = hf.concept_id
 WHERE v.visit_concept_id IN (9201, 262) --inpatient, er-inpatient
+    AND v.discharge_to_concept_id = 8536 --discharge to home
     AND v.visit_start_date <= co.condition_start_date
 """
 
