@@ -341,8 +341,8 @@ def create_prediction_cohort(spark_args,
     is_window_post_index = spark_args.is_window_post_index
 
     # Toggle the prior/post observation_period depending on the is_window_post_index flag
-    prior_observation_period = 0 if is_window_post_index else observation_window
-    post_observation_period = observation_window if is_window_post_index else 0
+    prior_observation_period = 0 if is_window_post_index else observation_window + hold_off_window
+    post_observation_period = observation_window + hold_off_window if is_window_post_index else 0
 
     # Generate the target cohort
     target_cohort = BaseCohortBuilder(
