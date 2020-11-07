@@ -96,21 +96,21 @@ class TemporalBertTrainer(VanillaBertTrainer):
 
     def create_data_generator(self) -> TemporalBertDataGenerator:
 
+        parameters = {'training_data': self._training_data,
+                      'batch_size': self._batch_size,
+                      'max_seq_len': self._context_window_size,
+                      'time_window_size': self._time_window_size,
+                      'min_num_of_concepts': self.min_num_of_concepts,
+                      'concept_tokenizer': self._tokenizer,
+                      'is_random_cursor': True}
+
+        data_generator_class = TemporalBertDataGenerator
+
         if self._include_visit_prediction:
+            parameters['visit_tokenizer'] = self._visit_tokenizer
             data_generator_class = TemporalVisitPredictionBertDataGenerator
-        else:
-            data_generator_class = TemporalBertDataGenerator
 
-        data_generator = data_generator_class(
-            training_data=self._training_data,
-            batch_size=self._batch_size,
-            max_seq_len=self._context_window_size,
-            min_num_of_concepts=self.min_num_of_concepts,
-            concept_tokenizer=self._tokenizer,
-            visit_tokenizer=self._visit_tokenizer,
-            time_window_size=self._time_window_size)
-
-        return data_generator
+        return data_generator_class(**parameters)
 
 
 def main(args):

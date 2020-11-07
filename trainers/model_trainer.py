@@ -4,7 +4,6 @@ from pathlib import Path
 import pandas as pd
 
 import tensorflow as tf
-from tensorflow.keras.models import Model
 
 from data_generators.data_generator_base import AbstractDataGeneratorBase
 from utils.logging_utils import *
@@ -19,7 +18,7 @@ class AbstractModel(ABC):
         self._model = self._create_model(*args, **kwargs)
 
     @abstractmethod
-    def _create_model(self, *args, **kwargs) -> Model:
+    def _create_model(self, *args, **kwargs):
         pass
 
     @abstractmethod
