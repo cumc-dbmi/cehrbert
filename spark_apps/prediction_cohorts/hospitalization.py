@@ -12,6 +12,41 @@ WHERE v.visit_concept_id IN (9201, 262)
 """
 
 HOSPITALIZATION_TARGET_QUERY = """
+WITH INDEX_VISIT_TABLE AS
+(SELECT DISTINCT
+    person_id,
+    FIRST(visit_start_date) OVER (PARTITION BY person_id ORDER BY visit_start_date, visit_occurrence_id) AS index_date,
+    FIRST(visit_occurrence_id) OVER (PARTITION BY person_id ORDER BY visit_start_date, visit_occurrence_id) AS visit_occurrence_id
+
+FROM global_temp.visit_occurrence
+WHERE 
+visit_end_date >= visit_start_date
+),
+HOSPITAL_TARGET AS
+(SELECT DISTINCT 
+    iv.person_id,
+    iv.index_date,
+    count(distinct case when v1.visit_concept_id IN (9201, 262) then v1.visit_occurrence_id end) as num_of_hospitalizations,
+    count(distinct v1.visit_occurrence_id) as num_of_visits
+FROM INDEX_VISIT_TABLE iv
+JOIN global_temp.visit_occurrence v1
+ON v1.person_id = iv.person_id AND DATEDIFF(v1.visit_start_date, iv.index_date) <= {total_window}
+JOIN global_temp.observation_period op
+ON iv.person_id = op.person_id
+AND DATEDIFF(CAST(op.observation_period_end_date AS date), CAST(op.observation_period_start_date AS date)) >= {total_window}
+GROUP BY 
+iv.person_id, 
+iv.index_date)
+
+SELECT 
+    person_id,
+    index_date,
+    CAST(null AS INT) AS visit_occurrence_id
+FROM HOSPITAL_TARGET
+WHERE num_of_visits between 2 and 30
+"""
+
+ORIGINAL_HOSPITALIZATION_TARGET_QUERY = """
 SELECT
     v.person_id,
     v.observation_period_start_date AS index_date,
