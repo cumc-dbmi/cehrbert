@@ -5,10 +5,17 @@ import pathlib
 import logging
 import pickle
 
+from itertools import chain
 import pandas as pd
 import numpy as np
 from sklearn import metrics
-from typing import Dict
+from typing import Dict, Union, Tuple
+
+from tensorflow.data import Dataset
+from tensorflow.keras.models import Model
+
+from sklearn.linear_model import LogisticRegression
+from xgboost import XGBClassifier
 
 from data_generators.tokenizer import ConceptTokenizer
 
@@ -66,32 +73,35 @@ def tokenize_concepts(training_data, column_name, tokenized_column_name, tokeniz
 
 
 @log_function_decorator
-def compute_binary_metrics(model, test_data, test_size, batch_size, metrics_folder):
+def compute_binary_metrics(model, test_data: Union[Dataset, Tuple[np.ndarray, np.ndarray]],
+                           metrics_folder):
     """
     Compute Recall, Precision, F1-score and PR-AUC for the test data
 
     :param model:
     :param test_data:
-    :param batch_size:
-    :param test_size:
     :param metrics_folder:
     :return:
     """
 
     def run_model():
-        _step = 0
-        _num_of_steps = test_size // batch_size + test_size % batch_size
-        _probabilities = []
-        _labels = []
-        for next_batch in test_data:
-            x, y = next_batch
-            prediction_batch = model.predict(x)
-            _probabilities.extend(prediction_batch.flatten().tolist())
-            _labels.extend(y.numpy().tolist())
-            _step += 1
-            if _step >= _num_of_steps:
-                break
-        return _probabilities, _labels
+        if isinstance(test_data, Dataset):
+            x = test_data.map(lambda _x, _y: _x)
+            y = test_data.map(lambda _x, _y: _y)
+            y = list(chain(*y.as_numpy_iterator()))
+        elif len(test_data) == 2:
+            x, y = test_data
+        else:
+            raise TypeError('Only numpy array and tensorflow Dataset are supported types.')
+
+        if isinstance(model, Model):
+            prob = model.predict(x)
+        elif isinstance(model, (LogisticRegression, XGBClassifier)):
+            prob = model.predict_proba(x)[:, 1]
+        else:
+            raise TypeError(f'Unknown type for the model {type(model)}')
+
+        return prob, y
 
     validate_folder(metrics_folder)
 
@@ -102,13 +112,15 @@ def compute_binary_metrics(model, test_data, test_size, batch_size, metrics_fold
     precision = metrics.precision_score(labels, predictions, average='binary')
     f1_score = metrics.f1_score(labels, predictions, average='binary')
     pr_auc = metrics.auc(recalls, precisions)
+    roc_auc = metrics.roc_auc_score(labels, probabilities)
 
     current_time = datetime.datetime.now().strftime("%m-%d-%Y-%H-%M-%S")
     data_metrics = {'time_stamp': [current_time],
                     'recall': [recall],
                     'precision': [precision],
                     'f1-score': [f1_score],
-                    'pr_auc': [pr_auc]}
+                    'pr_auc': [pr_auc],
+                    'roc_auc': [roc_auc]}
 
     pd.DataFrame(data_metrics).to_parquet(os.path.join(metrics_folder, f'{current_time}.parquet'))
 

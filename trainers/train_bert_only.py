@@ -51,28 +51,34 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
             f'include_visit_prediction: {include_visit_prediction}\n')
 
     def _load_dependencies(self):
-
-        self._tokenizer = tokenize_concepts(self._training_data, 'concept_ids', 'token_ids',
+        self._tokenizer = tokenize_concepts(self._training_data,
+                                            'concept_ids',
+                                            'token_ids',
                                             self._tokenizer_path)
-        self._visit_tokenizer = tokenize_concepts(self._training_data, 'visit_concept_ids',
-                                                  'visit_token_ids', self._visit_tokenizer_path,
-                                                  oov_token='-1')
+
+        if self._include_visit_prediction:
+            self._visit_tokenizer = tokenize_concepts(self._training_data,
+                                                      'visit_concept_ids',
+                                                      'visit_token_ids',
+                                                      self._visit_tokenizer_path,
+                                                      oov_token='-1')
 
     def create_data_generator(self) -> BertDataGenerator:
 
+        parameters = {'training_data': self._training_data,
+                      'batch_size': self._batch_size,
+                      'max_seq_len': self._context_window_size,
+                      'min_num_of_concepts': self.min_num_of_concepts,
+                      'concept_tokenizer': self._tokenizer,
+                      'is_random_cursor': True}
+
+        data_generator_class = BertDataGenerator
+
         if self._include_visit_prediction:
+            parameters['visit_tokenizer'] = self._visit_tokenizer
             data_generator_class = BertVisitPredictionDataGenerator
-        else:
-            data_generator_class = BertDataGenerator
 
-        data_generator = data_generator_class(training_data=self._training_data,
-                                              batch_size=self._batch_size,
-                                              max_seq_len=self._context_window_size,
-                                              min_num_of_concepts=self.min_num_of_concepts,
-                                              concept_tokenizer=self._tokenizer,
-                                              visit_tokenizer=self._visit_tokenizer)
-
-        return data_generator
+        return data_generator_class(**parameters)
 
     def _create_model(self):
         strategy = tf.distribute.MirroredStrategy()

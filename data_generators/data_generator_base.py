@@ -1,3 +1,4 @@
+import logging
 from typing import Set
 import inspect
 
@@ -64,6 +65,12 @@ class AbstractDataGeneratorBase(ABC):
         self._min_num_of_concepts = min_num_of_concepts
         self._is_random_cursor = is_random_cursor
         self._is_training = is_training
+
+        self.get_logger().info(f'batch_size: {batch_size}\n'
+                               f'max_seq_len: {max_seq_len}\n'
+                               f'min_num_of_concepts: {min_num_of_concepts}\n'
+                               f'is_random_cursor: {is_random_cursor}\n'
+                               f'is_training: {is_training}\n')
 
         self._learning_objectives = self._initialize_learning_objectives(max_seq_len=max_seq_len,
                                                                          is_training=is_training,
@@ -205,19 +212,20 @@ class AbstractDataGeneratorBase(ABC):
             output_dict_schemas.append(output_dict_schema)
         return dict(ChainMap(*input_dict_schemas)), dict(ChainMap(*output_dict_schemas))
 
+    @classmethod
+    def get_logger(cls):
+        return logging.getLogger(cls.__name__)
+
 
 class BertDataGenerator(AbstractDataGeneratorBase):
 
     def __init__(self,
                  concept_tokenizer: ConceptTokenizer,
-                 visit_tokenizer: ConceptTokenizer,
                  *args,
                  **kwargs):
         super(BertDataGenerator, self).__init__(concept_tokenizer=concept_tokenizer,
-                                                visit_tokenizer=visit_tokenizer,
                                                 *args, **kwargs)
         self._concept_tokenizer = concept_tokenizer
-        self._visit_tokenizer = visit_tokenizer
 
     def _get_learning_objective_classes(self):
         return [MaskedLanguageModelLearningObjective]
@@ -250,6 +258,14 @@ class BertDataGenerator(AbstractDataGeneratorBase):
 
 
 class BertVisitPredictionDataGenerator(BertDataGenerator):
+    def __init__(self,
+                 visit_tokenizer: ConceptTokenizer,
+                 *args,
+                 **kwargs):
+        super(BertDataGenerator, self).__init__(visit_tokenizer=visit_tokenizer,
+                                                *args, **kwargs)
+        self._visit_tokenizer = visit_tokenizer
+
     def _get_learning_objective_classes(self):
         return [MaskedLanguageModelLearningObjective, VisitPredictionLearningObjective]
 
