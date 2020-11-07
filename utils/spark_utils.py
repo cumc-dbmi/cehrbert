@@ -482,6 +482,29 @@ def create_concept_frequency_data(patient_event, date_filter=None):
     return patient_event
 
 
+def create_retain_data(patient_event):
+    import pandas as pd
+    from tensorflow.python.keras.preprocessing.text import Tokenizer
+
+    training_data = patient_event.where('visit_occurrence_id IS NOT NULL').distinct() \
+        .groupby('person_id', 'visit_occurrence_id') \
+        .agg(F.collect_list(F.col('standard_concept_id').cast('string')).alias('concept_ids')) \
+        .groupby('person_id').agg(F.collect_list('concept_ids').alias('visit_concept_ids'))
+
+    tokenizer = Tokenizer(filters='', lower=False)
+    training_data_pd = training_data.toPandas()
+    tokenizer.fit_on_texts(training_data_pd['visit_concept_ids'].explode())
+
+    training_data_pd = training_data_pd.set_index('person_id')
+    person_ids = training_data_pd['visit_concept_ids'].explode().index
+    token_ids = tokenizer.texts_to_sequences(training_data_pd['visit_concept_ids'].explode())
+    tokenized_training_data_pd = pd.DataFrame(zip(person_ids, token_ids),
+                                              columns=['person_id', 'token_ids'])
+    retain_training_data = tokenized_training_data_pd.groupby('person_id')['token_ids'].apply(
+        list).reset_index()
+    return retain_training_data
+
+
 def extract_ehr_records(spark, input_folder, domain_table_list, include_visit_type=False,
                         with_rollup=False):
     """
