@@ -10,7 +10,8 @@ import spark_apps.parameters as p
 VISIT_OCCURRENCE = 'visit_occurrence'
 
 
-def main(input_folder, output_folder, domain_table_list, date_filter):
+def main(input_folder, output_folder, domain_table_list, date_filter,
+         include_visit_type, is_new_patient_representation):
     spark = SparkSession.builder.appName('Generate Bert Training Data').getOrCreate()
     domain_tables = []
     for domain_table_name in domain_table_list:
@@ -23,7 +24,16 @@ def main(input_folder, output_folder, domain_table_list, date_filter):
         .select(patient_event['person_id'], patient_event['standard_concept_id'],
                 patient_event['date'], patient_event['visit_occurrence_id'],
                 patient_event['domain'], visit_occurrence['visit_concept_id'])
-    sequence_data = create_sequence_data(patient_event, date_filter, include_visit_type=True)
+
+    if is_new_patient_representation:
+        sequence_data = create_sequence_data_time_delta_embedded(patient_event,
+                                                                 visit_occurrence=visit_occurrence,
+                                                                 date_filter=date_filter,
+                                                                 include_visit_type=include_visit_type)
+    else:
+        sequence_data = create_sequence_data(patient_event, date_filter=date_filter,
+                                             include_visit_type=include_visit_type)
+
     sequence_data.write.mode('overwrite').parquet(os.path.join(output_folder, p.parquet_data_path))
 
 
@@ -58,6 +68,21 @@ if __name__ == '__main__':
                         action='store',
                         required=False,
                         default='2018-01-01')
+
+    parser.add_argument('-iv',
+                        '--include_visit_type',
+                        dest='include_visit_type',
+                        action='store_true',
+                        help='Specify whether to include visit types for '
+                             'generating the training data')
+
+    parser.add_argument('-ip',
+                        '--is_new_patient_representation',
+                        dest='is_new_patient_representation',
+                        action='store_true',
+                        help='Specify whether to generate the sequence of '
+                             'EHR records using the new patient representation')
     ARGS = parser.parse_args()
 
-    main(ARGS.input_folder, ARGS.output_folder, ARGS.domain_table_list, ARGS.date_filter)
+    main(ARGS.input_folder, ARGS.output_folder, ARGS.domain_table_list, ARGS.date_filter,
+         ARGS.include_visit_type, ARGS.is_new_patient_representation)

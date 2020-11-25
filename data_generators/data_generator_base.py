@@ -237,11 +237,9 @@ class BertDataGenerator(AbstractDataGeneratorBase):
         """
         while True:
             for row in self._training_data.itertuples():
-
-                seq_length = len(row.token_ids) - 1
-
+                seq_length = len(row.token_ids)
                 if self._is_training:
-                    cursor = random.randint(0, seq_length) if self._is_random_cursor & (
+                    cursor = random.randint(0, seq_length - 1) if self._is_random_cursor & (
                             seq_length > self._max_seq_len) else seq_length // 2
 
                     half_window_size = int(self._max_seq_len / 2)
@@ -283,10 +281,9 @@ class TemporalBertDataGenerator(BertDataGenerator):
         """
         while True:
             for row in self._training_data.itertuples():
-
-                seq_length = len(row.token_ids) - 1
+                seq_length = len(row.token_ids)
                 if self._is_training:
-                    cursor = random.randint(0, seq_length) if self._is_random_cursor & (
+                    cursor = random.randint(0, seq_length - 1) if self._is_random_cursor & (
                             seq_length > self._max_seq_len) else seq_length // 2
 
                     # Only include the concepts whose time stamps are within -half_time_window and

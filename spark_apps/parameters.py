@@ -126,5 +126,10 @@ def create_spark_args():
                         dest='is_roll_up_concept',
                         action='store_true',
                         help='Specify whether to roll up the concepts to their ancestors')
-
+    parser.add_argument('-ip',
+                        '--is_new_patient_representation',
+                        dest='is_new_patient_representation',
+                        action='store_true',
+                        help='Specify whether to generate the sequence of '
+                             'EHR records using the new patient representation')
     return parser.parse_args()

@@ -50,6 +50,18 @@ def instantiate_dependencies(spark, input_folder, dependency_list):
     return dependency_dict
 
 
+def validate_date_folder(input_folder, table_list):
+    for domain_table_name in table_list:
+        parquet_file_path = os.path.join(input_folder, domain_table_name)
+        if not os.path.exists(parquet_file_path):
+            raise FileExistsError(f'{parquet_file_path} does not exist')
+
+
+def validate_folder(folder_path):
+    if not os.path.exists(folder_path):
+        raise FileExistsError(f'{folder_path} does not exist')
+
+
 class BaseCohortBuilder(ABC):
     cohort_required_columns = ['person_id', 'index_date', 'visit_occurrence_id']
 
@@ -86,13 +98,13 @@ class BaseCohortBuilder(ABC):
                                f'prior_observation_period: {prior_observation_period}\n'
                                f'post_observation_period: {post_observation_period}\n')
 
-        # Validate the input and output folders
-        self._validate_folder(self._input_folder)
-        self._validate_folder(self._output_folder)
         # Validate the age range, observation_window and prediction_window
         self._validate_integer_inputs()
+        # Validate the input and output folders
+        validate_folder(self._input_folder)
+        validate_folder(self._output_folder)
         # Validate if the data folders exist
-        self._validate_date_folder(self._query_builder.get_dependency_list())
+        validate_date_folder(self._input_folder, self._query_builder.get_dependency_list())
 
         self.spark = SparkSession.builder.appName(
             f'Generate {self._query_builder.get_cohort_name()}').getOrCreate()
@@ -190,16 +202,6 @@ class BaseCohortBuilder(ABC):
         assert self._prior_observation_period >= 0
         assert self._post_observation_period >= 0
 
-    def _validate_date_folder(self, table_list):
-        for domain_table_name in table_list:
-            parquet_file_path = os.path.join(self._input_folder, domain_table_name)
-            if not os.path.exists(parquet_file_path):
-                raise FileExistsError(f'{parquet_file_path} does not exist')
-
-    def _validate_folder(self, folder_path):
-        if not os.path.exists(folder_path):
-            raise FileExistsError(f'{folder_path} does not exist')
-
     @classmethod
     def get_logger(cls):
         return logging.getLogger(cls.__name__)
@@ -220,7 +222,8 @@ class NestedCohortBuilder:
                  is_window_post_index: bool = False,
                  include_visit_type: bool = True,
                  is_feature_concept_frequency: bool = False,
-                 is_roll_up_concept: bool = False):
+                 is_roll_up_concept: bool = False,
+                 is_new_patient_representation: bool = False):
         self._cohort_name = cohort_name
         self._input_folder = input_folder
         self._output_folder = output_folder
@@ -235,6 +238,7 @@ class NestedCohortBuilder:
         self._include_visit_type = include_visit_type
         self._is_feature_concept_frequency = is_feature_concept_frequency
         self._is_roll_up_concept = is_roll_up_concept
+        self._is_new_patient_representation = is_new_patient_representation
         self._output_data_folder = os.path.join(self._output_folder,
                                                 re.sub('[^a-z0-9]+', '_',
                                                        self._cohort_name.lower()))
@@ -250,11 +254,18 @@ class NestedCohortBuilder:
                                f'is_window_post_index: {is_window_post_index}\n'
                                f'include_visit_type: {include_visit_type}\n'
                                f'is_feature_concept_frequency: {is_feature_concept_frequency}\n'
-                               f'is_roll_up_concept: {is_roll_up_concept}\n')
+                               f'is_roll_up_concept: {is_roll_up_concept}\n'
+                               f'is_new_patient_representation: {is_new_patient_representation}\n')
 
         self.spark = SparkSession.builder.appName(f'Generate {self._cohort_name}').getOrCreate()
         self._dependency_dict = instantiate_dependencies(self.spark, self._input_folder,
                                                          DEFAULT_DEPENDENCY)
+
+        # Validate the input and output folders
+        validate_folder(self._input_folder)
+        validate_folder(self._output_folder)
+        # Validate if the data folders exist
+        validate_date_folder(self._input_folder, self._ehr_table_list)
 
     def build(self):
         self._target_cohort.createOrReplaceGlobalTempView('target_cohort')
@@ -305,6 +316,14 @@ class NestedCohortBuilder:
         if self._is_feature_concept_frequency:
             return create_concept_frequency_data(cohort_ehr_records, None)
 
+        if self._is_new_patient_representation:
+            validate_date_folder(self._input_folder, [VISIT_OCCURRENCE])
+            visit_occurrence = preprocess_domain_table(self.spark,
+                                                       self._input_folder,
+                                                       VISIT_OCCURRENCE)
+            return create_sequence_data_time_delta_embedded(cohort_ehr_records, visit_occurrence,
+                                                            include_visit_type=self._include_visit_type)
+
         return create_sequence_data(cohort_ehr_records, None, self._include_visit_type)
 
     @classmethod
@@ -339,6 +358,7 @@ def create_prediction_cohort(spark_args,
     is_feature_concept_frequency = spark_args.is_feature_concept_frequency
     is_roll_up_concept = spark_args.is_roll_up_concept
     is_window_post_index = spark_args.is_window_post_index
+    is_new_patient_representation = spark_args.is_new_patient_representation
 
     # Toggle the prior/post observation_period depending on the is_window_post_index flag
     prior_observation_period = 0 if is_window_post_index else observation_window + hold_off_window
@@ -381,4 +401,5 @@ def create_prediction_cohort(spark_args,
                         is_window_post_index=is_window_post_index,
                         include_visit_type=include_visit_type,
                         is_feature_concept_frequency=is_feature_concept_frequency,
-                        is_roll_up_concept=is_roll_up_concept).build()
+                        is_roll_up_concept=is_roll_up_concept,
+                        is_new_patient_representation=is_new_patient_representation).build()

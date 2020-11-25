@@ -278,7 +278,7 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
 
         row, left_index, right_index, _ = row_slicer
 
-        iterator = zip(row.dates, row.token_ids, row.visit_segments)
+        iterator = zip(map(int, row.dates), row.token_ids, row.visit_segments)
         sorted_list = sorted(iterator, key=lambda tup2: (tup2[0], tup2[1]))
 
         (dates, concepts, visit_segments) = zip(*list(islice(sorted_list, left_index, right_index)))
