@@ -207,16 +207,16 @@ class VisitPredictionLearningObjective(LearningObjective):
 
     def _mask_visit_concepts(self, visit_concepts):
         """
-        Randomly one visit in a list of visits
+        Any visit has 50% chance to be masked
         :param visit_concepts:
         :return:
         """
         masked_visit_concepts = np.asarray(visit_concepts).copy()
-        random_choice_for_masking = np.random.choice(range(len(visit_concepts)))
         output_mask = np.zeros((self._max_seq_len,), dtype=int)
-        output_mask[random_choice_for_masking] = 1
-        masked_visit_concepts[random_choice_for_masking] = self._visit_tokenizer.get_mask_token_id()
-
+        for word_pos in range(0, len(visit_concepts)):
+            if random.random() < 0.5:
+                output_mask[word_pos] = 1
+                masked_visit_concepts[word_pos] = self._visit_tokenizer.get_mask_token_id()
         return masked_visit_concepts, output_mask
 
 
