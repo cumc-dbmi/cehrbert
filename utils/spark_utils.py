@@ -431,10 +431,10 @@ def create_sequence_data(patient_event, date_filter=None, include_visit_type=Fal
 
     date_conversion_udf = (F.unix_timestamp('date') / F.lit(24 * 60 * 60 * 7)).cast('int')
     earliest_visit_date_udf = F.min('date_in_week').over(W.partitionBy('visit_occurrence_id'))
-    visit_rank_udf = F.dense_rank().over(W.partitionBy('person_id').orderBy('earliest_visit_date'))
-    concept_position_udf = F.dense_rank().over(W.partitionBy('person_id', 'visit_occurrence_id')
+    visit_rank_udf = F.row_number().over(W.partitionBy('person_id').orderBy('earliest_visit_date'))
+    concept_position_udf = F.row_number().over(W.partitionBy('person_id', 'visit_occurrence_id')
                                                .orderBy('date_in_week', 'standard_concept_id'))
-    visit_segment_udf = F.col('visit_rank_order') % F.lit(2) + 1
+    visit_segment_udf = F.col('visit_rank_order')
 
     # Derive columns
     patient_event = patient_event.withColumn('date_in_week', date_conversion_udf).distinct() \
@@ -524,8 +524,8 @@ def create_sequence_data_time_delta_embedded(patient_event, visit_occurrence, da
     visit_date_udf = F.first('days_since_epoch').over(
         W.partitionBy('person_id', 'visit_occurrence_id').orderBy('days_since_epoch'))
     time_token_udf = F.udf(time_token_func, T.StringType())
-    visit_rank_udf = F.dense_rank().over(W.partitionBy('person_id').orderBy('visit_start_date'))
-    visit_segment_udf = F.col('visit_rank_order') % F.lit(2) + 1
+    visit_rank_udf = F.row_number().over(W.partitionBy('person_id').orderBy('visit_start_date'))
+    visit_segment_udf = F.col('visit_rank_order')
 
     patient_event = patient_event.union(visit_start_events).union(visit_end_events) \
         .withColumn('priority', priority_udf) \
@@ -540,7 +540,7 @@ def create_sequence_data_time_delta_embedded(patient_event, visit_occurrence, da
     time_token_insertions = patient_event.where('standard_concept_id = "VS"') \
         .withColumn('standard_concept_id', F.col('time_token')) \
         .withColumn('priority', F.lit(-2)) \
-        .withColumn('visit_segments', 0) \
+        .withColumn('visit_segments', F.lit(0)) \
         .where('prev_days_since_epoch IS NOT NULL')
 
     order_udf = F.row_number().over(
