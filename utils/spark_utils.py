@@ -540,6 +540,7 @@ def create_sequence_data_time_delta_embedded(patient_event, visit_occurrence, da
     time_token_insertions = patient_event.where('standard_concept_id = "VS"') \
         .withColumn('standard_concept_id', F.col('time_token')) \
         .withColumn('priority', F.lit(-2)) \
+        .withColumn('visit_segments', 0) \
         .where('prev_days_since_epoch IS NOT NULL')
 
     order_udf = F.row_number().over(

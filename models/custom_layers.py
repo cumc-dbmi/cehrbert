@@ -332,8 +332,7 @@ class VisitEmbeddingLayer(tf.keras.layers.Layer):
         self.embedding_size = embedding_size
 
         self.visit_embedding_layer = tf.keras.layers.Embedding(self.visit_order_size,
-                                                               self.embedding_size,
-                                                               mask_zero=True)
+                                                               self.embedding_size)
 
     def get_config(self):
         config = super().get_config()
