@@ -431,8 +431,9 @@ def create_sequence_data(patient_event, date_filter=None, include_visit_type=Fal
 
     date_conversion_udf = (F.unix_timestamp('date') / F.lit(24 * 60 * 60 * 7)).cast('int')
     earliest_visit_date_udf = F.min('date_in_week').over(W.partitionBy('visit_occurrence_id'))
-    visit_rank_udf = F.row_number().over(W.partitionBy('person_id').orderBy('earliest_visit_date'))
-    concept_position_udf = F.row_number().over(W.partitionBy('person_id', 'visit_occurrence_id')
+    visit_rank_udf = F.dense_rank().over(W.partitionBy('person_id').orderBy('earliest_visit_date',
+                                                                            'visit_occurrence_id'))
+    concept_position_udf = F.dense_rank().over(W.partitionBy('person_id', 'visit_occurrence_id')
                                                .orderBy('date_in_week', 'standard_concept_id'))
     visit_segment_udf = F.col('visit_rank_order')
 
@@ -524,7 +525,8 @@ def create_sequence_data_time_delta_embedded(patient_event, visit_occurrence, da
     visit_date_udf = F.first('days_since_epoch').over(
         W.partitionBy('person_id', 'visit_occurrence_id').orderBy('days_since_epoch'))
     time_token_udf = F.udf(time_token_func, T.StringType())
-    visit_rank_udf = F.row_number().over(W.partitionBy('person_id').orderBy('visit_start_date'))
+    visit_rank_udf = F.dense_rank().over(W.partitionBy('person_id').orderBy('visit_start_date',
+                                                                            'visit_occurrence_id'))
     visit_segment_udf = F.col('visit_rank_order')
 
     patient_event = patient_event.union(visit_start_events).union(visit_end_events) \
