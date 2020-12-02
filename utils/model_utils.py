@@ -8,6 +8,7 @@ import pickle
 from itertools import chain
 import pandas as pd
 import numpy as np
+import tensorflow as tf
 from sklearn import metrics
 from typing import Dict, Union, Tuple
 
@@ -147,3 +148,14 @@ def save_training_history(history: Dict, history_folder):
 def validate_folder(folder):
     if not os.path.exists(folder):
         raise FileExistsError(f'{folder} does not exist!')
+
+
+def create_concept_mask(mask, max_seq_length):
+    # mask the third dimension
+    concept_mask_1 = tf.tile(tf.expand_dims(tf.expand_dims(mask, axis=1), axis=-1),
+                             [1, 1, 1, max_seq_length])
+    # mask the fourth dimension
+    concept_mask_2 = tf.expand_dims(tf.expand_dims(mask, axis=1), axis=1)
+    concept_mask = tf.cast(
+        (concept_mask_1 + concept_mask_2) > 0, dtype=tf.int32, name='concept_mask')
+    return concept_mask

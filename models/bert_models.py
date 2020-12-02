@@ -4,21 +4,11 @@ import tensorflow as tf
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 
 from models.custom_layers import (VisitEmbeddingLayer, TimeSelfAttention, Encoder,
-                                  TemporalEncoder, PositionalEncodingLayer)
+                                  TemporalEncoder, PositionalEncodingLayer,
+                                  TemporalPositionalEncodingLayer)
+from utils.model_utils import create_concept_mask
 
 
-def create_concept_mask(mask, max_seq_length):
-    # mask the third dimension
-    concept_mask_1 = tf.tile(tf.expand_dims(tf.expand_dims(mask, axis=1), axis=-1),
-                             [1, 1, 1, max_seq_length])
-    # mask the fourth dimension
-    concept_mask_2 = tf.expand_dims(tf.expand_dims(mask, axis=1), axis=1)
-    concept_mask = tf.cast(
-        (concept_mask_1 + concept_mask_2) > 0, dtype=tf.int32, name='concept_mask')
-    return concept_mask
-
-
-# -
 def transformer_bert_model(
         max_seq_length: int,
         vocab_size: int,
@@ -27,7 +17,8 @@ def transformer_bert_model(
         num_heads: int,
         transformer_dropout: float = 0.1,
         embedding_dropout: float = 0.6,
-        l2_reg_penalty: float = 1e-4):
+        l2_reg_penalty: float = 1e-4,
+        use_time_embedding: bool = False):
     """
     Builds a BERT-based model (Bidirectional Encoder Representations
     from Transformers) following paper "BERT: Pre-training of Deep
@@ -47,6 +38,8 @@ def transformer_bert_model(
 
     mask = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='mask')
 
+    default_inputs = [masked_concept_ids, visit_segments, mask]
+
     concept_mask = create_concept_mask(mask, max_seq_length)
 
     l2_regularizer = (tf.keras.regularizers.l2(l2_reg_penalty) if l2_reg_penalty else None)
@@ -62,10 +55,6 @@ def transformer_bert_model(
 
     visit_segment_layer = VisitEmbeddingLayer(visit_order_size=max_seq_length,
                                               embedding_size=embedding_size)
-
-    positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
-                                                        embedding_size=embedding_size)
-
     encoder = Encoder(name='encoder',
                       num_layers=depth,
                       d_model=embedding_size,
@@ -81,10 +70,20 @@ def transformer_bert_model(
 
     next_step_input, embedding_matrix = embedding_layer(masked_concept_ids)
 
-    next_step_input = positional_encoding_layer(next_step_input)
     # Building a Vanilla Transformer (described in
     # "Attention is all you need", 2017)
     next_step_input = visit_segment_layer([visit_segments, next_step_input])
+
+    positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
+                                                        embedding_size=embedding_size)
+    next_step_input = positional_encoding_layer(next_step_input)
+
+    if use_time_embedding:
+        time_stamps = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
+                                            name='time_stamps')
+        default_inputs.append(time_stamps)
+        time_embedding_layer = TemporalPositionalEncodingLayer(embedding_size=embedding_size)
+        next_step_input = time_embedding_layer([next_step_input, time_stamps])
 
     next_step_input, _ = encoder(next_step_input, concept_mask)
 
@@ -92,13 +91,12 @@ def transformer_bert_model(
         output_layer([next_step_input, embedding_matrix]))
 
     model = tf.keras.Model(
-        inputs=[masked_concept_ids, visit_segments, mask],
+        inputs=default_inputs,
         outputs=[concept_predictions])
 
     return model
 
 
-# -
 def transformer_temporal_bert_model(
         max_seq_length: int,
         time_window_size: int,
