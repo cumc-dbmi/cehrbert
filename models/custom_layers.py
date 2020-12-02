@@ -323,6 +323,34 @@ class PositionalEncodingLayer(tf.keras.layers.Layer):
         return concept_embeddings + self.pos_encoding[:, :seq_len, :]
 
 
+class TemporalPositionalEncodingLayer(tf.keras.layers.Layer):
+    def __init__(self, embedding_size, *args, **kwargs):
+        super(TemporalPositionalEncodingLayer, self).__init__(*args, **kwargs)
+        self.embedding_size = embedding_size
+        self.w = self.add_weight(shape=(1, self.embedding_size),
+                                 trainable=True,
+                                 initializer=tf.keras.initializers.GlorotNormal(),
+                                 name='time_embedding_weight')
+        self.phi = self.add_weight(shape=(1, self.embedding_size),
+                                   trainable=True,
+                                   initializer=tf.keras.initializers.GlorotNormal(),
+                                   name='time_embedding_phi')
+
+    def get_config(self):
+        config = super().get_config()
+        config['embedding_size'] = self.embedding_size
+        return config
+
+    def call(self, inputs, **kwargs):
+        concept_embeddings, time_stamps = inputs
+        time_delta = tf.concat([time_stamps[:, 0:1] * 0, time_stamps[:, 1:] - time_stamps[:, :-1]],
+                               axis=-1)
+        normalized_time_delta = tf.cast(time_delta, tf.float32)
+        next_input = tf.expand_dims(normalized_time_delta, axis=-1) * self.w + self.phi
+        time_embeddings = tf.concat([next_input[:, 0:1, :], tf.sin(next_input[:, 1:, :])], axis=1)
+        return concept_embeddings + time_embeddings
+
+
 class VisitEmbeddingLayer(tf.keras.layers.Layer):
 
     def __init__(self, visit_order_size: int,
@@ -523,6 +551,7 @@ get_custom_objects().update({
     'PairwiseTimeAttention': TimeSelfAttention,
     'VisitEmbeddingLayer': VisitEmbeddingLayer,
     'PositionalEncodingLayer': PositionalEncodingLayer,
+    'TemporalPositionalEncodingLayer': TemporalPositionalEncodingLayer,
     'ReusableEmbedding': ReusableEmbedding,
     'TiedOutputEmbedding': TiedOutputEmbedding,
     'MaskedPenalizedSparseCategoricalCrossentropy': MaskedPenalizedSparseCategoricalCrossentropy

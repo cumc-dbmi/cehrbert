@@ -114,7 +114,7 @@ def join_domain_time_span(domain_tables, span=0):
                     F.lit(table_domain_field).alias("domain")) \
             .distinct()
 
-        if patient_event == None:
+        if patient_event is None:
             patient_event = domain_table
         else:
             patient_event = patient_event.union(domain_table)
@@ -137,9 +137,8 @@ def join_domain_tables(domain_tables):
     patient_event = None
 
     for domain_table in domain_tables:
-        # extract the domain concept_id from the table fields. E.g. condition_concept_id from condition_occurrence
-        # extract the domain start_date column
-        # extract the name of the table
+        # extract the domain concept_id from the table fields. E.g. condition_concept_id from
+        # condition_occurrence extract the domain start_date column extract the name of the table
         concept_id_field, date_field, table_domain_field = get_key_fields(domain_table)
         # standardize the output columns
         domain_table = domain_table.where(F.col(concept_id_field).cast('string') != '0') \
@@ -153,7 +152,7 @@ def join_domain_tables(domain_tables):
                                            F.lit(table_domain_field).alias('domain')) \
             .distinct()
 
-        if patient_event == None:
+        if patient_event is None:
             patient_event = domain_table
         else:
             patient_event = patient_event.union(domain_table)
@@ -435,7 +434,7 @@ def create_sequence_data(patient_event, date_filter=None, include_visit_type=Fal
                                                                             'visit_occurrence_id'))
     concept_position_udf = F.dense_rank().over(W.partitionBy('person_id', 'visit_occurrence_id')
                                                .orderBy('date_in_week', 'standard_concept_id'))
-    visit_segment_udf = F.col('visit_rank_order')
+    visit_segment_udf = F.col('visit_rank_order') % F.lit(2) + 1
 
     # Derive columns
     patient_event = patient_event.withColumn('date_in_week', date_conversion_udf).distinct() \
@@ -525,9 +524,9 @@ def create_sequence_data_time_delta_embedded(patient_event, visit_occurrence, da
     visit_date_udf = F.first('days_since_epoch').over(
         W.partitionBy('person_id', 'visit_occurrence_id').orderBy('days_since_epoch'))
     time_token_udf = F.udf(time_token_func, T.StringType())
-    visit_rank_udf = F.dense_rank().over(W.partitionBy('person_id').orderBy('visit_start_date',
-                                                                            'visit_occurrence_id'))
-    visit_segment_udf = F.col('visit_rank_order')
+    visit_rank_udf = F.dense_rank().over(
+        W.partitionBy('person_id').orderBy('visit_start_date', 'visit_occurrence_id'))
+    visit_segment_udf = F.col('visit_rank_order') % F.lit(2) + 1
 
     patient_event = patient_event.union(visit_start_events).union(visit_end_events) \
         .withColumn('priority', priority_udf) \

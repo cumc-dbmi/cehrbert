@@ -32,13 +32,17 @@ class Config(SimpleNamespace):
 
 class BertConfig(Config):
 
-    def __init__(self, visit_tokenizer_path, depth, num_heads, include_visit_prediction,
+    def __init__(self, visit_tokenizer_path,
+                 depth, num_heads,
+                 include_visit_prediction,
+                 use_time_embedding,
                  *args, **kwargs):
         super(BertConfig, self).__init__(*args, **kwargs)
         self.visit_tokenizer_path = visit_tokenizer_path
         self.depth = depth
         self.num_heads = num_heads
         self.include_visit_prediction = include_visit_prediction
+        self.use_time_embedding = use_time_embedding
 
 
 class TemporalBertConfig(BertConfig):
@@ -98,7 +102,8 @@ def create_bert_model_config(args):
                       batch_size=args.batch_size,
                       epochs=args.epochs,
                       learning_rate=args.learning_rate,
-                      include_visit_prediction=args.include_visit_prediction)
+                      include_visit_prediction=args.include_visit_prediction,
+                      use_time_embedding=args.use_time_embedding)
 
 
 def create_temporal_bert_model_config(args):

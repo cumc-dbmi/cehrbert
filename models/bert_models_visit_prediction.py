@@ -5,20 +5,9 @@ from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 
 from models.custom_layers import (VisitEmbeddingLayer, TimeSelfAttention, Encoder, DecoderLayer,
                                   TemporalEncoder, PositionalEncodingLayer)
+from utils.model_utils import create_concept_mask
 
 
-def create_concept_mask(mask, max_seq_length):
-    # mask the third dimension
-    concept_mask_1 = tf.tile(tf.expand_dims(tf.expand_dims(mask, axis=1), axis=-1),
-                             [1, 1, 1, max_seq_length])
-    # mask the fourth dimension
-    concept_mask_2 = tf.expand_dims(tf.expand_dims(mask, axis=1), axis=1)
-    concept_mask = tf.cast(
-        (concept_mask_1 + concept_mask_2) > 0, dtype=tf.int32, name='concept_mask')
-    return concept_mask
-
-
-# -
 def transformer_bert_model_visit_prediction(max_seq_length: int,
                                             concept_vocab_size: int,
                                             visit_vocab_size: int,
@@ -128,7 +117,6 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
     return model
 
 
-# -
 def transformer_temporal_bert_model_visit_prediction(
         max_seq_length: int,
         time_window_size: int,
