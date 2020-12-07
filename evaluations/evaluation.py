@@ -13,6 +13,8 @@ VANILLA_BERT_LSTM = 'vanilla_bert_lstm'
 TEMPORAL_BERT_LSTM = 'temporal_bert_lstm'
 SEQUENCE_MODEL_EVALUATORS = [LSTM, VANILLA_BERT_LSTM, TEMPORAL_BERT_LSTM]
 
+IS_TRANSFER_LEARNING = '--is_transfer_learning'
+
 
 def evaluate_sequence_models(args):
     # Load the training data
@@ -27,6 +29,8 @@ def evaluate_sequence_models(args):
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
             num_of_folds=args.num_of_folds,
+            is_transfer_learning=args.is_transfer_learning,
+            training_percentage=args.training_percentage,
             max_seq_length=args.max_seq_length,
             batch_size=args.batch_size,
             epochs=args.epochs,
@@ -44,6 +48,8 @@ def evaluate_sequence_models(args):
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
             num_of_folds=args.num_of_folds,
+            is_transfer_learning=args.is_transfer_learning,
+            training_percentage=args.training_percentage,
             max_seq_length=args.max_seq_length,
             batch_size=args.batch_size,
             epochs=args.epochs,
@@ -61,6 +67,8 @@ def evaluate_sequence_models(args):
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
             num_of_folds=args.num_of_folds,
+            is_transfer_learning=args.is_transfer_learning,
+            training_percentage=args.training_percentage,
             max_seq_length=args.max_seq_length,
             batch_size=args.batch_size,
             epochs=args.epochs,
@@ -72,12 +80,17 @@ def evaluate_sequence_models(args):
 def evaluate_baseline_models(args):
     # Load the training data
     dataset = pd.read_parquet(args.data_path)
+
     LogisticRegressionModelEvaluator(dataset=dataset,
                                      evaluation_folder=args.evaluation_folder,
-                                     num_of_folds=args.num_of_folds).eval_model()
+                                     num_of_folds=args.num_of_folds,
+                                     is_transfer_learning=args.is_transfer_learning,
+                                     training_percentage=args.training_percentage).eval_model()
     XGBClassifierEvaluator(dataset=dataset,
                            evaluation_folder=args.evaluation_folder,
-                           num_of_folds=args.num_of_folds).eval_model()
+                           num_of_folds=args.num_of_folds,
+                           is_transfer_learning=args.is_transfer_learning,
+                           training_percentage=args.training_percentage).eval_model()
 
 
 def create_evaluation_args():
@@ -89,6 +102,7 @@ def create_evaluation_args():
     lstm_model_required = LSTM in argv
     vanilla_bert_lstm = VANILLA_BERT_LSTM in argv
     temporal_bert_lstm = TEMPORAL_BERT_LSTM in argv
+    learning_percentage_required = IS_TRANSFER_LEARNING in argv
 
     main_parser.add_argument('-a',
                              '--action',
@@ -115,6 +129,15 @@ def create_evaluation_args():
                              required=False,
                              type=int,
                              default=4)
+    main_parser.add_argument('--is_transfer_learning',
+                             dest='is_transfer_learning',
+                             action='store_true')
+    main_parser.add_argument('--training_percentage',
+                             dest='training_percentage',
+                             required=learning_percentage_required,
+                             action='store',
+                             type=float,
+                             default=1.0)
 
     group = main_parser.add_argument_group('sequence model')
     group.add_argument('-me',
