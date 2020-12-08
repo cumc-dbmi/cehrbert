@@ -13,8 +13,6 @@ VANILLA_BERT_LSTM = 'vanilla_bert_lstm'
 TEMPORAL_BERT_LSTM = 'temporal_bert_lstm'
 SEQUENCE_MODEL_EVALUATORS = [LSTM, VANILLA_BERT_LSTM, TEMPORAL_BERT_LSTM]
 
-IS_TRANSFER_LEARNING = '--is_transfer_learning'
-
 
 def evaluate_sequence_models(args):
     # Load the training data
@@ -102,7 +100,6 @@ def create_evaluation_args():
     lstm_model_required = LSTM in argv
     vanilla_bert_lstm = VANILLA_BERT_LSTM in argv
     temporal_bert_lstm = TEMPORAL_BERT_LSTM in argv
-    learning_percentage_required = IS_TRANSFER_LEARNING in argv
 
     main_parser.add_argument('-a',
                              '--action',
@@ -134,7 +131,7 @@ def create_evaluation_args():
                              action='store_true')
     main_parser.add_argument('--training_percentage',
                              dest='training_percentage',
-                             required=learning_percentage_required,
+                             required=False,
                              action='store',
                              type=float,
                              default=1.0)
