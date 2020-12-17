@@ -223,7 +223,8 @@ class NestedCohortBuilder:
                  include_visit_type: bool = True,
                  is_feature_concept_frequency: bool = False,
                  is_roll_up_concept: bool = False,
-                 is_new_patient_representation: bool = False):
+                 is_new_patient_representation: bool = False,
+                 is_first_time_outcome: bool = False):
         self._cohort_name = cohort_name
         self._input_folder = input_folder
         self._output_folder = output_folder
@@ -239,6 +240,7 @@ class NestedCohortBuilder:
         self._is_feature_concept_frequency = is_feature_concept_frequency
         self._is_roll_up_concept = is_roll_up_concept
         self._is_new_patient_representation = is_new_patient_representation
+        self._is_first_time_outcome = is_first_time_outcome
         self._output_data_folder = os.path.join(self._output_folder,
                                                 re.sub('[^a-z0-9]+', '_',
                                                        self._cohort_name.lower()))
@@ -255,7 +257,8 @@ class NestedCohortBuilder:
                                f'include_visit_type: {include_visit_type}\n'
                                f'is_feature_concept_frequency: {is_feature_concept_frequency}\n'
                                f'is_roll_up_concept: {is_roll_up_concept}\n'
-                               f'is_new_patient_representation: {is_new_patient_representation}\n')
+                               f'is_new_patient_representation: {is_new_patient_representation}\n'
+                               f'is_first_time_outcome: {is_first_time_outcome}\n')
 
         self.spark = SparkSession.builder.appName(f'Generate {self._cohort_name}').getOrCreate()
         self._dependency_dict = instantiate_dependencies(self.spark, self._input_folder,
@@ -293,6 +296,18 @@ class NestedCohortBuilder:
                 OR o.person_id IS NOT NULL
         """.format(prediction_start_days=prediction_start_days,
                    prediction_window=prediction_window))
+
+        if self._is_first_time_outcome:
+            cohort.createOrReplaceGlobalTempView('cohort')
+            cohort = self.spark.sql("""
+            SELECT
+                c.*
+            FROM global_temp.cohort AS c 
+            LEFT JOIN global_temp.outcome_cohort AS o
+                ON c.person_id = o.person_id
+                    AND c.index_date >= o.index_date
+            WHERE o.person_id IS NULL       
+            """)
 
         ehr_records_for_cohorts = self.extract_ehr_records_for_cohort(cohort)
         cohort = cohort.join(ehr_records_for_cohorts, 'person_id')
@@ -359,6 +374,7 @@ def create_prediction_cohort(spark_args,
     is_roll_up_concept = spark_args.is_roll_up_concept
     is_window_post_index = spark_args.is_window_post_index
     is_new_patient_representation = spark_args.is_new_patient_representation
+    is_first_time_outcome = spark_args.is_first_time_outcome
 
     # Toggle the prior/post observation_period depending on the is_window_post_index flag
     prior_observation_period = 0 if is_window_post_index else observation_window + hold_off_window
@@ -402,4 +418,5 @@ def create_prediction_cohort(spark_args,
                         include_visit_type=include_visit_type,
                         is_feature_concept_frequency=is_feature_concept_frequency,
                         is_roll_up_concept=is_roll_up_concept,
-                        is_new_patient_representation=is_new_patient_representation).build()
+                        is_new_patient_representation=is_new_patient_representation,
+                        is_first_time_outcome=is_first_time_outcome).build()
