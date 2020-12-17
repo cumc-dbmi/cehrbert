@@ -132,4 +132,8 @@ def create_spark_args():
                         action='store_true',
                         help='Specify whether to generate the sequence of '
                              'EHR records using the new patient representation')
+    parser.add_argument('--is_first_time_outcome',
+                        dest='is_first_time_outcome',
+                        action='store_true',
+                        help='is the outcome the first time occurrence?')
     return parser.parse_args()
