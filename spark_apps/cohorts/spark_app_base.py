@@ -224,7 +224,8 @@ class NestedCohortBuilder:
                  is_feature_concept_frequency: bool = False,
                  is_roll_up_concept: bool = False,
                  is_new_patient_representation: bool = False,
-                 is_first_time_outcome: bool = False):
+                 is_first_time_outcome: bool = False,
+                 is_prediction_window_unbounded: bool = False):
         self._cohort_name = cohort_name
         self._input_folder = input_folder
         self._output_folder = output_folder
@@ -241,6 +242,7 @@ class NestedCohortBuilder:
         self._is_roll_up_concept = is_roll_up_concept
         self._is_new_patient_representation = is_new_patient_representation
         self._is_first_time_outcome = is_first_time_outcome
+        self._is_prediction_window_unbounded = is_prediction_window_unbounded
         self._output_data_folder = os.path.join(self._output_folder,
                                                 re.sub('[^a-z0-9]+', '_',
                                                        self._cohort_name.lower()))
@@ -258,7 +260,8 @@ class NestedCohortBuilder:
                                f'is_feature_concept_frequency: {is_feature_concept_frequency}\n'
                                f'is_roll_up_concept: {is_roll_up_concept}\n'
                                f'is_new_patient_representation: {is_new_patient_representation}\n'
-                               f'is_first_time_outcome: {is_first_time_outcome}\n')
+                               f'is_first_time_outcome: {is_first_time_outcome}\n'
+                               f'is_prediction_window_unbounded: {is_prediction_window_unbounded}\n')
 
         self.spark = SparkSession.builder.appName(f'Generate {self._cohort_name}').getOrCreate()
         self._dependency_dict = instantiate_dependencies(self.spark, self._input_folder,
@@ -281,21 +284,33 @@ class NestedCohortBuilder:
             prediction_start_days += self._observation_window + self._hold_off_window
             prediction_window += self._observation_window + self._hold_off_window
 
-        cohort = self.spark.sql("""
+        if self._is_prediction_window_unbounded:
+            query_template = """
+            SELECT DISTINCT
+                t.*,
+                CAST(ISNOTNULL(o.person_id) AS INT) AS label
+            FROM global_temp.target_cohort AS t 
+            LEFT JOIN global_temp.outcome_cohort AS o
+                ON t.person_id = o.person_id
+                    AND o.index_date >= DATE_ADD(t.index_date, {prediction_start_days}) 
+            """
+        else:
+            query_template = """
             SELECT DISTINCT
                 t.*,
                 CAST(ISNOTNULL(o.person_id) AS INT) AS label
             FROM global_temp.target_cohort AS t 
             JOIN global_temp.observation_period AS op
-                ON t.person_id = op.person_id
+                ON t.person_id = op.person_id 
+                    AND DATE_ADD(t.index_date, {prediction_window}) <= op.observation_period_end_date
             LEFT JOIN global_temp.outcome_cohort AS o
                 ON t.person_id = o.person_id
                     AND o.index_date BETWEEN DATE_ADD(t.index_date, {prediction_start_days}) 
                         AND DATE_ADD(t.index_date, {prediction_window})
-            WHERE DATE_ADD(t.index_date, {prediction_window}) <= op.observation_period_end_date
-                OR o.person_id IS NOT NULL
-        """.format(prediction_start_days=prediction_start_days,
-                   prediction_window=prediction_window))
+            """
+
+        cohort = self.spark.sql(query_template.format(prediction_start_days=prediction_start_days,
+                                                      prediction_window=prediction_window))
 
         if self._is_first_time_outcome:
             cohort.createOrReplaceGlobalTempView('cohort')
@@ -375,6 +390,7 @@ def create_prediction_cohort(spark_args,
     is_window_post_index = spark_args.is_window_post_index
     is_new_patient_representation = spark_args.is_new_patient_representation
     is_first_time_outcome = spark_args.is_first_time_outcome
+    is_prediction_window_unbounded = spark_args.is_prediction_window_unbounded
 
     # Toggle the prior/post observation_period depending on the is_window_post_index flag
     prior_observation_period = 0 if is_window_post_index else observation_window + hold_off_window
@@ -419,4 +435,5 @@ def create_prediction_cohort(spark_args,
                         is_feature_concept_frequency=is_feature_concept_frequency,
                         is_roll_up_concept=is_roll_up_concept,
                         is_new_patient_representation=is_new_patient_representation,
-                        is_first_time_outcome=is_first_time_outcome).build()
+                        is_first_time_outcome=is_first_time_outcome,
+                        is_prediction_window_unbounded=is_prediction_window_unbounded).build()

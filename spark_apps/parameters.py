@@ -96,7 +96,7 @@ def create_spark_args():
                         help='The prediction start days in which the prediction is made',
                         required=False,
                         type=int,
-                        default=0)
+                        default=1)
     parser.add_argument('-hw',
                         '--hold_off_window',
                         dest='hold_off_window',
@@ -136,4 +136,8 @@ def create_spark_args():
                         dest='is_first_time_outcome',
                         action='store_true',
                         help='is the outcome the first time occurrence?')
+    parser.add_argument('--is_prediction_window_unbounded',
+                        dest='is_prediction_window_unbounded',
+                        action='store_true',
+                        help='is the end of the prediction window unbounded?')
     return parser.parse_args()
