@@ -8,3 +8,4 @@ venv/
 *ipynb
 
 *__pycache__/
+.eggs/
