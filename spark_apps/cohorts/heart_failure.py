@@ -29,12 +29,14 @@ hf_conditions AS (
     SELECT
         *
     FROM global_temp.condition_occurrence AS co
-    WHERE co.condition_concept_id in {hf_concept}
+    JOIN global_temp.{hf_concept} AS hf
+    ON co.condition_concept_id = hf.concept_id
 ),
 
 worsen_hf_diagnosis AS (
     SELECT DISTINCT person_id, visit_occurrence_id 
     FROM global_temp.condition_occurrence AS co
+    JOIN global_temp.{worsen_hf_dx_concepts} AS w_hf
     WHERE co.condition_concept_id IN {worsen_hf_dx_concepts}
 ),
 
@@ -153,31 +155,31 @@ def query_builder():
 
     ancestor_table_specs = [AncestorTableSpec(table_name = HEART_FAILURE_CONCEPT_TABLE,
                                               ancestor_concept_ids = HEART_FAILURE_CONCEPT,
-                                              is_standard=False),
+                                              is_standard=True),
                            AncestorTableSpec(table_name = WORSEN_HF_DX_CONCEPT_TABLE,
                                               ancestor_concept_ids = WORSEN_HF_DIAGNOSIS_CONCEPT,
-                                              is_standard=False),
+                                              is_standard=True),
                            AncestorTableSpec(table_name = PHYSICAL_EXAM_COHORT_TABLE,
                                               ancestor_concept_ids = PHYSICAL_EXAM_CONCEPT,
-                                              is_standard=False),
+                                              is_standard=True),
                            AncestorTableSpec(table_name = BNP_CONCEPT_TABLE,
                                               ancestor_concept_ids = BNP_CONCEPT,
-                                              is_standard=False),
+                                              is_standard=True),
                            AncestorTableSpec(table_name = BNP_CONCEPT_TABLE,
                                               ancestor_concept_ids = NT_PRO_BNP_CONCEPT,
-                                              is_standard=False),
+                                              is_standard=True),
                            AncestorTableSpec(table_name = DRUG_CONCEPT_TABLE,
                                               ancestor_concept_ids = DRUG_CONCEPT,
-                                              is_standard=False),
+                                              is_standard=True),
                            AncestorTableSpec(table_name = MECHANICAL_SUPPORT_CONCEPT_TABLE,
                                               ancestor_concept_ids = MECHANICAL_CIRCULATORY_SUPPORT_CONCEPT,
-                                              is_standard=False),
+                                              is_standard=True),
                            AncestorTableSpec(table_name = DIALYSIS_CONCEPT_TABLE,
                                               ancestor_concept_ids = DIALYSIS_CONCEPT,
-                                              is_standard=False),
+                                              is_standard=True),
                            AncestorTableSpec(table_name = ARTIFICIAL_HEART_CONCEPT_TABLE,
                                               ancestor_concept_ids = ARTIFICIAL_HEART_ASSOCIATED_PROCEDURE_CONCEPT,
-                                              is_standard=False)]
+                                              is_standard=True)]
 
     return QueryBuilder(cohort_name=DEFAULT_COHORT_NAME,
                         query=query,
