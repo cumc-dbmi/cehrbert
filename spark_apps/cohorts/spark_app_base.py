@@ -299,8 +299,8 @@ class NestedCohortBuilder:
             FROM global_temp.target_cohort AS t
             LEFT JOIN global_temp.{entry_cohort} AS o
                 ON t.person_id = o.person_id
-                    AND DATE_ADD(t.index_date, {prediction_start_days}) <= o.index_date
-            WHERE o.person_id IS NOT NULL       
+                    AND DATE_ADD(t.index_date, {prediction_start_days}) > o.index_date
+            WHERE o.person_id IS NULL       
             """.format(entry_cohort=ENTRY_COHORT,
                        prediction_start_days=prediction_start_days))
             target_cohort.createOrReplaceGlobalTempView('target_cohort')
