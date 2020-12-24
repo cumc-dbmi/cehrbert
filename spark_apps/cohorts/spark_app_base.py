@@ -9,7 +9,7 @@ from pyspark.sql import SparkSession
 
 from utils.spark_utils import *
 from utils.logging_utils import *
-from spark_apps.cohorts.query_builder import QueryBuilder
+from spark_apps.cohorts.query_builder import QueryBuilder, ENTRY_COHORT
 
 COHORT_TABLE_NAME = 'cohort'
 PERSON = 'person'
@@ -125,6 +125,14 @@ class BaseCohortBuilder(ABC):
                 func = get_descendant_concept_ids if ancestor_table_spec.is_standard else build_ancestry_table_for
                 ancestor_table = func(self.spark, ancestor_table_spec.ancestor_concept_ids)
                 ancestor_table.createOrReplaceGlobalTempView(ancestor_table_spec.table_name)
+
+        # Build the dependency for the entry cohort if exists
+        if self._query_builder.get_entry_cohort_query():
+            entry_cohort_query = self._query_builder.get_entry_cohort_query()
+            query = entry_cohort_query.query_template.format(
+                **entry_cohort_query.parameters)
+            dependency_table = self.spark.sql(query)
+            dependency_table.createOrReplaceGlobalTempView(entry_cohort_query.table_name)
 
         # Build the dependencies for the main query to use if the dependency_queries are available
         if self._query_builder.get_dependency_queries():
@@ -284,6 +292,19 @@ class NestedCohortBuilder:
             prediction_start_days += self._observation_window + self._hold_off_window
             prediction_window += self._observation_window + self._hold_off_window
 
+        if self._is_first_time_outcome:
+            target_cohort = self.spark.sql("""
+            SELECT
+                t.*
+            FROM global_temp.target_cohort AS t
+            LEFT JOIN global_temp.{entry_cohort} AS o
+                ON t.person_id = o.person_id
+                    AND DATE_ADD(t.index_date, {prediction_start_days}) <= o.index_date
+            WHERE o.person_id IS NOT NULL       
+            """.format(entry_cohort=ENTRY_COHORT,
+                       prediction_start_days=prediction_start_days))
+            target_cohort.createOrReplaceGlobalTempView('target_cohort')
+
         if self._is_prediction_window_unbounded:
             query_template = """
             SELECT DISTINCT
@@ -311,18 +332,6 @@ class NestedCohortBuilder:
 
         cohort = self.spark.sql(query_template.format(prediction_start_days=prediction_start_days,
                                                       prediction_window=prediction_window))
-
-        if self._is_first_time_outcome:
-            cohort.createOrReplaceGlobalTempView('cohort')
-            cohort = self.spark.sql("""
-            SELECT
-                c.*
-            FROM global_temp.cohort AS c 
-            LEFT JOIN global_temp.outcome_cohort AS o
-                ON c.person_id = o.person_id
-                    AND c.index_date >= o.index_date
-            WHERE o.person_id IS NULL       
-            """)
 
         ehr_records_for_cohorts = self.extract_ehr_records_for_cohort(cohort)
         cohort = cohort.join(ehr_records_for_cohorts, 'person_id')

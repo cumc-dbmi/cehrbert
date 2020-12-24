@@ -2,6 +2,14 @@ from abc import ABC
 from typing import List, NamedTuple
 import logging
 
+ENTRY_COHORT = 'entry_cohort'
+
+
+def create_cohort_entry_query_spec(entry_query_template, parameters):
+    return QuerySpec(table_name=ENTRY_COHORT,
+                     query_template=entry_query_template,
+                     parameters=parameters)
+
 
 class QuerySpec(NamedTuple):
     query_template: str
@@ -30,6 +38,7 @@ class QueryBuilder(ABC):
                  cohort_name: str,
                  dependency_list: List[str],
                  query: QuerySpec,
+                 entry_cohort_query: QuerySpec = None,
                  dependency_queries: List[QuerySpec] = None,
                  post_queries: List[QuerySpec] = None,
                  ancestor_table_specs: List[AncestorTableSpec] = None):
@@ -44,6 +53,7 @@ class QueryBuilder(ABC):
         """
         self._cohort_name = cohort_name
         self._query = query
+        self._entry_cohort_query = entry_cohort_query
         self._dependency_queries = dependency_queries
         self._post_queries = post_queries
         self._dependency_list = dependency_list
@@ -51,6 +61,7 @@ class QueryBuilder(ABC):
 
         self.get_logger().info(f'cohort_name: {cohort_name}\n'
                                f'post_queries: {post_queries}\n'
+                               f'entry_cohort: {entry_cohort_query}\n'
                                f'dependency_queries: {dependency_queries}\n'
                                f'dependency_list: {dependency_list}\n'
                                f'ancestor_table_specs: {ancestor_table_specs}\n'
@@ -62,6 +73,13 @@ class QueryBuilder(ABC):
         :return:
         """
         return self._dependency_queries
+
+    def get_entry_cohort_query(self):
+        """
+        Queryspec for Instantiating the entry cohort in spark context
+        :return:
+        """
+        return self._entry_cohort_query
 
     def get_query(self):
         """
