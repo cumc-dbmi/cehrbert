@@ -56,7 +56,7 @@ time_attention_model_folder = '/data/research_ops/omops/omop_2020q2/training_dat
 vanilla_bert_model_folder = '/data/research_ops/omops/omop_2020q2/training_data_2015/vanilla_bert/'
 temporal_bert_model_folder = '/data/research_ops/omops/omop_2020q2/training_data_2015/temporal_bert_512_context/'
 
-heart_failure_folder = '/data/research_ops/omops/omop_2020q2/cohorts/re_admit_rollup_frequency'
+heart_failure_folder = '/data/research_ops/omops/omop_2020q2/cohort_tests/t2dm_hf_modified'
 
 merged_dataset = pd.read_parquet(heart_failure_folder)
 
