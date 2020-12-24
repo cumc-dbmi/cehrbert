@@ -37,49 +37,56 @@ worsen_hf_diagnosis AS (
     SELECT DISTINCT person_id, visit_occurrence_id 
     FROM global_temp.condition_occurrence AS co
     JOIN global_temp.{worsen_hf_dx_concepts} AS w_hf
-    WHERE co.condition_concept_id IN {worsen_hf_dx_concepts}
+    ON co.condition_concept_id = w_hf.concept_id
 ),
 
 phy_exam_cohort AS (
     SELECT DISTINCT person_id, visit_occurrence_id
     FROM global_temp.condition_occurrence AS co
-    WHERE co.condition_concept_id IN {phy_exam_concepts}
+    JOIN global_temp.{phy_exam_concepts} AS phy
+    ON co.condition_concept_id = phy.concept_id
 ),
 
 bnp_cohort AS (
     SELECT DISTINCT person_id, visit_occurrence_id
     FROM global_temp.measurement AS m
-    WHERE m.measurement_concept_id IN {bnp_concepts}
+    JOIN global_temp.{bnp_concepts} AS bnp
+    ON m.measurement_concept_id = bnp.concept_id
     AND m.value_source_value > 500
     UNION ALL 
     SELECT DISTINCT person_id, visit_occurrence_id
     FROM global_temp.measurement AS m
-    WHERE m.measurement_concept_id IN {nt_pro_bnp_concepts}
+    JOIN global_temp.{nt_pro_bnp_concepts} AS nt_bnp
+    ON m.measurement_concept_id = nt_bnp.concept_id
     AND m.value_source_value > 2000
 ),
 
 drug_cohort AS (
     SELECT DISTINCT person_id, visit_occurrence_id
     FROM global_temp.drug_exposure AS d
-    WHERE d.drug_concept_id IN {drug_concepts}
+    JOIN global_temp.{drug_concepts} AS dc
+    ON d.drug_concept_id = dc.concept_id
 ),
 
 mechanical_support_cohort AS (
     SELECT DISTINCT person_id, visit_occurrence_id
     FROM global_temp.procedure_occurrence AS p
-    WHERE p.procedure_concept_id IN {mechanical_support_concepts}
+    JOIN global_temp.{mechanical_support_concepts} AS msc
+    ON p.procedure_concept_id = msc.concept_id
 ),
 
 dialysis_cohort AS (
     SELECT DISTINCT person_id, visit_occurrence_id
     FROM global_temp.procedure_occurrence AS p
-    WHERE p.procedure_concept_id IN {dialysis_concepts}
+    JOIN global_temp.{dialysis_concepts} AS dc
+    ON p.procedure_concept_id = dc.concept_id
 ),
 
 artificial_heart_cohort AS (
     SELECT DISTINCT person_id, visit_occurrence_id
     FROM global_temp.procedure_occurrence AS p
-    WHERE p.procedure_concept_id IN {artificial_heart_concepts}
+    JOIN global_temp.{artificial_heart_concepts} AS ahc
+    ON p.procedure_concept_id = ahc.concept_id
 ),
 
 treatment_cohort AS (
@@ -113,7 +120,7 @@ FROM
         ON v.visit_occurrence_id = c.visit_occurrence_id
 ) c
 JOIN worsen_hf_diagnosis AS d
-    ON c.visit_occurrence_id = d.visit_occurrence_id
+    ON c.person_id = d.person_id c.index_date <= d.condition_start_date
 JOIN phy_exam_cohort AS pec
     ON c.visit_occurrence_id = pec.visit_occurrence_id
 JOIN bnp_cohort AS bnp
@@ -165,7 +172,7 @@ def query_builder():
                            AncestorTableSpec(table_name = BNP_CONCEPT_TABLE,
                                               ancestor_concept_ids = BNP_CONCEPT,
                                               is_standard=True),
-                           AncestorTableSpec(table_name = BNP_CONCEPT_TABLE,
+                           AncestorTableSpec(table_name = NT_PRO_BNP_CONCEPT_TABLE,
                                               ancestor_concept_ids = NT_PRO_BNP_CONCEPT,
                                               is_standard=True),
                            AncestorTableSpec(table_name = DRUG_CONCEPT_TABLE,
