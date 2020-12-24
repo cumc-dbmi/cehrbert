@@ -126,6 +126,13 @@ class BaseCohortBuilder(ABC):
                 ancestor_table = func(self.spark, ancestor_table_spec.ancestor_concept_ids)
                 ancestor_table.createOrReplaceGlobalTempView(ancestor_table_spec.table_name)
 
+        # Build the dependencies for the main query to use if the dependency_queries are available
+        if self._query_builder.get_dependency_queries():
+            for dependency_query in self._query_builder.get_dependency_queries():
+                query = dependency_query.query_template.format(**dependency_query.parameters)
+                dependency_table = self.spark.sql(query)
+                dependency_table.createOrReplaceGlobalTempView(dependency_query.table_name)
+
         # Build the dependency for the entry cohort if exists
         if self._query_builder.get_entry_cohort_query():
             entry_cohort_query = self._query_builder.get_entry_cohort_query()
@@ -133,13 +140,6 @@ class BaseCohortBuilder(ABC):
                 **entry_cohort_query.parameters)
             dependency_table = self.spark.sql(query)
             dependency_table.createOrReplaceGlobalTempView(entry_cohort_query.table_name)
-
-        # Build the dependencies for the main query to use if the dependency_queries are available
-        if self._query_builder.get_dependency_queries():
-            for dependency_query in self._query_builder.get_dependency_queries():
-                query = dependency_query.query_template.format(**dependency_query.parameters)
-                dependency_table = self.spark.sql(query)
-                dependency_table.createOrReplaceGlobalTempView(dependency_query.table_name)
 
         main_query = self._query_builder.get_query()
         cohort = self.spark.sql(main_query.query_template.format(**main_query.parameters))
