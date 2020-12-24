@@ -1,31 +1,71 @@
-from spark_apps.cohorts.query_builder import QueryBuilder, AncestorTableSpec, QuerySpec
+from spark_apps.cohorts.query_builder import QueryBuilder, AncestorTableSpec, QuerySpec, \
+    create_cohort_entry_query_spec
 
-#1. Incidens of Heart Failure
+# 1. Incidens of Heart Failure
 HEART_FAILURE_CONCEPT = [316139]
 
-#2. At least one new or worsening symptoms due to HF
+# 2. At least one new or worsening symptoms due to HF
 WORSEN_HF_DIAGNOSIS_CONCEPT = [312437, 4263848, 46272935, 4223659, 315361]
 
-#3. At least TWO physical examination findings OR one physical examination finding and at least ONE laboratory criterion
+# 3. At least TWO physical examination findings OR one physical examination finding and at least
+# ONE laboratory criterion
 PHYSICAL_EXAM_CONCEPT = [433595, 200528, 4117930, 4329988, 4289004, 4285133]
 ## Lab result concept
 # https://labtestsonline.org/tests/bnp-and-nt-probnp
-BNP_CONCEPT = [4307029, 3031569, 3011960, 3052295] # High B-type Natriuretic Peptide (BNP) > 500 pg/mL 
+BNP_CONCEPT = [4307029, 3031569, 3011960,
+               3052295]  # High B-type Natriuretic Peptide (BNP) > 500 pg/mL
 NT_PRO_BNP_CONCEPT = [3029187, 42529224, 3029435, 42529225]
-PWP_CONCEPT = [1002721, 4040920, 21490776] # Pulmonary artery wedge pressure >= 18 no patient in cumc
-CVP_CONCEPT = [21490675, 4323687, 3000333, 1003995] # Central venous pressure >= 12 no patient in cumc
-CI_CONCEPT = 21490712 # Cardiac index < 2.2 no patient in cumc
+PWP_CONCEPT = [1002721, 4040920,
+               21490776]  # Pulmonary artery wedge pressure >= 18 no patient in cumc
+CVP_CONCEPT = [21490675, 4323687, 3000333,
+               1003995]  # Central venous pressure >= 12 no patient in cumc
+CI_CONCEPT = 21490712  # Cardiac index < 2.2 no patient in cumc
 
-#4. At least ONE of the treatments specifically for HF
+# 4. At least ONE of the treatments specifically for HF
 DRUG_CONCEPT = [956874, 942350, 987406, 932745, 1309799, 970250, 992590, 907013, 1942960]
-MECHANICAL_CIRCULATORY_SUPPORT_CONCEPT = [45888564, 4052536, 4337306, 2107514, 45889695, 2107500, 45887675, 43527920, 2107501, 45890116, 40756954, 4338594, 43527923, 40757060, 2100812]
+MECHANICAL_CIRCULATORY_SUPPORT_CONCEPT = [45888564, 4052536, 4337306, 2107514, 45889695, 2107500,
+                                          45887675, 43527920, 2107501, 45890116, 40756954, 4338594,
+                                          43527923, 40757060, 2100812]
 DIALYSIS_CONCEPT = [4032243, 45889365]
-ARTIFICIAL_HEART_ASSOCIATED_PROCEDURE_CONCEPT = [4144390, 4150347, 4281764, 725038, 725037, 2100816, 2100822, 725039, 2100828, 4337306, 4140024, 4146121, 4060257, 4309033, 4222272, 4243758, 4241906, 4080968, 4224193, 4052537, 4050864]
+ARTIFICIAL_HEART_ASSOCIATED_PROCEDURE_CONCEPT = [4144390, 4150347, 4281764, 725038, 725037, 2100816,
+                                                 2100822, 725039, 2100828, 4337306, 4140024,
+                                                 4146121, 4060257, 4309033, 4222272, 4243758,
+                                                 4241906, 4080968, 4224193, 4052537, 4050864]
+
+HEART_FAILURE_ENTRY_COHORT = """
+WITH hf_conditions AS (
+SELECT
+    *
+FROM global_temp.condition_occurrence AS co
+JOIN global_temp.{hf_concept} AS hf
+ON co.condition_concept_id = hf.concept_id
+)
+
+SELECT
+    c.person_id,
+    c.earliest_visit_start_date AS index_date,
+    c.earliest_visit_occurrence_id AS visit_occurrence_id,
+    COUNT(c.visit_occurrence_id) OVER(PARTITION BY c.person_id) AS num_of_diagnosis
+FROM
+(
+    SELECT DISTINCT
+        v.person_id,
+        v.visit_occurrence_id,
+        first(DATE(c.condition_start_date)) OVER (PARTITION BY v.person_id 
+            ORDER BY DATE(c.condition_start_date)) AS earliest_condition_start_date,
+        first(DATE(v.visit_start_date)) OVER (PARTITION BY v.person_id 
+            ORDER BY DATE(v.visit_start_date)) AS earliest_visit_start_date,
+        first(v.visit_occurrence_id) OVER (PARTITION BY v.person_id
+            ORDER BY DATE(v.visit_start_date)) AS earliest_visit_occurrence_id
+    FROM global_temp.visit_occurrence AS v
+    JOIN hf_conditions AS c
+        ON v.visit_occurrence_id = c.visit_occurrence_id
+) c
+WHERE c.earliest_visit_start_date <= c.earliest_condition_start_date
+"""
 
 HEART_FAILURE_COHORT_QUERY = """
-WITH 
-
-hf_conditions AS (
+WITH hf_conditions AS (
     SELECT
         *
     FROM global_temp.condition_occurrence AS co
@@ -97,41 +137,44 @@ treatment_cohort AS (
     SELECT * FROM dialysis_cohort
     UNION ALL
     SELECT * FROM artificial_heart_cohort
+),
+
+entry_cohort AS (
+    SELECT
+        c.person_id,
+        c.earliest_visit_start_date AS index_date,
+        c.earliest_visit_occurrence_id AS visit_occurrence_id,
+        COUNT(c.visit_occurrence_id) OVER(PARTITION BY c.person_id) AS num_of_diagnosis
+    FROM
+    (
+        SELECT DISTINCT
+            v.person_id,
+            v.visit_occurrence_id,
+            first(DATE(c.condition_start_date)) OVER (PARTITION BY v.person_id 
+                ORDER BY DATE(c.condition_start_date)) AS earliest_condition_start_date,
+            first(DATE(v.visit_start_date)) OVER (PARTITION BY v.person_id 
+                ORDER BY DATE(v.visit_start_date)) AS earliest_visit_start_date,
+            first(v.visit_occurrence_id) OVER (PARTITION BY v.person_id
+                ORDER BY DATE(v.visit_start_date)) AS earliest_visit_occurrence_id
+        FROM global_temp.visit_occurrence AS v
+        JOIN hf_conditions AS c
+            ON v.visit_occurrence_id = c.visit_occurrence_id
+    ) c
+    WHERE c.earliest_visit_start_date <= c.earliest_condition_start_date
 )
 
 SELECT
-    c.person_id,
-    c.earliest_visit_start_date AS index_date,
-    c.earliest_visit_occurrence_id AS visit_occurrence_id,
-    COUNT(c.visit_occurrence_id) OVER(PARTITION BY c.person_id) AS num_of_diagnosis
-FROM
-(
-    SELECT DISTINCT
-        v.person_id,
-        v.visit_occurrence_id,
-        first(DATE(c.condition_start_date)) OVER (PARTITION BY v.person_id 
-            ORDER BY DATE(c.condition_start_date)) AS earliest_condition_start_date,
-        first(DATE(v.visit_start_date)) OVER (PARTITION BY v.person_id 
-            ORDER BY DATE(v.visit_start_date)) AS earliest_visit_start_date,
-        first(v.visit_occurrence_id) OVER (PARTITION BY v.person_id
-            ORDER BY DATE(v.visit_start_date)) AS earliest_visit_occurrence_id
-    FROM global_temp.visit_occurrence AS v
-    JOIN hf_conditions AS c
-        ON v.visit_occurrence_id = c.visit_occurrence_id
-) c
-JOIN worsen_hf_diagnosis AS d
-    ON c.person_id = d.person_id c.index_date <= d.condition_start_date
-JOIN phy_exam_cohort AS pec
-    ON c.visit_occurrence_id = pec.visit_occurrence_id
-JOIN bnp_cohort AS bnp
-    ON c.visit_occurrence_id = bnp.visit_occurrence_id
-JOIN treatment_cohort AS tc
-    ON c.visit_occurrence_id = tc.visit_occurrence_id
-WHERE c.earliest_visit_start_date <= c.earliest_condition_start_date
+    c.*
+FROM entry_cohort AS c
+LEFT JOIN bnp_cohort AS bnp
+    ON c.person_id = bnp.person_id
+LEFT JOIN treatment_cohort AS tc
+    ON c.person_id = tc.person_id
+WHERE COALESCE(bnp.person_id, tc.person_id) IS NOT NULL 
 """
 
-
-DEPENDENCY_LIST = ['person', 'condition_occurrence', 'visit_occurrence', 'drug_exposure', 'measurement', 
+DEPENDENCY_LIST = ['person', 'condition_occurrence', 'visit_occurrence', 'drug_exposure',
+                   'measurement',
                    'procedure_occurrence']
 HEART_FAILURE_CONCEPT_TABLE = 'hf_concept'
 WORSEN_HF_DX_CONCEPT_TABLE = 'worsen_hf_dx_concepts'
@@ -144,6 +187,7 @@ DIALYSIS_CONCEPT_TABLE = 'dialysis_concepts'
 ARTIFICIAL_HEART_CONCEPT_TABLE = 'artificial_heart_concepts'
 
 DEFAULT_COHORT_NAME = 'heart_failure'
+
 
 def query_builder():
     dependency_queries = []
@@ -158,39 +202,44 @@ def query_builder():
                                   'mechanical_support_concepts': MECHANICAL_SUPPORT_CONCEPT_TABLE,
                                   'dialysis_concepts': DIALYSIS_CONCEPT_TABLE,
                                   'artificial_heart_concepts': ARTIFICIAL_HEART_CONCEPT_TABLE
-                                 })
+                                  })
 
-    ancestor_table_specs = [AncestorTableSpec(table_name = HEART_FAILURE_CONCEPT_TABLE,
-                                              ancestor_concept_ids = HEART_FAILURE_CONCEPT,
+    ancestor_table_specs = [AncestorTableSpec(table_name=HEART_FAILURE_CONCEPT_TABLE,
+                                              ancestor_concept_ids=HEART_FAILURE_CONCEPT,
                                               is_standard=True),
-                           AncestorTableSpec(table_name = WORSEN_HF_DX_CONCEPT_TABLE,
-                                              ancestor_concept_ids = WORSEN_HF_DIAGNOSIS_CONCEPT,
+                            AncestorTableSpec(table_name=WORSEN_HF_DX_CONCEPT_TABLE,
+                                              ancestor_concept_ids=WORSEN_HF_DIAGNOSIS_CONCEPT,
                                               is_standard=True),
-                           AncestorTableSpec(table_name = PHYSICAL_EXAM_COHORT_TABLE,
-                                              ancestor_concept_ids = PHYSICAL_EXAM_CONCEPT,
+                            AncestorTableSpec(table_name=PHYSICAL_EXAM_COHORT_TABLE,
+                                              ancestor_concept_ids=PHYSICAL_EXAM_CONCEPT,
                                               is_standard=True),
-                           AncestorTableSpec(table_name = BNP_CONCEPT_TABLE,
-                                              ancestor_concept_ids = BNP_CONCEPT,
+                            AncestorTableSpec(table_name=BNP_CONCEPT_TABLE,
+                                              ancestor_concept_ids=BNP_CONCEPT,
                                               is_standard=True),
-                           AncestorTableSpec(table_name = NT_PRO_BNP_CONCEPT_TABLE,
-                                              ancestor_concept_ids = NT_PRO_BNP_CONCEPT,
+                            AncestorTableSpec(table_name=NT_PRO_BNP_CONCEPT_TABLE,
+                                              ancestor_concept_ids=NT_PRO_BNP_CONCEPT,
                                               is_standard=True),
-                           AncestorTableSpec(table_name = DRUG_CONCEPT_TABLE,
-                                              ancestor_concept_ids = DRUG_CONCEPT,
+                            AncestorTableSpec(table_name=DRUG_CONCEPT_TABLE,
+                                              ancestor_concept_ids=DRUG_CONCEPT,
                                               is_standard=True),
-                           AncestorTableSpec(table_name = MECHANICAL_SUPPORT_CONCEPT_TABLE,
-                                              ancestor_concept_ids = MECHANICAL_CIRCULATORY_SUPPORT_CONCEPT,
+                            AncestorTableSpec(table_name=MECHANICAL_SUPPORT_CONCEPT_TABLE,
+                                              ancestor_concept_ids=MECHANICAL_CIRCULATORY_SUPPORT_CONCEPT,
                                               is_standard=True),
-                           AncestorTableSpec(table_name = DIALYSIS_CONCEPT_TABLE,
-                                              ancestor_concept_ids = DIALYSIS_CONCEPT,
+                            AncestorTableSpec(table_name=DIALYSIS_CONCEPT_TABLE,
+                                              ancestor_concept_ids=DIALYSIS_CONCEPT,
                                               is_standard=True),
-                           AncestorTableSpec(table_name = ARTIFICIAL_HEART_CONCEPT_TABLE,
-                                              ancestor_concept_ids = ARTIFICIAL_HEART_ASSOCIATED_PROCEDURE_CONCEPT,
+                            AncestorTableSpec(table_name=ARTIFICIAL_HEART_CONCEPT_TABLE,
+                                              ancestor_concept_ids=ARTIFICIAL_HEART_ASSOCIATED_PROCEDURE_CONCEPT,
                                               is_standard=True)]
+
+    entry_cohort_query = create_cohort_entry_query_spec(
+        entry_query_template=HEART_FAILURE_ENTRY_COHORT,
+        parameters={'hf_concept': HEART_FAILURE_CONCEPT_TABLE})
 
     return QueryBuilder(cohort_name=DEFAULT_COHORT_NAME,
                         query=query,
+                        entry_cohort_query=entry_cohort_query,
                         dependency_list=DEPENDENCY_LIST,
                         dependency_queries=[],
                         post_queries=[],
-                        ancestor_table_specs = ancestor_table_specs)
+                        ancestor_table_specs=ancestor_table_specs)
