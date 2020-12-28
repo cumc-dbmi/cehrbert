@@ -1,7 +1,7 @@
 from spark_apps.cohorts.query_builder import QueryBuilder, QuerySpec, AncestorTableSpec
 
 COHORT_QUERY_TEMPLATE = """
-WITH person_ids_to_exclude_drug AS
+WITH person_ids_to_include_drug AS
 (
     SELECT DISTINCT
         d.person_id
@@ -38,6 +38,8 @@ FROM
     JOIN global_temp.visit_occurrence AS vo
         ON co.visit_occurrence_id = vo.visit_occurrence_id
 ) c
+JOIN person_ids_to_include_drug AS d
+    ON c.person_id = d.person_id
 LEFT JOIN person_ids_to_exclude_observation AS eo
     ON c.person_id = eo.person_id AND c.index_date > eo.observation_date
 WHERE eo.person_id IS NULL
@@ -81,6 +83,9 @@ def query_builder():
                                               is_standard=True),
                             AncestorTableSpec(table_name=OBSERVATION_EXCLUSION_TABLE,
                                               ancestor_concept_ids=OBSERVATION_EXCLUSION,
+                                              is_standard=True),
+                            AncestorTableSpec(table_name=DRUG_INCLUSION_TABLE,
+                                              ancestor_concept_ids=DRUG_INCLUSION,
                                               is_standard=True)
 
                             ]
