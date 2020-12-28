@@ -140,4 +140,8 @@ def create_spark_args():
                         dest='is_prediction_window_unbounded',
                         action='store_true',
                         help='is the end of the prediction window unbounded?')
+    parser.add_argument('--is_observation_window_unbounded',
+                        dest='is_observation_window_unbounded',
+                        action='store_true',
+                        help='is the observation window unbounded?')
     return parser.parse_args()

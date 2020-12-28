@@ -190,7 +190,6 @@ DEFAULT_COHORT_NAME = 'heart_failure'
 
 
 def query_builder():
-    dependency_queries = []
     query = QuerySpec(table_name=DEFAULT_COHORT_NAME,
                       query_template=HEART_FAILURE_COHORT_QUERY,
                       parameters={'hf_concept': HEART_FAILURE_CONCEPT_TABLE,
