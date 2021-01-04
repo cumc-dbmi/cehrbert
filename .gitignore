@@ -11,3 +11,6 @@ venv/
 .eggs/
 *.dat
 .metastore_db/
+
+evaluations/hospitalization_baseline.py
+evaluations/hospitalization_prediction-new-data-generator.py
