@@ -1,5 +1,5 @@
 from spark_apps.cohorts.query_builder import QueryBuilder, AncestorTableSpec, QuerySpec, \
-    create_cohort_entry_query_spec
+    create_cohort_entry_query_spec, create_negative_query_spec
 
 # 1. Incidens of Heart Failure
 HEART_FAILURE_CONCEPT = [316139]
@@ -64,7 +64,7 @@ FROM
 WHERE c.earliest_visit_start_date <= c.earliest_condition_start_date
 """
 
-HEART_FAILURE_COHORT_QUERY = """
+HEART_FAILURE_INTERMEDIATE_COHORT_QUERY = """
 WITH hf_conditions AS (
     SELECT
         *
@@ -164,7 +164,8 @@ entry_cohort AS (
 )
 
 SELECT
-    c.*
+    c.*,
+    CAST(COALESCE(bnp.person_id, tc.person_id) IS NOT NULL AS INT) AS inclusion
 FROM entry_cohort AS c
 LEFT JOIN (
     SELECT DISTINCT 
@@ -182,7 +183,15 @@ LEFT JOIN (
         ON hf.visit_occurrence_id = tc.visit_occurrence_id
 ) AS tc
     ON c.person_id = tc.person_id
-WHERE COALESCE(bnp.person_id, tc.person_id) IS NOT NULL 
+"""
+
+HEART_FAILURE_COHORT_QUERY = """
+SELECT
+    person_id,
+    index_date,
+    visit_occurrence_id
+FROM global_temp.{intermediate_heart_failure}
+WHERE inclusion = {inclusion}
 """
 
 DEPENDENCY_LIST = ['person', 'condition_occurrence', 'visit_occurrence', 'drug_exposure',
@@ -198,22 +207,16 @@ MECHANICAL_SUPPORT_CONCEPT_TABLE = 'mechanical_support_concepts'
 DIALYSIS_CONCEPT_TABLE = 'dialysis_concepts'
 ARTIFICIAL_HEART_CONCEPT_TABLE = 'artificial_heart_concepts'
 
+INTERMEDIATE_COHORT_NAME = 'intermediate_heart_failure'
 DEFAULT_COHORT_NAME = 'heart_failure'
+NEGATIVE_COHORT_NAME = 'negative_heart_failure'
 
 
 def query_builder():
     query = QuerySpec(table_name=DEFAULT_COHORT_NAME,
                       query_template=HEART_FAILURE_COHORT_QUERY,
-                      parameters={'hf_concept': HEART_FAILURE_CONCEPT_TABLE,
-                                  'worsen_hf_dx_concepts': WORSEN_HF_DX_CONCEPT_TABLE,
-                                  'phy_exam_concepts': PHYSICAL_EXAM_COHORT_TABLE,
-                                  'bnp_concepts': BNP_CONCEPT_TABLE,
-                                  'nt_pro_bnp_concepts': NT_PRO_BNP_CONCEPT_TABLE,
-                                  'drug_concepts': DRUG_CONCEPT_TABLE,
-                                  'mechanical_support_concepts': MECHANICAL_SUPPORT_CONCEPT_TABLE,
-                                  'dialysis_concepts': DIALYSIS_CONCEPT_TABLE,
-                                  'artificial_heart_concepts': ARTIFICIAL_HEART_CONCEPT_TABLE
-                                  })
+                      parameters={'intermediate_heart_failure': INTERMEDIATE_COHORT_NAME,
+                                  'inclusion': 1})
 
     ancestor_table_specs = [AncestorTableSpec(table_name=HEART_FAILURE_CONCEPT_TABLE,
                                               ancestor_concept_ids=HEART_FAILURE_CONCEPT,
@@ -243,14 +246,33 @@ def query_builder():
                                               ancestor_concept_ids=ARTIFICIAL_HEART_ASSOCIATED_PROCEDURE_CONCEPT,
                                               is_standard=True)]
 
+    dependency_queries = [QuerySpec(table_name=INTERMEDIATE_COHORT_NAME,
+                                    query_template=HEART_FAILURE_INTERMEDIATE_COHORT_QUERY,
+                                    parameters={'hf_concept': HEART_FAILURE_CONCEPT_TABLE,
+                                                'worsen_hf_dx_concepts': WORSEN_HF_DX_CONCEPT_TABLE,
+                                                'phy_exam_concepts': PHYSICAL_EXAM_COHORT_TABLE,
+                                                'bnp_concepts': BNP_CONCEPT_TABLE,
+                                                'nt_pro_bnp_concepts': NT_PRO_BNP_CONCEPT_TABLE,
+                                                'drug_concepts': DRUG_CONCEPT_TABLE,
+                                                'mechanical_support_concepts': MECHANICAL_SUPPORT_CONCEPT_TABLE,
+                                                'dialysis_concepts': DIALYSIS_CONCEPT_TABLE,
+                                                'artificial_heart_concepts': ARTIFICIAL_HEART_CONCEPT_TABLE
+                                                })]
+
     entry_cohort_query = create_cohort_entry_query_spec(
         entry_query_template=HEART_FAILURE_ENTRY_COHORT,
         parameters={'hf_concept': HEART_FAILURE_CONCEPT_TABLE})
 
+    negative_query = create_negative_query_spec(
+        entry_query_template=HEART_FAILURE_COHORT_QUERY,
+        parameters={'intermediate_heart_failure': INTERMEDIATE_COHORT_NAME,
+                    'inclusion': 0})
+
     return QueryBuilder(cohort_name=DEFAULT_COHORT_NAME,
                         query=query,
+                        negative_query=negative_query,
                         entry_cohort_query=entry_cohort_query,
                         dependency_list=DEPENDENCY_LIST,
-                        dependency_queries=[],
+                        dependency_queries=dependency_queries,
                         post_queries=[],
                         ancestor_table_specs=ancestor_table_specs)
