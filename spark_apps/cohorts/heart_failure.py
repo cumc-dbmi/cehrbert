@@ -32,6 +32,21 @@ ARTIFICIAL_HEART_ASSOCIATED_PROCEDURE_CONCEPT = [4144390, 4150347, 4281764, 7250
                                                  4146121, 4060257, 4309033, 4222272, 4243758,
                                                  4241906, 4080968, 4224193, 4052537, 4050864]
 
+DIURETIC_CONCEPT_ID = [4186999]
+
+ROLL_UP_DIURETICS_TO_INGREDIENT_TEMPLATE = """
+SELECT DISTINCT
+    c.*
+FROM global_temp.diuretics_ancestor_table AS a
+JOIN global_temp.concept_relationship AS cr
+    ON a.descendant_concept_id = cr.concept_id_1 AND cr.relationship_id = 'Maps to'
+JOIN global_temp.concept_ancestor AS ca
+    ON cr.concept_id_2 = ca.descendant_concept_id
+JOIN global_temp.concept AS c
+    ON ca.ancestor_concept_id = c.concept_id
+WHERE c.concept_class_id = 'Ingredient'
+"""
+
 HEART_FAILURE_ENTRY_COHORT = """
 WITH hf_conditions AS (
 SELECT
@@ -101,10 +116,25 @@ bnp_cohort AS (
     AND m.value_source_value > 2000
 ),
 
+drug_concepts AS (
+    SELECT DISTINCT 
+        *
+    FROM
+    (
+        SELECT *  
+        FROM global_temp.{drug_concepts} 
+        
+        UNION 
+        
+        SELECT  *
+        FROM global_temp.diuretics_concepts
+    ) d
+),
+
 drug_cohort AS (
     SELECT DISTINCT person_id, visit_occurrence_id
     FROM global_temp.drug_exposure AS d
-    JOIN global_temp.{drug_concepts} AS dc
+    JOIN drug_concepts AS dc
     ON d.drug_concept_id = dc.concept_id
 ),
 
@@ -207,6 +237,9 @@ MECHANICAL_SUPPORT_CONCEPT_TABLE = 'mechanical_support_concepts'
 DIALYSIS_CONCEPT_TABLE = 'dialysis_concepts'
 ARTIFICIAL_HEART_CONCEPT_TABLE = 'artificial_heart_concepts'
 
+DIURETICS_ANCESTOR_TABLE = 'diuretics_ancestor_table'
+DIURETICS_INGREDIENT_CONCEPTS = 'diuretics_concepts'
+
 INTERMEDIATE_COHORT_NAME = 'intermediate_heart_failure'
 DEFAULT_COHORT_NAME = 'heart_failure'
 NEGATIVE_COHORT_NAME = 'negative_heart_failure'
@@ -244,9 +277,16 @@ def query_builder():
                                               is_standard=True),
                             AncestorTableSpec(table_name=ARTIFICIAL_HEART_CONCEPT_TABLE,
                                               ancestor_concept_ids=ARTIFICIAL_HEART_ASSOCIATED_PROCEDURE_CONCEPT,
-                                              is_standard=True)]
+                                              is_standard=True),
+                            AncestorTableSpec(table_name=DIURETICS_ANCESTOR_TABLE,
+                                              ancestor_concept_ids=DIURETIC_CONCEPT_ID,
+                                              is_standard=False)
+                            ]
 
-    dependency_queries = [QuerySpec(table_name=INTERMEDIATE_COHORT_NAME,
+    dependency_queries = [QuerySpec(table_name=DIURETICS_INGREDIENT_CONCEPTS,
+                                    query_template=ROLL_UP_DIURETICS_TO_INGREDIENT_TEMPLATE,
+                                    parameters={}),
+                          QuerySpec(table_name=INTERMEDIATE_COHORT_NAME,
                                     query_template=HEART_FAILURE_INTERMEDIATE_COHORT_QUERY,
                                     parameters={'hf_concept': HEART_FAILURE_CONCEPT_TABLE,
                                                 'worsen_hf_dx_concepts': WORSEN_HF_DX_CONCEPT_TABLE,
