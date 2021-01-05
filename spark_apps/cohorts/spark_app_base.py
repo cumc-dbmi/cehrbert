@@ -9,7 +9,7 @@ from pyspark.sql import SparkSession
 
 from utils.spark_utils import *
 from utils.logging_utils import *
-from spark_apps.cohorts.query_builder import QueryBuilder, ENTRY_COHORT
+from spark_apps.cohorts.query_builder import QueryBuilder, ENTRY_COHORT, NEGATIVE_COHORT
 
 COHORT_TABLE_NAME = 'cohort'
 PERSON = 'person'
@@ -141,6 +141,14 @@ class BaseCohortBuilder(ABC):
             dependency_table = self.spark.sql(query)
             dependency_table.createOrReplaceGlobalTempView(entry_cohort_query.table_name)
 
+        # Build the negative cohort if exists
+        if self._query_builder.get_negative_query():
+            negative_cohort_query = self._query_builder.get_negative_query()
+            query = negative_cohort_query.query_template.format(
+                **negative_cohort_query.parameters)
+            dependency_table = self.spark.sql(query)
+            dependency_table.createOrReplaceGlobalTempView(negative_cohort_query.table_name)
+
         main_query = self._query_builder.get_query()
         cohort = self.spark.sql(main_query.query_template.format(**main_query.parameters))
         cohort.createOrReplaceGlobalTempView(main_query.table_name)
@@ -233,6 +241,7 @@ class NestedCohortBuilder:
                  is_roll_up_concept: bool = False,
                  is_new_patient_representation: bool = False,
                  is_first_time_outcome: bool = False,
+                 is_questionable_outcome_existed: bool = False,
                  is_prediction_window_unbounded: bool = False,
                  is_observation_window_unbounded: bool = False):
         self._cohort_name = cohort_name
@@ -252,6 +261,7 @@ class NestedCohortBuilder:
         self._is_roll_up_concept = is_roll_up_concept
         self._is_new_patient_representation = is_new_patient_representation
         self._is_first_time_outcome = is_first_time_outcome
+        self._is_questionable_outcome_existed = is_questionable_outcome_existed
         self._is_prediction_window_unbounded = is_prediction_window_unbounded
         self._output_data_folder = os.path.join(self._output_folder,
                                                 re.sub('[^a-z0-9]+', '_',
@@ -271,6 +281,7 @@ class NestedCohortBuilder:
                                f'is_roll_up_concept: {is_roll_up_concept}\n'
                                f'is_new_patient_representation: {is_new_patient_representation}\n'
                                f'is_first_time_outcome: {is_first_time_outcome}\n'
+                               f'is_questionable_outcome_existed: {is_questionable_outcome_existed}\n'
                                f'is_prediction_window_unbounded: {is_prediction_window_unbounded}\n'
                                f'is_observation_window_unbounded: {is_observation_window_unbounded}\n')
 
@@ -306,6 +317,17 @@ class NestedCohortBuilder:
             WHERE o.person_id IS NULL       
             """.format(entry_cohort=ENTRY_COHORT,
                        prediction_start_days=prediction_start_days))
+            target_cohort.createOrReplaceGlobalTempView('target_cohort')
+
+        if self._is_questionable_outcome_existed:
+            target_cohort = self.spark.sql("""
+            SELECT
+                t.*
+            FROM global_temp.target_cohort AS t
+            LEFT JOIN global_temp.{questionnation_outcome_cohort} AS o
+                ON t.person_id = o.person_id
+            WHERE o.person_id IS NULL       
+            """.format(questionnation_outcome_cohort=NEGATIVE_COHORT))
             target_cohort.createOrReplaceGlobalTempView('target_cohort')
 
         if self._is_prediction_window_unbounded:
@@ -408,6 +430,9 @@ def create_prediction_cohort(spark_args,
     is_first_time_outcome = spark_args.is_first_time_outcome
     is_prediction_window_unbounded = spark_args.is_prediction_window_unbounded
     is_observation_window_unbounded = spark_args.is_observation_window_unbounded
+    # If the outcome negative query exists, that means we need to remove those questionnable
+    # outcomes from the target cohort
+    is_questionable_outcome_existed = outcome_query_builder.get_negative_query() is not None
 
     # Toggle the prior/post observation_period depending on the is_window_post_index flag
     prior_observation_period = 0 if is_window_post_index else observation_window + hold_off_window
@@ -453,5 +478,6 @@ def create_prediction_cohort(spark_args,
                         is_roll_up_concept=is_roll_up_concept,
                         is_new_patient_representation=is_new_patient_representation,
                         is_first_time_outcome=is_first_time_outcome,
+                        is_questionable_outcome_existed=is_questionable_outcome_existed,
                         is_prediction_window_unbounded=is_prediction_window_unbounded,
                         is_observation_window_unbounded=is_observation_window_unbounded).build()

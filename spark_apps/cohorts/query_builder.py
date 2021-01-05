@@ -3,10 +3,17 @@ from typing import List, NamedTuple
 import logging
 
 ENTRY_COHORT = 'entry_cohort'
+NEGATIVE_COHORT = 'negative_cohort'
 
 
 def create_cohort_entry_query_spec(entry_query_template, parameters):
     return QuerySpec(table_name=ENTRY_COHORT,
+                     query_template=entry_query_template,
+                     parameters=parameters)
+
+
+def create_negative_query_spec(entry_query_template, parameters):
+    return QuerySpec(table_name=NEGATIVE_COHORT,
                      query_template=entry_query_template,
                      parameters=parameters)
 
@@ -38,6 +45,7 @@ class QueryBuilder(ABC):
                  cohort_name: str,
                  dependency_list: List[str],
                  query: QuerySpec,
+                 negative_query: QuerySpec = None,
                  entry_cohort_query: QuerySpec = None,
                  dependency_queries: List[QuerySpec] = None,
                  post_queries: List[QuerySpec] = None,
@@ -53,6 +61,7 @@ class QueryBuilder(ABC):
         """
         self._cohort_name = cohort_name
         self._query = query
+        self._negative_query = negative_query
         self._entry_cohort_query = entry_cohort_query
         self._dependency_queries = dependency_queries
         self._post_queries = post_queries
@@ -65,7 +74,8 @@ class QueryBuilder(ABC):
                                f'dependency_queries: {dependency_queries}\n'
                                f'dependency_list: {dependency_list}\n'
                                f'ancestor_table_specs: {ancestor_table_specs}\n'
-                               f'query: {query}\n')
+                               f'query: {query}\n'
+                               f'negative_query: {negative_query}\n')
 
     def get_dependency_queries(self):
         """
@@ -87,6 +97,13 @@ class QueryBuilder(ABC):
         :return:
         """
         return self._query
+
+    def get_negative_query(self):
+        """
+        Return the negative query that can be executed by spark.sql
+        :return:
+        """
+        return self._negative_query
 
     def get_post_process_queries(self):
         """
