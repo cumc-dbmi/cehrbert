@@ -166,9 +166,21 @@ entry_cohort AS (
 SELECT
     c.*
 FROM entry_cohort AS c
-LEFT JOIN bnp_cohort AS bnp
+LEFT JOIN (
+    SELECT DISTINCT 
+        hf.person_id
+    FROM hf_conditions AS hf 
+    JOIN bnp_cohort AS bnp
+        ON hf.visit_occurrence_id = bnp.visit_occurrence_id
+) bnp
     ON c.person_id = bnp.person_id
-LEFT JOIN treatment_cohort AS tc
+LEFT JOIN (
+    SELECT DISTINCT 
+        hf.person_id
+    FROM hf_conditions AS hf 
+    JOIN treatment_cohort AS tc
+        ON hf.visit_occurrence_id = tc.visit_occurrence_id
+) AS tc
     ON c.person_id = tc.person_id
 WHERE COALESCE(bnp.person_id, tc.person_id) IS NOT NULL 
 """
