@@ -375,7 +375,8 @@ class NestedCohortBuilder:
                                                                          self._hold_off_window)
             else:
                 record_window_filter = ehr_records['date'].between(
-                    F.date_sub(cohort['index_date'], self._observation_window),
+                    F.date_sub(cohort['index_date'],
+                               self._observation_window + self._hold_off_window),
                     F.date_sub(cohort['index_date'], self._hold_off_window))
 
         cohort_ehr_records = ehr_records.join(cohort, 'person_id').where(record_window_filter) \
