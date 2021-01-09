@@ -160,8 +160,8 @@ artificial_heart_cohort AS (
 ),
 
 treatment_cohort AS (
-    SELECT * FROM drug_cohort
-    UNION ALL
+--    SELECT * FROM drug_cohort
+--    UNION ALL
     SELECT * FROM mechanical_support_cohort
     UNION ALL
     SELECT * FROM dialysis_cohort
@@ -195,24 +195,26 @@ entry_cohort AS (
 
 SELECT
     c.*,
-    CAST(COALESCE(bnp.person_id, tc.person_id) IS NOT NULL AS INT) AS inclusion
+    CAST(COALESCE(bnp.person_id, tc.person_id, dc.person_id) IS NOT NULL AS INT) AS inclusion
 FROM entry_cohort AS c
 LEFT JOIN (
-    SELECT DISTINCT 
-        hf.person_id
-    FROM hf_conditions AS hf 
-    JOIN bnp_cohort AS bnp
-        ON hf.visit_occurrence_id = bnp.visit_occurrence_id
-) bnp
+SELECT DISTINCT person_id FROM bnp_cohort
+) AS bnp
     ON c.person_id = bnp.person_id
 LEFT JOIN (
     SELECT DISTINCT 
-        hf.person_id
-    FROM hf_conditions AS hf 
-    JOIN treatment_cohort AS tc
-        ON hf.visit_occurrence_id = tc.visit_occurrence_id
+        person_id
+    FROM treatment_cohort
 ) AS tc
     ON c.person_id = tc.person_id
+LEFT JOIN (
+    SELECT DISTINCT 
+        hf.person_id
+    FROM hf_conditions hf
+    JOIN drug_cohort dc
+    ON hf.visit_occurrence_id = dc.visit_occurrence_id
+) AS dc
+    ON c.person_id = dc.person_id
 """
 
 HEART_FAILURE_COHORT_QUERY = """
