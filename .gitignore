@@ -14,3 +14,5 @@ venv/
 
 evaluations/hospitalization_baseline.py
 evaluations/hospitalization_prediction-new-data-generator.py
+hospitalization_baseline.py
+hospitalization_prediction-new-data-generator.py
