@@ -28,7 +28,7 @@ FROM
     FROM global_temp.condition_occurrence AS co
     JOIN global_temp.visit_occurrence AS v
         ON co.visit_occurrence_id = v.visit_occurrence_id
-    WHERE co.condition_concept_id IN (4100065, 37311061)
+    WHERE co.condition_concept_id = 37311061
 ) c
 """
 
