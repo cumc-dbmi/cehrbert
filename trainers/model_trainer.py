@@ -133,7 +133,8 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
     def _get_callbacks(self):
         tensor_board_callback = tf.keras.callbacks.TensorBoard(log_dir=self._tf_board_log_path)
         model_checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath=self._model_path,
-                                                              save_best_only=True, monitor='loss',
+                                                              save_best_only=True,
+                                                              monitor='loss',
                                                               verbose=1)
         learning_rate_scheduler = tf.keras.callbacks.LearningRateScheduler(
             CosineLRSchedule(lr_high=self._learning_rate, lr_low=1e-8, initial_period=10),
