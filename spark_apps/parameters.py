@@ -6,8 +6,8 @@ feather_data_path = 'patient_sequence.pickle'
 tokenizer_path = 'tokenizer.pickle'
 visit_tokenizer_path = 'visit_tokenizer.pickle'
 time_attention_model_path = 'time_aware_model.h5'
-bert_model_path = 'bert_model.h5'
-temporal_bert_model_path = 'temporal_bert_model.h5'
+bert_model_path = 'bert_model_{epoch:02d}_{loss:.2f}.h5'
+temporal_bert_model_path = 'temporal_bert_model_{epoch:02d}_{loss:.2f}.h5'
 
 mortality_data_path = 'mortality'
 heart_failure_data_path = 'heart_failure'
@@ -140,4 +140,8 @@ def create_spark_args():
                         dest='is_prediction_window_unbounded',
                         action='store_true',
                         help='is the end of the prediction window unbounded?')
+    parser.add_argument('--is_observation_window_unbounded',
+                        dest='is_observation_window_unbounded',
+                        action='store_true',
+                        help='is the observation window unbounded?')
     return parser.parse_args()
