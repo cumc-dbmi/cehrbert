@@ -346,13 +346,14 @@ class NestedCohortBuilder:
                 t.*,
                 CAST(ISNOTNULL(o.person_id) AS INT) AS label
             FROM global_temp.target_cohort AS t 
-            JOIN global_temp.observation_period AS op
+            LEFT JOIN global_temp.observation_period AS op
                 ON t.person_id = op.person_id 
                     AND DATE_ADD(t.index_date, {prediction_window}) <= op.observation_period_end_date
             LEFT JOIN global_temp.outcome_cohort AS o
                 ON t.person_id = o.person_id
                     AND o.index_date BETWEEN DATE_ADD(t.index_date, {prediction_start_days}) 
                         AND DATE_ADD(t.index_date, {prediction_window})
+            WHERE op.person_id IS NOT NULL OR o.person_id IS NOT NULL
             """
 
         cohort = self.spark.sql(query_template.format(prediction_start_days=prediction_start_days,
