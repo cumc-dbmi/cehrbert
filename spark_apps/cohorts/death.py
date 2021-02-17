@@ -1,4 +1,4 @@
-from spark_apps.cohorts.query_builder import QueryBuilder, QuerySpec
+from spark_apps.cohorts.query_builder import QueryBuilder, QuerySpec, create_cohort_entry_query_spec
 
 DEATH_COHORT_QUERY = """
 WITH max_death_date_cte AS 
@@ -35,6 +35,12 @@ def query_builder():
     query = QuerySpec(table_name=DEFAULT_COHORT_NAME,
                       query_template=DEATH_COHORT_QUERY,
                       parameters={})
+
+    entry_cohort_query = create_cohort_entry_query_spec(
+        entry_query_template=DEATH_COHORT_QUERY,
+        parameters={})
+
     return QueryBuilder(cohort_name=DEFAULT_COHORT_NAME,
                         dependency_list=DEPENDENCY_LIST,
-                        query=query)
+                        query=query,
+                        entry_cohort_query=entry_cohort_query)
