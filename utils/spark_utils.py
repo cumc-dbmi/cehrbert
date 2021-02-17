@@ -153,7 +153,7 @@ def join_domain_tables(domain_tables):
                                            F.lit(table_domain_field).alias('domain')) \
             .distinct()
 
-        if patient_event == None:
+        if patient_event is None:
             patient_event = domain_table
         else:
             patient_event = patient_event.union(domain_table)
@@ -390,13 +390,15 @@ def roll_up_procedure(procedure_occurrence, concept, concept_ancestor):
     return procedure_occurrence
 
 
-def create_sequence_data(patient_event, date_filter=None, include_visit_type=False):
+def create_sequence_data(patient_event, date_filter=None, include_visit_type=False,
+                         classic_bert_seq=False):
     """
     Create a sequence of the events associated with one patient in a chronological order
 
     :param patient_event:
     :param date_filter:
     :param include_visit_type:
+    :param classic_bert_seq:
     :return:
     """
     take_dates_udf = F.udf(
@@ -417,6 +419,14 @@ def create_sequence_data(patient_event, date_filter=None, include_visit_type=Fal
 
     if date_filter:
         patient_event = patient_event.where(F.col('date') >= date_filter)
+
+    if classic_bert_seq:
+        separator_events = patient_event.groupBy('person_id, visit_occurrence_id').agg(
+            F.min('date').alias('date')).withColumn('date',
+                                                    F.date_add(F.col('date'), -1)).withColumn(
+            'domain', F.lit('Separator')).withColumn(
+            'standard_concept_id', F.lit('SEP'))
+        patient_event = patient_event.union(separator_events)
 
     columns_for_sorting = ['date_in_week', 'standard_concept_id', 'concept_position',
                            'visit_rank_order', 'visit_segment']
