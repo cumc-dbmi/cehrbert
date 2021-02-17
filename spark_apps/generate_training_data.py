@@ -27,7 +27,6 @@ def main(input_folder, output_folder, domain_table_list, date_filter,
 
     if is_new_patient_representation:
         sequence_data = create_sequence_data_time_delta_embedded(patient_event,
-                                                                 visit_occurrence=visit_occurrence,
                                                                  date_filter=date_filter,
                                                                  include_visit_type=include_visit_type)
     else:

@@ -387,11 +387,7 @@ class NestedCohortBuilder:
             return create_concept_frequency_data(cohort_ehr_records, None)
 
         if self._is_new_patient_representation:
-            validate_date_folder(self._input_folder, [VISIT_OCCURRENCE])
-            visit_occurrence = preprocess_domain_table(self.spark,
-                                                       self._input_folder,
-                                                       VISIT_OCCURRENCE)
-            return create_sequence_data_time_delta_embedded(cohort_ehr_records, visit_occurrence,
+            return create_sequence_data_time_delta_embedded(cohort_ehr_records,
                                                             include_visit_type=self._include_visit_type)
 
         return create_sequence_data(cohort_ehr_records, None, self._include_visit_type)
