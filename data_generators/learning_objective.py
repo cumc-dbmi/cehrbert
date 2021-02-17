@@ -141,7 +141,7 @@ class DemographicsLearningObjective(LearningObjective):
 
 
 class VisitPredictionLearningObjective(LearningObjective):
-    required_columns = ['visit_token_ids', 'dates']
+    required_columns = ['visit_token_ids', 'visit_concept_orders']
 
     def __init__(self,
                  visit_tokenizer: ConceptTokenizer,
@@ -195,10 +195,10 @@ class VisitPredictionLearningObjective(LearningObjective):
 
         row, left_index, right_index, _ = row_slicer
 
-        iterator = zip(row.dates, row.visit_token_ids)
-        sorted_list = sorted(iterator, key=lambda tup2: (tup2[0], tup2[1]))
-
-        (dates, visit_concept_ids) = zip(*list(islice(sorted_list, left_index, right_index)))
+        iterator = zip(row.visit_concept_orders, row.visit_token_ids)
+        sliced_visits = set(
+            islice(sorted(iterator, key=lambda tup2: tup2[0]), left_index, right_index))
+        (dates, visit_concept_ids) = zip(*list(sorted(sliced_visits, key=lambda tup2: tup2[0])))
 
         masked_visit_concepts, output_mask = self._mask_visit_concepts(
             visit_concept_ids)
