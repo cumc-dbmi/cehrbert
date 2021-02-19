@@ -132,6 +132,13 @@ def create_spark_args():
                         action='store_true',
                         help='Specify whether to generate the sequence of '
                              'EHR records using the new patient representation')
+    parser.add_argument('-cbs',
+                        '--classic_bert_seq',
+                        dest='classic_bert_seq',
+                        action='store_true',
+                        help='Specify whether to generate the sequence of '
+                             'EHR records using the classic BERT sequence representation where '
+                             'visits are separated by a SEP token')
     parser.add_argument('--is_first_time_outcome',
                         dest='is_first_time_outcome',
                         action='store_true',
