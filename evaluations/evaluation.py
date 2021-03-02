@@ -39,7 +39,7 @@ def evaluate_sequence_models(args):
         bert_tokenizer_path = os.path.join(args.vanilla_bert_model_folder,
                                            p.tokenizer_path)
         bert_model_path = os.path.join(args.vanilla_bert_model_folder,
-                                       p.bert_model_path)
+                                       p.bert_model_validation_path)
         BertLstmModelEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
@@ -56,7 +56,7 @@ def evaluate_sequence_models(args):
         temporal_bert_tokenizer_path = os.path.join(args.temporal_bert_model_folder,
                                                     p.tokenizer_path)
         temporal_bert_model_path = os.path.join(args.temporal_bert_model_folder,
-                                                p.temporal_bert_model_path)
+                                                p.temporal_bert_validation_model_path)
         BertLstmModelEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
