@@ -196,9 +196,8 @@ class VisitPredictionLearningObjective(LearningObjective):
         row, left_index, right_index, _ = row_slicer
 
         iterator = zip(row.visit_concept_orders, row.visit_token_ids)
-        sliced_visits = set(
-            islice(sorted(iterator, key=lambda tup2: tup2[0]), left_index, right_index))
-        (dates, visit_concept_ids) = zip(*list(sorted(sliced_visits, key=lambda tup2: tup2[0])))
+        (dates, visit_concept_ids) = zip(
+            *islice(sorted(iterator, key=lambda tup2: tup2[0]), left_index, right_index))
 
         masked_visit_concepts, output_mask = self._mask_visit_concepts(
             visit_concept_ids)
