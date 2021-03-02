@@ -240,6 +240,7 @@ class NestedCohortBuilder:
                  is_feature_concept_frequency: bool = False,
                  is_roll_up_concept: bool = False,
                  is_new_patient_representation: bool = False,
+                 classic_bert_seq: bool = False,
                  is_first_time_outcome: bool = False,
                  is_questionable_outcome_existed: bool = False,
                  is_prediction_window_unbounded: bool = False,
@@ -257,6 +258,7 @@ class NestedCohortBuilder:
         self._is_observation_post_index = is_window_post_index
         self._is_observation_window_unbounded = is_observation_window_unbounded
         self._include_visit_type = include_visit_type
+        self._classic_bert_seq = classic_bert_seq
         self._is_feature_concept_frequency = is_feature_concept_frequency
         self._is_roll_up_concept = is_roll_up_concept
         self._is_new_patient_representation = is_new_patient_representation
@@ -387,14 +389,11 @@ class NestedCohortBuilder:
             return create_concept_frequency_data(cohort_ehr_records, None)
 
         if self._is_new_patient_representation:
-            validate_date_folder(self._input_folder, [VISIT_OCCURRENCE])
-            visit_occurrence = preprocess_domain_table(self.spark,
-                                                       self._input_folder,
-                                                       VISIT_OCCURRENCE)
-            return create_sequence_data_time_delta_embedded(cohort_ehr_records, visit_occurrence,
+            return create_sequence_data_time_delta_embedded(cohort_ehr_records,
                                                             include_visit_type=self._include_visit_type)
 
-        return create_sequence_data(cohort_ehr_records, None, self._include_visit_type)
+        return create_sequence_data(cohort_ehr_records, None, self._include_visit_type,
+                                    classic_bert_seq=self._classic_bert_seq)
 
     @classmethod
     def get_logger(cls):
@@ -429,10 +428,11 @@ def create_prediction_cohort(spark_args,
     is_roll_up_concept = spark_args.is_roll_up_concept
     is_window_post_index = spark_args.is_window_post_index
     is_new_patient_representation = spark_args.is_new_patient_representation
+    classic_bert_seq = spark_args.classic_bert_seq
     is_first_time_outcome = spark_args.is_first_time_outcome
     is_prediction_window_unbounded = spark_args.is_prediction_window_unbounded
     is_observation_window_unbounded = spark_args.is_observation_window_unbounded
-    # If the outcome negative query exists, that means we need to remove those questionnable
+    # If the outcome negative query exists, that means we need to remove those questionable
     # outcomes from the target cohort
     is_questionable_outcome_existed = outcome_query_builder.get_negative_query() is not None
 
@@ -479,6 +479,7 @@ def create_prediction_cohort(spark_args,
                         is_feature_concept_frequency=is_feature_concept_frequency,
                         is_roll_up_concept=is_roll_up_concept,
                         is_new_patient_representation=is_new_patient_representation,
+                        classic_bert_seq=classic_bert_seq,
                         is_first_time_outcome=is_first_time_outcome,
                         is_questionable_outcome_existed=is_questionable_outcome_existed,
                         is_prediction_window_unbounded=is_prediction_window_unbounded,
