@@ -11,7 +11,7 @@ VISIT_OCCURRENCE = 'visit_occurrence'
 
 
 def main(input_folder, output_folder, domain_table_list, date_filter,
-         include_visit_type, is_new_patient_representation):
+         include_visit_type, is_new_patient_representation, is_classic_bert):
     spark = SparkSession.builder.appName('Generate Bert Training Data').getOrCreate()
     domain_tables = []
     for domain_table_name in domain_table_list:
@@ -27,12 +27,12 @@ def main(input_folder, output_folder, domain_table_list, date_filter,
 
     if is_new_patient_representation:
         sequence_data = create_sequence_data_time_delta_embedded(patient_event,
-                                                                 visit_occurrence=visit_occurrence,
                                                                  date_filter=date_filter,
                                                                  include_visit_type=include_visit_type)
     else:
         sequence_data = create_sequence_data(patient_event, date_filter=date_filter,
-                                             include_visit_type=include_visit_type)
+                                             include_visit_type=include_visit_type,
+                                             classic_bert_seq=is_classic_bert)
 
     sequence_data.write.mode('overwrite').parquet(os.path.join(output_folder, p.parquet_data_path))
 
@@ -82,7 +82,13 @@ if __name__ == '__main__':
                         action='store_true',
                         help='Specify whether to generate the sequence of '
                              'EHR records using the new patient representation')
+    parser.add_argument('-ib',
+                        '--is_classic_bert_sequence',
+                        dest='is_classic_bert_sequence',
+                        action='store_true',
+                        help='Specify whether to generate the sequence of '
+                             'EHR records using the classic BERT sequence')
     ARGS = parser.parse_args()
 
     main(ARGS.input_folder, ARGS.output_folder, ARGS.domain_table_list, ARGS.date_filter,
-         ARGS.include_visit_type, ARGS.is_new_patient_representation)
+         ARGS.include_visit_type, ARGS.is_new_patient_representation, ARGS.is_classic_bert_sequence)
