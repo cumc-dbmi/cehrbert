@@ -129,8 +129,8 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         """
         early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=1)
         model_checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath=self.get_model_path(),
-                                                              monitor='val_loss', mode='min',
-                                                              save_best_only=True)
+                                                              monitor='val_loss', mode='auto',
+                                                              save_best_only=True, verbose=1)
         return [early_stopping, model_checkpoint]
 
     @abstractmethod
