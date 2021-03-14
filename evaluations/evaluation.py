@@ -33,7 +33,8 @@ def evaluate_sequence_models(args):
             batch_size=args.batch_size,
             epochs=args.epochs,
             time_aware_model_path=time_aware_model_path,
-            tokenizer_path=time_attention_tokenizer_path
+            tokenizer_path=time_attention_tokenizer_path,
+            sequence_model_name=args.sequence_model_name
         ).eval_model()
 
     if VANILLA_BERT_LSTM in args.model_evaluators:
@@ -53,7 +54,8 @@ def evaluate_sequence_models(args):
             epochs=args.epochs,
             bert_model_path=bert_model_path,
             tokenizer_path=bert_tokenizer_path,
-            is_temporal=False).eval_model()
+            is_temporal=False,
+            sequence_model_name=args.sequence_model_name).eval_model()
 
     if TEMPORAL_BERT_LSTM in args.model_evaluators:
         validate_folder(args.temporal_bert_model_folder)
@@ -72,7 +74,8 @@ def evaluate_sequence_models(args):
             epochs=args.epochs,
             bert_model_path=temporal_bert_model_path,
             tokenizer_path=temporal_bert_tokenizer_path,
-            is_temporal=True).eval_model()
+            is_temporal=True,
+            sequence_model_name=args.sequence_model_name).eval_model()
 
 
 def evaluate_baseline_models(args):
@@ -148,6 +151,12 @@ def create_evaluation_args():
                        '--sequence_model_data_path',
                        dest='sequence_model_data_path',
                        action='store',
+                       required=sequence_model_required)
+    group.add_argument('-smn',
+                       '--sequence_model_name',
+                       dest='sequence_model_name',
+                       action='store',
+                       default=None,
                        required=sequence_model_required)
     group.add_argument('-m',
                        '--max_seq_length',

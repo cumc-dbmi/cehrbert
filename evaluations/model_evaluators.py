@@ -76,11 +76,14 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
     def __init__(self,
                  epochs,
                  batch_size,
+                 sequence_model_name=None,
                  *args, **kwargs):
         self.get_logger().info(f'epochs: {epochs}\n'
-                               f'batch_size: {batch_size}\n')
+                               f'batch_size: {batch_size}\n'
+                               f'sequence_model_name: {sequence_model_name}\n')
         self._epochs = epochs
         self._batch_size = batch_size
+        self._sequence_model_name = sequence_model_name
         super(SequenceModelEvaluator, self).__init__(*args, **kwargs)
 
     def train_model(self, training_data: Dataset, val_data: Dataset):
@@ -120,7 +123,7 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             yield train, test
 
     def get_model_name(self):
-        return self._model.name
+        return self._sequence_model_name if self._sequence_model_name else self._model.name
 
     def _get_callbacks(self):
         """
