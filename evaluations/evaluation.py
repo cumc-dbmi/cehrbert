@@ -156,8 +156,7 @@ def create_evaluation_args():
                        '--sequence_model_name',
                        dest='sequence_model_name',
                        action='store',
-                       default=None,
-                       required=sequence_model_required)
+                       default=None)
     group.add_argument('-m',
                        '--max_seq_length',
                        dest='max_seq_length',
