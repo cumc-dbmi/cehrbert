@@ -237,6 +237,7 @@ class NestedCohortBuilder:
                  prediction_window: int,
                  is_window_post_index: bool = False,
                  include_visit_type: bool = True,
+                 exclude_visit_tokens: bool = False,
                  is_feature_concept_frequency: bool = False,
                  is_roll_up_concept: bool = False,
                  is_new_patient_representation: bool = False,
@@ -258,6 +259,7 @@ class NestedCohortBuilder:
         self._is_observation_post_index = is_window_post_index
         self._is_observation_window_unbounded = is_observation_window_unbounded
         self._include_visit_type = include_visit_type
+        self._exclude_visit_tokens = exclude_visit_tokens
         self._classic_bert_seq = classic_bert_seq
         self._is_feature_concept_frequency = is_feature_concept_frequency
         self._is_roll_up_concept = is_roll_up_concept
@@ -390,7 +392,8 @@ class NestedCohortBuilder:
 
         if self._is_new_patient_representation:
             return create_sequence_data_time_delta_embedded(cohort_ehr_records,
-                                                            include_visit_type=self._include_visit_type)
+                                                            include_visit_type=self._include_visit_type,
+                                                            exclude_visit_tokens=self._exclude_visit_tokens)
 
         return create_sequence_data(cohort_ehr_records, None, self._include_visit_type,
                                     classic_bert_seq=self._classic_bert_seq)
@@ -424,6 +427,7 @@ def create_prediction_cohort(spark_args,
     prediction_window = spark_args.prediction_window
     hold_off_window = spark_args.hold_off_window
     include_visit_type = spark_args.include_visit_type
+    exclude_visit_tokens = spark_args.exclude_visit_tokens
     is_feature_concept_frequency = spark_args.is_feature_concept_frequency
     is_roll_up_concept = spark_args.is_roll_up_concept
     is_window_post_index = spark_args.is_window_post_index
@@ -476,6 +480,7 @@ def create_prediction_cohort(spark_args,
                         prediction_window=prediction_window,
                         is_window_post_index=is_window_post_index,
                         include_visit_type=include_visit_type,
+                        exclude_visit_tokens=exclude_visit_tokens,
                         is_feature_concept_frequency=is_feature_concept_frequency,
                         is_roll_up_concept=is_roll_up_concept,
                         is_new_patient_representation=is_new_patient_representation,
