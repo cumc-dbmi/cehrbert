@@ -118,6 +118,12 @@ def create_spark_args():
                         action='store_true',
                         help='Specify whether to include visit types for '
                              'generating the training data')
+    parser.add_argument('-ev',
+                        '--exclude_visit_tokens',
+                        dest='exclude_visit_tokens',
+                        action='store_true',
+                        help='Specify whether or not to exclude the VS and VE tokens')
+
     parser.add_argument('-f',
                         '--is_feature_concept_frequency',
                         dest='is_feature_concept_frequency',

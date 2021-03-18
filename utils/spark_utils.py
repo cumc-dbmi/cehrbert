@@ -504,13 +504,15 @@ def create_sequence_data(patient_event, date_filter=None, include_visit_type=Fal
 
 
 def create_sequence_data_time_delta_embedded(patient_event, date_filter=None,
-                                             include_visit_type=False):
+                                             include_visit_type=False,
+                                             exclude_visit_tokens=False):
     """
     Create a sequence of the events associated with one patient in a chronological order
 
     :param patient_event:
     :param date_filter:
     :param include_visit_type:
+    :param exclude_visit_tokens:
     :return:
     """
 
@@ -602,7 +604,13 @@ def create_sequence_data_time_delta_embedded(patient_event, date_filter=None,
         struct_columns.append('visit_rank_order')
         struct_columns.append('visit_concept_id')
 
-    patient_grouped_events = patient_event.union(time_token_insertions).distinct() \
+    unioned_distinct_tokens = patient_event.union(time_token_insertions).distinct()
+
+    if exclude_visit_tokens:
+        unioned_distinct_tokens = unioned_distinct_tokens.filter(
+            ~F.col('standard_concept_id').isin(['VS', 'VE']))
+
+    patient_grouped_events = unioned_distinct_tokens \
         .withColumn('order', order_udf) \
         .withColumn('data_for_sorting', F.struct(struct_columns)).groupBy('person_id').agg(
         F.collect_set('data_for_sorting').alias('data_for_sorting')) \
