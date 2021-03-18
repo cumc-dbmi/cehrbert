@@ -281,6 +281,7 @@ class NestedCohortBuilder:
                                f'hold_off_window: {hold_off_window}\n'
                                f'is_window_post_index: {is_window_post_index}\n'
                                f'include_visit_type: {include_visit_type}\n'
+                               f'exclude_visit_tokens: {exclude_visit_tokens}\n'
                                f'is_feature_concept_frequency: {is_feature_concept_frequency}\n'
                                f'is_roll_up_concept: {is_roll_up_concept}\n'
                                f'is_new_patient_representation: {is_new_patient_representation}\n'
