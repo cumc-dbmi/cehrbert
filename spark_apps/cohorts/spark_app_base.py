@@ -314,6 +314,7 @@ class NestedCohortBuilder:
         if self._is_first_time_outcome:
             target_cohort = self.spark.sql("""
             SELECT
+                t.person_id AS cohort_member_id,
                 t.*
             FROM global_temp.target_cohort AS t
             LEFT JOIN global_temp.{entry_cohort} AS o
@@ -361,11 +362,14 @@ class NestedCohortBuilder:
             WHERE op.person_id IS NOT NULL OR o.person_id IS NOT NULL
             """
 
+        cohort_member_id_udf = F.dense_rank().over(
+            W.orderBy('person_id', 'index_date', 'visit_occurrence_id'))
         cohort = self.spark.sql(query_template.format(prediction_start_days=prediction_start_days,
-                                                      prediction_window=prediction_window))
+                                                      prediction_window=prediction_window)) \
+            .withColumn('cohort_member_id', cohort_member_id_udf)
 
         ehr_records_for_cohorts = self.extract_ehr_records_for_cohort(cohort)
-        cohort = cohort.join(ehr_records_for_cohorts, 'person_id')
+        cohort = cohort.join(ehr_records_for_cohorts, ['person_id', 'cohort_member_id'])
         cohort.write.mode('overwrite').parquet(self._output_data_folder)
 
     def extract_ehr_records_for_cohort(self, cohort: DataFrame):
@@ -386,7 +390,8 @@ class NestedCohortBuilder:
                     F.date_sub(cohort['index_date'], self._hold_off_window))
 
         cohort_ehr_records = ehr_records.join(cohort, 'person_id').where(record_window_filter) \
-            .select([ehr_records[field_name] for field_name in ehr_records.schema.fieldNames()])
+            .select([ehr_records[field_name] for field_name in ehr_records.schema.fieldNames()]
+                    + ['cohort_member_id'])
 
         if self._is_feature_concept_frequency:
             return create_concept_frequency_data(cohort_ehr_records, None)

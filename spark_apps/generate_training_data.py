@@ -23,7 +23,8 @@ def main(input_folder, output_folder, domain_table_list, date_filter,
     patient_event = patient_event.join(visit_occurrence, 'visit_occurrence_id') \
         .select(patient_event['person_id'], patient_event['standard_concept_id'],
                 patient_event['date'], patient_event['visit_occurrence_id'],
-                patient_event['domain'], visit_occurrence['visit_concept_id'])
+                patient_event['domain'], visit_occurrence['visit_concept_id']) \
+        .withColumn('cohort_member_id', F.col('person_id'))
 
     if is_new_patient_representation:
         sequence_data = create_sequence_data_time_delta_embedded(patient_event,
