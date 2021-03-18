@@ -408,7 +408,8 @@ def create_sequence_data(patient_event, date_filter=None, include_visit_type=Fal
     # Define a list of custom UDFs for creating custom columns
     date_conversion_udf = (F.unix_timestamp('date') / F.lit(24 * 60 * 60 * 7)).cast('int')
     earliest_visit_date_udf = F.min('date_in_week').over(W.partitionBy('visit_occurrence_id'))
-    visit_rank_udf = F.dense_rank().over(W.partitionBy('person_id').orderBy('earliest_visit_date'))
+    visit_rank_udf = F.dense_rank().over(
+        W.partitionBy('cohort_member_id', 'person_id').orderBy('earliest_visit_date'))
     visit_segment_udf = F.col('visit_rank_order') % F.lit(2) + 1
 
     # Derive columns
@@ -422,11 +423,12 @@ def create_sequence_data(patient_event, date_filter=None, include_visit_type=Fal
     if classic_bert_seq:
         # Udf for identifying the earliest date associated with a visit_occurrence_id
         visit_start_date_udf = F.first('date').over(
-            W.partitionBy('person_id', 'visit_occurrence_id').orderBy('date'))
+            W.partitionBy('cohort_member_id', 'person_id', 'visit_occurrence_id').orderBy('date'))
 
         # Udf for identifying the previous visit_occurrence_id
         prev_visit_occurrence_id_udf = F.lag('visit_occurrence_id').over(
-            W.partitionBy('person_id').orderBy('visit_start_date', 'visit_occurrence_id'))
+            W.partitionBy('cohort_member_id', 'person_id').orderBy('visit_start_date',
+                                                                   'visit_occurrence_id'))
 
         # We can achieve this by overwriting the record with the earliest time stamp
         separator_events = patient_event.withColumn('visit_start_date', visit_start_date_udf) \
@@ -443,8 +445,10 @@ def create_sequence_data(patient_event, date_filter=None, include_visit_type=Fal
         patient_event = patient_event.union(separator_events)
 
     order_udf = F.row_number().over(
-        W.partitionBy('person_id').orderBy('earliest_visit_date', 'visit_occurrence_id', 'priority',
-                                           'date_in_week', 'standard_concept_id'))
+        W.partitionBy('cohort_member_id', 'person_id').orderBy('earliest_visit_date',
+                                                               'visit_occurrence_id',
+                                                               'priority', 'date_in_week',
+                                                               'standard_concept_id'))
 
     dates_udf = F.udf(
         lambda rows: [row[1] for row in sorted(rows, key=lambda x: x[0])],
@@ -470,7 +474,8 @@ def create_sequence_data(patient_event, date_filter=None, include_visit_type=Fal
     # Group by data by person_id and put all the events into a list
     # The order of the list is determined bythe order column
     patient_grouped_events = patient_event.withColumn('order', order_udf) \
-        .withColumn('date_concept_id_period', F.struct(output_columns)).groupBy('person_id') \
+        .withColumn('date_concept_id_period', F.struct(output_columns)) \
+        .groupBy('person_id', 'cohort_member_id') \
         .agg(F.collect_set('date_concept_id_period').alias('date_concept_id_period'),
              F.min('earliest_visit_date').alias('earliest_visit_date'),
              F.max('date').alias('max_event_date')) \
@@ -480,8 +485,8 @@ def create_sequence_data(patient_event, date_filter=None, include_visit_type=Fal
         .withColumn('visit_segments', visit_segments_udf('date_concept_id_period'))
 
     # Default columns in the output dataframe
-    columns_for_output = ['person_id', 'earliest_visit_date', 'max_event_date', 'dates',
-                          'concept_ids', 'concept_id_visit_orders', 'visit_segments']
+    columns_for_output = ['cohort_member_id', 'person_id', 'earliest_visit_date', 'max_event_date',
+                          'dates', 'concept_ids', 'concept_id_visit_orders', 'visit_segments']
 
     # If include_visit_type is enabled, we add additional information to the default output
     if include_visit_type:
@@ -532,11 +537,12 @@ def create_sequence_data_time_delta_embedded(patient_event, date_filter=None,
 
     # Udf for identifying the earliest date associated with a visit_occurrence_id
     visit_start_date_udf = F.first('date').over(
-        W.partitionBy('person_id', 'visit_occurrence_id').orderBy('date'))
+        W.partitionBy('cohort_member_id', 'person_id', 'visit_occurrence_id').orderBy('date'))
 
     # Udf for identifying the latest date associated with a visit_occurrence_id
     visit_end_date_udf = F.first('date').over(
-        W.partitionBy('person_id', 'visit_occurrence_id').orderBy(F.col('date').desc()))
+        W.partitionBy('cohort_member_id', 'person_id', 'visit_occurrence_id').orderBy(
+            F.col('date').desc()))
 
     visit_start_events = patient_event.withColumn('date', visit_start_date_udf) \
         .withColumn('standard_concept_id', F.lit('VS')) \
@@ -554,15 +560,18 @@ def create_sequence_data_time_delta_embedded(patient_event, date_filter=None,
     days_since_epoch_udf = (F.unix_timestamp('date') / F.lit(24 * 60 * 60)).cast('int')
     # Get the prev days_since_epoch
     prev_days_since_epoch_udf = F.lag('days_since_epoch').over(
-        W.partitionBy('person_id').orderBy('date', 'priority', 'visit_occurrence_id'))
+        W.partitionBy('cohort_member_id', 'person_id').orderBy('date', 'priority',
+                                                               'visit_occurrence_id'))
     # Compute the time difference between the current record and the previous record
     time_delta_udf = F.when(F.col('prev_days_since_epoch').isNull(), 0).otherwise(
         F.col('days_since_epoch') - F.col('prev_days_since_epoch'))
     visit_date_udf = F.first('days_since_epoch').over(
-        W.partitionBy('person_id', 'visit_occurrence_id').orderBy('days_since_epoch'))
+        W.partitionBy('cohort_member_id', 'person_id', 'visit_occurrence_id').orderBy(
+            'days_since_epoch'))
     # Udf for calculating the time token
     time_token_udf = F.udf(time_token_func, T.StringType())
-    visit_rank_udf = F.dense_rank().over(W.partitionBy('person_id').orderBy('visit_start_date'))
+    visit_rank_udf = F.dense_rank().over(
+        W.partitionBy('cohort_member_id', 'person_id').orderBy('visit_start_date'))
     visit_segment_udf = F.col('visit_rank_order') % F.lit(2) + 1
 
     patient_event = patient_event.union(visit_start_events).union(visit_end_events) \
@@ -582,8 +591,10 @@ def create_sequence_data_time_delta_embedded(patient_event, date_filter=None,
         .where('prev_days_since_epoch IS NOT NULL')
 
     order_udf = F.row_number().over(
-        W.partitionBy('person_id').orderBy('visit_start_date', 'visit_occurrence_id', 'priority',
-                                           'days_since_epoch', 'standard_concept_id'))
+        W.partitionBy('cohort_member_id', 'person_id').orderBy('visit_start_date',
+                                                               'visit_occurrence_id', 'priority',
+                                                               'days_since_epoch',
+                                                               'standard_concept_id'))
 
     extract_dates_udf = F.udf(
         lambda rows: [row[0] for row in sorted(rows, key=lambda x: x[0])],
@@ -598,7 +609,7 @@ def create_sequence_data_time_delta_embedded(patient_event, date_filter=None,
         T.ArrayType(T.StringType()))
 
     struct_columns = ['order', 'standard_concept_id', 'visit_segments']
-    output_columns = ['person_id', 'concept_ids', 'visit_segments', 'dates']
+    output_columns = ['cohort_member_id', 'person_id', 'concept_ids', 'visit_segments', 'dates']
 
     if include_visit_type:
         struct_columns.append('visit_rank_order')
@@ -612,7 +623,8 @@ def create_sequence_data_time_delta_embedded(patient_event, date_filter=None,
 
     patient_grouped_events = unioned_distinct_tokens \
         .withColumn('order', order_udf) \
-        .withColumn('data_for_sorting', F.struct(struct_columns)).groupBy('person_id').agg(
+        .withColumn('data_for_sorting', F.struct(struct_columns)).groupBy('cohort_member_id',
+                                                                          'person_id').agg(
         F.collect_set('data_for_sorting').alias('data_for_sorting')) \
         .withColumn('concept_ids', extract_concept_ids_udf('data_for_sorting')) \
         .withColumn('visit_segments', extract_visit_segments_udf('data_for_sorting')) \
@@ -646,12 +658,14 @@ def create_concept_frequency_data(patient_event, date_filter=None):
     take_concept_ids_udf = F.udf(lambda rows: [row[0] for row in rows], T.ArrayType(T.StringType()))
     take_freqs_udf = F.udf(lambda rows: [row[1] for row in rows], T.ArrayType(T.IntegerType()))
 
-    patient_event = patient_event.groupBy('person_id', 'standard_concept_id').count() \
+    patient_event = patient_event.groupBy('cohort_member_id', 'person_id',
+                                          'standard_concept_id').count() \
         .withColumn('concept_id_freq', F.struct('standard_concept_id', 'count')) \
-        .groupBy('person_id').agg(F.collect_list('concept_id_freq').alias('sequence')) \
+        .groupBy('cohort_member_id', 'person_id').agg(
+        F.collect_list('concept_id_freq').alias('sequence')) \
         .withColumn('concept_ids', take_concept_ids_udf('sequence')) \
         .withColumn('frequencies', take_freqs_udf('sequence')) \
-        .select('person_id', 'concept_ids', 'frequencies')
+        .select('cohort_member_id', 'person_id', 'concept_ids', 'frequencies')
 
     return patient_event
 
