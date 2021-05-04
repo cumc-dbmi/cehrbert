@@ -11,7 +11,7 @@ VISIT_OCCURRENCE = 'visit_occurrence'
 
 
 def main(input_folder, output_folder, domain_table_list, date_filter,
-         include_visit_type, is_new_patient_representation):
+         include_visit_type, is_new_patient_representation, exclude_visit_tokens, is_classic_bert):
     spark = SparkSession.builder.appName('Generate Bert Training Data').getOrCreate()
     domain_tables = []
     for domain_table_name in domain_table_list:
@@ -23,16 +23,18 @@ def main(input_folder, output_folder, domain_table_list, date_filter,
     patient_event = patient_event.join(visit_occurrence, 'visit_occurrence_id') \
         .select(patient_event['person_id'], patient_event['standard_concept_id'],
                 patient_event['date'], patient_event['visit_occurrence_id'],
-                patient_event['domain'], visit_occurrence['visit_concept_id'])
+                patient_event['domain'], visit_occurrence['visit_concept_id']) \
+        .withColumn('cohort_member_id', F.col('person_id'))
 
     if is_new_patient_representation:
         sequence_data = create_sequence_data_time_delta_embedded(patient_event,
-                                                                 visit_occurrence=visit_occurrence,
                                                                  date_filter=date_filter,
+                                                                 exclude_visit_tokens=exclude_visit_tokens,
                                                                  include_visit_type=include_visit_type)
     else:
         sequence_data = create_sequence_data(patient_event, date_filter=date_filter,
-                                             include_visit_type=include_visit_type)
+                                             include_visit_type=include_visit_type,
+                                             classic_bert_seq=is_classic_bert)
 
     sequence_data.write.mode('overwrite').parquet(os.path.join(output_folder, p.parquet_data_path))
 
@@ -82,7 +84,19 @@ if __name__ == '__main__':
                         action='store_true',
                         help='Specify whether to generate the sequence of '
                              'EHR records using the new patient representation')
+    parser.add_argument('-ib',
+                        '--is_classic_bert_sequence',
+                        dest='is_classic_bert_sequence',
+                        action='store_true',
+                        help='Specify whether to generate the sequence of '
+                             'EHR records using the classic BERT sequence')
+    parser.add_argument('-ev',
+                        '--exclude_visit_tokens',
+                        dest='exclude_visit_tokens',
+                        action='store_true',
+                        help='Specify whether or not to exclude the VS and VE tokens')
     ARGS = parser.parse_args()
 
     main(ARGS.input_folder, ARGS.output_folder, ARGS.domain_table_list, ARGS.date_filter,
-         ARGS.include_visit_type, ARGS.is_new_patient_representation)
+         ARGS.include_visit_type, ARGS.is_new_patient_representation, ARGS.exclude_visit_tokens,
+         ARGS.is_classic_bert_sequence)

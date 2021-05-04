@@ -53,6 +53,7 @@ def create_vanilla_bert_bi_lstm_model(max_seq_length, vanilla_bert_model_path):
     vanilla_bert_model = tf.keras.models.load_model(vanilla_bert_model_path,
                                                     custom_objects=dict(**get_custom_objects()))
     bert_inputs = vanilla_bert_model.inputs[0:3]
+#     bert_inputs = vanilla_bert_model.inputs
     contextualized_embeddings, _ = vanilla_bert_model.get_layer('encoder').output
     _, _, embedding_size = contextualized_embeddings.get_shape().as_list()
 
@@ -76,7 +77,7 @@ def create_vanilla_bert_bi_lstm_model(max_seq_length, vanilla_bert_model_path):
 
     output_layer = tf.keras.layers.Dense(1, activation='sigmoid')
 
-    next_input = masking_layer(contextualized_embeddings)
+    next_input = masking_layer(contextualized_embeddings) #attach a property to the concept embeddings to indicate where are the masks, send the flag to the downstream layer
 
     next_input = dropout_lstm_layer(bi_lstm_layer(next_input))
 

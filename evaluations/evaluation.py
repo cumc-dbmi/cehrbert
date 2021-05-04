@@ -27,11 +27,14 @@ def evaluate_sequence_models(args):
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
             num_of_folds=args.num_of_folds,
+            is_transfer_learning=args.is_transfer_learning,
+            training_percentage=args.training_percentage,
             max_seq_length=args.max_seq_length,
             batch_size=args.batch_size,
             epochs=args.epochs,
             time_aware_model_path=time_aware_model_path,
-            tokenizer_path=time_attention_tokenizer_path
+            tokenizer_path=time_attention_tokenizer_path,
+            sequence_model_name=args.sequence_model_name
         ).eval_model()
 
     if VANILLA_BERT_LSTM in args.model_evaluators:
@@ -39,45 +42,56 @@ def evaluate_sequence_models(args):
         bert_tokenizer_path = os.path.join(args.vanilla_bert_model_folder,
                                            p.tokenizer_path)
         bert_model_path = os.path.join(args.vanilla_bert_model_folder,
-                                       p.bert_model_path)
+                                       p.bert_model_validation_path)
         BertLstmModelEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
             num_of_folds=args.num_of_folds,
+            is_transfer_learning=args.is_transfer_learning,
+            training_percentage=args.training_percentage,
             max_seq_length=args.max_seq_length,
             batch_size=args.batch_size,
             epochs=args.epochs,
             bert_model_path=bert_model_path,
             tokenizer_path=bert_tokenizer_path,
-            is_temporal=False).eval_model()
+            is_temporal=False,
+            sequence_model_name=args.sequence_model_name).eval_model()
 
     if TEMPORAL_BERT_LSTM in args.model_evaluators:
         validate_folder(args.temporal_bert_model_folder)
         temporal_bert_tokenizer_path = os.path.join(args.temporal_bert_model_folder,
                                                     p.tokenizer_path)
         temporal_bert_model_path = os.path.join(args.temporal_bert_model_folder,
-                                                p.temporal_bert_model_path)
+                                                p.temporal_bert_validation_model_path)
         BertLstmModelEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
             num_of_folds=args.num_of_folds,
+            is_transfer_learning=args.is_transfer_learning,
+            training_percentage=args.training_percentage,
             max_seq_length=args.max_seq_length,
             batch_size=args.batch_size,
             epochs=args.epochs,
             bert_model_path=temporal_bert_model_path,
             tokenizer_path=temporal_bert_tokenizer_path,
-            is_temporal=True).eval_model()
+            is_temporal=True,
+            sequence_model_name=args.sequence_model_name).eval_model()
 
 
 def evaluate_baseline_models(args):
     # Load the training data
     dataset = pd.read_parquet(args.data_path)
+
     LogisticRegressionModelEvaluator(dataset=dataset,
                                      evaluation_folder=args.evaluation_folder,
-                                     num_of_folds=args.num_of_folds).eval_model()
+                                     num_of_folds=args.num_of_folds,
+                                     is_transfer_learning=args.is_transfer_learning,
+                                     training_percentage=args.training_percentage).eval_model()
     XGBClassifierEvaluator(dataset=dataset,
                            evaluation_folder=args.evaluation_folder,
-                           num_of_folds=args.num_of_folds).eval_model()
+                           num_of_folds=args.num_of_folds,
+                           is_transfer_learning=args.is_transfer_learning,
+                           training_percentage=args.training_percentage).eval_model()
 
 
 def create_evaluation_args():
@@ -115,6 +129,15 @@ def create_evaluation_args():
                              required=False,
                              type=int,
                              default=4)
+    main_parser.add_argument('--is_transfer_learning',
+                             dest='is_transfer_learning',
+                             action='store_true')
+    main_parser.add_argument('--training_percentage',
+                             dest='training_percentage',
+                             required=False,
+                             action='store',
+                             type=float,
+                             default=1.0)
 
     group = main_parser.add_argument_group('sequence model')
     group.add_argument('-me',
@@ -129,6 +152,11 @@ def create_evaluation_args():
                        dest='sequence_model_data_path',
                        action='store',
                        required=sequence_model_required)
+    group.add_argument('-smn',
+                       '--sequence_model_name',
+                       dest='sequence_model_name',
+                       action='store',
+                       default=None)
     group.add_argument('-m',
                        '--max_seq_length',
                        dest='max_seq_length',
