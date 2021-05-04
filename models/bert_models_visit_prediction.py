@@ -63,7 +63,7 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
         name='visit_embeddings',
         embeddings_regularizer=l2_regularizer)
 
-    visit_segment_layer = VisitEmbeddingLayer(visit_order_size=max_seq_length,
+    visit_segment_layer = VisitEmbeddingLayer(visit_order_size=3,
                                               embedding_size=embedding_size)
 
     positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
@@ -179,7 +179,7 @@ def transformer_temporal_bert_model_visit_prediction(
         name='visit_embeddings',
         embeddings_regularizer=l2_regularizer)
 
-    visit_segment_layer = VisitEmbeddingLayer(visit_order_size=max_seq_length,
+    visit_segment_layer = VisitEmbeddingLayer(visit_order_size=3,
                                               embedding_size=embedding_size)
 
     time_attention_layer = TimeSelfAttention(vocab_size=concept_vocab_size,
