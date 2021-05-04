@@ -242,6 +242,7 @@ class BertLstmModelEvaluator(SequenceModelEvaluator):
         visit_segments = self._dataset.visit_segments
         time_stamps = self._dataset.dates
         ages = self._dataset.ages
+        visit_concept_orders = self._dataset.visit_concept_orders
         index_age = np.asarray(
             ((self._dataset['age'] - self._dataset['age'].mean()) / self._dataset[
                 'age'].std()).astype(float).apply(lambda c: [c]).tolist())
@@ -253,6 +254,9 @@ class BertLstmModelEvaluator(SequenceModelEvaluator):
 
         padded_time_stamps = post_pad_pre_truncate(time_stamps, 0, self._max_seq_length)
         padded_ages = post_pad_pre_truncate(ages, 0, self._max_seq_length)
+        padded_visit_concept_orders = post_pad_pre_truncate(visit_concept_orders,
+                                                            self._max_seq_length,
+                                                            self._max_seq_length)
 
         inputs = {
             'age': index_age,
@@ -261,7 +265,8 @@ class BertLstmModelEvaluator(SequenceModelEvaluator):
             'mask': mask,
             'visit_segments': padded_visit_segments,
             'time_stamps': padded_time_stamps,
-            'ages': padded_ages
+            'ages': padded_ages,
+            'visit_concept_orders': padded_visit_concept_orders
         }
         return inputs, labels
 

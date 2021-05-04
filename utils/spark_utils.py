@@ -398,15 +398,12 @@ def create_sequence_data(patient_event,
                     F.col('date_concept_id_period.order').cast(T.ArrayType(T.IntegerType()))) \
         .withColumn('dates', F.col('date_concept_id_period.date_in_week')) \
         .withColumn('concept_ids', F.col('date_concept_id_period.standard_concept_id')) \
-        .withColumn('concept_id_visit_orders',
-                    F.col('date_concept_id_period.standard_concept_id')) \
         .withColumn('visit_segments', F.col('date_concept_id_period.visit_segment')) \
         .withColumn('ages', F.col('date_concept_id_period.age'))
 
     # Default columns in the output dataframe
     columns_for_output = ['cohort_member_id', 'person_id', 'earliest_visit_date', 'max_event_date',
-                          'orders', 'dates', 'ages', 'concept_ids', 'concept_id_visit_orders',
-                          'visit_segments']
+                          'orders', 'dates', 'ages', 'concept_ids', 'visit_segments']
 
     if include_visit_type:
         patient_grouped_events = patient_grouped_events \
@@ -537,8 +534,6 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
                     F.col('data_for_sorting.order').cast(T.ArrayType(T.IntegerType()))) \
         .withColumn('dates', F.col('data_for_sorting.date_in_week')) \
         .withColumn('concept_ids', F.col('data_for_sorting.standard_concept_id')) \
-        .withColumn('concept_id_visit_orders',
-                    F.col('data_for_sorting.standard_concept_id')) \
         .withColumn('visit_segments', F.col('data_for_sorting.visit_segment')) \
         .withColumn('ages', F.col('data_for_sorting.age'))
 
