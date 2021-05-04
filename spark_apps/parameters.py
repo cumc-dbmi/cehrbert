@@ -6,8 +6,10 @@ feather_data_path = 'patient_sequence.pickle'
 tokenizer_path = 'tokenizer.pickle'
 visit_tokenizer_path = 'visit_tokenizer.pickle'
 time_attention_model_path = 'time_aware_model.h5'
-bert_model_path = 'bert_model.h5'
-temporal_bert_model_path = 'temporal_bert_model.h5'
+bert_model_path = 'bert_model_{epoch:02d}_{loss:.2f}.h5'
+temporal_bert_model_path = 'temporal_bert_model_{epoch:02d}_{loss:.2f}.h5'
+bert_model_validation_path = 'bert_model.h5'
+temporal_bert_validation_model_path = 'temporal_bert_model.h5'
 
 mortality_data_path = 'mortality'
 heart_failure_data_path = 'heart_failure'
@@ -96,7 +98,7 @@ def create_spark_args():
                         help='The prediction start days in which the prediction is made',
                         required=False,
                         type=int,
-                        default=0)
+                        default=1)
     parser.add_argument('-hw',
                         '--hold_off_window',
                         dest='hold_off_window',
@@ -116,6 +118,12 @@ def create_spark_args():
                         action='store_true',
                         help='Specify whether to include visit types for '
                              'generating the training data')
+    parser.add_argument('-ev',
+                        '--exclude_visit_tokens',
+                        dest='exclude_visit_tokens',
+                        action='store_true',
+                        help='Specify whether or not to exclude the VS and VE tokens')
+
     parser.add_argument('-f',
                         '--is_feature_concept_frequency',
                         dest='is_feature_concept_frequency',
@@ -132,4 +140,23 @@ def create_spark_args():
                         action='store_true',
                         help='Specify whether to generate the sequence of '
                              'EHR records using the new patient representation')
+    parser.add_argument('-cbs',
+                        '--classic_bert_seq',
+                        dest='classic_bert_seq',
+                        action='store_true',
+                        help='Specify whether to generate the sequence of '
+                             'EHR records using the classic BERT sequence representation where '
+                             'visits are separated by a SEP token')
+    parser.add_argument('--is_first_time_outcome',
+                        dest='is_first_time_outcome',
+                        action='store_true',
+                        help='is the outcome the first time occurrence?')
+    parser.add_argument('--is_prediction_window_unbounded',
+                        dest='is_prediction_window_unbounded',
+                        action='store_true',
+                        help='is the end of the prediction window unbounded?')
+    parser.add_argument('--is_observation_window_unbounded',
+                        dest='is_observation_window_unbounded',
+                        action='store_true',
+                        help='is the observation window unbounded?')
     return parser.parse_args()

@@ -30,13 +30,24 @@ class AbstractModelEvaluator(AbstractModel):
                  dataset,
                  evaluation_folder,
                  num_of_folds,
+                 is_transfer_learning: bool = False,
+                 training_percentage: float = 1.0,
                  *args, **kwargs):
         self._dataset = copy.copy(dataset)
         self._evaluation_folder = evaluation_folder
         self._num_of_folds = num_of_folds
+        self._training_percentage = min(training_percentage, 1.0)
+        self._is_transfer_learning = is_transfer_learning
 
-        self.get_logger().info(f'evaluation_folder: {evaluation_folder}\n'
-                               f'num_of_folds: {num_of_folds}\n')
+        if is_transfer_learning:
+            extension = 'transfer_learning_{:.2f}'.format(self._training_percentage).replace('.',
+                                                                                             '_')
+            self._evaluation_folder = os.path.join(self._evaluation_folder, extension)
+
+        self.get_logger().info(f'evaluation_folder: {self._evaluation_folder}\n'
+                               f'num_of_folds: {self._num_of_folds}\n'
+                               f'is_transfer_learning {self._is_transfer_learning}\n'
+                               f'training_percentage: {self._training_percentage}\n')
 
         super().__init__(*args, **kwargs)
 
@@ -65,11 +76,14 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
     def __init__(self,
                  epochs,
                  batch_size,
+                 sequence_model_name=None,
                  *args, **kwargs):
         self.get_logger().info(f'epochs: {epochs}\n'
-                               f'batch_size: {batch_size}\n')
+                               f'batch_size: {batch_size}\n'
+                               f'sequence_model_name: {sequence_model_name}\n')
         self._epochs = epochs
         self._batch_size = batch_size
+        self._sequence_model_name = sequence_model_name
         super(SequenceModelEvaluator, self).__init__(*args, **kwargs)
 
     def train_model(self, training_data: Dataset, val_data: Dataset):
@@ -97,6 +111,9 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         inputs, labels = self.extract_model_inputs()
         k_fold = KFold(n_splits=self._num_of_folds, shuffle=True)
         for train, test in k_fold.split(self._dataset):
+            if self._is_transfer_learning:
+                size = int(len(train) * self._training_percentage)
+                train = np.random.choice(train, size, replace=False)
             training_input = {k: v[train] for k, v in inputs.items()}
             val_input = {k: v[test] for k, v in inputs.items()}
             train = tf.data.Dataset.from_tensor_slices((training_input, labels[train])) \
@@ -106,17 +123,19 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             yield train, test
 
     def get_model_name(self):
-        return self._model.name
+        return self._sequence_model_name if self._sequence_model_name else self._model.name
 
     def _get_callbacks(self):
         """
         Standard callbacks for the evaluations
         :return:
         """
-        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=1)
+        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
+                                                          patience=1,
+                                                          restore_best_weights=True)
         model_checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath=self.get_model_path(),
-                                                              monitor='val_auc', mode='auto',
-                                                              save_best_only=True)
+                                                              monitor='val_loss', mode='auto',
+                                                              save_best_only=True, verbose=1)
         return [early_stopping, model_checkpoint]
 
     @abstractmethod
@@ -265,6 +284,9 @@ class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
         inputs, age, labels = self.extract_model_inputs()
         k_fold = KFold(n_splits=self._num_of_folds, shuffle=True)
         for train, test in k_fold.split(self._dataset):
+            if self._is_transfer_learning:
+                size = int(len(train) * self._training_percentage)
+                train = np.random.choice(train, size, replace=False)
             train_data = (csr_matrix(hstack([inputs[train], age[train]])), labels[train])
             test_data = (csr_matrix(hstack([inputs[test], age[test]])), labels[test])
             yield train_data, test_data

@@ -9,7 +9,7 @@ from pyspark.sql import SparkSession
 
 from utils.spark_utils import *
 from utils.logging_utils import *
-from spark_apps.cohorts.query_builder import QueryBuilder
+from spark_apps.cohorts.query_builder import QueryBuilder, ENTRY_COHORT, NEGATIVE_COHORT
 
 COHORT_TABLE_NAME = 'cohort'
 PERSON = 'person'
@@ -133,6 +133,22 @@ class BaseCohortBuilder(ABC):
                 dependency_table = self.spark.sql(query)
                 dependency_table.createOrReplaceGlobalTempView(dependency_query.table_name)
 
+        # Build the dependency for the entry cohort if exists
+        if self._query_builder.get_entry_cohort_query():
+            entry_cohort_query = self._query_builder.get_entry_cohort_query()
+            query = entry_cohort_query.query_template.format(
+                **entry_cohort_query.parameters)
+            dependency_table = self.spark.sql(query)
+            dependency_table.createOrReplaceGlobalTempView(entry_cohort_query.table_name)
+
+        # Build the negative cohort if exists
+        if self._query_builder.get_negative_query():
+            negative_cohort_query = self._query_builder.get_negative_query()
+            query = negative_cohort_query.query_template.format(
+                **negative_cohort_query.parameters)
+            dependency_table = self.spark.sql(query)
+            dependency_table.createOrReplaceGlobalTempView(negative_cohort_query.table_name)
+
         main_query = self._query_builder.get_query()
         cohort = self.spark.sql(main_query.query_template.format(**main_query.parameters))
         cohort.createOrReplaceGlobalTempView(main_query.table_name)
@@ -221,9 +237,15 @@ class NestedCohortBuilder:
                  prediction_window: int,
                  is_window_post_index: bool = False,
                  include_visit_type: bool = True,
+                 exclude_visit_tokens: bool = False,
                  is_feature_concept_frequency: bool = False,
                  is_roll_up_concept: bool = False,
-                 is_new_patient_representation: bool = False):
+                 is_new_patient_representation: bool = False,
+                 classic_bert_seq: bool = False,
+                 is_first_time_outcome: bool = False,
+                 is_questionable_outcome_existed: bool = False,
+                 is_prediction_window_unbounded: bool = False,
+                 is_observation_window_unbounded: bool = False):
         self._cohort_name = cohort_name
         self._input_folder = input_folder
         self._output_folder = output_folder
@@ -235,10 +257,16 @@ class NestedCohortBuilder:
         self._prediction_start_days = prediction_start_days
         self._prediction_window = prediction_window
         self._is_observation_post_index = is_window_post_index
+        self._is_observation_window_unbounded = is_observation_window_unbounded
         self._include_visit_type = include_visit_type
+        self._exclude_visit_tokens = exclude_visit_tokens
+        self._classic_bert_seq = classic_bert_seq
         self._is_feature_concept_frequency = is_feature_concept_frequency
         self._is_roll_up_concept = is_roll_up_concept
         self._is_new_patient_representation = is_new_patient_representation
+        self._is_first_time_outcome = is_first_time_outcome
+        self._is_questionable_outcome_existed = is_questionable_outcome_existed
+        self._is_prediction_window_unbounded = is_prediction_window_unbounded
         self._output_data_folder = os.path.join(self._output_folder,
                                                 re.sub('[^a-z0-9]+', '_',
                                                        self._cohort_name.lower()))
@@ -253,9 +281,14 @@ class NestedCohortBuilder:
                                f'hold_off_window: {hold_off_window}\n'
                                f'is_window_post_index: {is_window_post_index}\n'
                                f'include_visit_type: {include_visit_type}\n'
+                               f'exclude_visit_tokens: {exclude_visit_tokens}\n'
                                f'is_feature_concept_frequency: {is_feature_concept_frequency}\n'
                                f'is_roll_up_concept: {is_roll_up_concept}\n'
-                               f'is_new_patient_representation: {is_new_patient_representation}\n')
+                               f'is_new_patient_representation: {is_new_patient_representation}\n'
+                               f'is_first_time_outcome: {is_first_time_outcome}\n'
+                               f'is_questionable_outcome_existed: {is_questionable_outcome_existed}\n'
+                               f'is_prediction_window_unbounded: {is_prediction_window_unbounded}\n'
+                               f'is_observation_window_unbounded: {is_observation_window_unbounded}\n')
 
         self.spark = SparkSession.builder.appName(f'Generate {self._cohort_name}').getOrCreate()
         self._dependency_dict = instantiate_dependencies(self.spark, self._input_folder,
@@ -278,24 +311,65 @@ class NestedCohortBuilder:
             prediction_start_days += self._observation_window + self._hold_off_window
             prediction_window += self._observation_window + self._hold_off_window
 
-        cohort = self.spark.sql("""
+        if self._is_first_time_outcome:
+            target_cohort = self.spark.sql("""
+            SELECT
+                t.person_id AS cohort_member_id,
+                t.*
+            FROM global_temp.target_cohort AS t
+            LEFT JOIN global_temp.{entry_cohort} AS o
+                ON t.person_id = o.person_id
+                    AND DATE_ADD(t.index_date, {prediction_start_days}) > o.index_date
+            WHERE o.person_id IS NULL       
+            """.format(entry_cohort=ENTRY_COHORT,
+                       prediction_start_days=prediction_start_days))
+            target_cohort.createOrReplaceGlobalTempView('target_cohort')
+
+        if self._is_questionable_outcome_existed:
+            target_cohort = self.spark.sql("""
+            SELECT
+                t.*
+            FROM global_temp.target_cohort AS t
+            LEFT JOIN global_temp.{questionnation_outcome_cohort} AS o
+                ON t.person_id = o.person_id
+            WHERE o.person_id IS NULL       
+            """.format(questionnation_outcome_cohort=NEGATIVE_COHORT))
+            target_cohort.createOrReplaceGlobalTempView('target_cohort')
+
+        if self._is_prediction_window_unbounded:
+            query_template = """
             SELECT DISTINCT
                 t.*,
                 CAST(ISNOTNULL(o.person_id) AS INT) AS label
             FROM global_temp.target_cohort AS t 
-            JOIN global_temp.observation_period AS op
-                ON t.person_id = op.person_id
+            LEFT JOIN global_temp.outcome_cohort AS o
+                ON t.person_id = o.person_id
+                    AND o.index_date >= DATE_ADD(t.index_date, {prediction_start_days}) 
+            """
+        else:
+            query_template = """
+            SELECT DISTINCT
+                t.*,
+                CAST(ISNOTNULL(o.person_id) AS INT) AS label
+            FROM global_temp.target_cohort AS t 
+            LEFT JOIN global_temp.observation_period AS op
+                ON t.person_id = op.person_id 
+                    AND DATE_ADD(t.index_date, {prediction_window}) <= op.observation_period_end_date
             LEFT JOIN global_temp.outcome_cohort AS o
                 ON t.person_id = o.person_id
                     AND o.index_date BETWEEN DATE_ADD(t.index_date, {prediction_start_days}) 
                         AND DATE_ADD(t.index_date, {prediction_window})
-            WHERE DATE_ADD(t.index_date, {prediction_window}) <= op.observation_period_end_date
-                OR o.person_id IS NOT NULL
-        """.format(prediction_start_days=prediction_start_days,
-                   prediction_window=prediction_window))
+            WHERE op.person_id IS NOT NULL OR o.person_id IS NOT NULL
+            """
+
+        cohort_member_id_udf = F.dense_rank().over(
+            W.orderBy('person_id', 'index_date', 'visit_occurrence_id'))
+        cohort = self.spark.sql(query_template.format(prediction_start_days=prediction_start_days,
+                                                      prediction_window=prediction_window)) \
+            .withColumn('cohort_member_id', cohort_member_id_udf)
 
         ehr_records_for_cohorts = self.extract_ehr_records_for_cohort(cohort)
-        cohort = cohort.join(ehr_records_for_cohorts, 'person_id')
+        cohort = cohort.join(ehr_records_for_cohorts, ['person_id', 'cohort_member_id'])
         cohort.write.mode('overwrite').parquet(self._output_data_folder)
 
     def extract_ehr_records_for_cohort(self, cohort: DataFrame):
@@ -306,25 +380,29 @@ class NestedCohortBuilder:
             record_window_filter = ehr_records['date'].between(
                 cohort['index_date'], F.date_add(cohort['index_date'], self._observation_window))
         else:
-            record_window_filter = ehr_records['date'].between(
-                F.date_sub(cohort['index_date'], self._observation_window),
-                F.date_sub(cohort['index_date'], self._hold_off_window))
+            if self._is_observation_window_unbounded:
+                record_window_filter = ehr_records['date'] <= F.date_sub(cohort['index_date'],
+                                                                         self._hold_off_window)
+            else:
+                record_window_filter = ehr_records['date'].between(
+                    F.date_sub(cohort['index_date'],
+                               self._observation_window + self._hold_off_window),
+                    F.date_sub(cohort['index_date'], self._hold_off_window))
 
         cohort_ehr_records = ehr_records.join(cohort, 'person_id').where(record_window_filter) \
-            .select([ehr_records[field_name] for field_name in ehr_records.schema.fieldNames()])
+            .select([ehr_records[field_name] for field_name in ehr_records.schema.fieldNames()]
+                    + ['cohort_member_id'])
 
         if self._is_feature_concept_frequency:
             return create_concept_frequency_data(cohort_ehr_records, None)
 
         if self._is_new_patient_representation:
-            validate_date_folder(self._input_folder, [VISIT_OCCURRENCE])
-            visit_occurrence = preprocess_domain_table(self.spark,
-                                                       self._input_folder,
-                                                       VISIT_OCCURRENCE)
-            return create_sequence_data_time_delta_embedded(cohort_ehr_records, visit_occurrence,
-                                                            include_visit_type=self._include_visit_type)
+            return create_sequence_data_time_delta_embedded(cohort_ehr_records,
+                                                            include_visit_type=self._include_visit_type,
+                                                            exclude_visit_tokens=self._exclude_visit_tokens)
 
-        return create_sequence_data(cohort_ehr_records, None, self._include_visit_type)
+        return create_sequence_data(cohort_ehr_records, None, self._include_visit_type,
+                                    classic_bert_seq=self._classic_bert_seq)
 
     @classmethod
     def get_logger(cls):
@@ -355,10 +433,18 @@ def create_prediction_cohort(spark_args,
     prediction_window = spark_args.prediction_window
     hold_off_window = spark_args.hold_off_window
     include_visit_type = spark_args.include_visit_type
+    exclude_visit_tokens = spark_args.exclude_visit_tokens
     is_feature_concept_frequency = spark_args.is_feature_concept_frequency
     is_roll_up_concept = spark_args.is_roll_up_concept
     is_window_post_index = spark_args.is_window_post_index
     is_new_patient_representation = spark_args.is_new_patient_representation
+    classic_bert_seq = spark_args.classic_bert_seq
+    is_first_time_outcome = spark_args.is_first_time_outcome
+    is_prediction_window_unbounded = spark_args.is_prediction_window_unbounded
+    is_observation_window_unbounded = spark_args.is_observation_window_unbounded
+    # If the outcome negative query exists, that means we need to remove those questionable
+    # outcomes from the target cohort
+    is_questionable_outcome_existed = outcome_query_builder.get_negative_query() is not None
 
     # Toggle the prior/post observation_period depending on the is_window_post_index flag
     prior_observation_period = 0 if is_window_post_index else observation_window + hold_off_window
@@ -400,6 +486,12 @@ def create_prediction_cohort(spark_args,
                         prediction_window=prediction_window,
                         is_window_post_index=is_window_post_index,
                         include_visit_type=include_visit_type,
+                        exclude_visit_tokens=exclude_visit_tokens,
                         is_feature_concept_frequency=is_feature_concept_frequency,
                         is_roll_up_concept=is_roll_up_concept,
-                        is_new_patient_representation=is_new_patient_representation).build()
+                        is_new_patient_representation=is_new_patient_representation,
+                        classic_bert_seq=classic_bert_seq,
+                        is_first_time_outcome=is_first_time_outcome,
+                        is_questionable_outcome_existed=is_questionable_outcome_existed,
+                        is_prediction_window_unbounded=is_prediction_window_unbounded,
+                        is_observation_window_unbounded=is_observation_window_unbounded).build()

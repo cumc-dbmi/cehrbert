@@ -1,4 +1,4 @@
-from spark_apps.cohorts import covid_inpatient, death
+from spark_apps.cohorts import covid, ventilation
 from spark_apps.cohorts.spark_app_base import create_prediction_cohort
 
 from spark_apps.parameters import create_spark_args
@@ -7,6 +7,6 @@ DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure', 'procedure_occurre
 
 if __name__ == '__main__':
     create_prediction_cohort(create_spark_args(),
-                             covid_inpatient.query_builder(),
-                             death.query_builder(),
+                             covid.query_builder(),
+                             ventilation.query_builder(),
                              DOMAIN_TABLE_LIST)
