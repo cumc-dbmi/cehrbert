@@ -58,7 +58,8 @@ def create_vanilla_feed_forward_model(vanilla_bert_model_path):
     vanilla_bert_model = tf.keras.models.load_model(vanilla_bert_model_path,
                                                     custom_objects=dict(**get_custom_objects()))
     bert_inputs = [i for i in vanilla_bert_model.inputs if
-                   'visit' not in i.name or 'visit_segment' in i.name]
+                   'visit' not in i.name or ('visit_segment' in i.name
+                                             or 'visit_concept_order' in i.name)]
 
     contextualized_embeddings, _ = vanilla_bert_model.get_layer('encoder').output
     _, _, embedding_size = contextualized_embeddings.get_shape().as_list()
@@ -88,7 +89,8 @@ def create_vanilla_bert_bi_lstm_model(max_seq_length, vanilla_bert_model_path):
     vanilla_bert_model = tf.keras.models.load_model(vanilla_bert_model_path,
                                                     custom_objects=dict(**get_custom_objects()))
     bert_inputs = [i for i in vanilla_bert_model.inputs if
-                   'visit' not in i.name or 'visit_segment' in i.name]
+                   'visit' not in i.name or ('visit_segment' in i.name
+                                             or 'visit_concept_order' in i.name)]
     #     bert_inputs = vanilla_bert_model.inputs
     contextualized_embeddings, _ = vanilla_bert_model.get_layer('encoder').output
     _, _, embedding_size = contextualized_embeddings.get_shape().as_list()
