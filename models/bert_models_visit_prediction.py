@@ -36,6 +36,9 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
     visit_segments = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
                                            name='visit_segments')
 
+    visit_concept_orders = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
+                                                 name='visit_concept_orders')
+
     mask = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='mask')
 
     concept_mask = create_concept_mask(mask, max_seq_length)
@@ -46,7 +49,8 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
     mask_visit = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
                                        name='mask_visit')
 
-    default_inputs = [masked_concept_ids, visit_segments, mask, masked_visit_concepts, mask_visit]
+    default_inputs = [masked_concept_ids, visit_segments, visit_concept_orders, mask,
+                      masked_visit_concepts, mask_visit]
 
     mask_visit_expanded = create_concept_mask(mask_visit, max_seq_length)
 
@@ -97,7 +101,7 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
 
     next_step_input, concept_embedding_matrix = concept_embedding_layer(masked_concept_ids)
 
-    next_step_input = positional_encoding_layer(next_step_input)
+    next_step_input = positional_encoding_layer(next_step_input, visit_concept_orders)
     # Building a Vanilla Transformer (described in
     # "Attention is all you need", 2017)
     next_step_input = visit_segment_layer([visit_segments, next_step_input])

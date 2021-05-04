@@ -36,9 +36,12 @@ def transformer_bert_model(
     visit_segments = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
                                            name='visit_segments')
 
+    visit_concept_orders = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
+                                                 name='visit_concept_orders')
+
     mask = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='mask')
 
-    default_inputs = [masked_concept_ids, visit_segments, mask]
+    default_inputs = [masked_concept_ids, visit_segments, visit_concept_orders, mask]
 
     concept_mask = create_concept_mask(mask, max_seq_length)
 
@@ -76,7 +79,7 @@ def transformer_bert_model(
 
     positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
                                                         embedding_size=embedding_size)
-    next_step_input = positional_encoding_layer(next_step_input)
+    next_step_input = positional_encoding_layer(next_step_input, visit_concept_orders)
 
     if use_time_embedding:
         time_stamps = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',

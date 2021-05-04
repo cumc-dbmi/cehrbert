@@ -310,7 +310,7 @@ class PositionalEncodingLayer(tf.keras.layers.Layer):
         super(PositionalEncodingLayer, self).__init__(*args, **kwargs)
         self.max_sequence_length = max_sequence_length
         self.embedding_size = embedding_size
-        self.pos_encoding = positional_encoding(max_sequence_length, embedding_size)
+        self.pos_encoding = tf.squeeze(positional_encoding(max_sequence_length, embedding_size))
 
     def get_config(self):
         config = super().get_config()
@@ -318,9 +318,15 @@ class PositionalEncodingLayer(tf.keras.layers.Layer):
         config['embedding_size'] = self.embedding_size
         return config
 
-    def call(self, concept_embeddings, **kwargs):
-        seq_len = tf.shape(concept_embeddings)[1]
-        return concept_embeddings + self.pos_encoding[:, :seq_len, :]
+    def call(self, concept_embeddings, visit_concept_orders, **kwargs):
+        # Normalize the visit_orders using the smallest visit_concept_orders
+        # Take the absolute value to make sure the padded values are not negative after
+        # normalization
+        visit_concept_orders = tf.abs(visit_concept_orders - tf.expand_dims(
+            tf.math.reduce_min(visit_concept_orders, axis=1), axis=-1))
+        # Get the same positional encodings for the concepts with the same visit_order
+        positional_embeddings = tf.gather(self.pos_encoding, visit_concept_orders, axis=0)
+        return concept_embeddings + positional_embeddings
 
 
 class TemporalPositionalEncodingLayer(tf.keras.layers.Layer):
