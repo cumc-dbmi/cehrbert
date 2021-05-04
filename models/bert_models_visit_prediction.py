@@ -4,7 +4,8 @@ import tensorflow as tf
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 
 from models.custom_layers import (VisitEmbeddingLayer, TimeSelfAttention, Encoder, DecoderLayer,
-                                  TemporalEncoder, PositionalEncodingLayer)
+                                  TemporalEncoder, PositionalEncodingLayer,
+                                  TemporalPositionalEncodingLayer)
 from utils.model_utils import create_concept_mask
 
 
@@ -16,7 +17,8 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
                                             num_heads: int,
                                             transformer_dropout: float = 0.1,
                                             embedding_dropout: float = 0.6,
-                                            l2_reg_penalty: float = 1e-4):
+                                            l2_reg_penalty: float = 1e-4,
+                                            use_time_embedding: bool = False):
     """
     Builds a BERT-based model (Bidirectional Encoder Representations
     from Transformers) following paper "BERT: Pre-training of Deep
@@ -43,6 +45,8 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
 
     mask_visit = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
                                        name='mask_visit')
+
+    default_inputs = [masked_concept_ids, visit_segments, mask, masked_visit_concepts, mask_visit]
 
     mask_visit_expanded = create_concept_mask(mask_visit, max_seq_length)
 
@@ -98,6 +102,13 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
     # "Attention is all you need", 2017)
     next_step_input = visit_segment_layer([visit_segments, next_step_input])
 
+    if use_time_embedding:
+        time_stamps = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
+                                            name='time_stamps')
+        default_inputs.append(time_stamps)
+        time_embedding_layer = TemporalPositionalEncodingLayer(embedding_size=embedding_size)
+        next_step_input = time_embedding_layer([next_step_input, time_stamps])
+
     next_step_input, _ = encoder(next_step_input, concept_mask)
 
     concept_predictions = concept_softmax_layer(
@@ -111,7 +122,7 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
         output_layer_2([decoder_output, visit_embedding_matrix]))
 
     model = tf.keras.Model(
-        inputs=[masked_concept_ids, visit_segments, mask, masked_visit_concepts, mask_visit],
+        inputs=default_inputs,
         outputs=[concept_predictions, visit_predictions])
 
     return model

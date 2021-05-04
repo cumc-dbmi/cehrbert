@@ -103,7 +103,9 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
                         visit_vocab_size=self._visit_tokenizer.get_vocab_size(),
                         embedding_size=self._embedding_size,
                         depth=self._depth,
-                        num_heads=self._num_heads)
+                        num_heads=self._num_heads,
+                        use_time_embedding=self._use_time_embedding
+                    )
 
                     losses = {
                         'concept_predictions': MaskedPenalizedSparseCategoricalCrossentropy(
