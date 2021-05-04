@@ -53,7 +53,7 @@ def transformer_bert_model(
         # https://arxiv.org/pdf/1508.03721.pdf
         embeddings_regularizer=l2_regularizer)
 
-    visit_segment_layer = VisitEmbeddingLayer(visit_order_size=max_seq_length,
+    visit_segment_layer = VisitEmbeddingLayer(visit_order_size=3,
                                               embedding_size=embedding_size)
     encoder = Encoder(name='encoder',
                       num_layers=depth,
@@ -144,7 +144,7 @@ def transformer_temporal_bert_model(
         # https://arxiv.org/pdf/1508.03721.pdf
         embeddings_regularizer=l2_regularizer)
 
-    visit_embedding_layer = VisitEmbeddingLayer(visit_order_size=max_seq_length,
+    visit_embedding_layer = VisitEmbeddingLayer(visit_order_size=3,
                                                 embedding_size=embedding_size)
 
     time_attention_layer = TimeSelfAttention(vocab_size=vocab_size,
