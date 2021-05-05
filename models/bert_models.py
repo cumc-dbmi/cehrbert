@@ -5,7 +5,7 @@ from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 
 from models.custom_layers import (VisitEmbeddingLayer, TimeSelfAttention, Encoder,
                                   TemporalEncoder, PositionalEncodingLayer,
-                                  TemporalPositionalEncodingLayer)
+                                  TimeEmbeddingLayer)
 from utils.model_utils import create_concept_mask
 
 
@@ -85,7 +85,7 @@ def transformer_bert_model(
         time_stamps = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
                                             name='time_stamps')
         default_inputs.append(time_stamps)
-        time_embedding_layer = TemporalPositionalEncodingLayer(embedding_size=embedding_size)
+        time_embedding_layer = TimeEmbeddingLayer(embedding_size=embedding_size)
         next_step_input = time_embedding_layer([next_step_input, time_stamps])
 
     next_step_input, _ = encoder(next_step_input, concept_mask)
