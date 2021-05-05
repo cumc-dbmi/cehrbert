@@ -329,10 +329,11 @@ class PositionalEncodingLayer(tf.keras.layers.Layer):
         return concept_embeddings + positional_embeddings
 
 
-class TemporalPositionalEncodingLayer(tf.keras.layers.Layer):
-    def __init__(self, embedding_size, *args, **kwargs):
-        super(TemporalPositionalEncodingLayer, self).__init__(*args, **kwargs)
+class TimeEmbeddingLayer(tf.keras.layers.Layer):
+    def __init__(self, embedding_size, is_time_delta=False, *args, **kwargs):
+        super(TimeEmbeddingLayer, self).__init__(*args, **kwargs)
         self.embedding_size = embedding_size
+        self.is_time_delta = is_time_delta
         self.w = self.add_weight(shape=(1, self.embedding_size),
                                  trainable=True,
                                  initializer=tf.keras.initializers.GlorotNormal(),
@@ -345,14 +346,17 @@ class TemporalPositionalEncodingLayer(tf.keras.layers.Layer):
     def get_config(self):
         config = super().get_config()
         config['embedding_size'] = self.embedding_size
+        config['is_time_delta'] = self.is_time_delta
         return config
 
     def call(self, inputs, **kwargs):
         concept_embeddings, time_stamps = inputs
-        time_delta = tf.concat([time_stamps[:, 0:1] * 0, time_stamps[:, 1:] - time_stamps[:, :-1]],
-                               axis=-1)
-        normalized_time_delta = tf.cast(time_delta, tf.float32)
-        next_input = tf.expand_dims(normalized_time_delta, axis=-1) * self.w + self.phi
+
+        if self.is_time_delta:
+            time_delta = tf.concat(
+                [time_stamps[:, 0:1] * 0, time_stamps[:, 1:] - time_stamps[:, :-1]], axis=-1)
+            time_stamps = tf.cast(time_delta, tf.float32)
+        next_input = tf.expand_dims(time_stamps, axis=-1) * self.w + self.phi
         time_embeddings = tf.concat([next_input[:, 0:1, :], tf.sin(next_input[:, 1:, :])], axis=1)
         return concept_embeddings + time_embeddings
 
@@ -557,7 +561,7 @@ get_custom_objects().update({
     'PairwiseTimeAttention': TimeSelfAttention,
     'VisitEmbeddingLayer': VisitEmbeddingLayer,
     'PositionalEncodingLayer': PositionalEncodingLayer,
-    'TemporalPositionalEncodingLayer': TemporalPositionalEncodingLayer,
+    'TimeEmbeddingLayer': TimeEmbeddingLayer,
     'ReusableEmbedding': ReusableEmbedding,
     'TiedOutputEmbedding': TiedOutputEmbedding,
     'MaskedPenalizedSparseCategoricalCrossentropy': MaskedPenalizedSparseCategoricalCrossentropy
