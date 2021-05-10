@@ -596,7 +596,7 @@ def create_sequence_data_time_delta_embedded(patient_event, date_filter=None,
                                                                'days_since_epoch',
                                                                'standard_concept_id'))
 
-    extract_dates_udf = F.udf(
+    extract_order_udf = F.udf(
         lambda rows: [row[0] for row in sorted(rows, key=lambda x: x[0])],
         T.ArrayType(T.IntegerType()))
 
@@ -608,8 +608,13 @@ def create_sequence_data_time_delta_embedded(patient_event, date_filter=None,
         lambda rows: [row[2] for row in sorted(rows, key=lambda x: x[0])],
         T.ArrayType(T.StringType()))
 
-    struct_columns = ['order', 'standard_concept_id', 'visit_segments']
-    output_columns = ['cohort_member_id', 'person_id', 'concept_ids', 'visit_segments', 'dates']
+    extract_age_udf = F.udf(
+        lambda rows: [row[3] for row in sorted(rows, key=lambda x: x[0])],
+        T.ArrayType(T.IntegerType())
+    )
+
+    struct_columns = ['order', 'standard_concept_id', 'visit_segments', 'age']
+    output_columns = ['cohort_member_id', 'person_id', 'concept_ids', 'visit_segments', 'orders', 'dates']
 
     if include_visit_type:
         struct_columns.append('visit_rank_order')
@@ -628,7 +633,8 @@ def create_sequence_data_time_delta_embedded(patient_event, date_filter=None,
         F.collect_set('data_for_sorting').alias('data_for_sorting')) \
         .withColumn('concept_ids', extract_concept_ids_udf('data_for_sorting')) \
         .withColumn('visit_segments', extract_visit_segments_udf('data_for_sorting')) \
-        .withColumn('dates', extract_dates_udf('data_for_sorting'))
+        .withColumn('orders', extract_order_udf('data_for_sorting')) \
+        .withColumn('dates', extract_age_udf('data_for_sorting'))
 
     # If include_visit_type is enabled, we add additional information to the default output
     if include_visit_type:

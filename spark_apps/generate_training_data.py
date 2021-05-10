@@ -8,6 +8,7 @@ from utils.spark_utils import *
 import spark_apps.parameters as p
 
 VISIT_OCCURRENCE = 'visit_occurrence'
+PERSON = 'person'
 
 
 def main(input_folder, output_folder, domain_table_list, date_filter,
@@ -18,13 +19,17 @@ def main(input_folder, output_folder, domain_table_list, date_filter,
         domain_tables.append(preprocess_domain_table(spark, input_folder, domain_table_name))
 
     visit_occurrence = preprocess_domain_table(spark, input_folder, VISIT_OCCURRENCE)
+    person = preprocess_domain_table(spark, input_folder, PERSON)
     patient_event = join_domain_tables(domain_tables)
     patient_event = patient_event.where('visit_occurrence_id IS NOT NULL').distinct()
     patient_event = patient_event.join(visit_occurrence, 'visit_occurrence_id') \
+        .join(person, 'person_id') \
         .select(patient_event['person_id'], patient_event['standard_concept_id'],
                 patient_event['date'], patient_event['visit_occurrence_id'],
-                patient_event['domain'], visit_occurrence['visit_concept_id']) \
-        .withColumn('cohort_member_id', F.col('person_id'))
+                patient_event['domain'], visit_occurrence['visit_concept_id'],
+                person['birth_datetime']) \
+        .withColumn('cohort_member_id', F.col('person_id')) \
+        .withColumn('age', F.months_between(F.col('date'),F.col("birth_datetime"))/F.lit(12))
 
     if is_new_patient_representation:
         sequence_data = create_sequence_data_time_delta_embedded(patient_event,
