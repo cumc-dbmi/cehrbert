@@ -6,6 +6,7 @@ from typing import List
 import numpy as np
 from tensorflow.python.keras.preprocessing.sequence import pad_sequences
 from tensorflow.dtypes import int32
+import tensorflow as tf
 
 from data_generators.data_classes import RowSlicer
 
@@ -282,7 +283,9 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
 
         row, left_index, right_index, _ = row_slicer
 
-        iterator = zip(map(int, row.dates), row.token_ids, row.visit_segments,
+        sorting_columns = getattr(row, 'orders') if hasattr(row, 'orders') else row.dates
+
+        iterator = zip(map(int, sorting_columns), row.token_ids, row.visit_segments,
                        row.visit_concept_orders)
         sorted_list = sorted(iterator, key=lambda tup2: (tup2[0], tup2[1]))
 

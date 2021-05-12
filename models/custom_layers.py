@@ -310,7 +310,7 @@ class PositionalEncodingLayer(tf.keras.layers.Layer):
         super(PositionalEncodingLayer, self).__init__(*args, **kwargs)
         self.max_sequence_length = max_sequence_length
         self.embedding_size = embedding_size
-        self.pos_encoding = tf.squeeze(positional_encoding(max_sequence_length, embedding_size))
+        self.pos_encoding = positional_encoding(max_sequence_length, embedding_size)
 
     def get_config(self):
         config = super().get_config()
@@ -319,14 +319,8 @@ class PositionalEncodingLayer(tf.keras.layers.Layer):
         return config
 
     def call(self, concept_embeddings, visit_concept_orders, **kwargs):
-        # Normalize the visit_orders using the smallest visit_concept_orders
-        # Take the absolute value to make sure the padded values are not negative after
-        # normalization
-        visit_concept_orders = tf.abs(visit_concept_orders - tf.expand_dims(
-            tf.math.reduce_min(visit_concept_orders, axis=1), axis=-1))
-        # Get the same positional encodings for the concepts with the same visit_order
-        positional_embeddings = tf.gather(self.pos_encoding, visit_concept_orders, axis=0)
-        return concept_embeddings + positional_embeddings
+        seq_len = tf.shape(concept_embeddings)[1]
+        return concept_embeddings + self.pos_encoding[:, :seq_len, :]
 
 
 class TimeEmbeddingLayer(tf.keras.layers.Layer):
@@ -351,11 +345,10 @@ class TimeEmbeddingLayer(tf.keras.layers.Layer):
 
     def call(self, inputs, **kwargs):
         concept_embeddings, time_stamps = inputs
-
+        time_stamps = tf.cast(time_stamps,  tf.float32)
         if self.is_time_delta:
-            time_delta = tf.concat(
+            time_stamps = tf.concat(
                 [time_stamps[:, 0:1] * 0, time_stamps[:, 1:] - time_stamps[:, :-1]], axis=-1)
-            time_stamps = tf.cast(time_delta, tf.float32)
         next_input = tf.expand_dims(time_stamps, axis=-1) * self.w + self.phi
         time_embeddings = tf.concat([next_input[:, 0:1, :], tf.sin(next_input[:, 1:, :])], axis=1)
         return concept_embeddings + time_embeddings
