@@ -29,7 +29,7 @@ def main(input_folder, output_folder, domain_table_list, date_filter,
                 patient_event['domain'], visit_occurrence['visit_concept_id'],
                 person['birth_datetime']) \
         .withColumn('cohort_member_id', F.col('person_id')) \
-        .withColumn('age', F.months_between(F.col('date'),F.col("birth_datetime"))/F.lit(12))
+        .withColumn('age', F.ceil(F.months_between(F.col('date'),F.col("birth_datetime"))/F.lit(12)))
 
     if is_new_patient_representation:
         sequence_data = create_sequence_data_time_delta_embedded(patient_event,
