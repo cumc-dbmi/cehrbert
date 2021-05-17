@@ -614,7 +614,8 @@ def create_sequence_data_time_delta_embedded(patient_event, date_filter=None,
     )
 
     struct_columns = ['order', 'standard_concept_id', 'visit_segments', 'age']
-    output_columns = ['cohort_member_id', 'person_id', 'concept_ids', 'visit_segments', 'orders', 'dates']
+    output_columns = ['cohort_member_id', 'person_id', 'concept_ids', 'visit_segments', 'orders',
+                      'dates']
 
     if include_visit_type:
         struct_columns.append('visit_rank_order')
@@ -719,15 +720,17 @@ def extract_ehr_records(spark, input_folder, domain_table_list, include_visit_ty
     patient_ehr_records = join_domain_tables(domain_tables)
     patient_ehr_records = patient_ehr_records.where('visit_occurrence_id IS NOT NULL').distinct()
     person = preprocess_domain_table(spark, input_folder, PERSON)
+    patient_ehr_records = patient_ehr_records.join(person, 'person_id') \
+        .withColumn('age',
+                    F.ceil(F.months_between(F.col('date'), F.col("birth_datetime")) / F.lit(12)))
     if include_visit_type:
         visit_occurrence = preprocess_domain_table(spark, input_folder, VISIT_OCCURRENCE)
         patient_ehr_records = patient_ehr_records.join(visit_occurrence, 'visit_occurrence_id') \
-            .join(person, 'person_id') \
             .select(patient_ehr_records['person_id'], patient_ehr_records['standard_concept_id'],
                     patient_ehr_records['date'], patient_ehr_records['visit_occurrence_id'],
                     patient_ehr_records['domain'], visit_occurrence['visit_concept_id'],
-                    person['birth_datetime']) \
-            .withColumn('age', F.ceil(F.months_between(F.col('date'),F.col("birth_datetime"))/F.lit(12)))
+                    patient_ehr_records['age'])
+
     return patient_ehr_records
 
 
