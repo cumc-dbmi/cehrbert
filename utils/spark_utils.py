@@ -711,19 +711,23 @@ def extract_ehr_records(spark, input_folder, domain_table_list, include_visit_ty
     :param with_rollup: whether ot not to roll up the concepts to the parent levels
     :return:
     """
+    PERSON = 'person'
     domain_tables = []
     for domain_table_name in domain_table_list:
         domain_tables.append(
             preprocess_domain_table(spark, input_folder, domain_table_name, with_rollup))
     patient_ehr_records = join_domain_tables(domain_tables)
     patient_ehr_records = patient_ehr_records.where('visit_occurrence_id IS NOT NULL').distinct()
-
+    person = preprocess_domain_table(spark, input_folder, PERSON)
     if include_visit_type:
         visit_occurrence = preprocess_domain_table(spark, input_folder, VISIT_OCCURRENCE)
         patient_ehr_records = patient_ehr_records.join(visit_occurrence, 'visit_occurrence_id') \
+            .join(person, 'person_id') \
             .select(patient_ehr_records['person_id'], patient_ehr_records['standard_concept_id'],
                     patient_ehr_records['date'], patient_ehr_records['visit_occurrence_id'],
-                    patient_ehr_records['domain'], visit_occurrence['visit_concept_id'])
+                    patient_ehr_records['domain'], visit_occurrence['visit_concept_id'],
+                    person['birth_datetime']) \
+            .withColumn('age', F.ceil(F.months_between(F.col('date'),F.col("birth_datetime"))/F.lit(12)))
     return patient_ehr_records
 
 
