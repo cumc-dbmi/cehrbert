@@ -343,15 +343,14 @@ class TimeEmbeddingLayer(tf.keras.layers.Layer):
         config['is_time_delta'] = self.is_time_delta
         return config
 
-    def call(self, inputs, **kwargs):
-        concept_embeddings, time_stamps = inputs
+    def call(self, time_stamps, **kwargs):
         time_stamps = tf.cast(time_stamps,  tf.float32)
         if self.is_time_delta:
             time_stamps = tf.concat(
                 [time_stamps[:, 0:1] * 0, time_stamps[:, 1:] - time_stamps[:, :-1]], axis=-1)
         next_input = tf.expand_dims(time_stamps, axis=-1) * self.w + self.phi
         time_embeddings = tf.concat([next_input[:, 0:1, :], tf.sin(next_input[:, 1:, :])], axis=1)
-        return concept_embeddings + time_embeddings
+        return time_embeddings
 
 
 class VisitEmbeddingLayer(tf.keras.layers.Layer):
