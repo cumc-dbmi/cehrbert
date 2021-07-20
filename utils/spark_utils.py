@@ -450,22 +450,14 @@ def create_sequence_data(patient_event, date_filter=None, include_visit_type=Fal
                                                                'priority', 'date_in_week',
                                                                'standard_concept_id'))
 
-    dates_udf = F.udf(
-        lambda rows: [row[1] for row in sorted(rows, key=lambda x: x[0])],
-        T.ArrayType(T.IntegerType()))
-    concept_ids_udf = F.udf(
-        lambda rows: [str(row[2]) for row in sorted(rows, key=lambda x: x[0])],
-        T.ArrayType(T.StringType()))
-    visit_orders_udf = F.udf(
-        lambda rows: [row[3] for row in sorted(rows, key=lambda x: x[0])],
-        T.ArrayType(T.IntegerType()))
-    visit_segments_udf = F.udf(
-        lambda rows: [row[4] for row in sorted(rows, key=lambda x: x[0])],
-        T.ArrayType(T.IntegerType()))
+    def create_column_udf(tuple_index, data_type):
+        return F.udf(
+            lambda rows: [row[tuple_index] for row in sorted(rows, key=lambda x: x[0])],
+            T.ArrayType(data_type))
 
     # Group the data into sequences
     output_columns = ['order', 'date_in_week', 'standard_concept_id', 'visit_rank_order',
-                      'visit_segment']
+                      'visit_segment', 'age']
 
     if include_visit_type:
         output_columns.append('visit_rank_order')
@@ -479,14 +471,19 @@ def create_sequence_data(patient_event, date_filter=None, include_visit_type=Fal
         .agg(F.collect_set('date_concept_id_period').alias('date_concept_id_period'),
              F.min('earliest_visit_date').alias('earliest_visit_date'),
              F.max('date').alias('max_event_date')) \
-        .withColumn('dates', dates_udf('date_concept_id_period')) \
-        .withColumn('concept_ids', concept_ids_udf('date_concept_id_period')) \
-        .withColumn('concept_id_visit_orders', visit_orders_udf('date_concept_id_period')) \
-        .withColumn('visit_segments', visit_segments_udf('date_concept_id_period'))
+        .withColumn('orders', create_column_udf(0, T.IntegerType())('date_concept_id_period')) \
+        .withColumn('dates', create_column_udf(1, T.IntegerType())('date_concept_id_period')) \
+        .withColumn('concept_ids', create_column_udf(2, T.StringType())('date_concept_id_period')) \
+        .withColumn('concept_id_visit_orders',
+                    create_column_udf(3, T.IntegerType())('date_concept_id_period')) \
+        .withColumn('visit_segments',
+                    create_column_udf(4, T.IntegerType())('date_concept_id_period')) \
+        .withColumn('ages', create_column_udf(5, T.IntegerType())('date_concept_id_period'))
 
     # Default columns in the output dataframe
     columns_for_output = ['cohort_member_id', 'person_id', 'earliest_visit_date', 'max_event_date',
-                          'dates', 'concept_ids', 'concept_id_visit_orders', 'visit_segments']
+                          'orders', 'dates', 'ages', 'concept_ids', 'concept_id_visit_orders',
+                          'visit_segments']
 
     # If include_visit_type is enabled, we add additional information to the default output
     if include_visit_type:
