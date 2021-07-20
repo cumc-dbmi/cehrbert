@@ -96,38 +96,53 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
 
     visit_softmax_layer = tf.keras.layers.Softmax(name='visit_predictions')
 
-    next_step_input, concept_embedding_matrix = concept_embedding_layer(masked_concept_ids)
+    # embeddings for encoder input
+    input_for_encoder, concept_embedding_matrix = concept_embedding_layer(masked_concept_ids)
+
+    # embeddings for decoder input
+    input_for_decoder, visit_embedding_matrix = visit_embedding_layer(masked_visit_concepts)
 
     # Building a Vanilla Transformer (described in
     # "Attention is all you need", 2017)
-    next_step_input = visit_segment_layer([visit_segments, next_step_input])
+    input_for_encoder = visit_segment_layer([visit_segments, input_for_encoder])
 
     if use_time_embedding:
-        time_stamps = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
+        # additional inputs with time embeddings
+        time_stamps = tf.keras.layers.Input(shape=(max_seq_length,),
+                                            dtype='int32',
                                             name='time_stamps')
-        ages = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
+        ages = tf.keras.layers.Input(shape=(max_seq_length,),
+                                     dtype='int32',
                                      name='ages')
         default_inputs.extend([time_stamps, ages])
+
+        # define the time embedding layer for absolute time stamps (since 1970)
         time_embedding_layer = TimeEmbeddingLayer(embedding_size=time_embeddings_size)
+        # define the age embedding layer for the age w.r.t the medical record
         age_embedding_layer = TimeEmbeddingLayer(embedding_size=time_embeddings_size)
-        scale_back_concat_layer = tf.keras.layers.Dense(embedding_size, activation='tanh')
+        # dense layer for rescale the patient sequence embeddings back to the original size
+        scale_back_patient_seq_concat_layer = tf.keras.layers.Dense(embedding_size,
+                                                                    activation='tanh')
+        # dense layer for rescale the visit sequence embeddings back to the original size
+        scale_back_visit_seq_concat_layer = tf.keras.layers.Dense(embedding_size,
+                                                                  activation='tanh')
         time_embeddings = age_embedding_layer(time_stamps)
         age_embeddings = time_embedding_layer(time_stamps)
-        next_step_input = scale_back_concat_layer(
-            tf.concat([next_step_input, time_embeddings, age_embeddings], axis=-1))
+        input_for_encoder = scale_back_patient_seq_concat_layer(
+            tf.concat([input_for_encoder, time_embeddings, age_embeddings], axis=-1))
+        input_for_decoder = scale_back_visit_seq_concat_layer(
+            tf.concat([input_for_decoder, time_embeddings, age_embeddings], axis=-1))
     else:
         positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
                                                             embedding_size=embedding_size)
-        next_step_input = positional_encoding_layer(next_step_input, visit_concept_orders)
+        input_for_encoder = positional_encoding_layer(input_for_encoder, visit_concept_orders)
 
-    next_step_input, _ = encoder(next_step_input, concept_mask)
+    input_for_encoder, _ = encoder(input_for_encoder, concept_mask)
 
     concept_predictions = concept_softmax_layer(
-        output_layer_1([next_step_input, concept_embedding_matrix]))
+        output_layer_1([input_for_encoder, concept_embedding_matrix]))
 
-    input_for_decoder, visit_embedding_matrix = visit_embedding_layer(masked_visit_concepts)
-
-    decoder_output, _, _ = decoder_layer(input_for_decoder, next_step_input, concept_mask,
+    decoder_output, _, _ = decoder_layer(input_for_decoder, input_for_encoder, concept_mask,
                                          mask_visit_expanded)
     visit_predictions = visit_softmax_layer(
         output_layer_2([decoder_output, visit_embedding_matrix]))
