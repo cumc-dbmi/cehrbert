@@ -18,7 +18,8 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
                                             transformer_dropout: float = 0.1,
                                             embedding_dropout: float = 0.6,
                                             l2_reg_penalty: float = 1e-4,
-                                            use_time_embedding: bool = False):
+                                            use_time_embedding: bool = False,
+                                            time_embeddings_size: int = 16):
     """
     Builds a BERT-based model (Bidirectional Encoder Representations
     from Transformers) following paper "BERT: Pre-training of Deep
@@ -73,10 +74,6 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
 
     visit_segment_layer = VisitEmbeddingLayer(visit_order_size=3,
                                               embedding_size=embedding_size)
-
-    positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
-                                                        embedding_size=embedding_size)
-
     encoder = Encoder(name='encoder',
                       num_layers=depth,
                       d_model=embedding_size,
@@ -101,7 +98,6 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
 
     next_step_input, concept_embedding_matrix = concept_embedding_layer(masked_concept_ids)
 
-    next_step_input = positional_encoding_layer(next_step_input, visit_concept_orders)
     # Building a Vanilla Transformer (described in
     # "Attention is all you need", 2017)
     next_step_input = visit_segment_layer([visit_segments, next_step_input])
@@ -109,9 +105,20 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
     if use_time_embedding:
         time_stamps = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
                                             name='time_stamps')
-        default_inputs.append(time_stamps)
-        time_embedding_layer = TimeEmbeddingLayer(embedding_size=embedding_size)
-        next_step_input = time_embedding_layer([next_step_input, time_stamps])
+        ages = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
+                                     name='ages')
+        default_inputs.extend([time_stamps, ages])
+        time_embedding_layer = TimeEmbeddingLayer(embedding_size=time_embeddings_size)
+        age_embedding_layer = TimeEmbeddingLayer(embedding_size=time_embeddings_size)
+        scale_back_concat_layer = tf.keras.layers.Dense(embedding_size, activation='tanh')
+        time_embeddings = age_embedding_layer(time_stamps)
+        age_embeddings = time_embedding_layer(time_stamps)
+        next_step_input = scale_back_concat_layer(
+            tf.concat([next_step_input, time_embeddings, age_embeddings], axis=-1))
+    else:
+        positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
+                                                            embedding_size=embedding_size)
+        next_step_input = positional_encoding_layer(next_step_input, visit_concept_orders)
 
     next_step_input, _ = encoder(next_step_input, concept_mask)
 
