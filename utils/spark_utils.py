@@ -487,18 +487,11 @@ def create_sequence_data(patient_event, date_filter=None, include_visit_type=Fal
 
     # If include_visit_type is enabled, we add additional information to the default output
     if include_visit_type:
-        visit_concept_orders_udf = F.udf(
-            lambda rows: [row[5] for row in sorted(rows, key=lambda x: x[0])],
-            T.ArrayType(T.IntegerType()))
-
-        visit_concept_ids_udf = F.udf(
-            lambda rows: [str(row[6]) for row in sorted(rows, key=lambda x: x[0])],
-            T.ArrayType(T.StringType()))
-
         patient_grouped_events = patient_grouped_events \
-            .withColumn('visit_concept_orders', visit_concept_orders_udf('date_concept_id_period')) \
-            .withColumn('visit_concept_ids', visit_concept_ids_udf('date_concept_id_period'))
-
+            .withColumn('visit_concept_orders',
+                        create_column_udf(6, T.IntegerType())('date_concept_id_period')) \
+            .withColumn('visit_concept_ids',
+                        create_column_udf(7, T.StringType())('date_concept_id_period'))
         columns_for_output.append('visit_concept_orders')
         columns_for_output.append('visit_concept_ids')
 
