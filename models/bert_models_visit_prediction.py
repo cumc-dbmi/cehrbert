@@ -126,8 +126,8 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
         # dense layer for rescale the visit sequence embeddings back to the original size
         scale_back_visit_seq_concat_layer = tf.keras.layers.Dense(embedding_size,
                                                                   activation='tanh')
-        time_embeddings = age_embedding_layer(time_stamps)
-        age_embeddings = time_embedding_layer(time_stamps)
+        time_embeddings = time_embedding_layer(time_stamps)
+        age_embeddings = age_embedding_layer(ages)
         input_for_encoder = scale_back_patient_seq_concat_layer(
             tf.concat([input_for_encoder, time_embeddings, age_embeddings], axis=-1))
         input_for_decoder = scale_back_visit_seq_concat_layer(
