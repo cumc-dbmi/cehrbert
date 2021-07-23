@@ -157,5 +157,5 @@ def create_concept_mask(mask, max_seq_length):
     # mask the fourth dimension
     concept_mask_2 = tf.expand_dims(tf.expand_dims(mask, axis=1), axis=1)
     concept_mask = tf.cast(
-        (concept_mask_1 + concept_mask_2) > 0, dtype=tf.int32, name='concept_mask')
+        (concept_mask_1 + concept_mask_2) > 0, dtype=tf.int32, name=f'{mask.name}_mask')
     return concept_mask
