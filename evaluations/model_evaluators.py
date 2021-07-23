@@ -240,25 +240,33 @@ class BertLstmModelEvaluator(SequenceModelEvaluator):
         token_ids = self._tokenizer.encode(
             self._dataset.concept_ids.apply(lambda concept_ids: concept_ids.tolist()))
         visit_segments = self._dataset.visit_segments
-        ages = np.asarray(((self._dataset['age'] - self._dataset['age'].mean()) / self._dataset[
-            'age'].std()).astype(float).apply(lambda c: [c]).tolist())
+        time_stamps = self._dataset.dates
+        ages = self._dataset.ages
+        index_age = np.asarray(
+            ((self._dataset['age'] - self._dataset['age'].mean()) / self._dataset[
+                'age'].std()).astype(float).apply(lambda c: [c]).tolist())
         labels = self._dataset.label
         padded_token_ides = post_pad_pre_truncate(token_ids, self._tokenizer.get_unused_token_id(),
                                                   self._max_seq_length)
         padded_visit_segments = post_pad_pre_truncate(visit_segments, 0, self._max_seq_length)
         mask = (padded_token_ides == self._tokenizer.get_unused_token_id()).astype(int)
 
+        padded_time_stamps = post_pad_pre_truncate(time_stamps, 0, self._max_seq_length)
+        padded_ages = post_pad_pre_truncate(ages, 0, self._max_seq_length)
+
         inputs = {
-            'age': ages,
+            'age': index_age,
             'concept_ids': padded_token_ides,
             'masked_concept_ids': padded_token_ides,
             'mask': mask,
-            'visit_segments': padded_visit_segments
+            'visit_segments': padded_visit_segments,
+            'time_stamps': padded_time_stamps,
+            'ages': padded_ages
         }
-
-        if self._is_temporal:
-            inputs['time_stamps'] = post_pad_pre_truncate(self._dataset.dates, 0,
-                                                          self._max_seq_length)
+        #
+        # if self._is_temporal:
+        #     inputs['time_stamps'] = post_pad_pre_truncate(self._dataset.dates, 0,
+        #                                                   self._max_seq_length)
         return inputs, labels
 
 
