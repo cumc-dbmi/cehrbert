@@ -37,9 +37,6 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
     visit_segments = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
                                            name='visit_segments')
 
-    visit_concept_orders = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
-                                                 name='visit_concept_orders')
-
     mask = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='mask')
 
     concept_mask = create_concept_mask(mask, max_seq_length)
@@ -50,7 +47,7 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
     mask_visit = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
                                        name='mask_visit')
 
-    default_inputs = [masked_concept_ids, visit_segments, visit_concept_orders, mask,
+    default_inputs = [masked_concept_ids, visit_segments, mask,
                       masked_visit_concepts, mask_visit]
 
     mask_visit_expanded = create_concept_mask(mask_visit, max_seq_length)
@@ -135,7 +132,7 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
     else:
         positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
                                                             embedding_size=embedding_size)
-        input_for_encoder = positional_encoding_layer(input_for_encoder, visit_concept_orders)
+        input_for_encoder = positional_encoding_layer(input_for_encoder)
 
     input_for_encoder, _ = encoder(input_for_encoder, concept_mask)
 
