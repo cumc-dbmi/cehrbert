@@ -331,11 +331,11 @@ class TimeEmbeddingLayer(tf.keras.layers.Layer):
         self.w = self.add_weight(shape=(1, self.embedding_size),
                                  trainable=True,
                                  initializer=tf.keras.initializers.GlorotNormal(),
-                                 name='time_embedding_weight')
+                                 name=f'time_embedding_weight_{self.name}')
         self.phi = self.add_weight(shape=(1, self.embedding_size),
                                    trainable=True,
                                    initializer=tf.keras.initializers.GlorotNormal(),
-                                   name='time_embedding_phi')
+                                   name=f'time_embedding_phi_{self.name}')
 
     def get_config(self):
         config = super().get_config()
@@ -344,7 +344,7 @@ class TimeEmbeddingLayer(tf.keras.layers.Layer):
         return config
 
     def call(self, time_stamps, **kwargs):
-        time_stamps = tf.cast(time_stamps,  tf.float32)
+        time_stamps = tf.cast(time_stamps, tf.float32)
         if self.is_time_delta:
             time_stamps = tf.concat(
                 [time_stamps[:, 0:1] * 0, time_stamps[:, 1:] - time_stamps[:, :-1]], axis=-1)
