@@ -318,7 +318,7 @@ class PositionalEncodingLayer(tf.keras.layers.Layer):
         config['embedding_size'] = self.embedding_size
         return config
 
-    def call(self, concept_embeddings, visit_concept_orders, **kwargs):
+    def call(self, concept_embeddings, **kwargs):
         seq_len = tf.shape(concept_embeddings)[1]
         return concept_embeddings + self.pos_encoding[:, :seq_len, :]
 

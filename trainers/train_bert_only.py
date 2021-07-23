@@ -1,7 +1,5 @@
 import os
 
-import tensorflow as tf
-
 from config.model_configs import create_bert_model_config
 from config.parse_args import create_parse_args_base_bert
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer

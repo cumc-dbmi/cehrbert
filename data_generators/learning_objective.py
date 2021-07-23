@@ -235,7 +235,6 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
             'mask': int32,
             'time_stamps': int32,
             'visit_segments': int32,
-            'visit_concept_orders': int32,
             'ages': int32
         }
         output_dict_schema = {'concept_predictions': int32}
@@ -258,17 +257,13 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
         visit_segments = post_pad_pre_truncate(visit_segments, 0, self._max_seq_len)
         time_stamps = post_pad_pre_truncate(time_stamps, 0, self._max_seq_len)
         ages = post_pad_pre_truncate(ages, 0, self._max_seq_len)
-        visit_orders = post_pad_pre_truncate(visit_orders,
-                                             self._max_seq_len,
-                                             self._max_seq_len)
 
         input_dict = {'masked_concept_ids': masked_concepts,
                       'concept_ids': concepts,
                       'mask': mask,
                       'time_stamps': time_stamps,
                       'ages': ages,
-                      'visit_segments': visit_segments,
-                      'visit_concept_orders': visit_orders}
+                      'visit_segments': visit_segments}
 
         output_dict = {'concept_predictions': np.stack([concepts, output_mask], axis=-1)}
 
