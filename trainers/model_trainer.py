@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 import os
 from pathlib import Path
-import pandas as pd
+# import pandas as pd
+import dask.dataframe as dd
 
 import tensorflow as tf
 
@@ -97,7 +98,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
     def _load_training_data(self):
         if not os.path.exists(self._training_data_parquet_path):
             raise FileExistsError(f'{self._training_data_parquet_path} does not exist!')
-        parquet = pd.read_parquet(self._training_data_parquet_path)
+        parquet = dd.read_parquet(self._training_data_parquet_path)
         return parquet
 
     @abstractmethod
