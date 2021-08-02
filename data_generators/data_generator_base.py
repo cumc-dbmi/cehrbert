@@ -252,7 +252,7 @@ class BertDataGenerator(AbstractDataGeneratorBase):
                     yield RowSlicer(row, 0, seq_length)
 
     def estimate_data_size(self):
-        return len(self._training_data.index)
+        return len(self._training_data)
 
 
 class BertVisitPredictionDataGenerator(BertDataGenerator):

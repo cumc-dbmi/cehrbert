@@ -58,18 +58,26 @@ def log_function_decorator(function):
 
 @log_function_decorator
 def tokenize_concepts(training_data, column_name, tokenized_column_name, tokenizer_path,
-                      oov_token='0'):
+                      oov_token='0', recreate=False):
     """
     Tokenize the concept sequence and save the tokenizer as a pickle file
     :return:
     """
-    tokenizer = ConceptTokenizer(oov_token=oov_token)
-    training_data[column_name] = training_data[column_name].apply(
-        lambda concept_ids: concept_ids.tolist())
-    tokenizer.fit_on_concept_sequences(training_data[column_name])
-    encoded_sequences = tokenizer.encode(training_data[column_name])
-    training_data[tokenized_column_name] = encoded_sequences
-    pickle.dump(tokenizer, open(tokenizer_path, 'wb'))
+    if not os.path.exists(tokenizer_path) or recreate:
+        tokenizer = ConceptTokenizer(oov_token=oov_token)
+        tokenizer.fit_on_concept_sequences(training_data[column_name])
+    else:
+        logging.getLogger(__name__).info(
+            f'Loading the existing tokenizer from {tokenizer_path}')
+        tokenizer = pickle.load(open(tokenizer_path, 'rb'))
+
+    training_data[tokenized_column_name] = training_data[column_name].map_partitions(
+        lambda ds: pd.Series(
+            tokenizer.encode(map(lambda t: t[1].tolist(), ds.iteritems()), is_generator=True),
+            name='concept_ids'), meta='iterable')
+
+    if not os.path.exists(tokenizer_path) or recreate:
+        pickle.dump(tokenizer, open(tokenizer_path, 'wb'))
     return tokenizer
 
 

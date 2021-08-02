@@ -1,5 +1,6 @@
 import os
 
+import pickle
 from config.model_configs import create_bert_model_config
 from config.parse_args import create_parse_args_base_bert
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
@@ -52,6 +53,7 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
             f'use_time_embeddings: {use_time_embedding}\n')
 
     def _load_dependencies(self):
+
         self._tokenizer = tokenize_concepts(self._training_data,
                                             'concept_ids',
                                             'token_ids',
