@@ -20,6 +20,9 @@ def main(input_folder, output_folder, domain_table_list, date_filter,
 
     visit_occurrence = preprocess_domain_table(spark, input_folder, VISIT_OCCURRENCE)
     person = preprocess_domain_table(spark, input_folder, PERSON)
+    person = person.select('person_id', F.coalesce('birth_datetime',
+                                                   F.concat('year_of_birth', F.lit('-01-01')).cast(
+                                                       'timestamp')).alias('birth_datetime'))
     patient_event = join_domain_tables(domain_tables)
     patient_event = patient_event.where('visit_occurrence_id IS NOT NULL').distinct()
     patient_event = patient_event.join(visit_occurrence, 'visit_occurrence_id') \
@@ -29,7 +32,8 @@ def main(input_folder, output_folder, domain_table_list, date_filter,
                 patient_event['domain'], visit_occurrence['visit_concept_id'],
                 person['birth_datetime']) \
         .withColumn('cohort_member_id', F.col('person_id')) \
-        .withColumn('age', F.ceil(F.months_between(F.col('date'),F.col("birth_datetime"))/F.lit(12)))
+        .withColumn('age', F.ceil(F.months_between(F.col('date'),
+                                                   F.col("birth_datetime")) / F.lit(12)))
 
     if is_new_patient_representation:
         sequence_data = create_sequence_data_time_delta_embedded(patient_event,
