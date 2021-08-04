@@ -489,9 +489,9 @@ def create_sequence_data(patient_event, date_filter=None, include_visit_type=Fal
     return patient_grouped_events.select(columns_for_output)
 
 
-def create_sequence_data_time_delta_embedded(patient_event, date_filter=None,
-                                             include_visit_type=False,
-                                             exclude_visit_tokens=False):
+def create_sequence_data_with_att(patient_event, date_filter=None,
+                                  include_visit_type=False,
+                                  exclude_visit_tokens=False):
     """
     Create a sequence of the events associated with one patient in a chronological order
 

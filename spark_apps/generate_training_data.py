@@ -19,6 +19,7 @@ def main(input_folder, output_folder, domain_table_list, date_filter,
         domain_tables.append(preprocess_domain_table(spark, input_folder, domain_table_name))
 
     visit_occurrence = preprocess_domain_table(spark, input_folder, VISIT_OCCURRENCE)
+    visit_occurrence = visit_occurrence.select('visit_occurrence_id', 'visit_concept_id')
     person = preprocess_domain_table(spark, input_folder, PERSON)
     person = person.select('person_id', F.coalesce('birth_datetime',
                                                    F.concat('year_of_birth', F.lit('-01-01')).cast(
@@ -27,19 +28,17 @@ def main(input_folder, output_folder, domain_table_list, date_filter,
     patient_event = patient_event.where('visit_occurrence_id IS NOT NULL').distinct()
     patient_event = patient_event.join(visit_occurrence, 'visit_occurrence_id') \
         .join(person, 'person_id') \
-        .select(patient_event['person_id'], patient_event['standard_concept_id'],
-                patient_event['date'], patient_event['visit_occurrence_id'],
-                patient_event['domain'], visit_occurrence['visit_concept_id'],
-                person['birth_datetime']) \
+        .select([patient_event[fieldName] for fieldName in patient_event.schema.fieldNames()] +
+                ['visit_concept_id', 'birth_datetime']) \
         .withColumn('cohort_member_id', F.col('person_id')) \
         .withColumn('age', F.ceil(F.months_between(F.col('date'),
                                                    F.col("birth_datetime")) / F.lit(12)))
 
     if is_new_patient_representation:
-        sequence_data = create_sequence_data_time_delta_embedded(patient_event,
-                                                                 date_filter=date_filter,
-                                                                 exclude_visit_tokens=exclude_visit_tokens,
-                                                                 include_visit_type=include_visit_type)
+        sequence_data = create_sequence_data_with_att(patient_event,
+                                                      date_filter=date_filter,
+                                                      exclude_visit_tokens=exclude_visit_tokens,
+                                                      include_visit_type=include_visit_type)
     else:
         sequence_data = create_sequence_data(patient_event, date_filter=date_filter,
                                              include_visit_type=include_visit_type,
