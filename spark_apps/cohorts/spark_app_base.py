@@ -397,9 +397,9 @@ class NestedCohortBuilder:
             return create_concept_frequency_data(cohort_ehr_records, None)
 
         if self._is_new_patient_representation:
-            return create_sequence_data_time_delta_embedded(cohort_ehr_records,
-                                                            include_visit_type=self._include_visit_type,
-                                                            exclude_visit_tokens=self._exclude_visit_tokens)
+            return create_sequence_data_with_att(cohort_ehr_records,
+                                                 include_visit_type=self._include_visit_type,
+                                                 exclude_visit_tokens=self._exclude_visit_tokens)
 
         return create_sequence_data(cohort_ehr_records, None, self._include_visit_type,
                                     classic_bert_seq=self._classic_bert_seq)
