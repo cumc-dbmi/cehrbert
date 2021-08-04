@@ -36,6 +36,7 @@ class BertConfig(Config):
                  depth, num_heads,
                  include_visit_prediction,
                  use_time_embedding,
+                 use_dask,
                  *args, **kwargs):
         super(BertConfig, self).__init__(*args, **kwargs)
         self.visit_tokenizer_path = visit_tokenizer_path
@@ -43,6 +44,7 @@ class BertConfig(Config):
         self.num_heads = num_heads
         self.include_visit_prediction = include_visit_prediction
         self.use_time_embedding = use_time_embedding
+        self.use_dask = use_dask
 
 
 class TemporalBertConfig(BertConfig):
@@ -103,7 +105,8 @@ def create_bert_model_config(args):
                       epochs=args.epochs,
                       learning_rate=args.learning_rate,
                       include_visit_prediction=args.include_visit_prediction,
-                      use_time_embedding=args.use_time_embedding)
+                      use_time_embedding=args.use_time_embedding,
+                      use_dask=args.use_dask)
 
 
 def create_temporal_bert_model_config(args):

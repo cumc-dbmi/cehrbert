@@ -8,6 +8,8 @@ import pickle
 from itertools import chain
 import pandas as pd
 import numpy as np
+from pandas import DataFrame as pd_dataframe
+from dask.dataframe import DataFrame as dd_dataframe
 import tensorflow as tf
 from sklearn import metrics
 from typing import Dict, Union, Tuple
@@ -57,7 +59,8 @@ def log_function_decorator(function):
 
 
 @log_function_decorator
-def tokenize_concepts(training_data, column_name, tokenized_column_name, tokenizer_path,
+def tokenize_concepts(training_data: Union[pd_dataframe, dd_dataframe],
+                      column_name, tokenized_column_name, tokenizer_path,
                       oov_token='0', recreate=False):
     """
     Tokenize the concept sequence and save the tokenizer as a pickle file
@@ -71,10 +74,15 @@ def tokenize_concepts(training_data, column_name, tokenized_column_name, tokeniz
             f'Loading the existing tokenizer from {tokenizer_path}')
         tokenizer = pickle.load(open(tokenizer_path, 'rb'))
 
-    training_data[tokenized_column_name] = training_data[column_name].map_partitions(
-        lambda ds: pd.Series(
-            tokenizer.encode(map(lambda t: t[1].tolist(), ds.iteritems()), is_generator=True),
-            name='concept_ids'), meta='iterable')
+    if isinstance(training_data, dd_dataframe):
+        training_data[tokenized_column_name] = training_data[column_name].map_partitions(
+            lambda ds: pd.Series(
+                tokenizer.encode(map(lambda t: t[1].tolist(), ds.iteritems()), is_generator=True),
+                name='concept_ids'), meta='iterable')
+    else:
+        training_data[column_name] = training_data[column_name].apply(
+            lambda concept_ids: concept_ids.tolist())
+        training_data[tokenized_column_name] = tokenizer.encode(training_data[column_name])
 
     if not os.path.exists(tokenizer_path) or recreate:
         pickle.dump(tokenizer, open(tokenizer_path, 'wb'))
