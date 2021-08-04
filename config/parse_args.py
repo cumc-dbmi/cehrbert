@@ -90,6 +90,9 @@ def create_parse_args_base_bert():
                         '--use_time_embedding',
                         dest='use_time_embedding',
                         action='store_true')
+    parser.add_argument('--use_dask',
+                        dest='use_dask',
+                        action='store_true')
 
     return parser
 

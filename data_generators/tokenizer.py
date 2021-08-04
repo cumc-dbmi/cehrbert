@@ -1,5 +1,6 @@
-from typing import Optional, Sequence
-from dask.dataframe import Series
+from typing import Optional, Sequence, Union
+from dask.dataframe import Series as dd_series
+from pandas import Series as df_series
 from tensorflow.python.keras.preprocessing.text import Tokenizer
 
 BERT_SPECIAL_TOKENS = ['[MASK]', '[UNUSED]']
@@ -13,8 +14,15 @@ class ConceptTokenizer:
         self.special_tokens = special_tokens
         self.tokenizer = Tokenizer(oov_token=oov_token, filters='', lower=False)
 
-    def fit_on_concept_sequences(self, concept_sequences: Series):
-        self.tokenizer.fit_on_texts(concept_sequences.apply(lambda s: s.tolist(), meta='iterable'))
+    def fit_on_concept_sequences(self, concept_sequences: Union[df_series, dd_series]):
+
+        if isinstance(concept_sequences, df_series):
+            self.tokenizer.fit_on_texts(concept_sequences.apply(
+                lambda concept_ids: concept_ids.tolist()))
+        else:
+            self.tokenizer.fit_on_texts(
+                concept_sequences.apply(lambda s: s.tolist(), meta='iterable'))
+
         self.tokenizer.fit_on_texts(self.mask_token)
         self.tokenizer.fit_on_texts(self.unused_token)
         if self.special_tokens is not None:

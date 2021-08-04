@@ -151,6 +151,7 @@ def main(args):
                        learning_rate=config.learning_rate,
                        include_visit_prediction=config.include_visit_prediction,
                        use_time_embedding=config.use_time_embedding,
+                       use_dask=config.use_dask,
                        tf_board_log_path=config.tf_board_log_path).train_model()
 
 
