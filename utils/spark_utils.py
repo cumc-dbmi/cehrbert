@@ -342,7 +342,7 @@ def create_sequence_data(patient_event, date_filter=None, include_visit_type=Fal
 
     # Derive columns
     patient_event = patient_event.where('visit_occurrence_id IS NOT NULL') \
-        .withColumn('date_in_week', date_conversion_udf).distinct() \
+        .withColumn('date_in_week', date_conversion_udf) \
         .withColumn('earliest_visit_date', earliest_visit_date_udf) \
         .withColumn('visit_rank_order', visit_rank_udf) \
         .withColumn('visit_segment', visit_segment_udf) \
