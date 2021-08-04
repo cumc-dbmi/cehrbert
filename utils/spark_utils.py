@@ -449,36 +449,29 @@ def create_sequence_data(patient_event, date_filter=None, include_visit_type=Fal
                                                                'visit_occurrence_id',
                                                                'priority', 'date_in_week',
                                                                'standard_concept_id'))
-
-    def create_column_udf(tuple_index, data_type):
-        return F.udf(
-            lambda rows: [row[tuple_index] for row in sorted(rows, key=lambda x: x[0])],
-            T.ArrayType(data_type))
-
     # Group the data into sequences
-    output_columns = ['order', 'date_in_week', 'standard_concept_id', 'visit_rank_order',
-                      'visit_segment', 'age']
+    output_columns = ['order', 'date_in_week', 'standard_concept_id', 'visit_segment', 'age']
 
     if include_visit_type:
         output_columns.append('visit_rank_order')
         output_columns.append('visit_concept_id')
 
     # Group by data by person_id and put all the events into a list
-    # The order of the list is determined bythe order column
+    # The order of the list is determined by the order column
     patient_grouped_events = patient_event.withColumn('order', order_udf) \
         .withColumn('date_concept_id_period', F.struct(output_columns)) \
         .groupBy('person_id', 'cohort_member_id') \
-        .agg(F.collect_set('date_concept_id_period').alias('date_concept_id_period'),
+        .agg(F.sort_array(F.collect_set('date_concept_id_period')).alias('date_concept_id_period'),
              F.min('earliest_visit_date').alias('earliest_visit_date'),
              F.max('date').alias('max_event_date')) \
-        .withColumn('orders', create_column_udf(0, T.IntegerType())('date_concept_id_period')) \
-        .withColumn('dates', create_column_udf(1, T.IntegerType())('date_concept_id_period')) \
-        .withColumn('concept_ids', create_column_udf(2, T.StringType())('date_concept_id_period')) \
+        .withColumn('orders',
+                    F.col('date_concept_id_period.order').cast(T.ArrayType(T.IntegerType()))) \
+        .withColumn('dates', F.col('date_concept_id_period.date_in_week')) \
+        .withColumn('concept_ids', F.col('date_concept_id_period.standard_concept_id')) \
         .withColumn('concept_id_visit_orders',
-                    create_column_udf(3, T.IntegerType())('date_concept_id_period')) \
-        .withColumn('visit_segments',
-                    create_column_udf(4, T.IntegerType())('date_concept_id_period')) \
-        .withColumn('ages', create_column_udf(5, T.IntegerType())('date_concept_id_period'))
+                    F.col('date_concept_id_period.standard_concept_id')) \
+        .withColumn('visit_segments', F.col('date_concept_id_period.visit_segment')) \
+        .withColumn('ages', F.col('date_concept_id_period.age'))
 
     # Default columns in the output dataframe
     columns_for_output = ['cohort_member_id', 'person_id', 'earliest_visit_date', 'max_event_date',
@@ -488,10 +481,8 @@ def create_sequence_data(patient_event, date_filter=None, include_visit_type=Fal
     # If include_visit_type is enabled, we add additional information to the default output
     if include_visit_type:
         patient_grouped_events = patient_grouped_events \
-            .withColumn('visit_concept_orders',
-                        create_column_udf(6, T.IntegerType())('date_concept_id_period')) \
-            .withColumn('visit_concept_ids',
-                        create_column_udf(7, T.StringType())('date_concept_id_period'))
+            .withColumn('visit_concept_orders', F.col('date_concept_id_period.visit_rank_order')) \
+            .withColumn('visit_concept_ids', F.col('date_concept_id_period.visit_concept_id'))
         columns_for_output.append('visit_concept_orders')
         columns_for_output.append('visit_concept_ids')
 
