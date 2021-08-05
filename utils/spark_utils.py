@@ -6,10 +6,7 @@ from pyspark.sql import Window as W
 
 from utils.logging_utils import *
 
-SUB_WINDOW_SIZE = 30
-
-NUM_OF_PARTITIONS = 600
-
+PERSON = 'person'
 VISIT_OCCURRENCE = 'visit_occurrence'
 
 DOMAIN_KEY_FIELDS = {
@@ -51,75 +48,6 @@ def create_file_path(input_folder, table_name):
         file_path = input_folder + '/' + table_name
 
     return file_path
-
-
-def get_patient_event_folder(output_folder):
-    return create_file_path(output_folder, 'patient_event')
-
-
-def get_patient_sequence_folder(output_folder):
-    return create_file_path(output_folder, 'patient_sequence')
-
-
-def get_patient_sequence_csv_folder(output_folder):
-    return create_file_path(output_folder, 'patient_sequence_csv')
-
-
-def get_pairwise_euclidean_distance_output(output_folder):
-    return create_file_path(output_folder, 'pairwise_euclidean_distance.pickle')
-
-
-def get_pairwise_cosine_similarity_output(output_folder):
-    return create_file_path(output_folder, 'pairwise_cosine_similarity.pickle')
-
-
-def write_sequences_to_csv(spark, patient_sequence_path, patient_sequence_csv_path):
-    spark.read.parquet(patient_sequence_path).select('concept_list').repartition(1) \
-        .write.mode('overwrite').option('header', 'false').csv(patient_sequence_csv_path)
-
-
-def join_domain_time_span(domain_tables, span=0):
-    """Standardize the format of OMOP domain tables using a time frame
-
-    Keyword arguments:
-    domain_tables -- the array containing the OMOOP domain tabls except visit_occurrence
-    span -- the span of the time window
-
-    The the output columns of the domain table is converted to the same standard format as the following
-    (person_id, standard_concept_id, date, lower_bound, upper_bound, domain).
-    In this case, co-occurrence is defined as those concept ids that have co-occurred
-    within the same time window of a patient.
-
-    """
-    patient_event = None
-
-    for domain_table in domain_tables:
-        # extract the domain concept_id from the table fields. E.g. condition_concept_id from condition_occurrence
-        # extract the domain start_date column
-        # extract the name of the table
-        concept_id_field, date_field, table_domain_field = get_key_fields(domain_table)
-
-        domain_table = domain_table.withColumn("date", F.to_date(F.col(date_field))) \
-            .withColumn("lower_bound", F.date_add(F.col(date_field), -span)) \
-            .withColumn("upper_bound", F.date_add(F.col(date_field), span))
-
-        # standardize the output columns
-        domain_table = domain_table.where(F.col(concept_id_field).cast('string') != '0') \
-            .select(domain_table["person_id"],
-                    domain_table[concept_id_field].alias("standard_concept_id"),
-                    domain_table["date"],
-                    domain_table["lower_bound"],
-                    domain_table["upper_bound"],
-                    domain_table['visit_occurrence_id'],
-                    F.lit(table_domain_field).alias("domain")) \
-            .distinct()
-
-        if patient_event is None:
-            patient_event = domain_table
-        else:
-            patient_event = patient_event.union(domain_table)
-
-    return patient_event
 
 
 def join_domain_tables(domain_tables):
@@ -693,7 +621,6 @@ def extract_ehr_records(spark, input_folder, domain_table_list, include_visit_ty
     :param with_rollup: whether ot not to roll up the concepts to the parent levels
     :return:
     """
-    PERSON = 'person'
     domain_tables = []
     for domain_table_name in domain_table_list:
         domain_tables.append(
