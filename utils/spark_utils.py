@@ -438,7 +438,7 @@ def create_sequence_data(patient_event, date_filter=None, include_visit_type=Fal
             .withColumn('domain', F.lit('Separator')) \
             .withColumn('standard_concept_id', F.lit('SEP')) \
             .withColumn('priority', F.lit(-1)) \
-            .withColumn('visit_segments', F.lit(0)) \
+            .withColumn('visit_segment', F.lit(0)) \
             .select(patient_event.schema.fieldNames())
 
         # Combine this artificial token SEP with the original data
