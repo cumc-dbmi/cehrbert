@@ -317,11 +317,12 @@ def roll_up_procedure(procedure_occurrence, concept, concept_ancestor):
     return procedure_occurrence
 
 
-def create_sequence_data(patient_event, date_filter=None, include_visit_type=False,
+def create_sequence_data(patient_event,
+                         date_filter=None,
+                         include_visit_type=False,
                          classic_bert_seq=False):
     """
     Create a sequence of the events associated with one patient in a chronological order
-
     :param patient_event:
     :param date_filter:
     :param include_visit_type:
@@ -378,7 +379,8 @@ def create_sequence_data(patient_event, date_filter=None, include_visit_type=Fal
                                                                'priority', 'date_in_week',
                                                                'standard_concept_id'))
     # Group the data into sequences
-    output_columns = ['order', 'date_in_week', 'standard_concept_id', 'visit_segment', 'age']
+    output_columns = ['order', 'date_in_week', 'standard_concept_id',
+                      'visit_segment', 'age']
 
     if include_visit_type:
         output_columns.append('visit_rank_order')
@@ -406,26 +408,25 @@ def create_sequence_data(patient_event, date_filter=None, include_visit_type=Fal
                           'orders', 'dates', 'ages', 'concept_ids', 'concept_id_visit_orders',
                           'visit_segments']
 
-    # If include_visit_type is enabled, we add additional information to the default output
     if include_visit_type:
         patient_grouped_events = patient_grouped_events \
             .withColumn('visit_concept_orders', F.col('date_concept_id_period.visit_rank_order')) \
             .withColumn('visit_concept_ids', F.col('date_concept_id_period.visit_concept_id'))
+
         columns_for_output.append('visit_concept_orders')
-        columns_for_output.append('visit_concept_ids')
+        columns_for_output.append('visit_concept_orders')
 
     return patient_grouped_events.select(columns_for_output)
 
 
 def create_sequence_data_with_att(patient_event, date_filter=None,
-                                  exclude_visit_tokens=False,
-                                  include_visit_type=False):
+                                  include_visit_type=False,
+                                  exclude_visit_tokens=False, ):
     """
     Create a sequence of the events associated with one patient in a chronological order
 
     :param patient_event:
     :param date_filter:
-    :param include_visit_type:
     :param exclude_visit_tokens:
     :return:
     """
@@ -511,10 +512,13 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
                                                                'days_since_epoch',
                                                                'standard_concept_id'))
 
-    struct_columns = ['order', 'date_in_week', 'standard_concept_id', 'visit_segment', 'age',
-                      'visit_rank_order', 'visit_concept_id']
+    struct_columns = ['order', 'date_in_week', 'standard_concept_id', 'visit_segment', 'age']
     output_columns = ['cohort_member_id', 'person_id', 'concept_ids', 'visit_segments', 'orders',
-                      'dates', 'visit_concept_orders', 'visit_concept_ids']
+                      'dates', 'ages']
+
+    if include_visit_type:
+        struct_columns.append('visit_rank_order')
+        struct_columns.append('visit_concept_id')
 
     if exclude_visit_tokens:
         unioned_distinct_tokens = unioned_distinct_tokens.filter(
@@ -532,9 +536,15 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
         .withColumn('concept_id_visit_orders',
                     F.col('data_for_sorting.standard_concept_id')) \
         .withColumn('visit_segments', F.col('data_for_sorting.visit_segment')) \
-        .withColumn('ages', F.col('data_for_sorting.age')) \
-        .withColumn('visit_concept_orders', F.col('data_for_sorting.visit_rank_order')) \
-        .withColumn('visit_concept_ids', F.col('data_for_sorting.visit_concept_id'))
+        .withColumn('ages', F.col('data_for_sorting.age'))
+
+    # If include_visit_type is enabled, we add additional information to the default output
+    if include_visit_type:
+        patient_grouped_events = patient_grouped_events \
+            .withColumn('visit_concept_orders', F.col('data_for_sorting.visit_rank_order')) \
+            .withColumn('visit_concept_ids', F.col('data_for_sorting.visit_concept_id'))
+        output_columns.append('visit_concept_orders')
+        output_columns.append('visit_concept_ids')
 
     return patient_grouped_events.select(output_columns)
 

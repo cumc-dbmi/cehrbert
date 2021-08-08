@@ -123,7 +123,6 @@ def create_spark_args():
                         dest='exclude_visit_tokens',
                         action='store_true',
                         help='Specify whether or not to exclude the VS and VE tokens')
-
     parser.add_argument('-f',
                         '--is_feature_concept_frequency',
                         dest='is_feature_concept_frequency',
