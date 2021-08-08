@@ -38,10 +38,11 @@ def main(input_folder, output_folder, domain_table_list, date_filter,
     if is_new_patient_representation:
         sequence_data = create_sequence_data_with_att(patient_event,
                                                       date_filter=date_filter,
-                                                      exclude_visit_tokens=exclude_visit_tokens,
-                                                      include_visit_type=include_visit_type)
+                                                      include_visit_type=include_visit_type,
+                                                      exclude_visit_tokens=exclude_visit_tokens)
     else:
-        sequence_data = create_sequence_data(patient_event, date_filter=date_filter,
+        sequence_data = create_sequence_data(patient_event,
+                                             date_filter=date_filter,
                                              include_visit_type=include_visit_type,
                                              classic_bert_seq=is_classic_bert)
 

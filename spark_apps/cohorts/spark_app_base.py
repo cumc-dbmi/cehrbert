@@ -401,7 +401,8 @@ class NestedCohortBuilder:
                                                  include_visit_type=self._include_visit_type,
                                                  exclude_visit_tokens=self._exclude_visit_tokens)
 
-        return create_sequence_data(cohort_ehr_records, None, self._include_visit_type,
+        return create_sequence_data(cohort_ehr_records, None,
+                                    include_visit_type=self._include_visit_type,
                                     classic_bert_seq=self._classic_bert_seq)
 
     @classmethod
