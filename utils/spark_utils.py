@@ -421,7 +421,7 @@ def create_sequence_data(patient_event,
 
 def create_sequence_data_with_att(patient_event, date_filter=None,
                                   include_visit_type=False,
-                                  exclude_visit_tokens=False, ):
+                                  exclude_visit_tokens=False):
     """
     Create a sequence of the events associated with one patient in a chronological order
 
@@ -501,7 +501,11 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
         .withColumn('priority', F.lit(-2)) \
         .withColumn('visit_segment', F.lit(0)) \
         .withColumn('date_in_week', F.lit(0)) \
+        .withColumn('age', F.lit(-1)) \
         .where('prev_days_since_epoch IS NOT NULL')
+
+    if include_visit_type:
+        time_token_insertions = time_token_insertions.withColumn('visit_concept_id', F.lit(0))
 
     unioned_distinct_tokens = patient_event.union(time_token_insertions).distinct()
 
