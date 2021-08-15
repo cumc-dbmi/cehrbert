@@ -28,6 +28,7 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
                  num_heads: int,
                  include_visit_prediction: bool,
                  use_time_embedding: bool,
+                 use_behrt: bool,
                  *args, **kwargs):
 
         self._tokenizer_path = tokenizer_path
@@ -38,6 +39,7 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
         self._num_heads = num_heads
         self._include_visit_prediction = include_visit_prediction
         self._use_time_embedding = use_time_embedding
+        self._use_behrt = use_behrt
 
         super(VanillaBertTrainer, self).__init__(*args, **kwargs)
 
@@ -50,7 +52,8 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
             f'depth: {depth}\n'
             f'num_heads: {num_heads}\n'
             f'include_visit_prediction: {include_visit_prediction}\n'
-            f'use_time_embeddings: {use_time_embedding}\n')
+            f'use_time_embeddings: {use_time_embedding}\n'
+            f'use_behrt: {use_behrt}\n')
 
     def _load_dependencies(self):
 
@@ -120,7 +123,8 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
                         embedding_size=self._embedding_size,
                         depth=self._depth,
                         num_heads=self._num_heads,
-                        use_time_embedding=self._use_time_embedding
+                        use_time_embedding=self._use_time_embedding,
+                        use_behrt=self._use_behrt
                     )
 
                     losses = {
@@ -151,6 +155,7 @@ def main(args):
                        learning_rate=config.learning_rate,
                        include_visit_prediction=config.include_visit_prediction,
                        use_time_embedding=config.use_time_embedding,
+                       use_behrt=config.use_behrt,
                        use_dask=config.use_dask,
                        tf_board_log_path=config.tf_board_log_path).train_model()
 
