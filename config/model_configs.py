@@ -36,6 +36,7 @@ class BertConfig(Config):
                  depth, num_heads,
                  include_visit_prediction,
                  use_time_embedding,
+                 use_behrt,
                  use_dask,
                  *args, **kwargs):
         super(BertConfig, self).__init__(*args, **kwargs)
@@ -44,6 +45,7 @@ class BertConfig(Config):
         self.num_heads = num_heads
         self.include_visit_prediction = include_visit_prediction
         self.use_time_embedding = use_time_embedding
+        self.use_behrt = use_behrt
         self.use_dask = use_dask
 
 
@@ -106,6 +108,7 @@ def create_bert_model_config(args):
                       learning_rate=args.learning_rate,
                       include_visit_prediction=args.include_visit_prediction,
                       use_time_embedding=args.use_time_embedding,
+                      use_behrt=args.use_behrt,
                       use_dask=args.use_dask)
 
 
