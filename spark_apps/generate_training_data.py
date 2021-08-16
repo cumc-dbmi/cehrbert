@@ -12,7 +12,8 @@ PERSON = 'person'
 
 
 def main(input_folder, output_folder, domain_table_list, date_filter,
-         include_visit_type, is_new_patient_representation, exclude_visit_tokens, is_classic_bert):
+         include_visit_type, is_new_patient_representation, exclude_visit_tokens,
+         is_classic_bert, include_prolonged_stay):
     spark = SparkSession.builder.appName('Generate Bert Training Data').getOrCreate()
     domain_tables = []
     for domain_table_name in domain_table_list:
@@ -46,6 +47,17 @@ def main(input_folder, output_folder, domain_table_list, date_filter,
                                              include_visit_type=include_visit_type,
                                              classic_bert_seq=is_classic_bert)
 
+    if include_prolonged_stay:
+        udf = F.when(F.col('visit_concept_id').isin([9201, 262, 9203]),
+                     F.coalesce((F.datediff('visit_end_date', 'visit_start_date') > 7).cast('int'),
+                                F.lit(0))).otherwise(F.lit(0))
+        visit_occurrence = preprocess_domain_table(spark, input_folder, VISIT_OCCURRENCE)
+        visit_occurrence = visit_occurrence.withColumn('prolonged_length_stay', udf) \
+            .select('person_id', 'prolonged_length_stay') \
+            .withColumn('prolonged_length_stay',
+                        F.max('prolonged_length_stay').over(W.partitionBy('person_id'))).distinct()
+        sequence_data = sequence_data.join(visit_occurrence, 'person_id')
+
     sequence_data.write.mode('overwrite').parquet(os.path.join(output_folder, p.parquet_data_path))
 
 
@@ -57,14 +69,12 @@ if __name__ == '__main__':
                         action='store',
                         help='The path for your input_folder where the raw data is',
                         required=True)
-
     parser.add_argument('-o',
                         '--output_folder',
                         dest='output_folder',
                         action='store',
                         help='The path for your output_folder',
                         required=True)
-
     parser.add_argument('-tc',
                         '--domain_table_list',
                         dest='domain_table_list',
@@ -72,7 +82,6 @@ if __name__ == '__main__':
                         action='store',
                         help='The list of domain tables you want to download',
                         required=True)
-
     parser.add_argument('-d',
                         '--date_filter',
                         dest='date_filter',
@@ -80,14 +89,12 @@ if __name__ == '__main__':
                         action='store',
                         required=False,
                         default='2018-01-01')
-
     parser.add_argument('-iv',
                         '--include_visit_type',
                         dest='include_visit_type',
                         action='store_true',
                         help='Specify whether to include visit types for '
                              'generating the training data')
-
     parser.add_argument('-ip',
                         '--is_new_patient_representation',
                         dest='is_new_patient_representation',
@@ -105,8 +112,13 @@ if __name__ == '__main__':
                         dest='exclude_visit_tokens',
                         action='store_true',
                         help='Specify whether or not to exclude the VS and VE tokens')
+    parser.add_argument('--include_prolonged_stay',
+                        dest='include_prolonged_stay',
+                        action='store_true',
+                        help='Specify whether or not to include the data for the second learning '
+                             'objective for Med-BERT')
     ARGS = parser.parse_args()
 
     main(ARGS.input_folder, ARGS.output_folder, ARGS.domain_table_list, ARGS.date_filter,
          ARGS.include_visit_type, ARGS.is_new_patient_representation, ARGS.exclude_visit_tokens,
-         ARGS.is_classic_bert_sequence)
+         ARGS.is_classic_bert_sequence, ARGS.include_prolonged_stay)

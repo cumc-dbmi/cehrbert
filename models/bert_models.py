@@ -20,7 +20,8 @@ def transformer_bert_model(
         l2_reg_penalty: float = 1e-4,
         use_time_embedding: bool = False,
         time_embeddings_size: int = 16,
-        use_behrt: bool = False
+        use_behrt: bool = False,
+        include_prolonged_length_stay: bool = False
 ):
     """
     Builds a BERT-based model (Bidirectional Encoder Representations
@@ -110,9 +111,18 @@ def transformer_bert_model(
     concept_predictions = softmax_layer(
         output_layer([next_step_input, embedding_matrix]))
 
+    outputs = [concept_predictions]
+
+    if include_prolonged_length_stay:
+        summed_contextualized_embeddings = tf.reduce_sum(next_step_input, axis=-1)
+        prolonged_length_stay_prediction = tf.keras.layers.Dense(1,
+                                                                 name='prolonged_length_stay',
+                                                                 activation='sigmoid')
+        outputs.append(prolonged_length_stay_prediction(summed_contextualized_embeddings))
+
     model = tf.keras.Model(
         inputs=default_inputs,
-        outputs=[concept_predictions])
+        outputs=outputs)
 
     return model
 

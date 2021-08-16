@@ -86,6 +86,9 @@ def create_parse_args_base_bert():
                         '--include_visit',
                         dest='include_visit_prediction',
                         action='store_true')
+    parser.add_argument('--include_prolonged_length_stay',
+                        dest='include_prolonged_length_stay',
+                        action='store_true')
     parser.add_argument('-ut',
                         '--use_time_embedding',
                         dest='use_time_embedding',
