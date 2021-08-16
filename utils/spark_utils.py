@@ -413,7 +413,7 @@ def create_sequence_data(patient_event,
             .withColumn('visit_concept_orders', F.col('date_concept_id_period.visit_rank_order')) \
             .withColumn('visit_concept_ids', F.col('date_concept_id_period.visit_concept_id'))
 
-        columns_for_output.append('visit_concept_orders')
+        columns_for_output.append('visit_concept_ids')
         columns_for_output.append('visit_concept_orders')
 
     return patient_grouped_events.select(columns_for_output)
