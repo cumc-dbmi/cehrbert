@@ -141,6 +141,33 @@ class DemographicsLearningObjective(LearningObjective):
         return input_dict, {}
 
 
+class ProlongedLengthStayLearningObjective(LearningObjective):
+    required_columns = ['prolonged_length_stay']
+
+    def get_tf_dataset_schema(self):
+        output_dict_schema = {
+            'prolonged_length_stay': int32
+        }
+        return {}, output_dict_schema
+
+    @validate_columns_decorator
+    def process_batch(self, rows: List[RowSlicer]):
+        """
+        Process a batch of rows to generate input and output data for the learning objective
+        :param rows:
+        :return:
+        """
+        prolonged_length_stay_input = []
+        for row_slicer in rows:
+            prolonged_length_stay_input.append(row_slicer.row.prolonged_length_stay)
+
+        output_dict = {
+            'prolonged_length_stay': prolonged_length_stay_input
+        }
+
+        return {}, output_dict
+
+
 class VisitPredictionLearningObjective(LearningObjective):
     required_columns = ['visit_token_ids', 'visit_concept_orders']
 

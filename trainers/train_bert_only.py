@@ -27,6 +27,7 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
                  depth: int,
                  num_heads: int,
                  include_visit_prediction: bool,
+                 include_prolonged_length_stay: bool,
                  use_time_embedding: bool,
                  use_behrt: bool,
                  *args, **kwargs):
@@ -38,6 +39,7 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
         self._depth = depth
         self._num_heads = num_heads
         self._include_visit_prediction = include_visit_prediction
+        self._include_prolonged_length_stay = include_prolonged_length_stay
         self._use_time_embedding = use_time_embedding
         self._use_behrt = use_behrt
 
@@ -52,6 +54,7 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
             f'depth: {depth}\n'
             f'num_heads: {num_heads}\n'
             f'include_visit_prediction: {include_visit_prediction}\n'
+            f'include_prolonged_length_stay: {include_prolonged_length_stay}\n'
             f'use_time_embeddings: {use_time_embedding}\n'
             f'use_behrt: {use_behrt}\n')
 
@@ -83,6 +86,8 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
         if self._include_visit_prediction:
             parameters['visit_tokenizer'] = self._visit_tokenizer
             data_generator_class = BertVisitPredictionDataGenerator
+        elif self._include_prolonged_length_stay:
+            data_generator_class = MedBertDataGenerator
 
         return data_generator_class(**parameters)
 
@@ -124,13 +129,17 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
                         depth=self._depth,
                         num_heads=self._num_heads,
                         use_time_embedding=self._use_time_embedding,
-                        use_behrt=self._use_behrt
+                        use_behrt=self._use_behrt,
+                        include_prolonged_length_stay=self._include_prolonged_length_stay
                     )
 
                     losses = {
                         'concept_predictions': MaskedPenalizedSparseCategoricalCrossentropy(
                             self.confidence_penalty)
                     }
+
+                    if self._include_prolonged_length_stay:
+                        losses['prolonged_length_stay'] = tf.losses.BinaryCrossentropy()
 
                 model.compile(optimizer, loss=losses,
                               metrics={'concept_predictions': masked_perplexity})
@@ -154,6 +163,7 @@ def main(args):
                        epochs=config.epochs,
                        learning_rate=config.learning_rate,
                        include_visit_prediction=config.include_visit_prediction,
+                       include_prolonged_length_stay=config.include_prolonged_length_stay,
                        use_time_embedding=config.use_time_embedding,
                        use_behrt=config.use_behrt,
                        use_dask=config.use_dask,

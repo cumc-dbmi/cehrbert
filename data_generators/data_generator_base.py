@@ -268,6 +268,11 @@ class BertVisitPredictionDataGenerator(BertDataGenerator):
         return [MaskedLanguageModelLearningObjective, VisitPredictionLearningObjective]
 
 
+class MedBertDataGenerator(BertDataGenerator):
+    def _get_learning_objective_classes(self):
+        return [MaskedLanguageModelLearningObjective, ProlongedLengthStayLearningObjective]
+
+
 class TemporalBertDataGenerator(BertDataGenerator):
 
     def __init__(self, time_window_size, *args, **kwargs):
