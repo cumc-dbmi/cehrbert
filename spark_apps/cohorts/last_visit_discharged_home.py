@@ -7,19 +7,18 @@ SELECT DISTINCT
     v.index_date
 FROM 
 (
-    SELECT DISTINCT
+    SELECT
         v.person_id,
-        FIRST(v.visit_occurrence_id) OVER(PARTITION BY v.person_id 
-            ORDER BY DATE(v.visit_end_date) DESC) AS visit_occurrence_id,
-        FIRST(DATE(v.visit_end_date)) OVER(PARTITION BY v.person_id 
-            ORDER BY DATE(v.visit_end_date) DESC) AS index_date,
-        FIRST(v.discharge_to_concept_id) OVER(PARTITION BY v.person_id 
-            ORDER BY DATE(v.visit_end_date) DESC) AS discharge_to_concept_id
+        v.visit_occurrence_id,
+        v.visit_end_date AS index_date,
+        v.discharge_to_concept_id,
+        ROW_NUMBER() OVER(PARTITION BY v.person_id ORDER BY DATE(v.visit_end_date) DESC) AS rn
     FROM global_temp.visit_occurrence AS v
     WHERE v.visit_concept_id IN (9201, 262) --inpatient, er-inpatient
-    ) AS a
-    WHERE a.discharge_to_concept_id NOT IN (4216643, 44814650, 8717, 8970, 8971) --discharge to home or other facilities
+        AND v.visit_end_date IS NOT NULL
+        AND v.discharge_to_concept_id NOT IN (4216643, 44814650, 8717, 8970, 8971) --discharge to home or other facilities
 ) AS v
+    WHERE v.rn = 1
 """
 
 DEPENDENCY_LIST = ['person', 'visit_occurrence']
