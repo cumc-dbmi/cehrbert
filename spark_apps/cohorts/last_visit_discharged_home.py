@@ -16,8 +16,9 @@ FROM
         FIRST(v.discharge_to_concept_id) OVER(PARTITION BY v.person_id 
             ORDER BY DATE(v.visit_end_date) DESC) AS discharge_to_concept_id
     FROM global_temp.visit_occurrence AS v
-    WHERE v.discharge_to_concept_id = 8536 --discharge to home
-        AND  v.visit_concept_id IN (9201, 262) --inpatient, er-inpatient
+    WHERE v.visit_concept_id IN (9201, 262) --inpatient, er-inpatient
+    ) AS a
+    WHERE a.discharge_to_concept_id NOT IN (4216643, 44814650, 8717, 8970, 8971) --discharge to home or other facilities
 ) AS v
 """
 
