@@ -20,8 +20,8 @@ JOIN global_temp.condition_occurrence AS co
 JOIN hf_concepts AS hf
     ON co.condition_concept_id = hf.concept_id
 WHERE v.visit_concept_id IN (9201, 262) --inpatient, er-inpatient
-    AND v.discharge_to_concept_id = 8536 --discharge to home
-    AND v.visit_start_date <= co.condition_start_date
+    AND v.discharge_to_concept_id NOT IN (4216643, 44814650, 8717, 8970, 8971) -- TBD
+    AND v.visit_start_date <= date_add(co.condition_start_date, 1)
 """
 
 HOSPITALIZATION_QUERY = """
