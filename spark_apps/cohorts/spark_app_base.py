@@ -244,6 +244,7 @@ class NestedCohortBuilder:
                  classic_bert_seq: bool = False,
                  is_first_time_outcome: bool = False,
                  is_questionable_outcome_existed: bool = False,
+                 is_remove_index_prediction_starts: bool = False,
                  is_prediction_window_unbounded: bool = False,
                  is_observation_window_unbounded: bool = False):
         self._cohort_name = cohort_name
@@ -265,6 +266,7 @@ class NestedCohortBuilder:
         self._is_roll_up_concept = is_roll_up_concept
         self._is_new_patient_representation = is_new_patient_representation
         self._is_first_time_outcome = is_first_time_outcome
+        self._is_remove_index_prediction_starts = is_remove_index_prediction_starts
         self._is_questionable_outcome_existed = is_questionable_outcome_existed
         self._is_prediction_window_unbounded = is_prediction_window_unbounded
         self._output_data_folder = os.path.join(self._output_folder,
@@ -287,6 +289,7 @@ class NestedCohortBuilder:
                                f'is_new_patient_representation: {is_new_patient_representation}\n'
                                f'is_first_time_outcome: {is_first_time_outcome}\n'
                                f'is_questionable_outcome_existed: {is_questionable_outcome_existed}\n'
+                               f'is_remove_index_prediction_starts: {is_remove_index_prediction_starts}\n'
                                f'is_prediction_window_unbounded: {is_prediction_window_unbounded}\n'
                                f'is_observation_window_unbounded: {is_observation_window_unbounded}\n')
 
@@ -335,20 +338,20 @@ class NestedCohortBuilder:
             WHERE o.person_id IS NULL       
             """.format(questionnation_outcome_cohort=NEGATIVE_COHORT))
             target_cohort.createOrReplaceGlobalTempView('target_cohort')
-
-        # Remove the patients whose outcome date lies between index_date and index_date +
-        # prediction_start_days
-        target_cohort = self.spark.sql("""
-        SELECT DISTINCT
-            t.*
-        FROM global_temp.target_cohort AS t 
-        LEFT JOIN global_temp.outcome_cohort AS exclusion
-            ON t.person_id = exclusion.person_id
-                AND exclusion.index_date BETWEEN t.index_date 
-                    AND DATE_ADD(t.index_date, {prediction_start_days}) 
-        WHERE exclusion.person_id IS NULL
-        """.format(prediction_start_days=max(prediction_start_days - 1, 0)))
-        target_cohort.createOrReplaceGlobalTempView('target_cohort')
+        if self._is_remove_index_prediction_starts:
+            # Remove the patients whose outcome date lies between index_date and index_date +
+            # prediction_start_days
+            target_cohort = self.spark.sql("""
+            SELECT DISTINCT
+                t.*
+            FROM global_temp.target_cohort AS t 
+            LEFT JOIN global_temp.outcome_cohort AS exclusion
+                ON t.person_id = exclusion.person_id
+                    AND exclusion.index_date BETWEEN t.index_date 
+                        AND DATE_ADD(t.index_date, {prediction_start_days}) 
+            WHERE exclusion.person_id IS NULL
+            """.format(prediction_start_days=max(prediction_start_days - 1, 0)))
+            target_cohort.createOrReplaceGlobalTempView('target_cohort')
 
         if self._is_prediction_window_unbounded:
             query_template = """
@@ -461,6 +464,10 @@ def create_prediction_cohort(spark_args,
     # outcomes from the target cohort
     is_questionable_outcome_existed = outcome_query_builder.get_negative_query() is not None
 
+    # Do we want to remove those records whose outcome occur between index_date and the start of
+    # the prediction window
+    is_remove_index_prediction_starts = spark_args.is_remove_index_prediction_starts
+
     # Toggle the prior/post observation_period depending on the is_window_post_index flag
     prior_observation_period = 0 if is_window_post_index else observation_window + hold_off_window
     post_observation_period = observation_window + hold_off_window if is_window_post_index else 0
@@ -509,4 +516,5 @@ def create_prediction_cohort(spark_args,
                         is_first_time_outcome=is_first_time_outcome,
                         is_questionable_outcome_existed=is_questionable_outcome_existed,
                         is_prediction_window_unbounded=is_prediction_window_unbounded,
+                        is_remove_index_prediction_starts=is_remove_index_prediction_starts,
                         is_observation_window_unbounded=is_observation_window_unbounded).build()

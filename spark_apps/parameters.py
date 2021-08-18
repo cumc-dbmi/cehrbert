@@ -150,6 +150,10 @@ def create_spark_args():
                         dest='is_first_time_outcome',
                         action='store_true',
                         help='is the outcome the first time occurrence?')
+    parser.add_argument('--is_remove_index_prediction_starts',
+                        dest='is_remove_index_prediction_starts',
+                        action='store_true',
+                        help='is outcome between index_date and prediction start window removed?')
     parser.add_argument('--is_prediction_window_unbounded',
                         dest='is_prediction_window_unbounded',
                         action='store_true',

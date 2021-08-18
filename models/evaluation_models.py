@@ -65,10 +65,12 @@ def create_vanilla_feed_forward_model(vanilla_bert_model_path):
 
     mask_input = [i for i in bert_inputs if
                   'mask' in i.name and 'concept' not in i.name][0]
-    mask_embeddings = tf.tile(tf.expand_dims(mask_input == 0, -1),
-                              [1, 1, embedding_size])
+    mask_embeddings = tf.tile(tf.expand_dims(mask_input == 0, -1, name='bert_expand_ff'),
+                              [1, 1, embedding_size], name='bert_tile_ff')
     contextualized_embeddings = tf.math.multiply(contextualized_embeddings,
-                                                 tf.cast(mask_embeddings, dtype=tf.float32))
+                                                 tf.cast(mask_embeddings, dtype=tf.float32,
+                                                         name='bert_cast_ff'),
+                                                 name='bert_multiply_ff')
 
     output_layer = tf.keras.layers.Dense(1, name='prediction', activation='sigmoid')
 
