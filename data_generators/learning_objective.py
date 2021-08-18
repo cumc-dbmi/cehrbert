@@ -6,7 +6,6 @@ from typing import List
 import numpy as np
 from tensorflow.python.keras.preprocessing.sequence import pad_sequences
 from tensorflow.dtypes import int32
-import tensorflow as tf
 
 from data_generators.data_classes import RowSlicer
 

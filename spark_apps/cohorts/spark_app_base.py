@@ -336,6 +336,20 @@ class NestedCohortBuilder:
             """.format(questionnation_outcome_cohort=NEGATIVE_COHORT))
             target_cohort.createOrReplaceGlobalTempView('target_cohort')
 
+        # Remove the patients whose outcome date lies between index_date and index_date +
+        # prediction_start_days
+        target_cohort = self.spark.sql("""
+        SELECT DISTINCT
+            t.*
+        FROM global_temp.target_cohort AS t 
+        LEFT JOIN global_temp.outcome_cohort AS exclusion
+            ON t.person_id = exclusion.person_id
+                AND exclusion.index_date BETWEEN t.index_date 
+                    AND DATE_ADD(t.index_date, {prediction_start_days}) 
+        WHERE exclusion.person_id IS NULL
+        """.format(prediction_start_days=max(prediction_start_days - 1, 0)))
+        target_cohort.createOrReplaceGlobalTempView('target_cohort')
+
         if self._is_prediction_window_unbounded:
             query_template = """
             SELECT DISTINCT
