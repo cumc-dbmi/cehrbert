@@ -248,7 +248,7 @@ class VisitPredictionLearningObjective(LearningObjective):
 
 
 class MaskedLanguageModelLearningObjective(LearningObjective):
-    required_columns = ['token_ids', 'dates', 'visit_segments', 'visit_concept_orders', 'ages']
+    required_columns = ['token_ids', 'dates', 'visit_segments', 'ages']
 
     def __init__(self, concept_tokenizer: ConceptTokenizer, max_seq_len: int, is_training: bool):
         self._max_seq_len = max_seq_len
@@ -270,8 +270,8 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
     @validate_columns_decorator
     def process_batch(self, rows: List[RowSlicer]):
 
-        (output_mask, masked_concepts, concepts, time_stamps, visit_segments,
-         visit_orders, ages) = zip(*list(map(self._make_record, rows)))
+        (output_mask, masked_concepts, concepts, time_stamps, visit_segments, ages) = zip(
+            *list(map(self._make_record, rows)))
 
         unused_token_id = self._concept_tokenizer.get_unused_token_id()
 
@@ -310,16 +310,16 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
 
         sorting_columns = getattr(row, 'orders') if hasattr(row, 'orders') else row.dates
 
-        iterator = zip(map(int, sorting_columns), row.token_ids, row.visit_segments,
-                       row.visit_concept_orders, row.dates, row.ages)
+        iterator = zip(map(int, sorting_columns), row.token_ids, row.visit_segments, row.dates,
+                       row.ages)
         sorted_list = sorted(iterator, key=lambda tup2: (tup2[0], tup2[1]))
 
-        (_, concepts, segments, visit_orders, dates, ages) = zip(
+        (_, concepts, segments, dates, ages) = zip(
             *list(islice(sorted_list, left_index, right_index)))
 
         masked_concepts, output_mask = self._mask_concepts(concepts)
 
-        return output_mask, masked_concepts, concepts, dates, segments, visit_orders, ages
+        return output_mask, masked_concepts, concepts, dates, segments, ages
 
     def _mask_concepts(self, concepts):
         """
