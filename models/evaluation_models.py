@@ -47,6 +47,39 @@ def create_bi_lstm_model(max_seq_length, vocab_size, embedding_size, concept_emb
     return model
 
 
+def create_vanilla_feed_forward_model(vanilla_bert_model_path):
+    """
+    BERT + Feedforward model for binary prediction
+    :param vanilla_bert_model_path:
+    :return:
+    """
+    age_at_index_date = tf.keras.layers.Input(name='age', shape=(1,))
+
+    vanilla_bert_model = tf.keras.models.load_model(vanilla_bert_model_path,
+                                                    custom_objects=dict(**get_custom_objects()))
+    bert_inputs = [i for i in vanilla_bert_model.inputs if
+                   'visit' not in i.name or 'visit_segment' in i.name]
+
+    contextualized_embeddings, _ = vanilla_bert_model.get_layer('encoder').output
+    _, _, embedding_size = contextualized_embeddings.get_shape().as_list()
+
+    mask_input = [i for i in bert_inputs if
+                  'mask' in i.name and 'concept' not in i.name][0]
+    mask_embeddings = tf.tile(tf.expand_dims(mask_input == 0, -1),
+                              [1, 1, embedding_size])
+    contextualized_embeddings = tf.math.multiply(contextualized_embeddings,
+                                                 tf.cast(mask_embeddings, dtype=tf.float32))
+
+    output_layer = tf.keras.layers.Dense(1, name='prediction', activation='sigmoid')
+
+    output = output_layer(tf.reduce_sum(contextualized_embeddings, axis=-1))
+
+    lstm_with_vanilla_bert = Model(inputs=bert_inputs + [age_at_index_date],
+                                   outputs=output, name='Vanilla_BERT_PLUS_BI_LSTM')
+
+    return lstm_with_vanilla_bert
+
+
 def create_vanilla_bert_bi_lstm_model(max_seq_length, vanilla_bert_model_path):
     age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
 

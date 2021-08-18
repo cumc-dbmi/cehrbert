@@ -263,11 +263,28 @@ class BertLstmModelEvaluator(SequenceModelEvaluator):
             'time_stamps': padded_time_stamps,
             'ages': padded_ages
         }
-        #
-        # if self._is_temporal:
-        #     inputs['time_stamps'] = post_pad_pre_truncate(self._dataset.dates, 0,
-        #                                                   self._max_seq_length)
         return inputs, labels
+
+
+class BertFeedForwardModelEvaluator(BertLstmModelEvaluator):
+
+    def __init__(self,
+                 *args, **kwargs):
+        super(BertFeedForwardModelEvaluator, self).__init__(*args, **kwargs)
+
+    def _create_model(self):
+        strategy = tf.distribute.MirroredStrategy()
+        self.get_logger().info('Number of devices: {}'.format(strategy.num_replicas_in_sync))
+        with strategy.scope():
+            try:
+                model = create_vanilla_feed_forward_model((self._bert_model_path))
+            except ValueError as e:
+                self.get_logger().exception(e)
+                model = create_vanilla_feed_forward_model((self._bert_model_path))
+            model.compile(loss='binary_crossentropy',
+                          optimizer=tf.keras.optimizers.Adam(1e-4),
+                          metrics=get_metrics())
+            return model
 
 
 class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
