@@ -112,7 +112,7 @@ if __name__ == '__main__':
                         dest='exclude_visit_tokens',
                         action='store_true',
                         help='Specify whether or not to exclude the VS and VE tokens')
-    parser.add_argument('--include_prolonged_stay',
+    parser.add_argument('--include_prolonged_length_stay',
                         dest='include_prolonged_stay',
                         action='store_true',
                         help='Specify whether or not to include the data for the second learning '
