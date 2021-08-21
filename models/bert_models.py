@@ -115,10 +115,12 @@ def transformer_bert_model(
     outputs = [concept_predictions]
 
     if include_prolonged_length_stay:
-        mask_embeddings = tf.cast(
-            tf.tile(tf.expand_dims(mask == 0, -1), [1, 1, embedding_size]), tf.float32)
-        summed_contextualized_embeddings = tf.reduce_sum(
-            tf.multiply(next_step_input, mask_embeddings), axis=-1)
+        mask_embeddings = tf.tile(tf.expand_dims(mask == 0, -1, name='bert_expand_prolonged'),
+                                  [1, 1, embedding_size], name='bert_tile_prolonged')
+        mask_embeddings = tf.cast(mask_embeddings, dtype=tf.float32, name='bert_cast_prolonged')
+        contextualized_embeddings = tf.math.multiply(next_step_input, mask_embeddings,
+                                                     name='bert_multiply_prolonged')
+        summed_contextualized_embeddings = tf.reduce_sum(contextualized_embeddings, axis=-1)
         prolonged_length_stay_prediction = tf.keras.layers.Dense(1,
                                                                  name='prolonged_length_stay',
                                                                  activation='sigmoid')
