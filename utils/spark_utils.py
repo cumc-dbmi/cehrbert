@@ -380,10 +380,9 @@ def create_sequence_data(patient_event,
                                                                'standard_concept_id'))
     # Group the data into sequences
     output_columns = ['order', 'date_in_week', 'standard_concept_id',
-                      'visit_segment', 'age']
+                      'visit_segment', 'age', 'visit_rank_order']
 
     if include_visit_type:
-        output_columns.append('visit_rank_order')
         output_columns.append('visit_concept_id')
 
     # Group by data by person_id and put all the events into a list
@@ -399,19 +398,18 @@ def create_sequence_data(patient_event,
         .withColumn('dates', F.col('date_concept_id_period.date_in_week')) \
         .withColumn('concept_ids', F.col('date_concept_id_period.standard_concept_id')) \
         .withColumn('visit_segments', F.col('date_concept_id_period.visit_segment')) \
-        .withColumn('ages', F.col('date_concept_id_period.age'))
+        .withColumn('ages', F.col('date_concept_id_period.age')) \
+        .withColumn('visit_concept_orders', F.col('date_concept_id_period.visit_rank_order'))
 
     # Default columns in the output dataframe
-    columns_for_output = ['cohort_member_id', 'person_id', 'earliest_visit_date', 'max_event_date',
-                          'orders', 'dates', 'ages', 'concept_ids', 'visit_segments']
+    columns_for_output = ['cohort_member_id', 'person_id', 'earliest_visit_date',
+                          'max_event_date', 'orders', 'dates', 'ages', 'concept_ids',
+                          'visit_segments', 'visit_concept_orders']
 
     if include_visit_type:
         patient_grouped_events = patient_grouped_events \
-            .withColumn('visit_concept_orders', F.col('date_concept_id_period.visit_rank_order')) \
             .withColumn('visit_concept_ids', F.col('date_concept_id_period.visit_concept_id'))
-
         columns_for_output.append('visit_concept_ids')
-        columns_for_output.append('visit_concept_orders')
 
     return patient_grouped_events.select(columns_for_output)
 
@@ -513,12 +511,12 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
                                                                'days_since_epoch',
                                                                'standard_concept_id'))
 
-    struct_columns = ['order', 'date_in_week', 'standard_concept_id', 'visit_segment', 'age']
+    struct_columns = ['order', 'date_in_week', 'standard_concept_id', 'visit_segment', 'age',
+                      'visit_rank_order']
     output_columns = ['cohort_member_id', 'person_id', 'concept_ids', 'visit_segments', 'orders',
-                      'dates', 'ages']
+                      'dates', 'ages', 'visit_concept_orders']
 
     if include_visit_type:
-        struct_columns.append('visit_rank_order')
         struct_columns.append('visit_concept_id')
 
     if exclude_visit_tokens:
@@ -535,14 +533,13 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
         .withColumn('dates', F.col('data_for_sorting.date_in_week')) \
         .withColumn('concept_ids', F.col('data_for_sorting.standard_concept_id')) \
         .withColumn('visit_segments', F.col('data_for_sorting.visit_segment')) \
-        .withColumn('ages', F.col('data_for_sorting.age'))
+        .withColumn('ages', F.col('data_for_sorting.age')) \
+        .withColumn('visit_concept_orders', F.col('data_for_sorting.visit_rank_order'))
 
     # If include_visit_type is enabled, we add additional information to the default output
     if include_visit_type:
         patient_grouped_events = patient_grouped_events \
-            .withColumn('visit_concept_orders', F.col('data_for_sorting.visit_rank_order')) \
             .withColumn('visit_concept_ids', F.col('data_for_sorting.visit_concept_id'))
-        output_columns.append('visit_concept_orders')
         output_columns.append('visit_concept_ids')
 
     return patient_grouped_events.select(output_columns)
