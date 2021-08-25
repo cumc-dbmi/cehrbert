@@ -392,7 +392,9 @@ def create_sequence_data(patient_event,
         .groupBy('person_id', 'cohort_member_id') \
         .agg(F.sort_array(F.collect_set('date_concept_id_period')).alias('date_concept_id_period'),
              F.min('earliest_visit_date').alias('earliest_visit_date'),
-             F.max('date').alias('max_event_date')) \
+             F.max('date').alias('max_event_date'),
+             F.max('visit_rank_order').alias('num_of_visits'),
+             F.count('standard_concept_id').alias('num_of_concepts')) \
         .withColumn('orders',
                     F.col('date_concept_id_period.order').cast(T.ArrayType(T.IntegerType()))) \
         .withColumn('dates', F.col('date_concept_id_period.date_in_week')) \
@@ -404,7 +406,8 @@ def create_sequence_data(patient_event,
     # Default columns in the output dataframe
     columns_for_output = ['cohort_member_id', 'person_id', 'earliest_visit_date',
                           'max_event_date', 'orders', 'dates', 'ages', 'concept_ids',
-                          'visit_segments', 'visit_concept_orders']
+                          'visit_segments', 'visit_concept_orders', 'num_of_visits',
+                          'num_of_concepts']
 
     if include_visit_type:
         patient_grouped_events = patient_grouped_events \
@@ -422,6 +425,7 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
 
     :param patient_event:
     :param date_filter:
+    :param include_visit_type:
     :param exclude_visit_tokens:
     :return:
     """
@@ -514,7 +518,7 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
     struct_columns = ['order', 'date_in_week', 'standard_concept_id', 'visit_segment', 'age',
                       'visit_rank_order']
     output_columns = ['cohort_member_id', 'person_id', 'concept_ids', 'visit_segments', 'orders',
-                      'dates', 'ages', 'visit_concept_orders']
+                      'dates', 'ages', 'visit_concept_orders', 'num_of_visits', 'num_of_concepts']
 
     if include_visit_type:
         struct_columns.append('visit_concept_id')
@@ -527,7 +531,9 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
         .withColumn('order', order_udf) \
         .withColumn('data_for_sorting', F.struct(struct_columns)) \
         .groupBy('cohort_member_id', 'person_id') \
-        .agg(F.sort_array(F.collect_set('data_for_sorting')).alias('data_for_sorting')) \
+        .agg(F.sort_array(F.collect_set('data_for_sorting')).alias('data_for_sorting'),
+             F.max('visit_rank_order').alias('num_of_visits'),
+             F.count('standard_concept_id').alias('num_of_concepts')) \
         .withColumn('orders',
                     F.col('data_for_sorting.order').cast(T.ArrayType(T.IntegerType()))) \
         .withColumn('dates', F.col('data_for_sorting.date_in_week')) \
