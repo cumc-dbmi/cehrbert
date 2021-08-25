@@ -558,14 +558,21 @@ def create_concept_frequency_data(patient_event, date_filter=None):
     take_concept_ids_udf = F.udf(lambda rows: [row[0] for row in rows], T.ArrayType(T.StringType()))
     take_freqs_udf = F.udf(lambda rows: [row[1] for row in rows], T.ArrayType(T.IntegerType()))
 
+    visit_count = patient_event.groupBy('cohort_member_id', 'person_id') \
+        .agg(F.countDistinct('visit_occurrence_id').alias('num_of_visits'))
+
     patient_event = patient_event.groupBy('cohort_member_id', 'person_id',
                                           'standard_concept_id').count() \
         .withColumn('concept_id_freq', F.struct('standard_concept_id', 'count')) \
         .groupBy('cohort_member_id', 'person_id').agg(
-        F.collect_list('concept_id_freq').alias('sequence')) \
+        F.collect_list('concept_id_freq').alias('sequence'),
+        F.sum('count').alias('num_of_concepts')) \
         .withColumn('concept_ids', take_concept_ids_udf('sequence')) \
         .withColumn('frequencies', take_freqs_udf('sequence')) \
-        .select('cohort_member_id', 'person_id', 'concept_ids', 'frequencies')
+        .join(visit_count, (patient_event['person_id'] == visit_count['person_id']) & (
+                patient_event['cohort_member_id'] == visit_count['cohort_member_id'])) \
+        .select(patient_event['cohort_member_id'], patient_event['person_id'],
+                'concept_ids', 'frequencies', 'num_of_concepts', 'num_of_visits')
 
     return patient_event
 
