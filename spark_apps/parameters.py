@@ -107,6 +107,20 @@ def create_spark_args():
                         required=False,
                         type=int,
                         default=0)
+    parser.add_argument('--num_of_visits',
+                        dest='num_of_visits',
+                        action='store',
+                        help='The number of visits to qualify for the inclusion of the cohorts',
+                        required=False,
+                        type=int,
+                        default=0)
+    parser.add_argument('--num_of_concepts',
+                        dest='num_of_concepts',
+                        action='store',
+                        help='The number of concepts to qualify for the inclusion of the cohorts',
+                        required=False,
+                        type=int,
+                        default=0)
     parser.add_argument('-iw',
                         '--is_window_post_index',
                         dest='is_window_post_index',

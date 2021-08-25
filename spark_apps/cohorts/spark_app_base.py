@@ -235,6 +235,8 @@ class NestedCohortBuilder:
                  hold_off_window: int,
                  prediction_start_days: int,
                  prediction_window: int,
+                 num_of_visits: int,
+                 num_of_concepts: int,
                  is_window_post_index: bool = False,
                  include_visit_type: bool = True,
                  exclude_visit_tokens: bool = False,
@@ -257,6 +259,8 @@ class NestedCohortBuilder:
         self._hold_off_window = hold_off_window
         self._prediction_start_days = prediction_start_days
         self._prediction_window = prediction_window
+        self._num_of_visits = num_of_visits
+        self._num_of_concepts = num_of_concepts
         self._is_observation_post_index = is_window_post_index
         self._is_observation_window_unbounded = is_observation_window_unbounded
         self._include_visit_type = include_visit_type
@@ -281,6 +285,8 @@ class NestedCohortBuilder:
                                f'prediction_start_days: {prediction_start_days}\n'
                                f'prediction_window: {prediction_window}\n'
                                f'hold_off_window: {hold_off_window}\n'
+                               f'num_of_visits: {num_of_visits}\n'
+                               f'num_of_concepts: {num_of_concepts}\n'
                                f'is_window_post_index: {is_window_post_index}\n'
                                f'include_visit_type: {include_visit_type}\n'
                                f'exclude_visit_tokens: {exclude_visit_tokens}\n'
@@ -386,7 +392,9 @@ class NestedCohortBuilder:
             .withColumn('cohort_member_id', cohort_member_id_udf)
 
         ehr_records_for_cohorts = self.extract_ehr_records_for_cohort(cohort)
-        cohort = cohort.join(ehr_records_for_cohorts, ['person_id', 'cohort_member_id'])
+        cohort = cohort.join(ehr_records_for_cohorts, ['person_id', 'cohort_member_id']) \
+            .where(F.col('num_of_visits') >= self._num_of_visits) \
+            .where(F.col('num_of_concepts') >= self._num_of_concepts)
         cohort.write.mode('overwrite').parquet(self._output_data_folder)
 
     def extract_ehr_records_for_cohort(self, cohort: DataFrame):
@@ -450,6 +458,8 @@ def create_prediction_cohort(spark_args,
     prediction_start_days = spark_args.prediction_start_days
     prediction_window = spark_args.prediction_window
     hold_off_window = spark_args.hold_off_window
+    num_of_visits = spark_args.num_of_visits
+    num_of_concepts = spark_args.num_of_concepts
     include_visit_type = spark_args.include_visit_type
     exclude_visit_tokens = spark_args.exclude_visit_tokens
     is_feature_concept_frequency = spark_args.is_feature_concept_frequency
@@ -506,6 +516,8 @@ def create_prediction_cohort(spark_args,
                         hold_off_window=hold_off_window,
                         prediction_start_days=prediction_start_days,
                         prediction_window=prediction_window,
+                        num_of_visits=num_of_visits,
+                        num_of_concepts=num_of_concepts,
                         is_window_post_index=is_window_post_index,
                         include_visit_type=include_visit_type,
                         exclude_visit_tokens=exclude_visit_tokens,
