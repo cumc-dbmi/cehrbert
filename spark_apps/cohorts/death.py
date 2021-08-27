@@ -8,23 +8,24 @@ WITH max_death_date_cte AS
         MAX(death_date) AS death_date
     FROM global_temp.death
     GROUP BY person_id
+),
+last_visit_start_date AS 
+(
+    SELECT
+        person_id,
+        MAX(visit_start_date) AS last_visit_start_date
+    FROM global_temp.visit_occurrence 
+    GROUP BY person_id
 )
 
 SELECT
-    dv.person_id,
-    dv.death_date AS index_date,
+    d.person_id,
+    d.death_date AS index_date,
     CAST(null AS INT) AS visit_occurrence_id
-FROM
-(
-    SELECT DISTINCT
-        d.person_id,
-        d.death_date,
-        FIRST(DATE(v.visit_start_date)) OVER(PARTITION BY v.person_id ORDER BY DATE(v.visit_start_date) DESC) AS last_visit_start_date
-    FROM max_death_date_cte AS d
-    JOIN global_temp.visit_occurrence AS v
-        ON d.person_id = v.person_id
-) dv
-WHERE dv.last_visit_start_date <= dv.death_date
+FROM max_death_date_cte AS d
+JOIN last_visit_start_date AS v
+    ON d.person_id = v.person_id
+        AND v.last_visit_start_date <= d.death_date
 """
 
 DEFAULT_COHORT_NAME = 'mortality'

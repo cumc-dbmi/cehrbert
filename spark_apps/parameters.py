@@ -107,6 +107,20 @@ def create_spark_args():
                         required=False,
                         type=int,
                         default=0)
+    parser.add_argument('--num_of_visits',
+                        dest='num_of_visits',
+                        action='store',
+                        help='The number of visits to qualify for the inclusion of the cohorts',
+                        required=False,
+                        type=int,
+                        default=0)
+    parser.add_argument('--num_of_concepts',
+                        dest='num_of_concepts',
+                        action='store',
+                        help='The number of concepts to qualify for the inclusion of the cohorts',
+                        required=False,
+                        type=int,
+                        default=0)
     parser.add_argument('-iw',
                         '--is_window_post_index',
                         dest='is_window_post_index',
@@ -123,7 +137,6 @@ def create_spark_args():
                         dest='exclude_visit_tokens',
                         action='store_true',
                         help='Specify whether or not to exclude the VS and VE tokens')
-
     parser.add_argument('-f',
                         '--is_feature_concept_frequency',
                         dest='is_feature_concept_frequency',
@@ -151,6 +164,10 @@ def create_spark_args():
                         dest='is_first_time_outcome',
                         action='store_true',
                         help='is the outcome the first time occurrence?')
+    parser.add_argument('--is_remove_index_prediction_starts',
+                        dest='is_remove_index_prediction_starts',
+                        action='store_true',
+                        help='is outcome between index_date and prediction start window removed?')
     parser.add_argument('--is_prediction_window_unbounded',
                         dest='is_prediction_window_unbounded',
                         action='store_true',

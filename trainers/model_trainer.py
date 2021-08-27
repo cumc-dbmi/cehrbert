@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 import os
 from pathlib import Path
 import pandas as pd
+import dask.dataframe as dd
 
 import tensorflow as tf
 
@@ -59,6 +60,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
                  tf_board_log_path: str = None,
                  shuffle_training_data: bool = True,
                  cache_dataset: bool = False,
+                 use_dask: bool = False,
                  *args, **kwargs):
 
         self._training_data_parquet_path = training_data_parquet_path
@@ -69,10 +71,11 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         self._learning_rate = learning_rate
         self._shuffle_training_data = shuffle_training_data
         self._cache_dataset = cache_dataset
+        self._use_dask = use_dask
         self._training_data = self._load_training_data()
 
         # shuffle the training data
-        if self._shuffle_training_data:
+        if self._shuffle_training_data and not self._use_dask:
             self._training_data = self._training_data.sample(frac=1).reset_index(drop=True)
 
         self._load_dependencies()
@@ -87,7 +90,8 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             f'learning_rate: {learning_rate}\n'
             f'tf_board_log_path: {tf_board_log_path}\n'
             f'shuffle_training_data: {shuffle_training_data}\n'
-            f'cache_dataset: {cache_dataset}\n')
+            f'cache_dataset: {cache_dataset}\n'
+            f'use_dask: {use_dask}\n')
 
     @abstractmethod
     def _load_dependencies(self):
@@ -97,8 +101,11 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
     def _load_training_data(self):
         if not os.path.exists(self._training_data_parquet_path):
             raise FileExistsError(f'{self._training_data_parquet_path} does not exist!')
-        parquet = pd.read_parquet(self._training_data_parquet_path)
-        return parquet
+
+        if self._use_dask:
+            return dd.read_parquet(self._training_data_parquet_path)
+        else:
+            return pd.read_parquet(self._training_data_parquet_path)
 
     @abstractmethod
     def create_data_generator(self) -> AbstractDataGeneratorBase:

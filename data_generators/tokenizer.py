@@ -1,5 +1,6 @@
-from typing import Optional, Sequence
-
+from typing import Optional, Sequence, Union
+from dask.dataframe import Series as dd_series
+from pandas import Series as df_series
 from tensorflow.python.keras.preprocessing.text import Tokenizer
 
 BERT_SPECIAL_TOKENS = ['[MASK]', '[UNUSED]']
@@ -13,15 +14,24 @@ class ConceptTokenizer:
         self.special_tokens = special_tokens
         self.tokenizer = Tokenizer(oov_token=oov_token, filters='', lower=False)
 
-    def fit_on_concept_sequences(self, concept_sequences):
-        self.tokenizer.fit_on_texts(concept_sequences)
+    def fit_on_concept_sequences(self, concept_sequences: Union[df_series, dd_series]):
+
+        if isinstance(concept_sequences, df_series):
+            self.tokenizer.fit_on_texts(concept_sequences.apply(
+                lambda concept_ids: concept_ids.tolist()))
+        else:
+            self.tokenizer.fit_on_texts(
+                concept_sequences.apply(lambda s: s.tolist(), meta='iterable'))
+
         self.tokenizer.fit_on_texts(self.mask_token)
         self.tokenizer.fit_on_texts(self.unused_token)
         if self.special_tokens is not None:
             self.tokenizer.fit_on_texts(self.special_tokens)
 
-    def encode(self, concept_sequences):
-        return self.tokenizer.texts_to_sequences(concept_sequences)
+    def encode(self, concept_sequences, is_generator=False):
+        return self.tokenizer.texts_to_sequences_generator(
+            concept_sequences) if is_generator else self.tokenizer.texts_to_sequences(
+            concept_sequences)
 
     def decode(self, concept_sequence_token_ids):
         return self.tokenizer.sequences_to_texts(concept_sequence_token_ids)
@@ -33,7 +43,8 @@ class ConceptTokenizer:
             all_keys.remove(self.tokenizer.word_index[self.tokenizer.oov_token])
 
         if self.special_tokens is not None:
-            excluded = set([self.tokenizer.word_index[special_token] for special_token in self.special_tokens])
+            excluded = set(
+                [self.tokenizer.word_index[special_token] for special_token in self.special_tokens])
             all_keys = all_keys - excluded
         return all_keys
 

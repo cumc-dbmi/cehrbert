@@ -10,8 +10,9 @@ EVALUATION_CHOICES = [FULL, SEQUENCE_MODEL, BASELINE_MODEL]
 
 LSTM = 'lstm'
 VANILLA_BERT_LSTM = 'vanilla_bert_lstm'
+VANILLA_BERT_FEED_FORWARD = 'vanilla_bert_feed_forward'
 TEMPORAL_BERT_LSTM = 'temporal_bert_lstm'
-SEQUENCE_MODEL_EVALUATORS = [LSTM, VANILLA_BERT_LSTM, TEMPORAL_BERT_LSTM]
+SEQUENCE_MODEL_EVALUATORS = [LSTM, VANILLA_BERT_LSTM, VANILLA_BERT_FEED_FORWARD, TEMPORAL_BERT_LSTM]
 
 
 def evaluate_sequence_models(args):
@@ -36,6 +37,26 @@ def evaluate_sequence_models(args):
             tokenizer_path=time_attention_tokenizer_path,
             sequence_model_name=args.sequence_model_name
         ).eval_model()
+
+    if VANILLA_BERT_FEED_FORWARD in args.model_evaluators:
+        validate_folder(args.vanilla_bert_model_folder)
+        bert_tokenizer_path = os.path.join(args.vanilla_bert_model_folder,
+                                           p.tokenizer_path)
+        bert_model_path = os.path.join(args.vanilla_bert_model_folder,
+                                       p.bert_model_validation_path)
+        BertFeedForwardModelEvaluator(
+            dataset=dataset,
+            evaluation_folder=args.evaluation_folder,
+            num_of_folds=args.num_of_folds,
+            is_transfer_learning=args.is_transfer_learning,
+            training_percentage=args.training_percentage,
+            max_seq_length=args.max_seq_length,
+            batch_size=args.batch_size,
+            epochs=args.epochs,
+            bert_model_path=bert_model_path,
+            tokenizer_path=bert_tokenizer_path,
+            is_temporal=False,
+            sequence_model_name=args.sequence_model_name).eval_model()
 
     if VANILLA_BERT_LSTM in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)

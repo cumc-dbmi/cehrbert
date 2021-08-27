@@ -140,6 +140,33 @@ class DemographicsLearningObjective(LearningObjective):
         return input_dict, {}
 
 
+class ProlongedLengthStayLearningObjective(LearningObjective):
+    required_columns = ['prolonged_length_stay']
+
+    def get_tf_dataset_schema(self):
+        output_dict_schema = {
+            'prolonged_length_stay': int32
+        }
+        return {}, output_dict_schema
+
+    @validate_columns_decorator
+    def process_batch(self, rows: List[RowSlicer]):
+        """
+        Process a batch of rows to generate input and output data for the learning objective
+        :param rows:
+        :return:
+        """
+        prolonged_length_stay_input = []
+        for row_slicer in rows:
+            prolonged_length_stay_input.append(row_slicer.row.prolonged_length_stay)
+
+        output_dict = {
+            'prolonged_length_stay': prolonged_length_stay_input
+        }
+
+        return {}, output_dict
+
+
 class VisitPredictionLearningObjective(LearningObjective):
     required_columns = ['visit_token_ids', 'visit_concept_orders']
 
@@ -220,7 +247,7 @@ class VisitPredictionLearningObjective(LearningObjective):
 
 
 class MaskedLanguageModelLearningObjective(LearningObjective):
-    required_columns = ['token_ids', 'dates', 'visit_segments']
+    required_columns = ['token_ids', 'dates', 'visit_segments', 'ages', 'visit_concept_orders']
 
     def __init__(self, concept_tokenizer: ConceptTokenizer, max_seq_len: int, is_training: bool):
         self._max_seq_len = max_seq_len
@@ -233,7 +260,9 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
             'concept_ids': int32,
             'mask': int32,
             'time_stamps': int32,
-            'visit_segments': int32
+            'visit_segments': int32,
+            'ages': int32,
+            'visit_concept_orders': int32
         }
         output_dict_schema = {'concept_predictions': int32}
         return input_dict_schema, output_dict_schema
@@ -241,7 +270,7 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
     @validate_columns_decorator
     def process_batch(self, rows: List[RowSlicer]):
 
-        (output_mask, masked_concepts, concepts, time_stamps, visit_segments) = zip(
+        (output_mask, masked_concepts, concepts, time_stamps, visit_segments, ages, visit_concept_orders) = zip(
             *list(map(self._make_record, rows)))
 
         unused_token_id = self._concept_tokenizer.get_unused_token_id()
@@ -254,12 +283,18 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
         # The auxiliary inputs for bert
         visit_segments = post_pad_pre_truncate(visit_segments, 0, self._max_seq_len)
         time_stamps = post_pad_pre_truncate(time_stamps, 0, self._max_seq_len)
+        ages = post_pad_pre_truncate(ages, 0, self._max_seq_len)
+        visit_concept_orders = post_pad_pre_truncate(visit_concept_orders,
+                                                     self._max_seq_len,
+                                                     self._max_seq_len)
 
         input_dict = {'masked_concept_ids': masked_concepts,
                       'concept_ids': concepts,
                       'mask': mask,
                       'time_stamps': time_stamps,
-                      'visit_segments': visit_segments}
+                      'ages': ages,
+                      'visit_segments': visit_segments,
+                      'visit_concept_orders': visit_concept_orders}
 
         output_dict = {'concept_predictions': np.stack([concepts, output_mask], axis=-1)}
 
@@ -277,14 +312,18 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
 
         row, left_index, right_index, _ = row_slicer
 
-        iterator = zip(map(int, row.dates), row.token_ids, row.visit_segments)
+        sorting_columns = getattr(row, 'orders') if hasattr(row, 'orders') else row.dates
+
+        iterator = zip(map(int, sorting_columns), row.token_ids, row.visit_segments, row.dates,
+                       row.ages, row.visit_concept_orders)
         sorted_list = sorted(iterator, key=lambda tup2: (tup2[0], tup2[1]))
 
-        (dates, concepts, visit_segments) = zip(*list(islice(sorted_list, left_index, right_index)))
+        (_, concepts, segments, dates, ages, visit_concept_orders) = zip(
+            *list(islice(sorted_list, left_index, right_index)))
 
         masked_concepts, output_mask = self._mask_concepts(concepts)
 
-        return output_mask, masked_concepts, concepts, dates, visit_segments
+        return output_mask, masked_concepts, concepts, dates, segments, ages, visit_concept_orders
 
     def _mask_concepts(self, concepts):
         """
