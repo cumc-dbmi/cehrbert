@@ -310,7 +310,7 @@ class PositionalEncodingLayer(tf.keras.layers.Layer):
         super(PositionalEncodingLayer, self).__init__(*args, **kwargs)
         self.max_sequence_length = max_sequence_length
         self.embedding_size = embedding_size
-        self.pos_encoding = positional_encoding(max_sequence_length, embedding_size)
+        self.pos_encoding = tf.squeeze(positional_encoding(max_sequence_length, embedding_size))
 
     def get_config(self):
         config = super().get_config()
@@ -318,9 +318,45 @@ class PositionalEncodingLayer(tf.keras.layers.Layer):
         config['embedding_size'] = self.embedding_size
         return config
 
-    def call(self, concept_embeddings, **kwargs):
-        seq_len = tf.shape(concept_embeddings)[1]
-        return concept_embeddings + self.pos_encoding[:, :seq_len, :]
+    def call(self, concept_embeddings, visit_concept_orders, **kwargs):
+        # Normalize the visit_orders using the smallest visit_concept_orders
+        # Take the absolute value to make sure the padded values are not negative after
+        # normalization
+        visit_concept_orders = tf.abs(visit_concept_orders - tf.expand_dims(
+            tf.math.reduce_min(visit_concept_orders, axis=1), axis=-1))
+        # Get the same positional encodings for the concepts with the same visit_order
+        positional_embeddings = tf.gather(self.pos_encoding, visit_concept_orders, axis=0)
+        return concept_embeddings + positional_embeddings
+
+
+class TimeEmbeddingLayer(tf.keras.layers.Layer):
+    def __init__(self, embedding_size, is_time_delta=False, *args, **kwargs):
+        super(TimeEmbeddingLayer, self).__init__(*args, **kwargs)
+        self.embedding_size = embedding_size
+        self.is_time_delta = is_time_delta
+        self.w = self.add_weight(shape=(1, self.embedding_size),
+                                 trainable=True,
+                                 initializer=tf.keras.initializers.GlorotNormal(),
+                                 name=f'time_embedding_weight_{self.name}')
+        self.phi = self.add_weight(shape=(1, self.embedding_size),
+                                   trainable=True,
+                                   initializer=tf.keras.initializers.GlorotNormal(),
+                                   name=f'time_embedding_phi_{self.name}')
+
+    def get_config(self):
+        config = super().get_config()
+        config['embedding_size'] = self.embedding_size
+        config['is_time_delta'] = self.is_time_delta
+        return config
+
+    def call(self, time_stamps, **kwargs):
+        time_stamps = tf.cast(time_stamps, tf.float32)
+        if self.is_time_delta:
+            time_stamps = tf.concat(
+                [time_stamps[:, 0:1] * 0, time_stamps[:, 1:] - time_stamps[:, :-1]], axis=-1)
+        next_input = tf.expand_dims(time_stamps, axis=-1) * self.w + self.phi
+        time_embeddings = tf.concat([next_input[:, 0:1, :], tf.sin(next_input[:, 1:, :])], axis=1)
+        return time_embeddings
 
 
 class VisitEmbeddingLayer(tf.keras.layers.Layer):
@@ -523,6 +559,7 @@ get_custom_objects().update({
     'PairwiseTimeAttention': TimeSelfAttention,
     'VisitEmbeddingLayer': VisitEmbeddingLayer,
     'PositionalEncodingLayer': PositionalEncodingLayer,
+    'TimeEmbeddingLayer': TimeEmbeddingLayer,
     'ReusableEmbedding': ReusableEmbedding,
     'TiedOutputEmbedding': TiedOutputEmbedding,
     'MaskedPenalizedSparseCategoricalCrossentropy': MaskedPenalizedSparseCategoricalCrossentropy

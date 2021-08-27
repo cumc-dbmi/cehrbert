@@ -252,7 +252,7 @@ class BertDataGenerator(AbstractDataGeneratorBase):
                     yield RowSlicer(row, 0, seq_length)
 
     def estimate_data_size(self):
-        return len(self._training_data.index)
+        return len(self._training_data)
 
 
 class BertVisitPredictionDataGenerator(BertDataGenerator):
@@ -266,6 +266,11 @@ class BertVisitPredictionDataGenerator(BertDataGenerator):
 
     def _get_learning_objective_classes(self):
         return [MaskedLanguageModelLearningObjective, VisitPredictionLearningObjective]
+
+
+class MedBertDataGenerator(BertDataGenerator):
+    def _get_learning_objective_classes(self):
+        return [MaskedLanguageModelLearningObjective, ProlongedLengthStayLearningObjective]
 
 
 class TemporalBertDataGenerator(BertDataGenerator):

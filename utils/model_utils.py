@@ -8,6 +8,9 @@ import pickle
 from itertools import chain
 import pandas as pd
 import numpy as np
+from pandas import DataFrame as pd_dataframe
+from dask.dataframe import DataFrame as dd_dataframe
+import tensorflow as tf
 from sklearn import metrics
 from typing import Dict, Union, Tuple
 
@@ -56,19 +59,33 @@ def log_function_decorator(function):
 
 
 @log_function_decorator
-def tokenize_concepts(training_data, column_name, tokenized_column_name, tokenizer_path,
-                      oov_token='0'):
+def tokenize_concepts(training_data: Union[pd_dataframe, dd_dataframe],
+                      column_name, tokenized_column_name, tokenizer_path,
+                      oov_token='0', recreate=False):
     """
     Tokenize the concept sequence and save the tokenizer as a pickle file
     :return:
     """
-    tokenizer = ConceptTokenizer(oov_token=oov_token)
-    training_data[column_name] = training_data[column_name].apply(
-        lambda concept_ids: concept_ids.tolist())
-    tokenizer.fit_on_concept_sequences(training_data[column_name])
-    encoded_sequences = tokenizer.encode(training_data[column_name])
-    training_data[tokenized_column_name] = encoded_sequences
-    pickle.dump(tokenizer, open(tokenizer_path, 'wb'))
+    if not os.path.exists(tokenizer_path) or recreate:
+        tokenizer = ConceptTokenizer(oov_token=oov_token)
+        tokenizer.fit_on_concept_sequences(training_data[column_name])
+    else:
+        logging.getLogger(__name__).info(
+            f'Loading the existing tokenizer from {tokenizer_path}')
+        tokenizer = pickle.load(open(tokenizer_path, 'rb'))
+
+    if isinstance(training_data, dd_dataframe):
+        training_data[tokenized_column_name] = training_data[column_name].map_partitions(
+            lambda ds: pd.Series(
+                tokenizer.encode(map(lambda t: t[1].tolist(), ds.iteritems()), is_generator=True),
+                name='concept_ids'), meta='iterable')
+    else:
+        training_data[column_name] = training_data[column_name].apply(
+            lambda concept_ids: concept_ids.tolist())
+        training_data[tokenized_column_name] = tokenizer.encode(training_data[column_name])
+
+    if not os.path.exists(tokenizer_path) or recreate:
+        pickle.dump(tokenizer, open(tokenizer_path, 'wb'))
     return tokenizer
 
 
@@ -147,3 +164,14 @@ def save_training_history(history: Dict, history_folder):
 def validate_folder(folder):
     if not os.path.exists(folder):
         raise FileExistsError(f'{folder} does not exist!')
+
+
+def create_concept_mask(mask, max_seq_length):
+    # mask the third dimension
+    concept_mask_1 = tf.tile(tf.expand_dims(tf.expand_dims(mask, axis=1), axis=-1),
+                             [1, 1, 1, max_seq_length])
+    # mask the fourth dimension
+    concept_mask_2 = tf.expand_dims(tf.expand_dims(mask, axis=1), axis=1)
+    concept_mask = tf.cast(
+        (concept_mask_1 + concept_mask_2) > 0, dtype=tf.int32, name=f'{mask.name}_mask')
+    return concept_mask

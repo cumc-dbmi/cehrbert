@@ -4,21 +4,11 @@ import tensorflow as tf
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 
 from models.custom_layers import (VisitEmbeddingLayer, TimeSelfAttention, Encoder,
-                                  TemporalEncoder, PositionalEncodingLayer)
+                                  TemporalEncoder, PositionalEncodingLayer,
+                                  TimeEmbeddingLayer)
+from utils.model_utils import create_concept_mask
 
 
-def create_concept_mask(mask, max_seq_length):
-    # mask the third dimension
-    concept_mask_1 = tf.tile(tf.expand_dims(tf.expand_dims(mask, axis=1), axis=-1),
-                             [1, 1, 1, max_seq_length])
-    # mask the fourth dimension
-    concept_mask_2 = tf.expand_dims(tf.expand_dims(mask, axis=1), axis=1)
-    concept_mask = tf.cast(
-        (concept_mask_1 + concept_mask_2) > 0, dtype=tf.int32, name='concept_mask')
-    return concept_mask
-
-
-# -
 def transformer_bert_model(
         max_seq_length: int,
         vocab_size: int,
@@ -27,7 +17,12 @@ def transformer_bert_model(
         num_heads: int,
         transformer_dropout: float = 0.1,
         embedding_dropout: float = 0.6,
-        l2_reg_penalty: float = 1e-4):
+        l2_reg_penalty: float = 1e-4,
+        use_time_embedding: bool = False,
+        time_embeddings_size: int = 16,
+        use_behrt: bool = False,
+        include_prolonged_length_stay: bool = False
+):
     """
     Builds a BERT-based model (Bidirectional Encoder Representations
     from Transformers) following paper "BERT: Pre-training of Deep
@@ -45,7 +40,12 @@ def transformer_bert_model(
     visit_segments = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
                                            name='visit_segments')
 
+    visit_concept_orders = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
+                                                 name='visit_concept_orders')
+
     mask = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='mask')
+
+    default_inputs = [masked_concept_ids, visit_segments, visit_concept_orders, mask]
 
     concept_mask = create_concept_mask(mask, max_seq_length)
 
@@ -62,10 +62,6 @@ def transformer_bert_model(
 
     visit_segment_layer = VisitEmbeddingLayer(visit_order_size=3,
                                               embedding_size=embedding_size)
-
-    positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
-                                                        embedding_size=embedding_size)
-
     encoder = Encoder(name='encoder',
                       num_layers=depth,
                       d_model=embedding_size,
@@ -81,24 +77,65 @@ def transformer_bert_model(
 
     next_step_input, embedding_matrix = embedding_layer(masked_concept_ids)
 
-    next_step_input = positional_encoding_layer(next_step_input)
     # Building a Vanilla Transformer (described in
     # "Attention is all you need", 2017)
     next_step_input = visit_segment_layer([visit_segments, next_step_input])
+
+    if use_behrt:
+        ages = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
+                                     name='ages')
+        default_inputs.extend([ages])
+        age_embedding_layer = TimeEmbeddingLayer(embedding_size=embedding_size)
+        next_step_input = next_step_input + age_embedding_layer(ages)
+        positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
+                                                            embedding_size=embedding_size)
+        next_step_input = positional_encoding_layer(next_step_input, visit_concept_orders)
+
+    elif use_time_embedding:
+        time_stamps = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
+                                            name='time_stamps')
+        ages = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
+                                     name='ages')
+        default_inputs.extend([time_stamps, ages])
+        time_embedding_layer = TimeEmbeddingLayer(embedding_size=embedding_size)
+        age_embedding_layer = TimeEmbeddingLayer(embedding_size=embedding_size)
+        scale_back_concat_layer = tf.keras.layers.Dense(embedding_size, activation='tanh')
+        time_embeddings = time_embedding_layer(time_stamps)
+        age_embeddings = age_embedding_layer(ages)
+        next_step_input = scale_back_concat_layer(
+            tf.concat([next_step_input, time_embeddings, age_embeddings], axis=-1))
+    else:
+        positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
+                                                            embedding_size=embedding_size)
+        next_step_input = positional_encoding_layer(next_step_input, visit_concept_orders)
 
     next_step_input, _ = encoder(next_step_input, concept_mask)
 
     concept_predictions = softmax_layer(
         output_layer([next_step_input, embedding_matrix]))
 
+    outputs = [concept_predictions]
+
+    if include_prolonged_length_stay:
+        mask_embeddings = tf.tile(tf.expand_dims(mask == 0, -1, name='bert_expand_prolonged'),
+                                  [1, 1, embedding_size], name='bert_tile_prolonged')
+        mask_embeddings = tf.cast(mask_embeddings, dtype=tf.float32, name='bert_cast_prolonged')
+        contextualized_embeddings = tf.math.multiply(next_step_input, mask_embeddings,
+                                                     name='bert_multiply_prolonged')
+        summed_contextualized_embeddings = tf.reduce_sum(contextualized_embeddings, axis=-1)
+        prolonged_length_stay_prediction = tf.keras.layers.Dense(1,
+                                                                 name='prolonged_length_stay',
+                                                                 activation='sigmoid')
+
+        outputs.append(prolonged_length_stay_prediction(summed_contextualized_embeddings))
+
     model = tf.keras.Model(
-        inputs=[masked_concept_ids, visit_segments, mask],
-        outputs=[concept_predictions])
+        inputs=default_inputs,
+        outputs=outputs)
 
     return model
 
 
-# -
 def transformer_temporal_bert_model(
         max_seq_length: int,
         time_window_size: int,

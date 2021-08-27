@@ -68,7 +68,6 @@ def create_parse_args():
 
 def create_parse_args_base_bert():
     parser = create_parse_args()
-
     parser.add_argument('-d',
                         '--depth',
                         dest='depth',
@@ -76,7 +75,6 @@ def create_parse_args_base_bert():
                         type=int,
                         default=5,
                         required=False)
-
     parser.add_argument('-nh',
                         '--num_heads',
                         dest='num_heads',
@@ -84,14 +82,23 @@ def create_parse_args_base_bert():
                         type=int,
                         default=8,
                         required=False)
-
     parser.add_argument('-iv',
                         '--include_visit',
                         dest='include_visit_prediction',
-                        action='store_true',
-                        default=False,
-                        required=False)
-
+                        action='store_true')
+    parser.add_argument('--include_prolonged_length_stay',
+                        dest='include_prolonged_length_stay',
+                        action='store_true')
+    parser.add_argument('-ut',
+                        '--use_time_embedding',
+                        dest='use_time_embedding',
+                        action='store_true')
+    parser.add_argument('--use_behrt',
+                        dest='use_behrt',
+                        action='store_true')
+    parser.add_argument('--use_dask',
+                        dest='use_dask',
+                        action='store_true')
     return parser
 
 
