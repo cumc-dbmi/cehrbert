@@ -508,7 +508,7 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
         .withColumn('standard_concept_id', F.col('time_token')) \
         .withColumn('priority', F.lit(-2)) \
         .withColumn('visit_segment', F.lit(0)) \
-        .withColumn('date_in_week', F.lit(0)) \
+        .withColumn('date_in_week', F.lit(-1)) \
         .withColumn('age', F.lit(-1)) \
         .where('prev_days_since_epoch IS NOT NULL')
 
