@@ -103,10 +103,6 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
     # embeddings for decoder input
     input_for_decoder, visit_embedding_matrix = visit_embedding_layer(masked_visit_concepts)
 
-    # Building a Vanilla Transformer (described in
-    # "Attention is all you need", 2017)
-    input_for_encoder = visit_segment_layer([visit_segments, input_for_encoder])
-
     if use_behrt:
         ages = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
                                      name='ages')
@@ -157,6 +153,10 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
         positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
                                                             embedding_size=embedding_size)
         input_for_encoder = positional_encoding_layer(input_for_encoder, visit_concept_orders)
+
+    # Building a Vanilla Transformer (described in
+    # "Attention is all you need", 2017)
+    input_for_encoder = visit_segment_layer([visit_segments, input_for_encoder])
 
     input_for_encoder, _ = encoder(input_for_encoder, concept_mask)
 
