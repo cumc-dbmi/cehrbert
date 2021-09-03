@@ -74,7 +74,8 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
         embeddings_regularizer=l2_regularizer)
 
     visit_segment_layer = VisitEmbeddingLayer(visit_order_size=3,
-                                              embedding_size=embedding_size)
+                                              embedding_size=embedding_size,
+                                              name='visit_segment_layer')
     encoder = Encoder(name='encoder',
                       num_layers=depth,
                       d_model=embedding_size,
