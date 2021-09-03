@@ -85,6 +85,7 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
 
     output_layer_1 = TiedOutputEmbedding(
         projection_regularizer=l2_regularizer,
+        add_biases=use_time_embedding,
         projection_dropout=embedding_dropout,
         name='concept_prediction_logits')
 
@@ -134,10 +135,10 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
         scale_back_patient_seq_concat_layer = tf.keras.layers.Dense(embedding_size,
                                                                     activation='tanh',
                                                                     name='scale_pat_seq_layer')
-        # # dense layer for rescale the visit sequence embeddings back to the original size
-        # scale_back_visit_seq_concat_layer = tf.keras.layers.Dense(embedding_size,
-        #                                                           activation='tanh',
-        #                                                           name='scale_visit_seq_layer')
+        # dense layer for rescale the visit sequence embeddings back to the original size
+        scale_back_visit_seq_concat_layer = tf.keras.layers.Dense(embedding_size,
+                                                                  activation='tanh',
+                                                                  name='scale_visit_seq_layer')
         time_embeddings = time_embedding_layer(time_stamps)
         age_embeddings = age_embedding_layer(ages)
 
@@ -145,10 +146,10 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
             tf.concat([input_for_encoder, time_embeddings, age_embeddings],
                       axis=-1,
                       name='concat_for_encoder'))
-        # input_for_decoder = scale_back_visit_seq_concat_layer(
-        #     tf.concat([input_for_decoder, time_embeddings, age_embeddings],
-        #               axis=-1,
-        #               name='concat_for_decoder'))
+        input_for_decoder = scale_back_visit_seq_concat_layer(
+            tf.concat([input_for_decoder, time_embeddings, age_embeddings],
+                      axis=-1,
+                      name='concat_for_decoder'))
     else:
         positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
                                                             embedding_size=embedding_size)
