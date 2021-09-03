@@ -71,6 +71,7 @@ def transformer_bert_model(
     output_layer = TiedOutputEmbedding(
         projection_regularizer=l2_regularizer,
         projection_dropout=embedding_dropout,
+        add_biases=use_time_embedding,
         name='concept_prediction_logits')
 
     softmax_layer = tf.keras.layers.Softmax(name='concept_predictions')
