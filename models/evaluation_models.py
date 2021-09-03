@@ -75,7 +75,7 @@ def create_vanilla_feed_forward_model(vanilla_bert_model_path):
 
     output_layer = tf.keras.layers.Dense(1, name='prediction', activation='sigmoid')
 
-    output = output_layer(tf.reduce_sum(contextualized_embeddings, axis=-1))
+    output = output_layer(tf.reduce_sum(contextualized_embeddings, axis=-2))
 
     lstm_with_vanilla_bert = Model(inputs=bert_inputs + [age_at_index_date],
                                    outputs=output, name='Vanilla_BERT_PLUS_BI_LSTM')
