@@ -107,10 +107,15 @@ def create_sliding_bert_model(model_path, max_seq_length, context_window, stride
                                                time_stamps,
                                                ages,
                                                mask])
+    dropout_conv_layer = tf.keras.layers.Dropout(0.2)
+
+    dense_layer = tf.keras.layers.Dense(64, activation='relu')
+
+    dropout_dense_layer = tf.keras.layers.Dropout(0.2)
 
     output_layer = tf.keras.layers.Dense(1, name='prediction', activation='sigmoid')
 
-    output = output_layer(conv_bert_output)
+    output = output_layer(dropout_dense_layer(dense_layer(dropout_conv_layer(conv_bert_output))))
 
     model_inputs = [concept_ids, visit_segments, time_stamps, ages, mask]
     ffd_bert_model = tf.keras.models.Model(inputs=model_inputs, outputs=output)

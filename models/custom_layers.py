@@ -572,7 +572,7 @@ class ConvolutionBertLayer(tf.keras.layers.Layer):
         self.stride = stride
         self.step = (seq_len - context_window) // stride + 1
         self.bert_layer = BertLayer(model_path=model_path)
-        self.conv_1d = tf.keras.layers.Conv1D(1, 1)
+        self.conv_1d = tf.keras.layers.Conv1D(3, 1)
 
         assert (self.step - 1) * self.stride + self.context_window == self.seq_len
 
@@ -588,6 +588,7 @@ class ConvolutionBertLayer(tf.keras.layers.Layer):
         concept_ids, visit_segments, time_stamps, ages, mask = inputs
 
         bert_outputs = []
+        bert_output_masking = []
         for i in range(self.step):
             start_index = i * self.stride
             end_index = i * self.stride + self.context_window
@@ -603,17 +604,27 @@ class ConvolutionBertLayer(tf.keras.layers.Layer):
                            time_stamps_step,
                            ages_step,
                            mask_step]
+
+            output_masking = tf.cast(tf.reduce_all(mask_step == 1, axis=-1), dtype=tf.int32)
+
             output_step = self.bert_layer(inputs_step)
             bert_outputs.append(output_step)
+            bert_output_masking.append(output_masking)
 
         # (batch, step, embedding_size)
         bert_output_tensor = tf.stack(bert_outputs, axis=1)
+        # (batch, step)
+        bert_output_masking_tensor = tf.stack(bert_output_masking, axis=1)
         # (batch, step, 1)
         conv_output = self.conv_1d(bert_output_tensor)
+        conv_output += (tf.cast(tf.expand_dims(bert_output_masking_tensor, axis=-1),
+                                dtype='float32') * -1e9)
 
-        context_representation = tf.squeeze(
+        _, _, embedding_size = bert_output_tensor.get_shape().as_list()
+
+        context_representation = tf.reshape(
             tf.transpose(tf.nn.softmax(conv_output, axis=1), [0, 2, 1]) @ bert_output_tensor,
-            axis=1)
+            (-1, self.conv_1d.filters * embedding_size))
 
         return context_representation
 
