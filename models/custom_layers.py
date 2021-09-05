@@ -521,7 +521,8 @@ class BertLayer(tf.keras.layers.Layer):
         self.age_embedding_layer = bert_model.get_layer('age_embedding_layer')
         self.scale_pat_seq_layer = bert_model.get_layer('scale_pat_seq_layer')
         self.encoder_layer = bert_model.get_layer('encoder')
-        self.conv_1d = tf.keras.layers.Conv1D(1, 1)
+        self.conv_1d = tf.keras.layers.Conv1D(2, 1)
+        self.dense = tf.keras.layers.Dense(self.scale_pat_seq_layer.units)
 
     def get_config(self):
         config = super().get_config()
@@ -550,11 +551,11 @@ class BertLayer(tf.keras.layers.Layer):
 
         conv_output = self.conv_1d(contextualized_embeddings)
         conv_output += (tf.cast(tf.expand_dims(local_mask, axis=-1), dtype='float32') * -1e9)
-        context_representation = tf.squeeze(
+        context_representation = tf.reshape(
             tf.transpose(tf.nn.softmax(conv_output, axis=1), [0, 2, 1]) @ contextualized_embeddings,
-            axis=1)
+            (-1, self.conv_1d.filters * embedding_size))
 
-        return context_representation
+        return self.dense(context_representation)
 
 
 class ConvolutionBertLayer(tf.keras.layers.Layer):
@@ -571,6 +572,7 @@ class ConvolutionBertLayer(tf.keras.layers.Layer):
         self.stride = stride
         self.step = (seq_len - context_window) // stride + 1
         self.bert_layer = BertLayer(model_path=model_path)
+        self.conv_1d = tf.keras.layers.Conv1D(1, 1)
 
         assert (self.step - 1) * self.stride + self.context_window == self.seq_len
 
@@ -604,7 +606,16 @@ class ConvolutionBertLayer(tf.keras.layers.Layer):
             output_step = self.bert_layer(inputs_step)
             bert_outputs.append(output_step)
 
-        return tf.stack(bert_outputs, axis=1)
+        # (batch, step, embedding_size)
+        bert_output_tensor = tf.stack(bert_outputs, axis=1)
+        # (batch, step, 1)
+        conv_output = self.conv_1d(bert_output_tensor)
+
+        context_representation = tf.squeeze(
+            tf.transpose(tf.nn.softmax(conv_output, axis=1), [0, 2, 1]) @ bert_output_tensor,
+            axis=1)
+
+        return context_representation
 
 
 get_custom_objects().update({
