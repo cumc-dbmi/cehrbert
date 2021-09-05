@@ -292,6 +292,38 @@ class BertFeedForwardModelEvaluator(BertLstmModelEvaluator):
             return model
 
 
+class SlidingBertModelEvaluator(BertLstmModelEvaluator):
+
+    def __init__(self,
+                 context_window: int,
+                 stride: int, *args, **kwargs):
+        self._context_window = context_window
+        self._stride = stride
+        super(SlidingBertModelEvaluator, self).__init__(*args, **kwargs)
+
+    def _create_model(self):
+        strategy = tf.distribute.MirroredStrategy()
+        self.get_logger().info('Number of devices: {}'.format(strategy.num_replicas_in_sync))
+        with strategy.scope():
+            try:
+                model = create_sliding_bert_model(
+                    model_path=self._bert_model_path,
+                    max_seq_length=self._max_seq_length,
+                    context_window=self._context_window,
+                    stride=self._stride)
+            except ValueError as e:
+                self.get_logger().exception(e)
+                model = create_sliding_bert_model(
+                    model_path=self._bert_model_path,
+                    max_seq_length=self._max_seq_length,
+                    context_window=self._context_window,
+                    stride=self._stride)
+            model.compile(loss='binary_crossentropy',
+                          optimizer=tf.keras.optimizers.Adam(1e-4),
+                          metrics=get_metrics())
+            return model
+
+
 class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
 
     def __init__(self, *args, **kwargs):

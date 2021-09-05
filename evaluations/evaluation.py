@@ -11,8 +11,10 @@ EVALUATION_CHOICES = [FULL, SEQUENCE_MODEL, BASELINE_MODEL]
 LSTM = 'lstm'
 VANILLA_BERT_LSTM = 'vanilla_bert_lstm'
 VANILLA_BERT_FEED_FORWARD = 'vanilla_bert_feed_forward'
+SLIDING_BERT = 'sliding_bert'
 TEMPORAL_BERT_LSTM = 'temporal_bert_lstm'
-SEQUENCE_MODEL_EVALUATORS = [LSTM, VANILLA_BERT_LSTM, VANILLA_BERT_FEED_FORWARD, TEMPORAL_BERT_LSTM]
+SEQUENCE_MODEL_EVALUATORS = [LSTM, VANILLA_BERT_LSTM, VANILLA_BERT_FEED_FORWARD, TEMPORAL_BERT_LSTM,
+                             SLIDING_BERT]
 
 
 def evaluate_sequence_models(args):
@@ -56,6 +58,25 @@ def evaluate_sequence_models(args):
             bert_model_path=bert_model_path,
             tokenizer_path=bert_tokenizer_path,
             is_temporal=False,
+            sequence_model_name=args.sequence_model_name).eval_model()
+
+    if SLIDING_BERT in args.model_evaluators:
+        validate_folder(args.vanilla_bert_model_folder)
+        bert_tokenizer_path = os.path.join(args.vanilla_bert_model_folder, p.tokenizer_path)
+        bert_model_path = os.path.join(args.vanilla_bert_model_folder, p.bert_model_validation_path)
+        SlidingBertModelEvaluator(
+            dataset=dataset,
+            evaluation_folder=args.evaluation_folder,
+            num_of_folds=args.num_of_folds,
+            is_transfer_learning=args.is_transfer_learning,
+            training_percentage=args.training_percentage,
+            max_seq_length=args.max_seq_length,
+            batch_size=args.batch_size,
+            epochs=args.epochs,
+            bert_model_path=bert_model_path,
+            tokenizer_path=bert_tokenizer_path,
+            stride=args.stride,
+            context_window=args.context_window,
             sequence_model_name=args.sequence_model_name).eval_model()
 
     if VANILLA_BERT_LSTM in args.model_evaluators:
@@ -124,6 +145,7 @@ def create_evaluation_args():
     lstm_model_required = LSTM in argv
     vanilla_bert_lstm = VANILLA_BERT_LSTM in argv
     temporal_bert_lstm = TEMPORAL_BERT_LSTM in argv
+    sliding_bert = SLIDING_BERT in argv
 
     main_parser.add_argument('-a',
                              '--action',
@@ -212,6 +234,16 @@ def create_evaluation_args():
                        dest='temporal_bert_model_folder',
                        action='store',
                        required=temporal_bert_lstm)
+    group.add_argument('--stride',
+                       dest='stride',
+                       action='store',
+                       type=int,
+                       required=sliding_bert)
+    group.add_argument('--context_window',
+                       dest='context_window',
+                       action='store',
+                       type=int,
+                       required=sliding_bert)
 
     return main_parser
 

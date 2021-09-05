@@ -4,6 +4,7 @@ from tensorflow.keras.initializers import Constant
 from tensorflow.keras.models import Model
 
 from models.custom_layers import get_custom_objects
+from models.custom_layers import ConvolutionBertLayer
 
 
 def create_bi_lstm_model(max_seq_length, vocab_size, embedding_size, concept_embeddings):
@@ -81,6 +82,39 @@ def create_vanilla_feed_forward_model(vanilla_bert_model_path):
                                    outputs=output, name='Vanilla_BERT_PLUS_BI_LSTM')
 
     return lstm_with_vanilla_bert
+
+
+def create_sliding_bert_model(model_path, max_seq_length, context_window, stride):
+    concept_ids = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
+                                        name='concept_ids')
+    visit_segments = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
+                                           name='visit_segments')
+    time_stamps = tf.keras.layers.Input(shape=(max_seq_length,),
+                                        dtype='int32',
+                                        name='time_stamps')
+    ages = tf.keras.layers.Input(shape=(max_seq_length,),
+                                 dtype='int32',
+                                 name='ages')
+    mask = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='mask')
+
+    convolution_bert_layer = ConvolutionBertLayer(model_path=model_path,
+                                                  seq_len=max_seq_length,
+                                                  context_window=context_window,
+                                                  stride=stride)
+
+    conv_bert_output = convolution_bert_layer([concept_ids,
+                                               visit_segments,
+                                               time_stamps,
+                                               ages,
+                                               mask])
+
+    output_layer = tf.keras.layers.Dense(1, name='prediction', activation='sigmoid')
+    output = output_layer(tf.reduce_sum(conv_bert_output, axis=1))
+
+    model_inputs = [concept_ids, visit_segments, time_stamps, ages, mask]
+    ffd_bert_model = tf.keras.models.Model(inputs=model_inputs, outputs=output)
+
+    return ffd_bert_model
 
 
 def create_vanilla_bert_bi_lstm_model(max_seq_length, vanilla_bert_model_path):

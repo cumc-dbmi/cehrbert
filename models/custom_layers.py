@@ -5,6 +5,8 @@ from keras.utils import get_custom_objects
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 from keras_transformer.bert import MaskedPenalizedSparseCategoricalCrossentropy
 
+from utils.model_utils import create_concept_mask
+
 
 def get_angles(pos, i, d_model):
     angle_rates = 1 / np.power(10000, (2 * (i // 2)) / np.float32(d_model))
@@ -504,48 +506,105 @@ class TimeSelfAttention(TimeAttention):
             self_attention_logits)
 
 
-class GraphEmbeddingLayer(tf.keras.layers.Layer):
-    def __init__(self, vocab_size: int, embedding_size: int, unit: int = 64, *args, **kwargs):
-        super(GraphEmbeddingLayer, self).__init__(*args, **kwargs)
-        self._embedding_size = embedding_size
-        self._vocab_size = vocab_size
-        self._unit = unit
+class BertLayer(tf.keras.layers.Layer):
 
-        self._embedding_layer = tf.keras.layers.Embedding(self._vocab_size,
-                                                          self._embedding_size,
-                                                          name='graph_embedding')
+    def __init__(self, model_path: str, *args, **kwargs):
+        super(BertLayer, self).__init__(*args, **kwargs)
+        bert_model = tf.keras.models.load_model(model_path, custom_objects=get_custom_objects())
 
-        self._dense_layer_1 = tf.keras.layers.Dense(self._unit, activation='tanh')
-        self._dense_layer_2 = tf.keras.layers.Dense(1, use_bias=False)
+        self.model_path = model_path
+        self.concept_embedding_layer = bert_model.get_layer('concept_embeddings')
+        self.visit_segment_layer = [layer for layer in bert_model.layers if
+                                    layer.name in ['visit_embedding_layer',
+                                                   'visit_segment_layer']][0]
+        self.time_embedding_layer = bert_model.get_layer('time_embedding_layer')
+        self.age_embedding_layer = bert_model.get_layer('age_embedding_layer')
+        self.scale_pat_seq_layer = bert_model.get_layer('scale_pat_seq_layer')
+        self.encoder_layer = bert_model.get_layer('encoder')
+        self.conv_1d = tf.keras.layers.Conv1D(1, 1)
 
     def get_config(self):
         config = super().get_config()
-        config['embedding_size'] = self._embedding_size
-        config['vocab_size'] = self._vocab_size
-        config['unit'] = self._unit
+        config['model_path'] = self.model_path
         return config
 
-    def call(self, concept_ids, **kwargs):
-        """
+    def call(self, inputs, **kwargs):
+        local_concept_ids, local_visit_segments, local_time_stamps, local_ages, local_mask = inputs
 
-        :param concept_ids:
-        :param kwargs:
-        :return:
-        """
-        _, seq_length = tf.shape(concept_ids)
-        concept_embeddings = self._embedding_layer(concept_ids)
-        first_concept_embeddings = tf.tile(tf.expand_dims(concept_embeddings[:, 0, :], axis=1),
-                                           [1, seq_length, 1])
+        batch_size, max_seq_length = local_mask.get_shape().as_list()
 
-        next_input = tf.concat([first_concept_embeddings, concept_embeddings], axis=2)
+        concept_embeddings, _ = self.concept_embedding_layer(local_concept_ids)
+        time_embeddings = self.time_embedding_layer(local_time_stamps)
+        age_embeddings = self.age_embedding_layer(local_ages)
+        concept_mask = create_concept_mask(local_mask, max_seq_length)
 
-        next_input = self._dense_layer_1(next_input)
-        next_input = self._dense_layer_2(next_input)
-        attention = tf.nn.softmax(tf.squeezen(next_input))
-        combined_concept_embeddings = tf.reduce_sum(
-            concept_embeddings * tf.expand_dims(attention, axis=1), axis=-1)
+        input_for_encoder = self.scale_pat_seq_layer(
+            tf.concat([concept_embeddings, time_embeddings, age_embeddings],
+                      axis=-1))
+        input_for_encoder = self.visit_segment_layer([local_visit_segments, input_for_encoder])
+        contextualized_embeddings, _ = self.encoder_layer(input_for_encoder, concept_mask)
+        _, _, embedding_size = contextualized_embeddings.get_shape().as_list()
+        mask_embeddings = tf.tile(tf.expand_dims(local_mask == 0, -1), [1, 1, embedding_size])
+        contextualized_embeddings = tf.math.multiply(contextualized_embeddings,
+                                                     tf.cast(mask_embeddings, dtype=tf.float32))
 
-        return combined_concept_embeddings
+        conv_output = self.conv_1d(contextualized_embeddings)
+        conv_output += (tf.cast(tf.expand_dims(local_mask, axis=-1), dtype='float32') * -1e9)
+        context_representation = tf.squeeze(
+            tf.transpose(tf.nn.softmax(conv_output, axis=1), [0, 2, 1]) @ contextualized_embeddings,
+            axis=1)
+
+        return context_representation
+
+
+class ConvolutionBertLayer(tf.keras.layers.Layer):
+
+    def __init__(self,
+                 model_path: str,
+                 seq_len: int,
+                 context_window: int,
+                 stride: int, *args, **kwargs):
+        super(ConvolutionBertLayer, self).__init__(*args, **kwargs)
+        self.model_path = model_path
+        self.seq_len = seq_len
+        self.context_window = context_window
+        self.stride = stride
+        self.step = (seq_len - context_window) // stride + 1
+        self.bert_layer = BertLayer(model_path=model_path)
+
+        assert (self.step - 1) * self.stride + self.context_window == self.seq_len
+
+    def get_config(self):
+        config = super().get_config()
+        config['model_path'] = self.model_path
+        config['seq_len'] = self.seq_len
+        config['context_window'] = self.context_window
+        config['stride'] = self.stride
+        return config
+
+    def call(self, inputs, **kwargs):
+        concept_ids, visit_segments, time_stamps, ages, mask = inputs
+
+        bert_outputs = []
+        for i in range(self.step):
+            start_index = i * self.stride
+            end_index = i * self.stride + self.context_window
+
+            concept_ids_step = concept_ids[:, start_index:end_index]
+            visit_segments_step = visit_segments[:, start_index:end_index]
+            time_stamps_step = time_stamps[:, start_index:end_index]
+            ages_step = ages[:, start_index:end_index]
+            mask_step = mask[:, start_index:end_index]
+
+            inputs_step = [concept_ids_step,
+                           visit_segments_step,
+                           time_stamps_step,
+                           ages_step,
+                           mask_step]
+            output_step = self.bert_layer(inputs_step)
+            bert_outputs.append(output_step)
+
+        return tf.stack(bert_outputs, axis=1)
 
 
 get_custom_objects().update({
@@ -562,5 +621,7 @@ get_custom_objects().update({
     'TimeEmbeddingLayer': TimeEmbeddingLayer,
     'ReusableEmbedding': ReusableEmbedding,
     'TiedOutputEmbedding': TiedOutputEmbedding,
-    'MaskedPenalizedSparseCategoricalCrossentropy': MaskedPenalizedSparseCategoricalCrossentropy
+    'MaskedPenalizedSparseCategoricalCrossentropy': MaskedPenalizedSparseCategoricalCrossentropy,
+    'BertLayer': BertLayer,
+    'ConvolutionBertLayer': ConvolutionBertLayer
 })
