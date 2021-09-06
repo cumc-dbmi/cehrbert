@@ -346,6 +346,7 @@ def create_sequence_data(patient_event,
 
     # Derive columns
     patient_event = patient_event.where('visit_occurrence_id IS NOT NULL') \
+        .withColumn('standard_concept_id', F.col('standard_concept_id').cast('string')) \
         .withColumn('date_in_week', date_conversion_udf) \
         .withColumn('earliest_visit_date', earliest_visit_date_udf) \
         .withColumn('visit_rank_order', visit_rank_udf) \
