@@ -521,8 +521,8 @@ class BertLayer(tf.keras.layers.Layer):
         self.age_embedding_layer = bert_model.get_layer('age_embedding_layer')
         self.scale_pat_seq_layer = bert_model.get_layer('scale_pat_seq_layer')
         self.encoder_layer = bert_model.get_layer('encoder')
-        self.conv_1d = tf.keras.layers.Conv1D(2, 1)
-        self.dense = tf.keras.layers.Dense(self.scale_pat_seq_layer.units)
+        self.conv_1d = tf.keras.layers.Conv1D(1, 1)
+        self.dense = tf.keras.layers.Dense(self.scale_pat_seq_layer.units, activation='tanh')
 
     def get_config(self):
         config = super().get_config()
@@ -572,7 +572,7 @@ class ConvolutionBertLayer(tf.keras.layers.Layer):
         self.stride = stride
         self.step = (seq_len - context_window) // stride + 1
         self.bert_layer = BertLayer(model_path=model_path)
-        self.conv_1d = tf.keras.layers.Conv1D(3, 1)
+        self.conv_1d = tf.keras.layers.Conv1D(1, 1)
 
         assert (self.step - 1) * self.stride + self.context_window == self.seq_len
 
