@@ -521,7 +521,9 @@ class BertLayer(tf.keras.layers.Layer):
         self.age_embedding_layer = bert_model.get_layer('age_embedding_layer')
         self.scale_pat_seq_layer = bert_model.get_layer('scale_pat_seq_layer')
         self.encoder_layer = bert_model.get_layer('encoder')
-        self.conv_1d = tf.keras.layers.Conv1D(1, 1)
+        #         self.conv_1d = tf.keras.layers.Conv1D(1, 1)
+        self.attention_dense = tf.keras.layers.Dense(self.scale_pat_seq_layer.units,
+                                                     activation='tanh')
         self.dense = tf.keras.layers.Dense(self.scale_pat_seq_layer.units, activation='tanh')
 
     def get_config(self):
@@ -549,11 +551,17 @@ class BertLayer(tf.keras.layers.Layer):
         contextualized_embeddings = tf.math.multiply(contextualized_embeddings,
                                                      tf.cast(mask_embeddings, dtype=tf.float32))
 
-        conv_output = self.conv_1d(contextualized_embeddings)
-        conv_output += (tf.cast(tf.expand_dims(local_mask, axis=-1), dtype='float32') * -1e9)
-        context_representation = tf.reshape(
-            tf.transpose(tf.nn.softmax(conv_output, axis=1), [0, 2, 1]) @ contextualized_embeddings,
-            (-1, self.conv_1d.filters * embedding_size))
+        # (batch, seq_len, embeddings_size)
+        multi_dim_att = tf.nn.softmax(self.attention_dense(contextualized_embeddings)
+                                      + (tf.cast(tf.expand_dims(local_mask, axis=-1),
+                                                 dtype='float32') * -1e9), axis=1)
+        context_representation = tf.reduce_sum(multi_dim_att * contextualized_embeddings, axis=1)
+
+        #         conv_output = self.conv_1d(contextualized_embeddings)
+        #         conv_output += (tf.cast(tf.expand_dims(local_mask, axis=-1), dtype='float32') * -1e9)
+        #         context_representation = tf.reshape(
+        #             tf.transpose(tf.nn.softmax(conv_output, axis=1), [0, 2, 1]) @ contextualized_embeddings,
+        #             (-1, self.conv_1d.filters * embedding_size))
 
         return self.dense(context_representation)
 
@@ -572,7 +580,9 @@ class ConvolutionBertLayer(tf.keras.layers.Layer):
         self.stride = stride
         self.step = (seq_len - context_window) // stride + 1
         self.bert_layer = BertLayer(model_path=model_path)
-        self.conv_1d = tf.keras.layers.Conv1D(1, 1)
+        #         self.conv_1d = tf.keras.layers.Conv1D(1, 1)
+        self.attention_dense = tf.keras.layers.Dense(self.bert_layer.scale_pat_seq_layer.units,
+                                                     activation='tanh')
 
         assert (self.step - 1) * self.stride + self.context_window == self.seq_len
 
@@ -616,15 +626,21 @@ class ConvolutionBertLayer(tf.keras.layers.Layer):
         # (batch, step)
         bert_output_masking_tensor = tf.stack(bert_output_masking, axis=1)
         # (batch, step, 1)
-        conv_output = self.conv_1d(bert_output_tensor)
-        conv_output += (tf.cast(tf.expand_dims(bert_output_masking_tensor, axis=-1),
-                                dtype='float32') * -1e9)
+        #         conv_output = self.conv_1d(bert_output_tensor)
+
+        attn = self.attention_dense(bert_output_tensor)
+
+        attn += (tf.cast(tf.expand_dims(bert_output_masking_tensor, axis=-1),
+                         dtype='float32') * -1e9)
 
         _, _, embedding_size = bert_output_tensor.get_shape().as_list()
 
-        context_representation = tf.reshape(
-            tf.transpose(tf.nn.softmax(conv_output, axis=1), [0, 2, 1]) @ bert_output_tensor,
-            (-1, self.conv_1d.filters * embedding_size))
+        context_representation = tf.reduce_sum(tf.nn.softmax(attn, axis=1) * bert_output_tensor,
+                                               axis=1)
+
+        #         context_representation = tf.reshape(
+        #             tf.transpose(tf.nn.softmax(conv_output, axis=1), [0, 2, 1]) @ bert_output_tensor,
+        #             (-1, self.conv_1d.filters * embedding_size))
 
         return context_representation
 

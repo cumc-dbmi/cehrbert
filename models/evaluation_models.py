@@ -112,11 +112,11 @@ def create_sliding_bert_model(model_path, max_seq_length, context_window, stride
 
     next_input = tf.keras.layers.concatenate([conv_bert_output, age_at_index_date])
 
-    dropout_conv_layer = tf.keras.layers.Dropout(0.1)
+    dropout_conv_layer = tf.keras.layers.Dropout(0.2)
 
     dense_layer = tf.keras.layers.Dense(64, activation='tanh')
 
-    dropout_dense_layer = tf.keras.layers.Dropout(0.1)
+    dropout_dense_layer = tf.keras.layers.Dropout(0.2)
 
     output_layer = tf.keras.layers.Dense(1, name='prediction', activation='sigmoid')
 
