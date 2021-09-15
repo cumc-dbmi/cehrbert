@@ -73,9 +73,9 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
         name='visit_embeddings',
         embeddings_regularizer=l2_regularizer)
 
-    visit_segment_layer = VisitEmbeddingLayer(visit_order_size=3,
-                                              embedding_size=embedding_size,
-                                              name='visit_segment_layer')
+    # visit_segment_layer = VisitEmbeddingLayer(visit_order_size=3,
+    #                                           embedding_size=embedding_size,
+    #                                           name='visit_segment_layer')
     encoder = Encoder(name='encoder',
                       num_layers=depth,
                       d_model=embedding_size,
@@ -156,9 +156,9 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
                                                             embedding_size=embedding_size)
         input_for_encoder = positional_encoding_layer(input_for_encoder, visit_concept_orders)
 
-    # Building a Vanilla Transformer (described in
-    # "Attention is all you need", 2017)
-    input_for_encoder = visit_segment_layer([visit_segments, input_for_encoder])
+    # # Building a Vanilla Transformer (described in
+    # # "Attention is all you need", 2017)
+    # input_for_encoder = visit_segment_layer([visit_segments, input_for_encoder])
 
     input_for_encoder, _ = encoder(input_for_encoder, concept_mask)
 
