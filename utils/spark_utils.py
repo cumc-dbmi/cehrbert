@@ -473,6 +473,10 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
         .withColumn('standard_concept_id', F.lit('VE')) \
         .withColumn('domain', F.lit('visit')).distinct()
 
+    if include_visit_type:
+        visit_start_events = visit_start_events.withColumn('visit_concept_id', F.lit('VS'))
+        visit_end_events = visit_end_events.withColumn('visit_concept_id', F.lit('VE'))
+
     # Calculate the priority, VS has the highest priority, regular concepts have 0 priority
     # and VE has the lowest priority
     priority_udf = F.when(F.col('standard_concept_id') == 'VS', -1).when(
@@ -514,7 +518,8 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
         .where('prev_days_since_epoch IS NOT NULL')
 
     if include_visit_type:
-        time_token_insertions = time_token_insertions.withColumn('visit_concept_id', F.lit(0))
+        time_token_insertions = time_token_insertions.withColumn('visit_concept_id',
+                                                                 F.col('standard_concept_id'))
 
     unioned_distinct_tokens = patient_event.union(time_token_insertions).distinct()
 
@@ -581,7 +586,7 @@ def create_concept_frequency_data(patient_event, date_filter=None):
         .withColumn('concept_ids', take_concept_ids_udf('sequence')) \
         .withColumn('frequencies', take_freqs_udf('sequence')) \
         .join(visit_count, (patient_event['person_id'] == visit_count['person_id']) & (
-                patient_event['cohort_member_id'] == visit_count['cohort_member_id'])) \
+            patient_event['cohort_member_id'] == visit_count['cohort_member_id'])) \
         .select(patient_event['cohort_member_id'], patient_event['person_id'],
                 'concept_ids', 'frequencies', 'num_of_concepts', 'num_of_visits')
 
