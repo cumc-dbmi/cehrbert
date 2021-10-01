@@ -129,10 +129,10 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
         default_inputs.extend([time_stamps, ages])
 
         # # define the time embedding layer for absolute time stamps (since 1970)
-        time_embedding_layer = TimeEmbeddingLayer(embedding_size=embedding_size,
+        time_embedding_layer = TimeEmbeddingLayer(embedding_size=time_embeddings_size,
                                                   name='time_embedding_layer')
         # define the age embedding layer for the age w.r.t the medical record
-        age_embedding_layer = TimeEmbeddingLayer(embedding_size=embedding_size,
+        age_embedding_layer = TimeEmbeddingLayer(embedding_size=time_embeddings_size,
                                                  name='age_embedding_layer')
 
         # dense layer for rescale the patient sequence embeddings back to the original size
