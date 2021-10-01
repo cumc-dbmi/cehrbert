@@ -94,8 +94,8 @@ def transformer_bert_model(
         ages = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
                                      name='ages')
         default_inputs.extend([time_stamps, ages])
-        time_embedding_layer = TimeEmbeddingLayer(embedding_size=embedding_size)
-        age_embedding_layer = TimeEmbeddingLayer(embedding_size=embedding_size)
+        time_embedding_layer = TimeEmbeddingLayer(embedding_size=time_embeddings_size)
+        age_embedding_layer = TimeEmbeddingLayer(embedding_size=time_embeddings_size)
         scale_back_concat_layer = tf.keras.layers.Dense(embedding_size, activation='tanh')
         time_embeddings = time_embedding_layer(time_stamps)
         age_embeddings = age_embedding_layer(ages)
