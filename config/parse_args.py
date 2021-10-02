@@ -99,6 +99,12 @@ def create_parse_args_base_bert():
     parser.add_argument('--use_dask',
                         dest='use_dask',
                         action='store_true')
+    parser.add_argument('--time_embeddings_size',
+                        dest='time_embeddings_size',
+                        action='store',
+                        type=int,
+                        default=16,
+                        required=False)
     return parser
 
 

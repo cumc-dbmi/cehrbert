@@ -30,6 +30,7 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
                  include_prolonged_length_stay: bool,
                  use_time_embedding: bool,
                  use_behrt: bool,
+                 time_embeddings_size: int,
                  *args, **kwargs):
 
         self._tokenizer_path = tokenizer_path
@@ -42,6 +43,7 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
         self._include_prolonged_length_stay = include_prolonged_length_stay
         self._use_time_embedding = use_time_embedding
         self._use_behrt = use_behrt
+        self._time_embeddings_size = time_embeddings_size
 
         super(VanillaBertTrainer, self).__init__(*args, **kwargs)
 
@@ -56,7 +58,8 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
             f'include_visit_prediction: {include_visit_prediction}\n'
             f'include_prolonged_length_stay: {include_prolonged_length_stay}\n'
             f'use_time_embeddings: {use_time_embedding}\n'
-            f'use_behrt: {use_behrt}\n')
+            f'use_behrt: {use_behrt}\n'
+            f'time_embeddings_size: {time_embeddings_size}')
 
     def _load_dependencies(self):
 
@@ -112,7 +115,8 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
                         embedding_size=self._embedding_size,
                         depth=self._depth,
                         num_heads=self._num_heads,
-                        use_time_embedding=self._use_time_embedding
+                        use_time_embedding=self._use_time_embedding,
+                        time_embeddings_size=self._time_embeddings_size
                     )
 
                     losses = {
@@ -129,6 +133,7 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
                         depth=self._depth,
                         num_heads=self._num_heads,
                         use_time_embedding=self._use_time_embedding,
+                        time_embeddings_size=self._time_embeddings_size,
                         use_behrt=self._use_behrt,
                         include_prolonged_length_stay=self._include_prolonged_length_stay
                     )
@@ -165,6 +170,7 @@ def main(args):
                        include_visit_prediction=config.include_visit_prediction,
                        include_prolonged_length_stay=config.include_prolonged_length_stay,
                        use_time_embedding=config.use_time_embedding,
+                       time_embeddings_size=config.time_embeddings_size,
                        use_behrt=config.use_behrt,
                        use_dask=config.use_dask,
                        tf_board_log_path=config.tf_board_log_path).train_model()

@@ -39,6 +39,7 @@ class BertConfig(Config):
                  use_time_embedding,
                  use_behrt,
                  use_dask,
+                 time_embeddings_size,
                  *args, **kwargs):
         super(BertConfig, self).__init__(*args, **kwargs)
         self.visit_tokenizer_path = visit_tokenizer_path
@@ -49,6 +50,7 @@ class BertConfig(Config):
         self.use_time_embedding = use_time_embedding
         self.use_behrt = use_behrt
         self.use_dask = use_dask
+        self.time_embeddings_size = time_embeddings_size
 
 
 class TemporalBertConfig(BertConfig):
@@ -112,6 +114,7 @@ def create_bert_model_config(args):
                       include_prolonged_length_stay=args.include_prolonged_length_stay,
                       use_time_embedding=args.use_time_embedding,
                       use_behrt=args.use_behrt,
+                      time_embeddings_size=args.time_embeddings_size,
                       use_dask=args.use_dask)
 
 
