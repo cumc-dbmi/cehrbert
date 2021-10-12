@@ -102,25 +102,27 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         save_training_history(history, self.get_model_history_folder())
 
     def eval_model(self):
-        for train, test in self.k_fold():
+        for train, val, test in self.k_fold():
             self._model = self._create_model()
-            self.train_model(train, test)
+            self.train_model(train, val)
             compute_binary_metrics(self._model, test, self.get_model_metrics_folder())
 
     def k_fold(self):
         inputs, labels = self.extract_model_inputs()
-        k_fold = KFold(n_splits=self._num_of_folds, shuffle=True)
+        k_fold = KFold(n_splits=5, shuffle=True)
+        train_size = int(len(labels) * 0.7)
         for train, test in k_fold.split(self._dataset):
             if self._is_transfer_learning:
                 size = int(len(train) * self._training_percentage)
                 train = np.random.choice(train, size, replace=False)
             training_input = {k: v[train] for k, v in inputs.items()}
             val_input = {k: v[test] for k, v in inputs.items()}
-            train = tf.data.Dataset.from_tensor_slices((training_input, labels[train])) \
-                .cache().batch(self._batch_size)
+            train_val = tf.data.Dataset.from_tensor_slices((training_input, labels[train]))
+            train = train_val.take(train_size).cache().batch(self._batch_size)
+            val = train_val.skip(train_size).cache().batch(self._batch_size)
             test = tf.data.Dataset.from_tensor_slices((val_input, labels[test])) \
                 .cache().batch(self._batch_size)
-            yield train, test
+            yield train, val, test
 
     def get_model_name(self):
         return self._sequence_model_name if self._sequence_model_name else self._model.name
