@@ -1,6 +1,7 @@
 import copy
 from abc import abstractmethod, ABC
 from sklearn.model_selection import KFold
+from sklearn.model_selection import train_test_split
 
 from scipy.sparse import csr_matrix, hstack
 from sklearn.preprocessing import normalize, StandardScaler
@@ -110,19 +111,27 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
     def k_fold(self):
         inputs, labels = self.extract_model_inputs()
         k_fold = KFold(n_splits=5, shuffle=True)
-        train_size = int(len(labels) * 0.7)
-        for train, test in k_fold.split(self._dataset):
+
+        for train_val, test in k_fold.split(self._dataset):
+
+            train, val = train_test_split(train_val, test_size=0.125)
+
             if self._is_transfer_learning:
                 size = int(len(train) * self._training_percentage)
                 train = np.random.choice(train, size, replace=False)
+
             training_input = {k: v[train] for k, v in inputs.items()}
-            val_input = {k: v[test] for k, v in inputs.items()}
-            train_val = tf.data.Dataset.from_tensor_slices((training_input, labels[train]))
-            train = train_val.take(train_size).cache().batch(self._batch_size)
-            val = train_val.skip(train_size).cache().batch(self._batch_size)
-            test = tf.data.Dataset.from_tensor_slices((val_input, labels[test])) \
-                .cache().batch(self._batch_size)
-            yield train, val, test
+            val_input = {k: v[val] for k, v in inputs.items()}
+            test_input = {k: v[test] for k, v in inputs.items()}
+
+            training_set = tf.data.Dataset.from_tensor_slices(
+                (training_input, labels[train])).cache().batch(self._batch_size)
+            val_set = tf.data.Dataset.from_tensor_slices(
+                (val_input, labels[val])).cache().batch(self._batch_size)
+            test_set = tf.data.Dataset.from_tensor_slices(
+                (test_input, labels[test])).cache().batch(self._batch_size)
+
+            yield training_set, val_set, test_set
 
     def get_model_name(self):
         return self._sequence_model_name if self._sequence_model_name else self._model.name
