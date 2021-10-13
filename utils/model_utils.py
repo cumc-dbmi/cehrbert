@@ -19,6 +19,7 @@ from tensorflow.data import Dataset
 from tensorflow.keras.models import Model
 
 from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import GridSearchCV
 from xgboost import XGBClassifier
 
 from data_generators.tokenizer import ConceptTokenizer
@@ -114,7 +115,7 @@ def compute_binary_metrics(model, test_data: Union[Dataset, Tuple[np.ndarray, np
 
         if isinstance(model, Model):
             prob = model.predict(x)
-        elif isinstance(model, (LogisticRegression, XGBClassifier)):
+        elif isinstance(model, (LogisticRegression, XGBClassifier, GridSearchCV)):
             prob = model.predict_proba(x)[:, 1]
         else:
             raise TypeError(f'Unknown type for the model {type(model)}')
