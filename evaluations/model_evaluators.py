@@ -2,9 +2,11 @@ import copy
 from abc import abstractmethod, ABC
 from sklearn.model_selection import KFold
 from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GridSearchCV
 
 from scipy.sparse import csr_matrix, hstack
 from sklearn.preprocessing import normalize, StandardScaler
+from sklearn.pipeline import Pipeline
 from tensorflow.python.keras.preprocessing.text import Tokenizer
 
 from models.evaluation_models import *
@@ -124,9 +126,9 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             val_input = {k: v[val] for k, v in inputs.items()}
             test_input = {k: v[test] for k, v in inputs.items()}
 
-            tf.print(f'{self}: The train size is {len(train)}; The val indices are {train}')
-            tf.print(f'{self}: The val size is {len(val)}; The val indices are {val}')
-            tf.print(f'{self}: The test size is {len(test)}; The val indices are {test}')
+            tf.print(f'{self}: The train size is {len(train)}')
+            tf.print(f'{self}: The val size is {len(val)}')
+            tf.print(f'{self}: The test size is {len(test)}')
 
             training_set = tf.data.Dataset.from_tensor_slices(
                 (training_input, labels[train])).cache().batch(self._batch_size)
@@ -351,7 +353,10 @@ class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
         for train, test in self.k_fold():
             x, y = train
             self._model = self._create_model()
-            self._model.fit(x, y)
+            if isinstance(self._model, GridSearchCV):
+                self._model = self._model.fit(x, y)
+            else:
+                self._model.fit(x, y)
             compute_binary_metrics(self._model, test, self.get_model_metrics_folder())
 
     def get_model_name(self):
@@ -360,7 +365,11 @@ class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
     def k_fold(self):
         inputs, age, labels = self.extract_model_inputs()
         k_fold = KFold(n_splits=self._num_of_folds, shuffle=True)
-        for train, test in k_fold.split(self._dataset):
+
+        for train, val_test in k_fold.split(labels):
+            # further split val_test using a 2:3 ratio between val and test
+            val, test = train_test_split(val_test, test_size=0.6, random_state=1)
+            train = np.concatenate([train, val])
             if self._is_transfer_learning:
                 size = int(len(train) * self._training_percentage)
                 train = np.random.choice(train, size, replace=False)
@@ -408,8 +417,21 @@ class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
 
 
 class LogisticRegressionModelEvaluator(BaselineModelEvaluator):
+
     def _create_model(self, *args, **kwargs):
-        return LogisticRegression(random_state=0, n_jobs=20, verbose=1)
+        pipe = Pipeline([('classifier', LogisticRegression())])
+        # Create param grid.
+        param_grid = [
+            {'classifier': [LogisticRegression()],
+             'classifier__penalty': ['l1', 'l2'],
+             'classifier__C': np.logspace(-4, 4, 20),
+             'classifier__solver': ['liblinear'],
+             'classifier__max_iter': [500]
+             }
+        ]
+        # Create grid search object
+        clf = GridSearchCV(pipe, param_grid=param_grid, cv=5, verbose=True, n_jobs=-1)
+        return clf
 
 
 class XGBClassifierEvaluator(BaselineModelEvaluator):
