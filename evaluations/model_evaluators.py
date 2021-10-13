@@ -110,11 +110,11 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
 
     def k_fold(self):
         inputs, labels = self.extract_model_inputs()
-        k_fold = KFold(n_splits=5, shuffle=True)
+        k_fold = KFold(n_splits=self._num_of_folds, shuffle=True, random_state=1)
 
-        for train_val, test in k_fold.split(self._dataset):
-
-            train, val = train_test_split(train_val, test_size=0.125)
+        for train, val_test in k_fold.split(labels):
+            # further split val_test using a 2:3 ratio between val and test
+            val, test = train_test_split(val_test, test_size=0.6, random_state=1)
 
             if self._is_transfer_learning:
                 size = int(len(train) * self._training_percentage)
@@ -123,6 +123,10 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             training_input = {k: v[train] for k, v in inputs.items()}
             val_input = {k: v[val] for k, v in inputs.items()}
             test_input = {k: v[test] for k, v in inputs.items()}
+
+            tf.print(f'{self}: The train size is {len(train)}; The val indices are {train}')
+            tf.print(f'{self}: The val size is {len(val)}; The val indices are {val}')
+            tf.print(f'{self}: The test size is {len(test)}; The val indices are {test}')
 
             training_set = tf.data.Dataset.from_tensor_slices(
                 (training_input, labels[train])).cache().batch(self._batch_size)
