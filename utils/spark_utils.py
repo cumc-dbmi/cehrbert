@@ -1,8 +1,5 @@
 from os import path
-import math
 
-import pandas as pd
-from pyspark.sql.functions import pandas_udf
 import pyspark.sql.functions as F
 import pyspark.sql.types as T
 from pyspark.sql import Window as W
@@ -346,7 +343,6 @@ def create_sequence_data(patient_event,
 
     # Derive columns
     patient_event = patient_event.where('visit_occurrence_id IS NOT NULL') \
-        .withColumn('standard_concept_id', F.col('standard_concept_id').cast('string')) \
         .withColumn('date_in_week', date_conversion_udf) \
         .withColumn('earliest_visit_date', earliest_visit_date_udf) \
         .withColumn('visit_rank_order', visit_rank_udf) \
@@ -389,21 +385,16 @@ def create_sequence_data(patient_event,
     if include_visit_type:
         output_columns.append('visit_concept_id')
 
-    @pandas_udf('int')
-    def is_sep_udf(concept_ids: pd.Series) -> pd.Series:
-        return (~concept_ids.str.contains('SEP')).astype(int)
-
     # Group by data by person_id and put all the events into a list
     # The order of the list is determined by the order column
     patient_grouped_events = patient_event.withColumn('order', order_udf) \
-        .withColumn('is_sep_token', is_sep_udf('standard_concept_id')) \
         .withColumn('date_concept_id_period', F.struct(output_columns)) \
         .groupBy('person_id', 'cohort_member_id') \
         .agg(F.sort_array(F.collect_set('date_concept_id_period')).alias('date_concept_id_period'),
              F.min('earliest_visit_date').alias('earliest_visit_date'),
              F.max('date').alias('max_event_date'),
              F.max('visit_rank_order').alias('num_of_visits'),
-             F.sum('is_sep_token').alias('num_of_concepts')) \
+             F.count('standard_concept_id').alias('num_of_concepts')) \
         .withColumn('orders',
                     F.col('date_concept_id_period.order').cast(T.ArrayType(T.IntegerType()))) \
         .withColumn('dates', F.col('date_concept_id_period.date_in_week')) \
@@ -439,8 +430,9 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
     :return:
     """
 
-    @F.udf(returnType=T.StringType())
-    def time_token_udf(time_delta):
+    import math
+
+    def time_token_func(time_delta):
         if time_delta < 0:
             return 'W-1'
         if time_delta < 28:
@@ -448,10 +440,6 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
         if time_delta < 360:
             return f'M{str(math.floor(time_delta / 30))}'
         return 'LT'
-
-    @pandas_udf('int')
-    def is_att_udf(concept_ids: pd.Series) -> pd.Series:
-        return (~concept_ids.str.contains('VS|VE|M|LT|W')).astype(int)
 
     if date_filter:
         patient_event = patient_event.where(F.col('date').cast('date') >= date_filter)
@@ -473,10 +461,6 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
         .withColumn('standard_concept_id', F.lit('VE')) \
         .withColumn('domain', F.lit('visit')).distinct()
 
-    if include_visit_type:
-        visit_start_events = visit_start_events.withColumn('visit_concept_id', F.lit('VS'))
-        visit_end_events = visit_end_events.withColumn('visit_concept_id', F.lit('VE'))
-
     # Calculate the priority, VS has the highest priority, regular concepts have 0 priority
     # and VE has the lowest priority
     priority_udf = F.when(F.col('standard_concept_id') == 'VS', -1).when(
@@ -494,6 +478,8 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
     visit_date_udf = F.first('days_since_epoch').over(
         W.partitionBy('cohort_member_id', 'person_id', 'visit_occurrence_id').orderBy(
             'days_since_epoch'))
+    # Udf for calculating the time token
+    time_token_udf = F.udf(time_token_func, T.StringType())
     visit_rank_udf = F.dense_rank().over(
         W.partitionBy('cohort_member_id', 'person_id').orderBy('visit_start_date'))
     visit_segment_udf = F.col('visit_rank_order') % F.lit(2) + 1
@@ -513,13 +499,12 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
         .withColumn('standard_concept_id', F.col('time_token')) \
         .withColumn('priority', F.lit(-2)) \
         .withColumn('visit_segment', F.lit(0)) \
-        .withColumn('date_in_week', F.lit(-1)) \
+        .withColumn('date_in_week', F.lit(0)) \
         .withColumn('age', F.lit(-1)) \
         .where('prev_days_since_epoch IS NOT NULL')
 
     if include_visit_type:
-        time_token_insertions = time_token_insertions.withColumn('visit_concept_id',
-                                                                 F.col('standard_concept_id'))
+        time_token_insertions = time_token_insertions.withColumn('visit_concept_id', F.lit(0))
 
     unioned_distinct_tokens = patient_event.union(time_token_insertions).distinct()
 
@@ -544,12 +529,11 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
 
     patient_grouped_events = unioned_distinct_tokens \
         .withColumn('order', order_udf) \
-        .withColumn('is_att_token', is_att_udf('standard_concept_id')) \
         .withColumn('data_for_sorting', F.struct(struct_columns)) \
         .groupBy('cohort_member_id', 'person_id') \
         .agg(F.sort_array(F.collect_set('data_for_sorting')).alias('data_for_sorting'),
              F.max('visit_rank_order').alias('num_of_visits'),
-             F.sum('is_att_token').alias('num_of_concepts')) \
+             F.count('standard_concept_id').alias('num_of_concepts')) \
         .withColumn('orders',
                     F.col('data_for_sorting.order').cast(T.ArrayType(T.IntegerType()))) \
         .withColumn('dates', F.col('data_for_sorting.date_in_week')) \
@@ -574,21 +558,14 @@ def create_concept_frequency_data(patient_event, date_filter=None):
     take_concept_ids_udf = F.udf(lambda rows: [row[0] for row in rows], T.ArrayType(T.StringType()))
     take_freqs_udf = F.udf(lambda rows: [row[1] for row in rows], T.ArrayType(T.IntegerType()))
 
-    visit_count = patient_event.groupBy('cohort_member_id', 'person_id') \
-        .agg(F.countDistinct('visit_occurrence_id').alias('num_of_visits'))
-
     patient_event = patient_event.groupBy('cohort_member_id', 'person_id',
                                           'standard_concept_id').count() \
         .withColumn('concept_id_freq', F.struct('standard_concept_id', 'count')) \
         .groupBy('cohort_member_id', 'person_id').agg(
-        F.collect_list('concept_id_freq').alias('sequence'),
-        F.sum('count').alias('num_of_concepts')) \
+        F.collect_list('concept_id_freq').alias('sequence')) \
         .withColumn('concept_ids', take_concept_ids_udf('sequence')) \
         .withColumn('frequencies', take_freqs_udf('sequence')) \
-        .join(visit_count, (patient_event['person_id'] == visit_count['person_id']) & (
-            patient_event['cohort_member_id'] == visit_count['cohort_member_id'])) \
-        .select(patient_event['cohort_member_id'], patient_event['person_id'],
-                'concept_ids', 'frequencies', 'num_of_concepts', 'num_of_visits')
+        .select('cohort_member_id', 'person_id', 'concept_ids', 'frequencies')
 
     return patient_event
 
