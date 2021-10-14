@@ -341,6 +341,54 @@ class SlidingBertModelEvaluator(BertLstmModelEvaluator):
             return model
 
 
+class RandomVanillaLstmBertModelEvaluator(BertLstmModelEvaluator):
+
+    def __init__(self,
+                 embedding_size,
+                 depth,
+                 num_heads,
+                 use_time_embedding,
+                 time_embeddings_size,
+                 visit_tokenizer_path,
+                 *args, **kwargs):
+        self._embedding_size = embedding_size
+        self._depth = depth
+        self._num_heads = num_heads
+        self._use_time_embedding = use_time_embedding
+        self._time_embeddings_size = time_embeddings_size
+        self._visit_tokenizer = pickle.load(open(visit_tokenizer_path, 'rb'))
+        super(RandomVanillaLstmBertModelEvaluator, self).__init__(*args, **kwargs)
+
+    def _create_model(self):
+        strategy = tf.distribute.MirroredStrategy()
+        self.get_logger().info('Number of devices: {}'.format(strategy.num_replicas_in_sync))
+        with strategy.scope():
+
+            try:
+                model = create_random_vanilla_bert_bi_lstm_model(max_seq_length=self._max_seq_length,
+                                                                 embedding_size=self._embedding_size,
+                                                                 depth=self._depth,
+                                                                 tokenizer=self._tokenizer,
+                                                                 visit_tokenizer=self._visit_tokenizer,
+                                                                 num_heads=self._num_heads,
+                                                                 use_time_embedding=self._use_time_embedding,
+                                                                 time_embeddings_size=self._time_embeddings_size)
+            except ValueError as e:
+                self.get_logger().exception(e)
+                model = create_random_vanilla_bert_bi_lstm_model(max_seq_length=self._max_seq_length,
+                                                                 embedding_size=self._embedding_size,
+                                                                 depth=self._depth,
+                                                                 tokenizer=self._tokenizer,
+                                                                 visit_tokenizer=self._visit_tokenizer,
+                                                                 num_heads=self._num_heads,
+                                                                 use_time_embedding=self._use_time_embedding,
+                                                                 time_embeddings_size=self._time_embeddings_size)
+            model.compile(loss='binary_crossentropy',
+                          optimizer=tf.keras.optimizers.Adam(1e-4),
+                          metrics=get_metrics())
+            return model
+
+
 class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
 
     def __init__(self, *args, **kwargs):

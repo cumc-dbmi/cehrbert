@@ -13,8 +13,9 @@ VANILLA_BERT_LSTM = 'vanilla_bert_lstm'
 VANILLA_BERT_FEED_FORWARD = 'vanilla_bert_feed_forward'
 SLIDING_BERT = 'sliding_bert'
 TEMPORAL_BERT_LSTM = 'temporal_bert_lstm'
+RANDOM_VANILLA_BERT_LSTM = 'random_vanilla_bert_lstm'
 SEQUENCE_MODEL_EVALUATORS = [LSTM, VANILLA_BERT_LSTM, VANILLA_BERT_FEED_FORWARD, TEMPORAL_BERT_LSTM,
-                             SLIDING_BERT]
+                             SLIDING_BERT, RANDOM_VANILLA_BERT_LSTM]
 
 
 def evaluate_sequence_models(args):
@@ -119,6 +120,33 @@ def evaluate_sequence_models(args):
             is_temporal=True,
             sequence_model_name=args.sequence_model_name).eval_model()
 
+    if RANDOM_VANILLA_BERT_LSTM in args.model_evaluators:
+        validate_folder(args.vanilla_bert_model_folder)
+        bert_tokenizer_path = os.path.join(args.vanilla_bert_model_folder,
+                                           p.tokenizer_path)
+        visit_tokenizer_path = os.path.join(args.vanilla_bert_model_folder,
+                                            p.visit_tokenizer_path)
+        RandomVanillaLstmBertModelEvaluator(
+            dataset=dataset,
+            evaluation_folder=args.evaluation_folder,
+            num_of_folds=args.num_of_folds,
+            is_transfer_learning=args.is_transfer_learning,
+            training_percentage=args.training_percentage,
+            max_seq_length=args.max_seq_length,
+            batch_size=args.batch_size,
+            epochs=args.epochs,
+            bert_model_path=bert_model_path,
+            tokenizer_path=bert_tokenizer_path,
+            visit_tokenizer_path=visit_tokenizer_path,
+            is_temporal=False,
+            sequence_model_name=args.sequence_model_name,
+            embedding_size=args.embedding_size,
+            depth=args.depth,
+            num_heads=args.num_heads,
+            use_time_embedding=args.use_time_embedding,
+            time_embeddings_size=args.time_embeddings_size
+        ).eval_model()
+
 
 def evaluate_baseline_models(args):
     # Load the training data
@@ -146,6 +174,7 @@ def create_evaluation_args():
     vanilla_bert_lstm = VANILLA_BERT_LSTM in argv
     temporal_bert_lstm = TEMPORAL_BERT_LSTM in argv
     sliding_bert = SLIDING_BERT in argv
+    random_vanilla_bert_lstm_required = RANDOM_VANILLA_BERT_LSTM in argv
 
     main_parser.add_argument('-a',
                              '--action',
@@ -244,6 +273,43 @@ def create_evaluation_args():
                        action='store',
                        type=int,
                        required=sliding_bert)
+    group.add_argument('-d',
+                       '--depth',
+                       dest='depth',
+                       action='store',
+                       type=int,
+                       default=5,
+                       required=random_vanilla_bert_lstm_required)
+    group.add_argument('-nh',
+                       '--num_heads',
+                       dest='num_heads',
+                       action='store',
+                       type=int,
+                       default=8,
+                       required=random_vanilla_bert_lstm_required)
+    group.add_argument('-iv',
+                       '--include_visit',
+                       dest='include_visit_prediction',
+                       action='store_true',
+                       required=random_vanilla_bert_lstm_required)
+    group.add_argument('-ut',
+                       '--use_time_embedding',
+                       dest='use_time_embedding',
+                       action='store_true',
+                       required=random_vanilla_bert_lstm_required)
+    group.add_argument('--time_embeddings_size',
+                       dest='time_embeddings_size',
+                       action='store',
+                       type=int,
+                       default=16,
+                       required=random_vanilla_bert_lstm_required)
+    group.add_argument('--embedding_size',
+                       dest='embedding_size',
+                       action='store',
+                       type=int,
+                       default=128,
+                       required=random_vanilla_bert_lstm_required
+                       )
 
     return main_parser
 
