@@ -122,6 +122,8 @@ def evaluate_sequence_models(args):
 
     if RANDOM_VANILLA_BERT_LSTM in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
+        bert_model_path = os.path.join(args.vanilla_bert_model_folder,
+                                       p.bert_model_validation_path)
         bert_tokenizer_path = os.path.join(args.vanilla_bert_model_folder,
                                            p.tokenizer_path)
         visit_tokenizer_path = os.path.join(args.vanilla_bert_model_folder,
@@ -174,7 +176,6 @@ def create_evaluation_args():
     vanilla_bert_lstm = VANILLA_BERT_LSTM in argv
     temporal_bert_lstm = TEMPORAL_BERT_LSTM in argv
     sliding_bert = SLIDING_BERT in argv
-    random_vanilla_bert_lstm_required = RANDOM_VANILLA_BERT_LSTM in argv
 
     main_parser.add_argument('-a',
                              '--action',
@@ -273,43 +274,41 @@ def create_evaluation_args():
                        action='store',
                        type=int,
                        required=sliding_bert)
-    group.add_argument('-d',
-                       '--depth',
+    group.add_argument('--depth',
                        dest='depth',
                        action='store',
                        type=int,
                        default=5,
-                       required=random_vanilla_bert_lstm_required)
+                       required=False)
     group.add_argument('-nh',
                        '--num_heads',
                        dest='num_heads',
                        action='store',
                        type=int,
                        default=8,
-                       required=random_vanilla_bert_lstm_required)
+                       required=False)
     group.add_argument('-iv',
                        '--include_visit',
                        dest='include_visit_prediction',
                        action='store_true',
-                       required=random_vanilla_bert_lstm_required)
+                       required=False)
     group.add_argument('-ut',
                        '--use_time_embedding',
                        dest='use_time_embedding',
                        action='store_true',
-                       required=random_vanilla_bert_lstm_required)
+                       required=False)
     group.add_argument('--time_embeddings_size',
                        dest='time_embeddings_size',
                        action='store',
                        type=int,
                        default=16,
-                       required=random_vanilla_bert_lstm_required)
+                       required=False)
     group.add_argument('--embedding_size',
                        dest='embedding_size',
                        action='store',
                        type=int,
                        default=128,
-                       required=random_vanilla_bert_lstm_required
-                       )
+                       required=False)
 
     return main_parser
 
