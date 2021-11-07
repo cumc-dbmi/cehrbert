@@ -16,7 +16,7 @@ FROM
     FROM global_temp.visit_occurrence AS v
     WHERE v.visit_concept_id IN (9201, 262) --inpatient, er-inpatient
         AND v.visit_end_date IS NOT NULL
-        AND v.discharge_to_concept_id NOT IN (4216643, 44814650, 8717, 8970, 8971) --discharge to home or other facilities
+        AND v.discharge_to_concept_id = 8536 --discharge to home
 ) AS v
     WHERE v.rn = 1
 """
