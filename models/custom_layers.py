@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 
-from keras.utils import get_custom_objects
+from tensorflow.keras.utils import get_custom_objects
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 from keras_transformer.bert import MaskedPenalizedSparseCategoricalCrossentropy
 
