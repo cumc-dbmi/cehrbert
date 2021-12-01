@@ -4,7 +4,7 @@ import tensorflow as tf
 from config.model_configs import create_bert_model_config
 from config.parse_args import create_parse_args_base_bert
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
-from utils.model_utils import tokenize_concepts
+from utils.model_utils import tokenize_one_field
 from models.bert_models_visit_prediction import transformer_bert_model_visit_prediction
 from models.bert_models import transformer_bert_model
 from models.custom_layers import get_custom_objects
@@ -63,17 +63,17 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
 
     def _load_dependencies(self):
 
-        self._tokenizer = tokenize_concepts(self._training_data,
+        self._tokenizer = tokenize_one_field(self._training_data,
                                             'concept_ids',
                                             'token_ids',
-                                            self._tokenizer_path)
+                                             self._tokenizer_path)
 
         if self._include_visit_prediction:
-            self._visit_tokenizer = tokenize_concepts(self._training_data,
+            self._visit_tokenizer = tokenize_one_field(self._training_data,
                                                       'visit_concept_ids',
                                                       'visit_token_ids',
-                                                      self._visit_tokenizer_path,
-                                                      oov_token='-1')
+                                                       self._visit_tokenizer_path,
+                                                       oov_token='-1')
 
     def create_data_generator(self) -> BertDataGenerator:
 

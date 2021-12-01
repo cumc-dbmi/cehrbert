@@ -548,18 +548,18 @@ visit_tokenizer_path = os.path.join(output_folder, 'visit_tokenizer.pickle')
 patient_sequence['patient_concept_ids'] = patient_sequence.concept_ids \
     .apply(lambda visit_concepts: np.hstack(visit_concepts))
 
-tokenizer = tokenize_concepts(patient_sequence,
+tokenizer = tokenize_one_field(patient_sequence,
                               'patient_concept_ids',
-                              None,
-                              tokenizer_path,
-                              encode=False)
+                               None,
+                               tokenizer_path,
+                               encode=False)
 
 tokenizer.fit_on_concept_sequences(patient_sequence.time_interval_atts)
 
-visit_tokenizer = tokenize_concepts(patient_sequence,
+visit_tokenizer = tokenize_one_field(patient_sequence,
                                     'visit_concept_ids',
                                     'visit_token_ids',
-                                    visit_tokenizer_path)
+                                     visit_tokenizer_path)
 
 # %%
 num_concept_per_v = 40

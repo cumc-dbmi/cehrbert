@@ -4,10 +4,11 @@ import tensorflow as tf
 from config.model_configs import create_bert_model_config
 from config.parse_args import create_parse_args_hierarchical_bert
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
-from utils.model_utils import tokenize_concepts
+from utils.model_utils import tokenize_one_field, tokenize_multiple_fields
 from models.hierachical_bert_model import transformer_hierarchical_bert_model
 from models.custom_layers import get_custom_objects
 from data_generators.data_generator_base import *
+from data_generators.data_classes import TokenizeFieldInfo
 
 from keras_transformer.bert import (
     masked_perplexity, MaskedPenalizedSparseCategoricalCrossentropy)
@@ -52,18 +53,21 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
 
         self._training_data['patient_concept_ids'] = self._training_data.concept_ids \
             .apply(lambda visit_concepts: np.hstack(visit_concepts))
-        self._tokenizer = tokenize_concepts(self._training_data,
-                                            'patient_concept_ids',
-                                            None,
-                                            self._tokenizer_path,
-                                            encode=False)
-        self._tokenizer.fit_on_concept_sequences(
-            self._training_data.time_interval_atts)
+        tokenize_fields_info = [TokenizeFieldInfo(column_name='patient_concept_ids'),
+                                TokenizeFieldInfo(column_name='time_interval_atts')]
+        self._tokenizer = tokenize_multiple_fields(
+            self._training_data,
+            tokenize_fields_info,
+            self._tokenizer_path,
+            encode=False)
 
         if self._include_visit_prediction:
-            self._visit_tokenizer = tokenize_concepts(
-                self._training_data, 'visit_concept_ids', 'visit_token_ids',
-                self._visit_tokenizer_path)
+            self._visit_tokenizer = tokenize_one_field(
+                self._training_data,
+                'visit_concept_ids',
+                'visit_token_ids',
+                self._visit_tokenizer_path
+            )
 
     def create_data_generator(self) -> HierarchicalBertDataGenerator:
 

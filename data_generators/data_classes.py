@@ -9,3 +9,8 @@ class RowSlicer(NamedTuple):
     start_index: int
     end_index: int
     target_index: int = 0
+
+
+class TokenizeFieldInfo(NamedTuple):
+    column_name: str
+    tokenized_column_name: str = None

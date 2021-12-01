@@ -6,7 +6,7 @@ from tensorflow.python.keras import Model
 from config.model_configs import create_time_attention_model_config
 from config.parse_args import create_parse_args
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
-from utils.model_utils import tokenize_concepts
+from utils.model_utils import tokenize_one_field
 from data_generators.data_generator_base import TimeAttentionDataGenerator
 from models.custom_layers import get_custom_objects
 from models.time_attention_models import time_attention_cbow_model
@@ -35,8 +35,8 @@ class TimeAttentionConceptEmbeddingTrainer(AbstractConceptEmbeddingTrainer):
             f'time_window_size: {time_window_size}\n')
 
     def _load_dependencies(self):
-        self._tokenizer = tokenize_concepts(self._training_data, 'concept_ids', 'token_ids',
-                                            self._tokenizer_path)
+        self._tokenizer = tokenize_one_field(self._training_data, 'concept_ids', 'token_ids',
+                                             self._tokenizer_path)
 
     def create_data_generator(self) -> TimeAttentionDataGenerator:
         data_generator = TimeAttentionDataGenerator(training_data=self._training_data,

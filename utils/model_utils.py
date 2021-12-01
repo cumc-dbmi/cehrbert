@@ -13,7 +13,7 @@ from pandas import DataFrame as pd_dataframe
 from dask.dataframe import DataFrame as dd_dataframe
 import tensorflow as tf
 from sklearn import metrics
-from typing import Dict, Union, Tuple
+from typing import Dict, Union, Tuple, List
 
 from tensorflow.data import Dataset
 from tensorflow.keras.models import Model
@@ -23,6 +23,7 @@ from sklearn.model_selection import GridSearchCV
 from xgboost import XGBClassifier
 
 from data_generators.tokenizer import ConceptTokenizer
+from data_generators.data_classes import TokenizeFieldInfo
 
 LOGGER = logging.getLogger(__name__)
 
@@ -61,33 +62,70 @@ def log_function_decorator(function):
 
 
 @log_function_decorator
-def tokenize_concepts(training_data: Union[pd_dataframe, dd_dataframe],
-                      column_name, tokenized_column_name, tokenizer_path,
-                      oov_token='0', encode=True, recreate=False):
+def tokenize_one_field(training_data: Union[pd_dataframe, dd_dataframe],
+                       column_name, tokenized_column_name, tokenizer_path,
+                       oov_token='0', encode=True, recreate=False):
     """
     Tokenize the concept sequence and save the tokenizer as a pickle file
     :return:
     """
+    tokenize_fields_info = [TokenizeFieldInfo(column_name=column_name,
+                                              tokenized_column_name=tokenized_column_name)]
+    return tokenize_multiple_fields(training_data,
+                                    tokenize_fields_info,
+                                    tokenizer_path,
+                                    oov_token,
+                                    encode,
+                                    recreate)
+
+
+@log_function_decorator
+def tokenize_multiple_fields(training_data: Union[pd_dataframe, dd_dataframe],
+                             tokenize_fields_info: List[TokenizeFieldInfo], tokenizer_path,
+                             oov_token='0', encode=True, recreate=False):
+    """
+    Tokenize a list of fields
+    :param training_data:
+    :param tokenize_fields_info:
+    :param tokenizer_path:
+    :param oov_token:
+    :param encode:
+    :param recreate:
+    :return:
+    """
+
+    def tokenize_one_column(_tokenize_field_info: TokenizeFieldInfo):
+        """
+        Tokenize a field
+        :param _tokenize_field_info:
+        :return:
+        """
+        if isinstance(training_data, dd_dataframe):
+            training_data[_tokenize_field_info.tokenized_column_name] = training_data[
+                _tokenize_field_info.column_name].map_partitions(
+                lambda ds: pd.Series(
+                    tokenizer.encode(map(lambda t: t[1].tolist(), ds.iteritems()),
+                                     is_generator=True), name='concept_ids'), meta='iterable')
+        else:
+            training_data[_tokenize_field_info.column_name] = training_data[
+                _tokenize_field_info.column_name].apply(
+                lambda concept_ids: concept_ids.tolist() if not isinstance(concept_ids,
+                                                                           list) else concept_ids)
+            training_data[_tokenize_field_info.tokenized_column_name] = tokenizer.encode(
+                training_data[_tokenize_field_info.column_name])
+
     if not os.path.exists(tokenizer_path) or recreate:
         tokenizer = ConceptTokenizer(oov_token=oov_token)
-        tokenizer.fit_on_concept_sequences(training_data[column_name])
+        for tokenize_field_info in tokenize_fields_info:
+            tokenizer.fit_on_concept_sequences(training_data[tokenize_field_info.column_name])
     else:
         logging.getLogger(__name__).info(
             f'Loading the existing tokenizer from {tokenizer_path}')
         tokenizer = pickle.load(open(tokenizer_path, 'rb'))
 
     if encode:
-        if isinstance(training_data, dd_dataframe):
-            training_data[tokenized_column_name] = training_data[column_name].map_partitions(
-                lambda ds: pd.Series(
-                    tokenizer.encode(map(lambda t: t[1].tolist(), ds.iteritems()),
-                                     is_generator=True),
-                    name='concept_ids'), meta='iterable')
-        else:
-            training_data[column_name] = training_data[column_name].apply(
-                lambda concept_ids: concept_ids.tolist() if not isinstance(concept_ids,
-                                                                           list) else concept_ids)
-            training_data[tokenized_column_name] = tokenizer.encode(training_data[column_name])
+        for tokenize_field_info in tokenize_fields_info:
+            tokenize_one_column(tokenize_field_info)
 
     if not os.path.exists(tokenizer_path) or recreate:
         pickle.dump(tokenizer, open(tokenizer_path, 'wb'))
