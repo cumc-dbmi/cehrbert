@@ -278,7 +278,7 @@ def create_cher_bert_bi_lstm_model(bert_model_path):
 
     next_input = dropout_lstm_layer(bi_lstm_layer(next_input))
 
-    next_input = tf.keras.layers.concatenate([next_input, age_of_visit_input])
+    next_input = tf.keras.layers.concatenate([next_input, tf.reshape(age_of_visit_input, (-1, 1))])
 
     next_input = dropout_dense_layer(dense_layer(next_input))
 
