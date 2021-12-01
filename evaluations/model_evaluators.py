@@ -13,7 +13,7 @@ from models.loss_schedulers import CosineLRSchedule
 from trainers.model_trainer import AbstractModel
 from utils.model_utils import *
 from data_generators.learning_objective import post_pad_pre_truncate
-from data_generators.data_generator_base import FineTuningHierarchicalBertDataGenerator
+from tensorflow.python.keras.preprocessing.sequence import pad_sequences
 
 
 def get_metrics():
@@ -92,7 +92,7 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         self._sequence_model_name = sequence_model_name
         super(SequenceModelEvaluator, self).__init__(*args, **kwargs)
 
-    def train_model(self, training_data: Dataset, val_data: Dataset):
+    def train_model(self, training_data: Dataset, val_data: Dataset, **kwargs):
         """
         Training the model for the keras based sequence models
         :param training_data:
@@ -103,7 +103,8 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             training_data,
             epochs=self._epochs,
             validation_data=val_data,
-            callbacks=self._get_callbacks()
+            callbacks=self._get_callbacks(),
+            **kwargs
         )
         save_training_history(history, self.get_model_history_folder())
 
@@ -536,37 +537,88 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
                           metrics=get_metrics())
             return model
 
-    def create_data_generator(self, training_data):
-        data_generator = FineTuningHierarchicalBertDataGenerator(
-            training_data=training_data,
-            concept_tokenizer=self._tokenizer,
-            batch_size=self._batch_size,
-            max_num_of_visits=self._max_num_of_visits,
-            max_num_of_concepts=self._max_num_of_concepts,
-            is_training=False
-        )
+    def _concept_mask(self, concept_ids):
+        return list(
+            map(lambda c: (c == self._tokenizer.get_unused_token_id()).astype(int), concept_ids))
 
-        tf_dataset = tf.data.Dataset.from_generator(
-            data_generator.create_batch_generator,
-            output_types=(data_generator.get_tf_dataset_schema())
-        ).map(lambda x, y: (x, y['label'])).take(
-            data_generator.get_steps_per_epoch()).cache()
-        return tf_dataset
-
-    def k_fold(self):
-        k_fold = KFold(n_splits=self._num_of_folds, shuffle=True, random_state=1)
-        for train, val_test in k_fold.split(self._dataset):
-            # further split val_test using a 2:3 ratio between val and test
-            val, test = train_test_split(val_test, test_size=0.6, random_state=1)
-
-            if self._is_transfer_learning:
-                size = int(len(train) * self._training_percentage)
-                train = np.random.choice(train, size, replace=False)
-
-            training_set = self.create_data_generator(self._dataset.iloc[train])
-            val_set = self.create_data_generator(self._dataset.iloc[val])
-            test_set = self.create_data_generator(self._dataset.iloc[test])
-            yield training_set, val_set, test_set
+    def _pad(self, x, padded_token):
+        return pad_sequences(np.asarray(x), maxlen=self._max_num_of_concepts, padding='post',
+                             value=padded_token, dtype='int32')
 
     def extract_model_inputs(self):
-        pass
+        max_seq_len = self._max_num_of_concepts * self._max_num_of_visits
+        unused_token_id = self._tokenizer.get_unused_token_id()
+
+        # Process concept ids
+        token_ids = self._dataset.concept_ids \
+            .apply(convert_to_list_of_lists) \
+            .apply(self._tokenizer.encode) \
+            .apply(lambda tokens: self._pad(tokens, padded_token=unused_token_id))
+        padded_token_ids = np.reshape(
+            post_pad_pre_truncate(
+                token_ids.apply(lambda d: d.flatten()),
+                unused_token_id,
+                max_seq_len
+            ),
+            (-1, self._max_num_of_visits, self._max_num_of_concepts)
+        )
+
+        # Generate the concept mask
+        pat_mask = (padded_token_ids == unused_token_id).astype(int)
+
+        # Process age sequence
+        ages = self._dataset.ages.apply(
+            convert_to_list_of_lists
+        ).apply(
+            lambda tokens: self._pad(tokens, padded_token=0)
+        )
+        padded_ages = np.reshape(
+            post_pad_pre_truncate(ages.apply(lambda d: d.flatten()), 0, max_seq_len),
+            (-1, self._max_num_of_visits, self._max_num_of_concepts)
+        )
+
+        # Process time sequence
+        dates = self._dataset.dates \
+            .apply(convert_to_list_of_lists) \
+            .apply(lambda tokens: self._pad(tokens, padded_token=0))
+
+        padded_dates = np.reshape(
+            post_pad_pre_truncate(dates.apply(lambda d: d.flatten()), 0, max_seq_len),
+            (-1, self._max_num_of_visits, self._max_num_of_concepts)
+        )
+
+        # Process att tokens
+        att_tokens = self._tokenizer.encode(
+            self._dataset.time_interval_atts.apply(lambda t: t.tolist()).tolist())
+        padded_att_tokens = post_pad_pre_truncate(
+            att_tokens,
+            unused_token_id,
+            self._max_num_of_visits
+        )[:, 1:]
+
+        # Process visit segments
+        padded_visit_segments = post_pad_pre_truncate(
+            self._dataset.visit_segments,
+            pad_value=0,
+            max_seq_len=self._max_num_of_visits
+        )
+
+        padded_visit_mask = post_pad_pre_truncate(
+            self._dataset.visit_masks,
+            pad_value=1,
+            max_seq_len=self._max_num_of_visits
+        )
+
+        inputs = {
+            'pat_seq': padded_token_ids,
+            'pat_mask': pat_mask,
+            'pat_seq_time': padded_dates,
+            'pat_seq_age': padded_ages,
+            'visit_segment': padded_visit_segments,
+            'visit_time_delta_att': padded_att_tokens,
+            'visit_mask': padded_visit_mask,
+            'age': np.expand_dims(self._dataset.age, axis=-1)
+        }
+        labels = self._dataset.label
+
+        return inputs, labels
