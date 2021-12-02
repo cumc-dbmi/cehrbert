@@ -254,21 +254,45 @@ def create_cher_bert_bi_lstm_model(bert_model_path):
     _, max_seq_length, embedding_size = contextualized_embeddings.shape
 
     pat_mask = model.get_layer('pat_mask').output
-    mask_embeddings = tf.cast(tf.reshape(pat_mask == 0, (-1, max_seq_length))[:, :, tf.newaxis],
-                              dtype=tf.float32)
 
-    contextualized_embeddings = tf.math.multiply(contextualized_embeddings, mask_embeddings)
+    visit_mask = model.get_layer('visit_mask').output
+
+    _, num_of_visits, num_of_concepts = pat_mask.shape
+
+    mask_embeddings = tf.cast(
+        tf.reshape(pat_mask == 0, (-1, max_seq_length))[:, :, tf.newaxis],
+        dtype=tf.float32
+    )
+
+    mask_visit_embeddings = tf.cast(
+        (visit_mask == 0)[:, :, tf.newaxis],
+        dtype=tf.float32
+    )
+
+    contextualized_embeddings = tf.math.multiply(
+        contextualized_embeddings,
+        mask_embeddings
+    )
 
     age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
 
-    masking_layer = tf.keras.layers.Masking(mask_value=0.,
-                                            input_shape=(max_seq_length, embedding_size))
+    masking_layer = tf.keras.layers.Masking(
+        mask_value=0.,
+        input_shape=(max_seq_length, embedding_size)
+    )
 
-    bi_lstm_layer = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128))
+    visit_masking_layer = tf.keras.layers.Masking(
+        mask_value=0.,
+        input_shape=(num_of_visits, embedding_size)
+    )
+
+    bi_lstm_layer_visit = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128))
+
+    bi_lstm_layer_patient = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128))
 
     dropout_lstm_layer = tf.keras.layers.Dropout(0.2)
 
-    dense_layer = tf.keras.layers.Dense(64, activation='relu')
+    dense_layer = tf.keras.layers.Dense(64, activation='tanh')
 
     dropout_dense_layer = tf.keras.layers.Dropout(0.2)
 
@@ -276,11 +300,29 @@ def create_cher_bert_bi_lstm_model(bert_model_path):
 
     next_input = masking_layer(contextualized_embeddings)
 
-    next_input = dropout_lstm_layer(bi_lstm_layer(next_input))
+    next_input_visit_view = tf.reshape(
+        next_input,
+        (-1, num_of_concepts, embedding_size)
+    )
 
-    next_input = tf.keras.layers.concatenate([next_input, tf.reshape(age_of_visit_input, (-1, 1))])
+    # (batch_size, num_of_visits, embedding_size)
+    lstm_visit_output = tf.reshape(
+        bi_lstm_layer_visit(next_input_visit_view),
+        (-1, num_of_visits, bi_lstm_layer_visit.output_shape[1])
+    )
 
-    next_input = dropout_dense_layer(dense_layer(next_input))
+    # (batch_size, embedding_size)
+    lstm_patient_output = bi_lstm_layer_patient(
+        visit_masking_layer(lstm_visit_output * mask_visit_embeddings)
+    )
+
+    next_input = dropout_lstm_layer(lstm_patient_output)
+
+    next_input = dropout_dense_layer(dense_layer(
+        tf.keras.layers.concatenate(
+            [next_input, tf.reshape(age_of_visit_input, (-1, 1))]
+        )
+    ))
 
     output = output_layer(next_input)
 
