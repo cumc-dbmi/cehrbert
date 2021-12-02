@@ -252,26 +252,36 @@ def create_cher_bert_bi_lstm_model(bert_model_path):
 
     model = tf.keras.models.load_model(bert_model_path, custom_objects=get_custom_objects())
 
-    contextualized_embeddings = model.get_layer(
-        'global_concept_embeddings_normalization'
-    ).output
-
+    contextualized_embeddings = model.get_layer('global_concept_embeddings_normalization').output
     _, max_seq_length, embedding_size = contextualized_embeddings.shape
 
     pat_mask = model.get_layer('pat_mask').output
 
+    pat_mask_reshaped = tf.reshape(pat_mask, (-1, max_seq_length))
+
+    pat_mask_reordered = tf.sort(pat_mask_reshaped, axis=1)
+
+    sorted_index = tf.argsort(pat_mask_reshaped, axis=1)
+
+    index_1d = tf.cast(tf.where(sorted_index >= 0)[:, 0], dtype=tf.int32)
+
+    index_2d = tf.stack([index_1d, tf.reshape(sorted_index, [-1])], axis=-1)
+
+    contextualized_embeddings = tf.reshape(
+        tf.gather_nd(contextualized_embeddings, index_2d),
+        (-1, max_seq_length, embedding_size)
+    )
+
     mask_embeddings = tf.cast(
-        tf.reshape(pat_mask == 0, (-1, max_seq_length))[:, :, tf.newaxis],
-        dtype=tf.float32
-    )
+        tf.reshape(pat_mask_reordered == 0, (-1, max_seq_length))[:, :, tf.newaxis],
+        dtype=tf.float32)
 
-    conv_layer = tf.keras.layers.Conv1D(
-        filters=16,
-        kernel_size=1,
-        activation='tanh'
-    )
+    contextualized_embeddings = tf.math.multiply(contextualized_embeddings, mask_embeddings)
 
-    flatten_conv_output_layer = tf.keras.layers.Flatten()
+    masking_layer = tf.keras.layers.Masking(mask_value=0.,
+                                            input_shape=(max_seq_length, embedding_size))
+
+    bi_lstm_layer = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128))
 
     dropout_lstm_layer = tf.keras.layers.Dropout(0.2)
 
@@ -281,24 +291,18 @@ def create_cher_bert_bi_lstm_model(bert_model_path):
 
     output_layer = tf.keras.layers.Dense(1, activation='sigmoid', name='label')
 
-    conv_output = conv_layer(contextualized_embeddings)
+    next_input = masking_layer(contextualized_embeddings)
 
-    next_input = dropout_lstm_layer(
-        flatten_conv_output_layer(conv_output * mask_embeddings)
-    )
+    next_input = dropout_lstm_layer(bi_lstm_layer(next_input))
 
-    next_input = tf.keras.layers.concatenate(
-        [next_input, tf.reshape(age_of_visit_input, (-1, 1))]
-    )
+    next_input = tf.keras.layers.concatenate([next_input, tf.reshape(age_of_visit_input, (-1, 1))])
 
     next_input = dropout_dense_layer(dense_layer(next_input))
 
     output = output_layer(next_input)
 
-    lstm_with_cher_bert = tf.keras.models.Model(
-        inputs=model.inputs + [age_of_visit_input],
-        outputs=output, name='CHER_BERT_PLUS_BI_LSTM'
-    )
+    lstm_with_cher_bert = tf.keras.models.Model(inputs=model.inputs + [age_of_visit_input],
+                                                outputs=output, name='CHER_BERT_PLUS_BI_LSTM')
 
     return lstm_with_cher_bert
 
