@@ -177,38 +177,47 @@ def transformer_hierarchical_bert_model(num_of_visits,
 
     # Use a multi head attention layer to generate the global concept embeddings by attending to
     # the visit embeddings
-    # decoder_layer = DecoderLayer(d_model=embedding_size, num_heads=num_heads, dff=512)
-    #
-    # global_concept_embeddings, _, _ = decoder_layer(
-    #     contextualized_concept_embeddings,
-    #     contextualized_visit_embeddings,
-    #     tf.reshape(pat_mask, (-1, num_of_visits * num_of_concepts))[:, :, tf.newaxis],
-    #     visit_concept_mask
-    # )
+    decoder_layer = DecoderLayer(
+        d_model=embedding_size,
+        num_heads=num_heads,
+        dff=512,
+        name='global_concept_embeddings_la'
+    )
 
-    multi_head_attention_layer = MultiHeadAttention(embedding_size, num_heads)
-    global_concept_embeddings, _ = multi_head_attention_layer(
-        contextualized_visit_embeddings,
-        contextualized_visit_embeddings,
+    # Create the mask for multihead attention (batch_size, 1, max_seq_length, 1)
+    # The second and fourth dimensions will be broadcasted
+    concept_embeddings_attn_mask = tf.reshape(
+        pat_mask, (-1, num_of_visits * num_of_concepts)
+    )[:, tf.newaxis, :, tf.newaxis]
+
+    global_concept_embeddings, _, _ = decoder_layer(
         contextualized_concept_embeddings,
-        visit_concept_mask,
-        None)
-
-    global_concept_embeddings_normalization = tf.keras.layers.LayerNormalization(
-        name='global_concept_embeddings_normalization',
-        epsilon=1e-6
+        contextualized_visit_embeddings,
+        concept_embeddings_attn_mask,
+        visit_concept_mask
     )
 
-    global_concept_embeddings = global_concept_embeddings_normalization(
-        global_concept_embeddings + contextualized_concept_embeddings
-    )
+    # multi_head_attention_layer = MultiHeadAttention(embedding_size, num_heads)
+    # global_concept_embeddings, _ = multi_head_attention_layer(
+    #     contextualized_visit_embeddings,
+    #     contextualized_visit_embeddings,
+    #     contextualized_concept_embeddings,
+    #     visit_concept_mask,
+    #     None)
+    #
+    # global_concept_embeddings_normalization = tf.keras.layers.LayerNormalization(
+    #     name='global_concept_embeddings_normalization',
+    #     epsilon=1e-6
+    # )
+    #
+    # global_concept_embeddings = global_concept_embeddings_normalization(
+    #     global_concept_embeddings + contextualized_concept_embeddings
+    # )
 
     concept_output_layer = TiedOutputEmbedding(
         projection_regularizer=l2_regularizer,
         projection_dropout=embedding_dropout,
         name='concept_prediction_logits')
-
-    contextualized_visit_embeddings_without_att = identity @ contextualized_visit_embeddings
 
     concept_softmax_layer = tf.keras.layers.Softmax(name='concept_predictions')
 
@@ -219,6 +228,8 @@ def transformer_hierarchical_bert_model(num_of_visits,
     outputs = [concept_predictions]
 
     if include_second_tiered_learning_objectives:
+        contextualized_visit_embeddings_without_att = identity @ contextualized_visit_embeddings
+
         visit_prediction_dense = tf.keras.layers.Dense(visit_vocab_size,
                                                        name='visit_prediction_dense')
         is_readmission_prediction_dense = tf.keras.layers.Dense(2, activation='sigmoid',

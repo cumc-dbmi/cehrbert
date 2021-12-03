@@ -92,11 +92,12 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
         self.get_logger().info('Number of devices: {}'.format(
             strategy.num_replicas_in_sync))
         with strategy.scope():
-            if os.path.exists(self._model_path):
+            existing_model_path = os.path.join(self.get_model_folder(), 'bert_model.h5')
+            if os.path.exists(existing_model_path):
                 self.get_logger().info(
-                    f'The {self} model will be loaded from {self._model_path}')
+                    f'The {self} model will be loaded from {existing_model_path}')
                 model = tf.keras.models.load_model(
-                    self._model_path, custom_objects=get_custom_objects())
+                    existing_model_path, custom_objects=get_custom_objects())
             else:
                 optimizer = optimizers.Adam(lr=self._learning_rate,
                                             beta_1=0.9,

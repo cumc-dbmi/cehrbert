@@ -252,7 +252,7 @@ def create_cher_bert_bi_lstm_model(bert_model_path):
 
     model = tf.keras.models.load_model(bert_model_path, custom_objects=get_custom_objects())
 
-    contextualized_embeddings = model.get_layer('global_concept_embeddings_normalization').output
+    contextualized_embeddings, _, _ = model.get_layer('global_concept_embeddings_la').output
     _, max_seq_length, embedding_size = contextualized_embeddings.shape
 
     pat_mask = model.get_layer('pat_mask').output

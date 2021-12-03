@@ -554,16 +554,37 @@ class HierarchicalBertSecondaryLearningObjective(HierarchicalMaskedLanguageModel
         :return:
         """
         (
-            visit_masks, visit_token_ids, visit_prolonged_stays, is_readmissions
+            visit_token_ids, visit_prolonged_stays, is_readmissions
         ) = zip(*list(map(self._make_record, rows)))
 
+        padded_visit_token_ids = self._pad(
+            visit_token_ids,
+            padded_token=self._visit_tokenizer.get_unused_token_id()
+        )
+
+        visit_masks = padded_visit_token_ids != self._visit_tokenizer.get_unused_token_id()
+
+        padded_visit_prolonged_stays = self._pad(
+            visit_prolonged_stays,
+            padded_token=-1
+        )
+
+        padded_is_readmissions = self._pad(
+            is_readmissions,
+            padded_token=-1
+        )
+
         output_dict = {
-            'visit_predictions': np.stack([visit_token_ids, visit_masks], axis=-1),
-            'visit_prolonged_stays': np.stack([visit_prolonged_stays, visit_masks], axis=-1),
-            'is_readmissions': np.stack([is_readmissions, visit_masks], axis=-1)
+            'visit_predictions': np.stack([padded_visit_token_ids, visit_masks], axis=-1),
+            'visit_prolonged_stays': np.stack([padded_visit_prolonged_stays, visit_masks], axis=-1),
+            'is_readmissions': np.stack([padded_is_readmissions, visit_masks], axis=-1)
         }
 
         return {}, output_dict
+
+    def _pad(self, x, padded_token):
+        return pad_sequences(np.asarray(x), maxlen=self._max_num_of_visits, padding='post',
+                             value=padded_token, dtype='int32')
 
     def _make_record(self, row_slicer: RowSlicer):
         """
@@ -578,13 +599,16 @@ class HierarchicalBertSecondaryLearningObjective(HierarchicalMaskedLanguageModel
         row, start_index, end_index, _ = row_slicer
 
         visit_token_ids = self._pad_visits(row.visit_token_ids[start_index:end_index], '0', False)
-        maksed_visit_tokens, visit_masks = self._mask_visit_concepts(visit_token_ids)
+        # maksed_visit_tokens, visit_masks = self._mask_visit_concepts(visit_token_ids)
         visit_prolonged_stays = self._pad_visits(row.visit_prolonged_stays[start_index:end_index],
                                                  '0', False)
-        is_readmissions = self._pad_visits(row.visit_prolonged_stays[start_index:end_index], '0',
+        is_readmissions = self._pad_visits(row.is_readmissions[start_index:end_index], '0',
                                            False)
+
+        # visit_masks = np.ones((len(visit_token_ids),), dtype=int)
+
         return (
-            maksed_visit_tokens, visit_token_ids, visit_prolonged_stays, is_readmissions
+            visit_token_ids, visit_prolonged_stays, is_readmissions
         )
 
     def _mask_visit_concepts(self, visit_concepts):
