@@ -529,7 +529,7 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
 
 
 class HierarchicalBertSecondaryLearningObjective(HierarchicalMaskedLanguageModelLearningObjective):
-    required_columns = ['visit_token_ids', 'visit_prolonged_stays', 'is_readmissions']
+    required_columns = ['visit_token_ids']
 
     def __init__(self, visit_tokenizer: ConceptTokenizer,
                  max_num_of_visits: int,
@@ -540,9 +540,7 @@ class HierarchicalBertSecondaryLearningObjective(HierarchicalMaskedLanguageModel
 
     def get_tf_dataset_schema(self):
         output_dict_schema = {
-            'visit_predictions': int32,
-            'visit_prolonged_stays': int32,
-            'is_readmissions': int32,
+            'visit_predictions': int32
         }
         return {}, output_dict_schema
 
@@ -563,21 +561,19 @@ class HierarchicalBertSecondaryLearningObjective(HierarchicalMaskedLanguageModel
         )
 
         visit_masks = padded_visit_token_ids != self._visit_tokenizer.get_unused_token_id()
+        #
+        # padded_visit_prolonged_stays = self._pad(
+        #     visit_prolonged_stays,
+        #     padded_token=-1
+        # )
 
-        padded_visit_prolonged_stays = self._pad(
-            visit_prolonged_stays,
-            padded_token=-1
-        )
-
-        padded_is_readmissions = self._pad(
-            is_readmissions,
-            padded_token=-1
-        )
+        # padded_is_readmissions = self._pad(
+        #     is_readmissions,
+        #     padded_token=-1
+        # )
 
         output_dict = {
-            'visit_predictions': np.stack([padded_visit_token_ids, visit_masks], axis=-1),
-            'visit_prolonged_stays': np.stack([padded_visit_prolonged_stays, visit_masks], axis=-1),
-            'is_readmissions': np.stack([padded_is_readmissions, visit_masks], axis=-1)
+            'visit_predictions': np.stack([padded_visit_token_ids, visit_masks], axis=-1)
         }
 
         return {}, output_dict
@@ -598,33 +594,13 @@ class HierarchicalBertSecondaryLearningObjective(HierarchicalMaskedLanguageModel
 
         row, start_index, end_index, _ = row_slicer
 
-        visit_token_ids = self._pad_visits(row.visit_token_ids[start_index:end_index], '0', False)
-        # maksed_visit_tokens, visit_masks = self._mask_visit_concepts(visit_token_ids)
-        visit_prolonged_stays = self._pad_visits(row.visit_prolonged_stays[start_index:end_index],
-                                                 '0', False)
-        is_readmissions = self._pad_visits(row.is_readmissions[start_index:end_index], '0',
-                                           False)
-
-        # visit_masks = np.ones((len(visit_token_ids),), dtype=int)
+        visit_token_ids = row.visit_token_ids[start_index:end_index]
+        visit_prolonged_stays = row.visit_prolonged_stays[start_index:end_index]
+        is_readmissions = row.is_readmissions[start_index:end_index]
 
         return (
             visit_token_ids, visit_prolonged_stays, is_readmissions
         )
-
-    def _mask_visit_concepts(self, visit_concepts):
-        """
-        Any visit has 50% chance to be masked
-        :param visit_concepts:
-        :return:
-        """
-        masked_visit_concepts = np.asarray(visit_concepts).copy()
-        output_mask = np.zeros((len(masked_visit_concepts),), dtype=int)
-        if self._is_training:
-            for word_pos in range(0, len(visit_concepts)):
-                if random.random() < 0.5:
-                    output_mask[word_pos] = 1
-                    masked_visit_concepts[word_pos] = self._visit_tokenizer.get_mask_token_id()
-        return masked_visit_concepts, output_mask
 
 
 class TimeAttentionLearningObjective(LearningObjective):

@@ -14,6 +14,8 @@ Language Understanding](https://arxiv.org/abs/1810.04805). A quote from it:
 > modifications.
 """
 
+import tensorflow as tf
+from tensorflow.keras.losses import binary_crossentropy
 from tensorflow.keras import backend as K
 from tensorflow.keras.utils import get_custom_objects
 
@@ -79,8 +81,21 @@ class MaskedPenalizedSparseCategoricalCrossentropy(object):
         }
 
 
+class SequenceCrossentropy(object):
+    def __init__(self):
+        self.__name__ = 'SequenceCrossentropy'
+
+    def __call__(self, y_true, y_pred):
+        y_true_val = K.cast(y_true[:, :, 0], dtype='float32')
+        mask = K.cast(y_true[:, :, 1], dtype='float32')
+        num_items_masked = K.sum(mask, axis=-1) + 1e-6
+        loss = binary_crossentropy(y_true_val * mask, tf.squeeze(y_pred))
+        return loss / num_items_masked
+
+
 get_custom_objects().update({
     'MaskedPenalizedSparseCategoricalCrossentropy':
         MaskedPenalizedSparseCategoricalCrossentropy,
     'masked_perplexity': masked_perplexity,
+    'SequenceCrossentropy': SequenceCrossentropy
 })

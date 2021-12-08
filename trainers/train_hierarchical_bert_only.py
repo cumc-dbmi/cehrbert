@@ -128,12 +128,6 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
                                 self.confidence_penalty),
                         'visit_predictions':
                             MaskedPenalizedSparseCategoricalCrossentropy(
-                                self.confidence_penalty),
-                        'is_readmissions':
-                            MaskedPenalizedSparseCategoricalCrossentropy(
-                                self.confidence_penalty),
-                        'visit_prolonged_stays':
-                            MaskedPenalizedSparseCategoricalCrossentropy(
                                 self.confidence_penalty)
                     }
                 else:

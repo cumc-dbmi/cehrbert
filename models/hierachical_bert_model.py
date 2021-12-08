@@ -230,28 +230,31 @@ def transformer_hierarchical_bert_model(num_of_visits,
     if include_second_tiered_learning_objectives:
         contextualized_visit_embeddings_without_att = identity @ contextualized_visit_embeddings
 
-        visit_prediction_dense = tf.keras.layers.Dense(visit_vocab_size,
-                                                       name='visit_prediction_dense')
-        is_readmission_prediction_dense = tf.keras.layers.Dense(2, activation='sigmoid',
-                                                                name='is_readmissions')
-        prolonged_length_stay_prediction_dense = tf.keras.layers.Dense(2, activation='sigmoid',
-                                                                       name='visit_prolonged_stays')
-        visit_softmax_layer = tf.keras.layers.Softmax(name='visit_predictions')
+        visit_prediction_dense = tf.keras.layers.Dense(
+            visit_vocab_size,
+            name='visit_prediction_dense'
+        )
+        # is_readmission_prediction_dense = tf.keras.layers.Dense(2, activation='sigmoid',
+        #                                                         name='is_readmissions')
+        # prolonged_length_stay_prediction_dense = tf.keras.layers.Dense(2, activation='sigmoid',
+        #                                                                name='visit_prolonged_stays')
+        visit_softmax_layer = tf.keras.layers.Softmax(
+            name='visit_predictions'
+        )
 
         visit_predictions = visit_softmax_layer(
             visit_prediction_dense(contextualized_visit_embeddings_without_att)
         )
+        #
+        # is_readmission_prediction = is_readmission_prediction_dense(
+        #     contextualized_visit_embeddings_without_att
+        # )
+        #
+        # prolonged_length_stay_prediction = prolonged_length_stay_prediction_dense(
+        #     contextualized_visit_embeddings_without_att
+        # )
 
-        is_readmission_prediction = is_readmission_prediction_dense(
-            contextualized_visit_embeddings_without_att
-        )
-
-        prolonged_length_stay_prediction = prolonged_length_stay_prediction_dense(
-            contextualized_visit_embeddings_without_att
-        )
-
-        outputs.extend(
-            [visit_predictions, is_readmission_prediction, prolonged_length_stay_prediction])
+        outputs.extend([visit_predictions])
 
     hierarchical_bert = tf.keras.Model(
         inputs=default_inputs,
