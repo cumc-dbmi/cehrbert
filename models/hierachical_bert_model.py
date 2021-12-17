@@ -24,6 +24,7 @@ def transformer_hierarchical_bert_model(num_of_visits,
     :param embedding_size:
     :param depth:
     :param num_heads:
+    :param num_of_exchanges:
     :param transformer_dropout:
     :param embedding_dropout:
     :param l2_reg_penalty:
@@ -100,8 +101,10 @@ def transformer_hierarchical_bert_model(num_of_visits,
         tf.concat([pt_seq_concept_embeddings, pt_seq_age_embeddings, pt_seq_time_embeddings],
                   axis=-1, name='concat_for_encoder'))
 
-    temporal_concept_embeddings = tf.reshape(temporal_concept_embeddings,
-                                             (-1, num_of_concepts, embedding_size))
+    temporal_concept_embeddings = tf.reshape(
+        temporal_concept_embeddings,
+        (-1, num_of_concepts, embedding_size)
+    )
 
     # The first bert applied at the visit level
     concept_encoder = Encoder(name='concept_encoder',
@@ -148,40 +151,46 @@ def transformer_hierarchical_bert_model(num_of_visits,
 
     for _ in range(num_of_exchanges):
         # Step 1
+        # (batch_size * num_of_visits, num_of_concepts, embedding_size)
         contextualized_concept_embeddings, _ = concept_encoder(
             temporal_concept_embeddings,  # be reused
             pat_concept_mask  # not change
         )
 
+        # (batch_size, num_of_visits, num_of_concepts, embedding_size)
         contextualized_concept_embeddings = tf.reshape(
             contextualized_concept_embeddings,
             shape=(-1, num_of_visits, num_of_concepts, embedding_size)
         )
         # Step 2 generate augmented visit embeddings
         # Slice out the first contextualized embedding of each visit
+        # (batch_size, num_of_visits, embedding_size)
         visit_embeddings = contextualized_concept_embeddings[:, :, 0]
 
-        # Reshape the data in visit view back to patient view: (batch, sequence, embedding_size)
+        # Reshape the data in visit view back to patient view:
+        # (batch, num_of_visits * num_of_concepts, embedding_size)
         contextualized_concept_embeddings = tf.reshape(
             contextualized_concept_embeddings,
             shape=(-1, num_of_visits * num_of_concepts, embedding_size)
         )
 
+        # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
         expanded_visit_embeddings = tf.transpose(
             tf.transpose(visit_embeddings, perm=[0, 2, 1]) @ identity,
             perm=[0, 2, 1]
         )
 
+        # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
         expanded_att_embeddings = tf.transpose(
             tf.transpose(att_embeddings, perm=[0, 2, 1]) @ identity_inverse,
             perm=[0, 2, 1]
         )
 
         # Insert the att embeddings between visit embedidngs
+        # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
         augmented_visit_embeddings = expanded_visit_embeddings + expanded_att_embeddings
 
         # Step 3 encoder applied to patient level
-
         # Feed augmented visit embeddings into encoders to get contextualized visit embeddings
         contextualized_visit_embeddings, _ = visit_encoder(
             augmented_visit_embeddings,
@@ -195,12 +204,19 @@ def transformer_hierarchical_bert_model(num_of_visits,
             visit_concept_mask,
             None)
 
-        global_concept_embeddings = global_embedding_dropout_layer(global_concept_embeddings)
+        global_concept_embeddings = global_embedding_dropout_layer(
+            global_concept_embeddings
+        )
+
         global_concept_embeddings = global_concept_embeddings_normalization(
             global_concept_embeddings + contextualized_concept_embeddings
         )
-        temporal_concept_embeddings = tf.reshape(global_concept_embeddings,
-                                                 (-1, num_of_visits, num_of_concepts, embedding_size))
+
+        temporal_concept_embeddings = tf.reshape(
+            global_concept_embeddings,
+            (-1, num_of_concepts, embedding_size)
+        )
+
         att_embeddings = identity_inverse @ contextualized_visit_embeddings
 
     concept_output_layer = TiedOutputEmbedding(
@@ -208,7 +224,9 @@ def transformer_hierarchical_bert_model(num_of_visits,
         projection_dropout=embedding_dropout,
         name='concept_prediction_logits')
 
-    concept_softmax_layer = tf.keras.layers.Softmax(name='concept_predictions')
+    concept_softmax_layer = tf.keras.layers.Softmax(
+        name='concept_predictions'
+    )
 
     concept_predictions = concept_softmax_layer(
         concept_output_layer([global_concept_embeddings, embedding_matrix])
