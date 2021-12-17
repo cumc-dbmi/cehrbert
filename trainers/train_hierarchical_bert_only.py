@@ -23,6 +23,7 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
                  embedding_size: int, depth: int, max_num_visits: int,
                  max_num_concepts: int, num_heads: int,
                  include_visit_prediction: bool, time_embeddings_size: int,
+                 num_of_exchanges: int,
                  *args, **kwargs):
 
         self._tokenizer_path = tokenizer_path
@@ -32,6 +33,7 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
         self._max_num_visits = max_num_visits
         self._max_num_concepts = max_num_concepts
         self._num_heads = num_heads
+        self._num_of_exchanges = num_of_exchanges
         self._include_visit_prediction = include_visit_prediction
         self._time_embeddings_size = time_embeddings_size
 
@@ -46,6 +48,7 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
             f'max_num_visits: {max_num_visits}\n'
             f'max_num_concepts: {max_num_concepts}\n'
             f'num_heads: {num_heads}\n'
+            f'num_of_exchanges: {num_of_exchanges}\n'
             f'include_visit_prediction: {include_visit_prediction}\n'
             f'time_embeddings_size: {time_embeddings_size}')
 
@@ -117,6 +120,7 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
                     embedding_size=self._embedding_size,
                     depth=self._depth,
                     num_heads=self._num_heads,
+                    num_of_exchanges=self._num_of_exchanges,
                     time_embeddings_size=self._time_embeddings_size,
                     include_second_tiered_learning_objectives=self._include_visit_prediction
                 )
@@ -159,6 +163,7 @@ def main(args):
         max_num_visits=args.max_num_visits,
         max_num_concepts=args.max_num_concepts,
         num_heads=config.num_heads,
+        num_of_exchanges=config.num_of_exchanges,
         batch_size=config.batch_size,
         epochs=config.epochs,
         learning_rate=config.learning_rate,

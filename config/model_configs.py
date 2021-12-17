@@ -33,7 +33,7 @@ class Config(SimpleNamespace):
 class BertConfig(Config):
 
     def __init__(self, visit_tokenizer_path,
-                 depth, num_heads,
+                 depth, num_heads,num_of_exchanges,
                  include_visit_prediction,
                  include_prolonged_length_stay,
                  use_time_embedding,
@@ -45,6 +45,7 @@ class BertConfig(Config):
         self.visit_tokenizer_path = visit_tokenizer_path
         self.depth = depth
         self.num_heads = num_heads
+        self.num_of_exchanges = num_of_exchanges
         self.include_visit_prediction = include_visit_prediction
         self.include_prolonged_length_stay = include_prolonged_length_stay
         self.use_time_embedding = use_time_embedding
@@ -107,6 +108,7 @@ def create_bert_model_config(args):
                       time_window_size=args.time_window_size,
                       depth=args.depth,
                       num_heads=args.num_heads,
+                      num_of_exchanges=args.num_of_exchanges,
                       batch_size=args.batch_size,
                       epochs=args.epochs,
                       learning_rate=args.learning_rate,
