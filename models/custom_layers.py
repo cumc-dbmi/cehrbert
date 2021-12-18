@@ -702,6 +702,16 @@ class HierarchicalBertLayer(tf.keras.layers.Layer):
                 axis=1),
             dtype=tf.float32)
 
+        self.merge_matrix = tf.constant(
+            [1] + [0] * (self.num_of_concepts - 1),
+            dtype=tf.float32
+        )[tf.newaxis, tf.newaxis, :, tf.newaxis]
+
+        self.merge_matrix_inverse = tf.constant(
+            [0] + [1] * (self.num_of_concepts - 1),
+            dtype=tf.float32
+        )[tf.newaxis, tf.newaxis, :, tf.newaxis]
+
         self.global_embedding_dropout_layer = tf.keras.layers.Dropout(dropout_rate)
         self.global_concept_embeddings_normalization = tf.keras.layers.LayerNormalization(
             name='global_concept_embeddings_normalization',
@@ -768,14 +778,14 @@ class HierarchicalBertLayer(tf.keras.layers.Layer):
 
             # Step 3 encoder applied to patient level
             # Feed augmented visit embeddings into encoders to get contextualized visit embeddings
-            contextualized_visit_embeddings, _ = self.visit_encoder_layer(
+            visit_embeddings, _ = self.visit_encoder_layer(
                 augmented_visit_embeddings,
                 visit_concept_mask
             )
 
             global_concept_embeddings, _ = self.mha_layer(
-                contextualized_visit_embeddings,
-                contextualized_visit_embeddings,
+                visit_embeddings,
+                visit_embeddings,
                 contextualized_concept_embeddings,
                 visit_concept_mask,
                 None)
@@ -788,14 +798,34 @@ class HierarchicalBertLayer(tf.keras.layers.Layer):
                 global_concept_embeddings + contextualized_concept_embeddings
             )
 
+            # att_embeddings = self.identity_inverse @ visit_embeddings
+
+            visit_embeddings_without_att = self.identity @ visit_embeddings
+
+            global_concept_embeddings = tf.reshape(
+                global_concept_embeddings,
+                (-1, self.num_of_visits, self.num_of_concepts, self.embedding_size)
+            )
+
+            global_concept_embeddings += (
+                    global_concept_embeddings * self.merge_matrix_inverse +
+                    tf.expand_dims(
+                        visit_embeddings_without_att,
+                        axis=-2
+                    ) * self.merge_matrix
+            )
+
             temporal_concept_embeddings = tf.reshape(
                 global_concept_embeddings,
                 (-1, self.num_of_concepts, self.embedding_size)
             )
 
-            att_embeddings = self.identity_inverse @ contextualized_visit_embeddings
+        global_concept_embeddings = tf.reshape(
+            global_concept_embeddings,
+            (-1, self.num_of_visits * self.num_of_concepts, self.embedding_size)
+        )
 
-        return global_concept_embeddings, self.identity @ contextualized_visit_embeddings
+        return global_concept_embeddings, self.identity @ visit_embeddings
 
 
 get_custom_objects().update({
