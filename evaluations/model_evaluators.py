@@ -10,6 +10,7 @@ from tensorflow.python.keras.preprocessing.text import Tokenizer
 
 from models.evaluation_models import *
 from models.loss_schedulers import CosineLRSchedule
+from models.hierachical_bert_model import transformer_hierarchical_bert_model
 from trainers.model_trainer import AbstractModel
 from utils.model_utils import *
 from data_generators.learning_objective import post_pad_pre_truncate
@@ -622,3 +623,58 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
         labels = self._dataset.label
 
         return inputs, labels
+
+
+class RandomHierarchicalBertEvaluator(HierarchicalBertEvaluator):
+
+    def __init__(self,
+                 num_of_exchanges,
+                 embedding_size,
+                 depth,
+                 num_heads,
+                 use_time_embedding,
+                 time_embeddings_size,
+                 *args, **kwargs):
+        self._num_of_exchanges = num_of_exchanges
+        self._embedding_size = embedding_size
+        self._depth = depth
+        self._num_heads = num_heads
+        self._use_time_embedding = use_time_embedding
+        self._time_embeddings_size = time_embeddings_size
+        super(RandomHierarchicalBertEvaluator, self).__init__(*args, **kwargs)
+
+        self.get_logger().info(f'num_of_exchanges: {num_of_exchanges}\n'
+                               f'embedding_size: {embedding_size}\n'
+                               f'depth: {depth}\n'
+                               f'num_heads: {num_heads}\n'
+                               f'use_time_embedding: {use_time_embedding}\n'
+                               f'time_embeddings_size: {time_embeddings_size}\n')
+
+    def _create_model(self):
+        strategy = tf.distribute.MirroredStrategy()
+        self.get_logger().info('Number of devices: {}'.format(strategy.num_replicas_in_sync))
+        with strategy.scope():
+
+            try:
+                cherbert_model = transformer_hierarchical_bert_model(
+                    num_of_visits=self._max_num_of_visits,
+                    num_of_concepts=self._max_num_of_concepts,
+                    concept_vocab_size=self._tokenizer.get_vocab_size(),
+                    embedding_size=self._embedding_size,
+                    depth=self._depth,
+                    num_heads=self._num_heads,
+                    num_of_exchanges=self._num_of_exchanges,
+                    time_embeddings_size=self._time_embeddings_size
+                )
+                model = create_cher_bert_bi_lstm_model_with_model(
+                    cherbert_model
+                )
+            except ValueError as e:
+                self.get_logger().exception(e)
+                model = create_cher_bert_bi_lstm_model_with_model(
+                    cherbert_model
+                )
+            model.compile(loss='binary_crossentropy',
+                          optimizer=tf.keras.optimizers.Adam(1e-4),
+                          metrics=get_metrics())
+            return model

@@ -248,11 +248,14 @@ def create_random_vanilla_bert_bi_lstm_model(max_seq_length,
 
 
 def create_cher_bert_bi_lstm_model(bert_model_path):
+    model = tf.keras.models.load_model(bert_model_path, custom_objects=get_custom_objects())
+    return create_cher_bert_bi_lstm_model_with_model(model)
+
+
+def create_cher_bert_bi_lstm_model_with_model(model):
     age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
 
-    model = tf.keras.models.load_model(bert_model_path, custom_objects=get_custom_objects())
-
-    contextualized_embeddings, _, _ = model.get_layer('global_concept_embeddings_la').output
+    contextualized_embeddings = model.get_layer('global_concept_embeddings_normalization').output
     _, max_seq_length, embedding_size = contextualized_embeddings.shape
 
     pat_mask = model.get_layer('pat_mask').output
