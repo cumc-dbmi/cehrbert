@@ -106,118 +106,26 @@ def transformer_hierarchical_bert_model(num_of_visits,
         (-1, num_of_concepts, embedding_size)
     )
 
-    # The first bert applied at the visit level
-    concept_encoder = Encoder(name='concept_encoder',
-                              num_layers=depth,
-                              d_model=embedding_size,
-                              num_heads=num_heads,
-                              dropout_rate=transformer_dropout)
-
-    # Second bert applied at the patient level to the visit embeddings
-    visit_encoder = Encoder(name='visit_encoder',
-                            num_layers=depth,
-                            d_model=embedding_size,
-                            num_heads=num_heads,
-                            dropout_rate=transformer_dropout)
-
-    # Insert the att embeddings between the visit embeddings using the following trick
-    identity = tf.constant(
-        np.insert(
-            np.identity(num_of_visits),
-            obj=range(1, num_of_visits),
-            values=0,
-            axis=1
-        ),
-        dtype=tf.float32
+    hierarchical_bert_layer = HierarchicalBertLayer(
+        num_of_exchanges=num_of_exchanges,
+        num_of_visits=num_of_visits,
+        num_of_concepts=num_of_concepts,
+        depth=depth,
+        embedding_size=embedding_size,
+        num_heads=num_heads,
+        dropout_rate=transformer_dropout,
+        name='hierarchical_bert_layer'
     )
+
     # Look up the embeddings for the att tokens
     att_embeddings, _ = concept_embedding_layer(visit_time_delta_att)
 
-    # Create the inverse "identity" matrix for inserting att embeddings
-    identity_inverse = tf.constant(
-        np.insert(
-            np.identity(num_of_visits - 1),
-            obj=range(0, num_of_visits),
-            values=0,
-            axis=1),
-        dtype=tf.float32)
-
-    multi_head_attention_layer = MultiHeadAttention(embedding_size, num_heads)
-    global_embedding_dropout_layer = tf.keras.layers.Dropout(transformer_dropout)
-    global_concept_embeddings_normalization = tf.keras.layers.LayerNormalization(
-        name='global_concept_embeddings_normalization',
-        epsilon=1e-6
+    global_concept_embeddings = hierarchical_bert_layer(
+        temporal_concept_embeddings,
+        att_embeddings,
+        pat_concept_mask,
+        visit_concept_mask,
     )
-
-    for _ in range(num_of_exchanges):
-        # Step 1
-        # (batch_size * num_of_visits, num_of_concepts, embedding_size)
-        contextualized_concept_embeddings, _ = concept_encoder(
-            temporal_concept_embeddings,  # be reused
-            pat_concept_mask  # not change
-        )
-
-        # (batch_size, num_of_visits, num_of_concepts, embedding_size)
-        contextualized_concept_embeddings = tf.reshape(
-            contextualized_concept_embeddings,
-            shape=(-1, num_of_visits, num_of_concepts, embedding_size)
-        )
-        # Step 2 generate augmented visit embeddings
-        # Slice out the first contextualized embedding of each visit
-        # (batch_size, num_of_visits, embedding_size)
-        visit_embeddings = contextualized_concept_embeddings[:, :, 0]
-
-        # Reshape the data in visit view back to patient view:
-        # (batch, num_of_visits * num_of_concepts, embedding_size)
-        contextualized_concept_embeddings = tf.reshape(
-            contextualized_concept_embeddings,
-            shape=(-1, num_of_visits * num_of_concepts, embedding_size)
-        )
-
-        # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
-        expanded_visit_embeddings = tf.transpose(
-            tf.transpose(visit_embeddings, perm=[0, 2, 1]) @ identity,
-            perm=[0, 2, 1]
-        )
-
-        # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
-        expanded_att_embeddings = tf.transpose(
-            tf.transpose(att_embeddings, perm=[0, 2, 1]) @ identity_inverse,
-            perm=[0, 2, 1]
-        )
-
-        # Insert the att embeddings between visit embedidngs
-        # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
-        augmented_visit_embeddings = expanded_visit_embeddings + expanded_att_embeddings
-
-        # Step 3 encoder applied to patient level
-        # Feed augmented visit embeddings into encoders to get contextualized visit embeddings
-        contextualized_visit_embeddings, _ = visit_encoder(
-            augmented_visit_embeddings,
-            visit_concept_mask
-        )
-
-        global_concept_embeddings, _ = multi_head_attention_layer(
-            contextualized_visit_embeddings,
-            contextualized_visit_embeddings,
-            contextualized_concept_embeddings,
-            visit_concept_mask,
-            None)
-
-        global_concept_embeddings = global_embedding_dropout_layer(
-            global_concept_embeddings
-        )
-
-        global_concept_embeddings = global_concept_embeddings_normalization(
-            global_concept_embeddings + contextualized_concept_embeddings
-        )
-
-        temporal_concept_embeddings = tf.reshape(
-            global_concept_embeddings,
-            (-1, num_of_concepts, embedding_size)
-        )
-
-        att_embeddings = identity_inverse @ contextualized_visit_embeddings
 
     concept_output_layer = TiedOutputEmbedding(
         projection_regularizer=l2_regularizer,
@@ -241,10 +149,7 @@ def transformer_hierarchical_bert_model(num_of_visits,
             visit_vocab_size,
             name='visit_prediction_dense'
         )
-        # is_readmission_prediction_dense = tf.keras.layers.Dense(2, activation='sigmoid',
-        #                                                         name='is_readmissions')
-        # prolonged_length_stay_prediction_dense = tf.keras.layers.Dense(2, activation='sigmoid',
-        #                                                                name='visit_prolonged_stays')
+
         visit_softmax_layer = tf.keras.layers.Softmax(
             name='visit_predictions'
         )
@@ -252,14 +157,6 @@ def transformer_hierarchical_bert_model(num_of_visits,
         visit_predictions = visit_softmax_layer(
             visit_prediction_dense(contextualized_visit_embeddings_without_att)
         )
-        #
-        # is_readmission_prediction = is_readmission_prediction_dense(
-        #     contextualized_visit_embeddings_without_att
-        # )
-        #
-        # prolonged_length_stay_prediction = prolonged_length_stay_prediction_dense(
-        #     contextualized_visit_embeddings_without_att
-        # )
 
         outputs.extend([visit_predictions])
 
