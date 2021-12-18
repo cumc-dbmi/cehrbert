@@ -664,30 +664,23 @@ class HierarchicalBertLayer(tf.keras.layers.Layer):
         self.depth = depth
         self.num_heads = num_heads
         self.dropout_rate = dropout_rate
-        self.concept_encoder_layers = [
-            Encoder(name='concept_encoder' + str(i),
-                    num_layers=depth,
-                    d_model=embedding_size,
-                    num_heads=num_heads,
-                    dropout_rate=dropout_rate)
-            for i in range(num_of_exchanges)
-        ]
-        self.visit_encoder_layers = [
-            Encoder(name='visit_encoder' + str(i),
-                    num_layers=depth,
-                    d_model=embedding_size,
-                    num_heads=num_heads,
-                    dropout_rate=dropout_rate)
-            for i in range(num_of_exchanges)
-        ]
-        self.mha_layers = [
-            MultiHeadAttention(
-                self.embedding_size,
-                num_heads,
-                name='mha' + str(i)
-            )
-            for i in range(num_of_exchanges)
-        ]
+        self.concept_encoder_layer = Encoder(
+            name='concept_encoder',
+            num_layers=depth,
+            d_model=embedding_size,
+            num_heads=num_heads,
+            dropout_rate=dropout_rate)
+        self.visit_encoder_layer = Encoder(
+            name='visit_encoder',
+            num_layers=depth,
+            d_model=embedding_size,
+            num_heads=num_heads,
+            dropout_rate=dropout_rate)
+        self.mha_layer = MultiHeadAttention(
+            self.embedding_size,
+            num_heads,
+            name='mha'
+        )
 
         # Insert the att embeddings between the visit embeddings using the following trick
         self.identity = tf.constant(
@@ -735,7 +728,7 @@ class HierarchicalBertLayer(tf.keras.layers.Layer):
         for i in range(self.num_of_exchanges):
             # Step 1
             # (batch_size * num_of_visits, num_of_concepts, embedding_size)
-            contextualized_concept_embeddings, _ = self.concept_encoder_layers[i](
+            contextualized_concept_embeddings, _ = self.concept_encoder_layer(
                 temporal_concept_embeddings,  # be reused
                 pat_concept_mask  # not change
             )
@@ -775,12 +768,12 @@ class HierarchicalBertLayer(tf.keras.layers.Layer):
 
             # Step 3 encoder applied to patient level
             # Feed augmented visit embeddings into encoders to get contextualized visit embeddings
-            contextualized_visit_embeddings, _ = self.visit_encoder_layers[i](
+            contextualized_visit_embeddings, _ = self.visit_encoder_layer(
                 augmented_visit_embeddings,
                 visit_concept_mask
             )
 
-            global_concept_embeddings, _ = self.mha_layers[i](
+            global_concept_embeddings, _ = self.mha_layer(
                 contextualized_visit_embeddings,
                 contextualized_visit_embeddings,
                 contextualized_concept_embeddings,
