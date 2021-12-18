@@ -78,24 +78,29 @@ def transformer_hierarchical_bert_model(num_of_visits,
                                               embedding_size=embedding_size,
                                               name='visit_segment_layer')
 
+    pt_seq_concept_embeddings, embedding_matrix = concept_embedding_layer(
+        pat_seq)
+    pt_seq_concept_embeddings = visit_segment_layer(
+        [visit_segment[:, :, tf.newaxis],
+         pt_seq_concept_embeddings]
+    )
+
     # define the time embedding layer for absolute time stamps (since 1970)
-    time_embedding_layer = TimeEmbeddingLayer(embedding_size=time_embeddings_size,
-                                              name='time_embedding_layer')
+    time_embedding_layer = TimeEmbeddingLayer(
+        embedding_size=time_embeddings_size,
+        name='time_embedding_layer')
     # define the age embedding layer for the age w.r.t the medical record
-    age_embedding_layer = TimeEmbeddingLayer(embedding_size=time_embeddings_size,
-                                             name='age_embedding_layer')
+    age_embedding_layer = TimeEmbeddingLayer(
+        embedding_size=time_embeddings_size,
+        name='age_embedding_layer')
 
-    temporal_transformation_layer = tf.keras.layers.Dense(embedding_size,
-                                                          activation='tanh',
-                                                          name='temporal_transformation')
+    temporal_transformation_layer = tf.keras.layers.Dense(
+        embedding_size,
+        activation='tanh',
+        name='temporal_transformation')
 
-    pt_seq_concept_embeddings, embedding_matrix = concept_embedding_layer(pat_seq)
     pt_seq_age_embeddings = age_embedding_layer(pat_seq_age)
     pt_seq_time_embeddings = time_embedding_layer(pat_seq_time)
-
-    # dense layer for rescale the patient sequence embeddings back to the original size
-    pt_seq_concept_embeddings = visit_segment_layer([visit_segment[:, :, tf.newaxis],
-                                                     pt_seq_concept_embeddings])
 
     temporal_concept_embeddings = temporal_transformation_layer(
         tf.concat([pt_seq_concept_embeddings, pt_seq_age_embeddings, pt_seq_time_embeddings],
@@ -120,7 +125,7 @@ def transformer_hierarchical_bert_model(num_of_visits,
     # Look up the embeddings for the att tokens
     att_embeddings, _ = concept_embedding_layer(visit_time_delta_att)
 
-    global_concept_embeddings = hierarchical_bert_layer(
+    global_concept_embeddings, visit_embeddings_without_att = hierarchical_bert_layer(
         temporal_concept_embeddings,
         att_embeddings,
         pat_concept_mask,
@@ -143,8 +148,6 @@ def transformer_hierarchical_bert_model(num_of_visits,
     outputs = [concept_predictions]
 
     if include_second_tiered_learning_objectives:
-        contextualized_visit_embeddings_without_att = identity @ contextualized_visit_embeddings
-
         visit_prediction_dense = tf.keras.layers.Dense(
             visit_vocab_size,
             name='visit_prediction_dense'
@@ -155,7 +158,7 @@ def transformer_hierarchical_bert_model(num_of_visits,
         )
 
         visit_predictions = visit_softmax_layer(
-            visit_prediction_dense(contextualized_visit_embeddings_without_att)
+            visit_prediction_dense(visit_embeddings_without_att)
         )
 
         outputs.extend([visit_predictions])

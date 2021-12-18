@@ -255,7 +255,7 @@ def create_cher_bert_bi_lstm_model(bert_model_path):
 def create_cher_bert_bi_lstm_model_with_model(model):
     age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
 
-    contextualized_embeddings = model.get_layer('hierarchical_bert_layer').output
+    contextualized_embeddings, _ = model.get_layer('hierarchical_bert_layer').output
     _, max_seq_length, embedding_size = contextualized_embeddings.shape
 
     pat_mask = model.get_layer('pat_mask').output

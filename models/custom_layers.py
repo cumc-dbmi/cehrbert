@@ -795,7 +795,7 @@ class HierarchicalBertLayer(tf.keras.layers.Layer):
 
             att_embeddings = self.identity_inverse @ contextualized_visit_embeddings
 
-        return global_concept_embeddings  # (batch_size, num_of_visits * num_of_concepts, d_model)
+        return global_concept_embeddings, self.identity @ contextualized_visit_embeddings
 
 
 get_custom_objects().update({
