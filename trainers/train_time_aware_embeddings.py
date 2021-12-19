@@ -3,8 +3,8 @@ import os
 import tensorflow as tf
 from tensorflow.python.keras import Model
 
-from config.model_configs import create_time_attention_model_config
-from config.parse_args import create_parse_args
+from models.model_parameters import ModelPathConfig
+from models.parse_args import create_parse_args
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
 from utils.model_utils import tokenize_one_field
 from data_generators.data_generator_base import TimeAttentionDataGenerator
@@ -78,16 +78,17 @@ class TimeAttentionConceptEmbeddingTrainer(AbstractConceptEmbeddingTrainer):
 
 
 def main(args):
-    config = create_time_attention_model_config(args)
+    config = ModelPathConfig(args.input_folder, args.output_folder)
     TimeAttentionConceptEmbeddingTrainer(training_data_parquet_path=config.parquet_data_path,
                                          model_path=config.model_path,
                                          tokenizer_path=config.tokenizer_path,
-                                         embedding_size=config.concept_embedding_size,
-                                         context_window_size=config.max_seq_length,
-                                         time_window_size=config.time_window_size,
-                                         batch_size=config.batch_size, epochs=config.epochs,
-                                         learning_rate=config.learning_rate,
-                                         tf_board_log_path=config.tf_board_log_path,
+                                         embedding_size=args.embedding_size,
+                                         context_window_size=args.max_seq_length,
+                                         time_window_size=args.time_window_size,
+                                         batch_size=args.batch_size,
+                                         epochs=args.epochs,
+                                         learning_rate=args.learning_rate,
+                                         tf_board_log_path=args.tf_board_log_path,
                                          cache_dataset=True).train_model()
 
 

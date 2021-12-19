@@ -1,8 +1,8 @@
 import os
 
 import tensorflow as tf
-from config.model_configs import create_bert_model_config
-from config.parse_args import create_parse_args_hierarchical_bert
+from models.model_parameters import ModelPathConfig
+from models.parse_args import create_parse_args_hierarchical_bert
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
 from utils.model_utils import tokenize_one_field, tokenize_multiple_fields
 from models.hierachical_bert_model import transformer_hierarchical_bert_model
@@ -152,25 +152,25 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
 
 
 def main(args):
-    config = create_bert_model_config(args)
+    config = ModelPathConfig(args.input_folder, args.output_folder)
     HierarchicalBertTrainer(
         training_data_parquet_path=config.parquet_data_path,
         model_path=config.model_path,
         tokenizer_path=config.tokenizer_path,
         visit_tokenizer_path=config.visit_tokenizer_path,
-        embedding_size=config.concept_embedding_size,
-        depth=config.depth,
+        embedding_size=args.embedding_size,
+        depth=args.depth,
         max_num_visits=args.max_num_visits,
         max_num_concepts=args.max_num_concepts,
-        num_heads=config.num_heads,
-        num_of_exchanges=config.num_of_exchanges,
-        batch_size=config.batch_size,
-        epochs=config.epochs,
-        learning_rate=config.learning_rate,
-        include_visit_prediction=config.include_visit_prediction,
-        time_embeddings_size=config.time_embeddings_size,
-        use_dask=config.use_dask,
-        tf_board_log_path=config.tf_board_log_path).train_model()
+        num_heads=args.num_heads,
+        num_of_exchanges=args.num_of_exchanges,
+        batch_size=args.batch_size,
+        epochs=args.epochs,
+        learning_rate=args.learning_rate,
+        include_visit_prediction=args.include_visit_prediction,
+        time_embeddings_size=args.time_embeddings_size,
+        use_dask=args.use_dask,
+        tf_board_log_path=args.tf_board_log_path).train_model()
 
 
 if __name__ == "__main__":

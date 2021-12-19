@@ -4,7 +4,8 @@ import os
 
 from pyspark.sql import SparkSession
 
-import spark_apps.parameters as p
+import config.parameters
+import spark_apps.spark_parse_args as p
 from utils.spark_utils import *
 from utils.spark_utils import create_hierarchical_sequence_data
 
@@ -30,7 +31,8 @@ def main(input_folder, output_folder, domain_table_list, date_filter, max_num_of
         max_num_of_visits_per_person=max_num_of_visits_per_person
     )
 
-    sequence_data.write.mode('overwrite').parquet(os.path.join(output_folder, p.parquet_data_path))
+    sequence_data.write.mode('overwrite').parquet(os.path.join(output_folder,
+                                                               config.parameters.parquet_data_path))
 
 
 if __name__ == '__main__':

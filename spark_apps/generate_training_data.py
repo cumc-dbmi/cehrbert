@@ -4,8 +4,9 @@ import datetime
 
 from pyspark.sql import SparkSession
 
+import config.parameters
 from utils.spark_utils import *
-import spark_apps.parameters as p
+import spark_apps.spark_parse_args as p
 
 VISIT_OCCURRENCE = 'visit_occurrence'
 PERSON = 'person'
@@ -58,7 +59,8 @@ def main(input_folder, output_folder, domain_table_list, date_filter,
                         F.max('prolonged_length_stay').over(W.partitionBy('person_id'))).distinct()
         sequence_data = sequence_data.join(visit_occurrence, 'person_id')
 
-    sequence_data.write.mode('overwrite').parquet(os.path.join(output_folder, p.parquet_data_path))
+    sequence_data.write.mode('overwrite').parquet(os.path.join(output_folder,
+                                                               config.parameters.parquet_data_path))
 
 
 if __name__ == '__main__':

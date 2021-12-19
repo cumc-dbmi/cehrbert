@@ -1,8 +1,8 @@
 import os
 
 import tensorflow as tf
-from config.model_configs import create_bert_model_config
-from config.parse_args import create_parse_args_base_bert
+from models.model_parameters import ModelPathConfig
+from models.parse_args import create_parse_args_base_bert
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
 from utils.model_utils import tokenize_one_field
 from models.bert_models_visit_prediction import transformer_bert_model_visit_prediction
@@ -64,14 +64,14 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
     def _load_dependencies(self):
 
         self._tokenizer = tokenize_one_field(self._training_data,
-                                            'concept_ids',
-                                            'token_ids',
+                                             'concept_ids',
+                                             'token_ids',
                                              self._tokenizer_path)
 
         if self._include_visit_prediction:
             self._visit_tokenizer = tokenize_one_field(self._training_data,
-                                                      'visit_concept_ids',
-                                                      'visit_token_ids',
+                                                       'visit_concept_ids',
+                                                       'visit_token_ids',
                                                        self._visit_tokenizer_path,
                                                        oov_token='-1')
 
@@ -156,25 +156,25 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
 
 
 def main(args):
-    config = create_bert_model_config(args)
+    config = ModelPathConfig(args.input_folder, args.output_folder)
     VanillaBertTrainer(training_data_parquet_path=config.parquet_data_path,
                        model_path=config.model_path,
                        tokenizer_path=config.tokenizer_path,
                        visit_tokenizer_path=config.visit_tokenizer_path,
-                       embedding_size=config.concept_embedding_size,
-                       context_window_size=config.max_seq_length,
-                       depth=config.depth,
-                       num_heads=config.num_heads,
-                       batch_size=config.batch_size,
-                       epochs=config.epochs,
-                       learning_rate=config.learning_rate,
-                       include_visit_prediction=config.include_visit_prediction,
-                       include_prolonged_length_stay=config.include_prolonged_length_stay,
-                       use_time_embedding=config.use_time_embedding,
-                       time_embeddings_size=config.time_embeddings_size,
-                       use_behrt=config.use_behrt,
-                       use_dask=config.use_dask,
-                       tf_board_log_path=config.tf_board_log_path).train_model()
+                       embedding_size=args.embedding_size,
+                       context_window_size=args.max_seq_length,
+                       depth=args.depth,
+                       num_heads=args.num_heads,
+                       batch_size=args.batch_size,
+                       epochs=args.epochs,
+                       learning_rate=args.learning_rate,
+                       include_visit_prediction=args.include_visit_prediction,
+                       include_prolonged_length_stay=args.include_prolonged_length_stay,
+                       use_time_embedding=args.use_time_embedding,
+                       time_embeddings_size=args.time_embeddings_size,
+                       use_behrt=args.use_behrt,
+                       use_dask=args.use_dask,
+                       tf_board_log_path=args.tf_board_log_path).train_model()
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-from spark_apps.parameters import create_spark_args
+from spark_apps.spark_parse_args import create_spark_args
 from spark_apps.cohorts import type_two_diabietes as t2dm
 from spark_apps.cohorts import heart_failure as hf
 from spark_apps.cohorts.spark_app_base import create_prediction_cohort

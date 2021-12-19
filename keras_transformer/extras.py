@@ -6,7 +6,6 @@ import math
 import tensorflow as tf
 
 from tensorflow.keras import activations, regularizers
-# noinspection PyPep8Naming
 from tensorflow.keras import backend as K
 
 from tensorflow.keras.utils import get_custom_objects

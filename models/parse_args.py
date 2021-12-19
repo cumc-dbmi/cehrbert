@@ -34,8 +34,8 @@ def create_parse_args():
                         default=100,
                         required=False)
     parser.add_argument('-c',
-                        '--concept_embedding_size',
-                        dest='concept_embedding_size',
+                        '--embedding_size',
+                        dest='embedding_size',
                         action='store',
                         type=int,
                         default=128,
