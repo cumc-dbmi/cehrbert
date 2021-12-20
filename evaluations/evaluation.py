@@ -1,4 +1,4 @@
-import config.parameters
+import config.parameters as p
 from evaluations.evaluation_parse_args import create_evaluation_args
 from evaluations.model_evaluators import *
 
@@ -26,9 +26,9 @@ def evaluate_sequence_models(args):
     if LSTM in args.model_evaluators:
         validate_folder(args.time_attention_model_folder)
         time_attention_tokenizer_path = os.path.join(args.time_attention_model_folder,
-                                                     config.parameters.tokenizer_path)
+                                                     p.tokenizer_path)
         time_aware_model_path = os.path.join(args.time_attention_model_folder,
-                                             config.parameters.time_attention_model_path)
+                                             p.time_attention_model_path)
         BiLstmModelEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
@@ -46,9 +46,9 @@ def evaluate_sequence_models(args):
     if VANILLA_BERT_FEED_FORWARD in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
         bert_tokenizer_path = os.path.join(args.vanilla_bert_model_folder,
-                                           config.parameters.tokenizer_path)
+                                           p.tokenizer_path)
         bert_model_path = os.path.join(args.vanilla_bert_model_folder,
-                                       config.parameters.bert_model_validation_path)
+                                       p.bert_model_validation_path)
         BertFeedForwardModelEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
@@ -66,9 +66,9 @@ def evaluate_sequence_models(args):
     if SLIDING_BERT in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
         bert_tokenizer_path = os.path.join(args.vanilla_bert_model_folder,
-                                           config.parameters.tokenizer_path)
+                                           p.tokenizer_path)
         bert_model_path = os.path.join(args.vanilla_bert_model_folder,
-                                       config.parameters.bert_model_validation_path)
+                                       p.bert_model_validation_path)
         SlidingBertModelEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
@@ -87,9 +87,9 @@ def evaluate_sequence_models(args):
     if VANILLA_BERT_LSTM in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
         bert_tokenizer_path = os.path.join(args.vanilla_bert_model_folder,
-                                           config.parameters.tokenizer_path)
+                                           p.tokenizer_path)
         bert_model_path = os.path.join(args.vanilla_bert_model_folder,
-                                       config.parameters.bert_model_validation_path)
+                                       p.bert_model_validation_path)
         BertLstmModelEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
@@ -107,9 +107,9 @@ def evaluate_sequence_models(args):
     if TEMPORAL_BERT_LSTM in args.model_evaluators:
         validate_folder(args.temporal_bert_model_folder)
         temporal_bert_tokenizer_path = os.path.join(args.temporal_bert_model_folder,
-                                                    config.parameters.tokenizer_path)
+                                                    p.tokenizer_path)
         temporal_bert_model_path = os.path.join(args.temporal_bert_model_folder,
-                                                config.parameters.temporal_bert_validation_model_path)
+                                                p.temporal_bert_validation_model_path)
         BertLstmModelEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
@@ -127,11 +127,11 @@ def evaluate_sequence_models(args):
     if RANDOM_VANILLA_BERT_LSTM in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
         bert_model_path = os.path.join(args.vanilla_bert_model_folder,
-                                       config.parameters.bert_model_validation_path)
+                                       p.bert_model_validation_path)
         bert_tokenizer_path = os.path.join(args.vanilla_bert_model_folder,
-                                           config.parameters.tokenizer_path)
+                                           p.tokenizer_path)
         visit_tokenizer_path = os.path.join(args.vanilla_bert_model_folder,
-                                            config.parameters.visit_tokenizer_path)
+                                            p.visit_tokenizer_path)
         RandomVanillaLstmBertModelEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
@@ -156,9 +156,9 @@ def evaluate_sequence_models(args):
     if HIERARCHICAL_BERT_LSTM in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
         bert_model_path = os.path.join(args.vanilla_bert_model_folder,
-                                       config.parameters.bert_model_validation_path)
+                                       p.bert_model_validation_path)
         bert_tokenizer_path = os.path.join(args.vanilla_bert_model_folder,
-                                           config.parameters.tokenizer_path)
+                                           p.tokenizer_path)
         HierarchicalBertEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
