@@ -124,7 +124,7 @@ def transformer_hierarchical_bert_model(num_of_visits,
         d_model=embedding_size,
         num_heads=num_heads,
         dff=512,
-        dropout_rate=transformer_dropout)
+        rate=transformer_dropout)
 
     # Insert the att embeddings between the visit embeddings using the following trick
     identity = tf.constant(
