@@ -3,7 +3,11 @@ from evaluations.evaluation_parameters import FULL, SEQUENCE_MODEL, BASELINE_MOD
     VANILLA_BERT_LSTM, VANILLA_BERT_FEED_FORWARD, SLIDING_BERT, TEMPORAL_BERT_LSTM, \
     RANDOM_VANILLA_BERT_LSTM, HIERARCHICAL_BERT_LSTM, RANDOM_HIERARCHICAL_BERT_LSTM
 from evaluations.evaluation_parse_args import create_evaluation_args
-from evaluations.model_evaluators import *
+from evaluations.model_evaluators.hierarchical_bert_evaluators import *
+from evaluations.model_evaluators.bert_model_evaluators import *
+from evaluations.model_evaluators.sequence_model_evaluators import *
+from evaluations.model_evaluators.frequency_model_evaluators import *
+from utils.model_utils import *
 
 
 def evaluate_sequence_models(args):
