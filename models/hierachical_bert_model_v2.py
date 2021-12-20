@@ -108,7 +108,7 @@ def transformer_hierarchical_bert_model(num_of_visits,
 
     global_concept_embeddings_mask = tf.reshape(
         pat_mask, (-1, num_of_visits * num_of_concepts)
-    )[:, tf.newaxis, :, tf.newaxis]
+    )[:, tf.newaxis, tf.newaxis, :]
 
     # The first bert applied at the visit level
     concept_encoder = Encoder(

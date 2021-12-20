@@ -1,5 +1,4 @@
 from models.custom_layers import *
-import numpy as np
 
 
 def transformer_hierarchical_bert_model(num_of_visits,
