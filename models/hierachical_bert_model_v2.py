@@ -76,15 +76,11 @@ def transformer_hierarchical_bert_model(num_of_visits,
                                               embedding_size=embedding_size,
                                               name='visit_segment_layer')
 
-    temporal_concept_embeddings, embedding_matrix = concept_embedding_layer(pat_seq)
+    concept_embeddings, embedding_matrix = concept_embedding_layer(pat_seq)
 
     # dense layer for rescale the patient sequence embeddings back to the original size
-    temporal_concept_embeddings = visit_segment_layer([visit_segment[:, :, tf.newaxis],
-                                                       temporal_concept_embeddings])
-
-    global_concept_embeddings_mask = tf.reshape(
-        pat_mask, (-1, num_of_visits * num_of_concepts)
-    )[:, tf.newaxis, tf.newaxis, :]
+    concept_embeddings = visit_segment_layer([visit_segment[:, :, tf.newaxis],
+                                              concept_embeddings])
 
     # The first bert applied at the visit level
     concept_encoder = Encoder(
@@ -95,12 +91,22 @@ def transformer_hierarchical_bert_model(num_of_visits,
         dropout_rate=transformer_dropout)
 
     # Second bert applied at the patient level to the visit embeddings
-    visit_decoders = [DecoderLayer(
-        name=f'visit_decoder_{i}',
+    visit_encoder_layer = Encoder(
+        name='visit_encoder',
+        num_layers=depth,
         d_model=embedding_size,
         num_heads=num_heads,
-        dff=512,
-        rate=transformer_dropout) for i in range(depth)]
+        dropout_rate=transformer_dropout)
+
+    merge_matrix = tf.constant(
+        [1] + [0] * (num_of_concepts - 1),
+        dtype=tf.float32
+    )[tf.newaxis, tf.newaxis, :, tf.newaxis]
+
+    merge_matrix_inverse = tf.constant(
+        [0] + [1] * (num_of_concepts - 1),
+        dtype=tf.float32
+    )[tf.newaxis, tf.newaxis, :, tf.newaxis]
 
     multi_head_attention_layer = MultiHeadAttention(embedding_size, num_heads)
     global_embedding_dropout_layer = tf.keras.layers.Dropout(transformer_dropout)
@@ -112,66 +118,62 @@ def transformer_hierarchical_bert_model(num_of_visits,
     for _ in range(num_of_exchanges):
         # Step 1
         # (batch_size * num_of_visits, num_of_concepts, embedding_size)
-        contextualized_concept_embeddings, _ = concept_encoder(
-            temporal_concept_embeddings,  # be reused
+        concept_embeddings = tf.reshape(
+            concept_embeddings,
+            shape=(-1, num_of_concepts, embedding_size)
+        )
+
+        concept_embeddings, _ = concept_encoder(
+            concept_embeddings,  # be reused
             pat_concept_mask  # not change
         )
 
         # (batch_size, num_of_visits, num_of_concepts, embedding_size)
-        contextualized_concept_embeddings = tf.reshape(
-            contextualized_concept_embeddings,
+        concept_embeddings = tf.reshape(
+            concept_embeddings,
             shape=(-1, num_of_visits, num_of_concepts, embedding_size)
         )
-        # Step 2 generate augmented visit embeddings
+        # Step 2 generate visit embeddings
         # Slice out the first contextualized embedding of each visit
         # (batch_size, num_of_visits, embedding_size)
-        visit_embeddings = contextualized_concept_embeddings[:, :, 0]
-
-        # Reshape the data in visit view back to patient view:
-        # (batch, num_of_visits * num_of_concepts, embedding_size)
-        contextualized_concept_embeddings = tf.reshape(
-            contextualized_concept_embeddings,
-            shape=(-1, num_of_visits * num_of_concepts, embedding_size)
-        )
+        visit_embeddings = concept_embeddings[:, :, 0]
 
         # Step 3 decoder applied to patient level
         # Feed augmented visit embeddings into encoders to get contextualized visit embeddings
         # x, enc_output, decoder_mask, encoder_mask
-        for visit_decoder in visit_decoders:
-            visit_embeddings, _, _ = visit_decoder(
-                visit_embeddings,
-                contextualized_concept_embeddings,
-                visit_concept_mask,
-                global_concept_embeddings_mask
-            )
-
-        global_concept_embeddings, _ = multi_head_attention_layer(
+        visit_embeddings, _ = visit_encoder_layer(
             visit_embeddings,
-            visit_embeddings,
-            contextualized_concept_embeddings,
-            visit_concept_mask)
-
-        global_concept_embeddings = global_embedding_dropout_layer(
-            global_concept_embeddings
+            visit_concept_mask
         )
 
-        global_concept_embeddings = global_concept_embeddings_normalization(
-            global_concept_embeddings + contextualized_concept_embeddings
+        # Merge the visit embeddings back into the concept embeddings
+        concept_embeddings += (
+                concept_embeddings * merge_matrix_inverse +
+                tf.expand_dims(
+                    visit_embeddings,
+                    axis=-2
+                ) * merge_matrix
         )
 
-        global_concept_embeddings = tf.reshape(
-            global_concept_embeddings,
-            (-1, num_of_visits, num_of_concepts, embedding_size)
-        )
+    # Reshape the data in visit view back to patient view:
+    # (batch, num_of_visits * num_of_concepts, embedding_size)
+    concept_embeddings = tf.reshape(
+        concept_embeddings,
+        shape=(-1, num_of_visits * num_of_concepts, embedding_size)
+    )
 
-        temporal_concept_embeddings = tf.reshape(
-            global_concept_embeddings,
-            (-1, num_of_concepts, embedding_size)
-        )
+    global_concept_embeddings, _ = multi_head_attention_layer(
+        visit_embeddings,
+        visit_embeddings,
+        concept_embeddings,
+        visit_concept_mask)
 
-    global_concept_embeddings = tf.reshape(
-        global_concept_embeddings,
-        (-1, num_of_visits * num_of_concepts, embedding_size)
+    global_concept_embeddings = global_embedding_dropout_layer(
+        global_concept_embeddings
+    )
+
+    global_concept_embeddings = global_concept_embeddings_normalization(
+        global_concept_embeddings + concept_embeddings
     )
 
     concept_output_layer = TiedOutputEmbedding(
