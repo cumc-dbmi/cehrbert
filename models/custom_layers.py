@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 
-from keras.utils import get_custom_objects
+from tensorflow.keras.utils import get_custom_objects
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 from keras_transformer.bert import MaskedPenalizedSparseCategoricalCrossentropy
 
@@ -357,7 +357,8 @@ class TimeEmbeddingLayer(tf.keras.layers.Layer):
             time_stamps = tf.concat(
                 [time_stamps[:, 0:1] * 0, time_stamps[:, 1:] - time_stamps[:, :-1]], axis=-1)
         next_input = tf.expand_dims(time_stamps, axis=-1) * self.w + self.phi
-        time_embeddings = tf.concat([next_input[:, 0:1, :], tf.sin(next_input[:, 1:, :])], axis=1)
+        time_embeddings = tf.concat([next_input[:, 0:1, :], tf.concat(
+            [next_input[:, 1:, 0:1], tf.sin(next_input[:, 1:, 1:])], axis=-1)], axis=1)
         return time_embeddings
 
 
