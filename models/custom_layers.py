@@ -320,7 +320,7 @@ class PositionalEncodingLayer(tf.keras.layers.Layer):
         config['embedding_size'] = self.embedding_size
         return config
 
-    def call(self, concept_embeddings, visit_concept_orders, **kwargs):
+    def call(self, visit_concept_orders):
         # Normalize the visit_orders using the smallest visit_concept_orders
         # Take the absolute value to make sure the padded values are not negative after
         # normalization
@@ -328,7 +328,7 @@ class PositionalEncodingLayer(tf.keras.layers.Layer):
             tf.math.reduce_min(visit_concept_orders, axis=1), axis=-1))
         # Get the same positional encodings for the concepts with the same visit_order
         positional_embeddings = tf.gather(self.pos_encoding, visit_concept_orders, axis=0)
-        return concept_embeddings + positional_embeddings
+        return positional_embeddings
 
 
 class TimeEmbeddingLayer(tf.keras.layers.Layer):
