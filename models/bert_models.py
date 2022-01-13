@@ -54,19 +54,21 @@ def transformer_bert_model(
     embedding_layer = ReusableEmbedding(
         vocab_size, embedding_size,
         input_length=max_seq_length,
-        name='bpe_embeddings',
-        # Regularization is based on paper "A Comparative Study on
-        # Regularization Strategies for Embedding-based Neural Networks"
-        # https://arxiv.org/pdf/1508.03721.pdf
+        name='concept_embeddings',
         embeddings_regularizer=l2_regularizer)
 
-    visit_segment_layer = VisitEmbeddingLayer(visit_order_size=3,
-                                              embedding_size=embedding_size)
-    encoder = Encoder(name='encoder',
-                      num_layers=depth,
-                      d_model=embedding_size,
-                      num_heads=num_heads,
-                      dropout_rate=transformer_dropout)
+    visit_segment_layer = VisitEmbeddingLayer(
+        visit_order_size=3,
+        embedding_size=embedding_size,
+        name='visit_segment'
+    )
+
+    encoder = Encoder(
+        name='encoder',
+        num_layers=depth,
+        d_model=embedding_size,
+        num_heads=num_heads,
+        dropout_rate=transformer_dropout)
 
     output_layer = TiedOutputEmbedding(
         projection_regularizer=l2_regularizer,
@@ -74,9 +76,13 @@ def transformer_bert_model(
         add_biases=use_time_embedding,
         name='concept_prediction_logits')
 
-    softmax_layer = tf.keras.layers.Softmax(name='concept_predictions')
+    softmax_layer = tf.keras.layers.Softmax(
+        name='concept_predictions'
+    )
 
-    next_step_input, embedding_matrix = embedding_layer(masked_concept_ids)
+    next_step_input, embedding_matrix = embedding_layer(
+        masked_concept_ids
+    )
 
     if use_behrt:
         ages = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
@@ -89,18 +95,48 @@ def transformer_bert_model(
         next_step_input += positional_encoding_layer(visit_concept_orders)
 
     elif use_time_embedding:
-        time_stamps = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
-                                            name='time_stamps')
-        ages = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
-                                     name='ages')
+        time_stamps = tf.keras.layers.Input(
+            shape=(max_seq_length,),
+            dtype='int32',
+            name='time_stamps')
+        ages = tf.keras.layers.Input(
+            shape=(max_seq_length,),
+            dtype='int32',
+            name='ages')
         default_inputs.extend([time_stamps, ages])
-        time_embedding_layer = TimeEmbeddingLayer(embedding_size=time_embeddings_size)
-        age_embedding_layer = TimeEmbeddingLayer(embedding_size=time_embeddings_size)
-        scale_back_concat_layer = tf.keras.layers.Dense(embedding_size, activation='tanh')
-        time_embeddings = time_embedding_layer(time_stamps)
-        age_embeddings = age_embedding_layer(ages)
+        # # define the time embedding layer for absolute time stamps (since 1970)
+        time_embedding_layer = TimeEmbeddingLayer(
+            embedding_size=time_embeddings_size,
+            name='time_embedding_layer')
+        # define the age embedding layer for the age w.r.t the medical record
+        age_embedding_layer = TimeEmbeddingLayer(
+            embedding_size=time_embeddings_size,
+            name='age_embedding_layer')
+        positional_encoding_layer = PositionalEncodingLayer(
+            max_sequence_length=max_seq_length,
+            embedding_size=time_embeddings_size,
+            name='positional_encoding_layer')
+
+        scale_back_concat_layer = tf.keras.layers.Dense(
+            embedding_size,
+            activation='tanh',
+            name='scale_pat_seq_layer'
+        )
+        time_embeddings = time_embedding_layer(
+            time_stamps
+        )
+        age_embeddings = age_embedding_layer(
+            ages
+        )
+        positional_encodings = positional_encoding_layer(
+            visit_concept_orders
+        )
         next_step_input = scale_back_concat_layer(
-            tf.concat([next_step_input, time_embeddings, age_embeddings], axis=-1))
+            tf.concat(
+                [next_step_input, time_embeddings, age_embeddings, positional_encodings],
+                axis=-1
+            )
+        )
     else:
         positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
                                                             embedding_size=embedding_size)
