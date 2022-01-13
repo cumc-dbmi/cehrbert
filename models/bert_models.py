@@ -86,7 +86,7 @@ def transformer_bert_model(
         next_step_input = next_step_input + age_embedding_layer(ages)
         positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
                                                             embedding_size=embedding_size)
-        next_step_input = positional_encoding_layer(next_step_input, visit_concept_orders)
+        next_step_input += positional_encoding_layer(visit_concept_orders)
 
     elif use_time_embedding:
         time_stamps = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
@@ -104,7 +104,7 @@ def transformer_bert_model(
     else:
         positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
                                                             embedding_size=embedding_size)
-        next_step_input = positional_encoding_layer(next_step_input, visit_concept_orders)
+        next_step_input += positional_encoding_layer(visit_concept_orders)
 
     # Building a Vanilla Transformer (described in
     # "Attention is all you need", 2017)

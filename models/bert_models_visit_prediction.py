@@ -116,7 +116,7 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
         input_for_encoder = input_for_encoder + age_embedding_layer(ages)
         positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
                                                             embedding_size=embedding_size)
-        input_for_encoder = positional_encoding_layer(input_for_encoder, visit_concept_orders)
+        input_for_encoder += positional_encoding_layer(visit_concept_orders)
 
     elif use_time_embedding:
         # additional inputs with time embeddings
@@ -157,7 +157,7 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
     else:
         positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
                                                             embedding_size=embedding_size)
-        input_for_encoder = positional_encoding_layer(input_for_encoder, visit_concept_orders)
+        input_for_encoder += positional_encoding_layer(visit_concept_orders)
 
     input_for_encoder, _ = encoder(input_for_encoder, concept_mask)
 
