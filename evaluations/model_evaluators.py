@@ -2,7 +2,6 @@ import copy
 from abc import abstractmethod, ABC
 from sklearn.model_selection import KFold
 from sklearn.model_selection import train_test_split
-from sklearn.model_selection import GridSearchCV
 
 from scipy.sparse import csr_matrix, hstack
 from sklearn.preprocessing import normalize, StandardScaler
@@ -10,6 +9,7 @@ from sklearn.pipeline import Pipeline
 from tensorflow.python.keras.preprocessing.text import Tokenizer
 
 from models.evaluation_models import *
+from models.loss_schedulers import CosineLRSchedule
 from trainers.model_trainer import AbstractModel
 from utils.model_utils import *
 from data_generators.learning_objective import post_pad_pre_truncate
@@ -35,12 +35,14 @@ class AbstractModelEvaluator(AbstractModel):
                  num_of_folds,
                  is_transfer_learning: bool = False,
                  training_percentage: float = 1.0,
+                 learning_rate: float = 1e-4,
                  *args, **kwargs):
         self._dataset = copy.copy(dataset)
         self._evaluation_folder = evaluation_folder
         self._num_of_folds = num_of_folds
         self._training_percentage = min(training_percentage, 1.0)
         self._is_transfer_learning = is_transfer_learning
+        self._learning_rate = learning_rate
 
         if is_transfer_learning:
             extension = 'transfer_learning_{:.2f}'.format(self._training_percentage).replace('.',
@@ -147,13 +149,16 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         Standard callbacks for the evaluations
         :return:
         """
+        learning_rate_scheduler = tf.keras.callbacks.LearningRateScheduler(
+            CosineLRSchedule(lr_high=self._learning_rate, lr_low=1e-8, initial_period=10),
+            verbose=1)
         early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
                                                           patience=1,
                                                           restore_best_weights=True)
         model_checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath=self.get_model_path(),
                                                               monitor='val_loss', mode='auto',
                                                               save_best_only=True, verbose=1)
-        return [early_stopping, model_checkpoint]
+        return [learning_rate_scheduler, early_stopping, model_checkpoint]
 
     @abstractmethod
     def extract_model_inputs(self):
@@ -197,7 +202,7 @@ class BiLstmModelEvaluator(SequenceModelEvaluator):
                                          embedding_size,
                                          embeddings)
             model.compile(loss='binary_crossentropy',
-                          optimizer=tf.keras.optimizers.Adam(1e-4),
+                          optimizer=tf.keras.optimizers.Adam(self._learning_rate),
                           metrics=get_metrics())
             return model
 
@@ -249,7 +254,7 @@ class BertLstmModelEvaluator(SequenceModelEvaluator):
                 model = create_model_fn(self._max_seq_length, self._bert_model_path)
 
             model.compile(loss='binary_crossentropy',
-                          optimizer=tf.keras.optimizers.Adam(1e-4),
+                          optimizer=tf.keras.optimizers.Adam(self._learning_rate),
                           metrics=get_metrics())
             return model
 
@@ -304,7 +309,7 @@ class BertFeedForwardModelEvaluator(BertLstmModelEvaluator):
                 self.get_logger().exception(e)
                 model = create_vanilla_feed_forward_model((self._bert_model_path))
             model.compile(loss='binary_crossentropy',
-                          optimizer=tf.keras.optimizers.Adam(1e-4),
+                          optimizer=tf.keras.optimizers.Adam(self._learning_rate),
                           metrics=get_metrics())
             return model
 
@@ -336,7 +341,7 @@ class SlidingBertModelEvaluator(BertLstmModelEvaluator):
                     context_window=self._context_window,
                     stride=self._stride)
             model.compile(loss='binary_crossentropy',
-                          optimizer=tf.keras.optimizers.Adam(1e-4),
+                          optimizer=tf.keras.optimizers.Adam(self._learning_rate),
                           metrics=get_metrics())
             return model
 
@@ -393,7 +398,7 @@ class RandomVanillaLstmBertModelEvaluator(BertLstmModelEvaluator):
                     use_time_embedding=self._use_time_embedding,
                     time_embeddings_size=self._time_embeddings_size)
             model.compile(loss='binary_crossentropy',
-                          optimizer=tf.keras.optimizers.Adam(1e-4),
+                          optimizer=tf.keras.optimizers.Adam(self._learning_rate),
                           metrics=get_metrics())
             return model
 
