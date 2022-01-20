@@ -825,6 +825,7 @@ def create_hierarchical_sequence_data(person, visit_occurrence, patient_event,
 
     patient_sequence = patient_sequence \
         .where(F.col('num_of_visits') <= max_num_of_visits_per_person) \
+        .withColumn('visit_rank_orders', F.col('patient_list.visit_rank_order')) \
         .withColumn('concept_orders', F.col('patient_list.visit_concept_orders')) \
         .withColumn('concept_ids', F.col('patient_list.visit_concept_ids')) \
         .withColumn('dates', F.col('patient_list.visit_concept_dates')) \

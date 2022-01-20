@@ -358,7 +358,7 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
     required_columns = ['concept_ids', 'dates',
                         'visit_segments', 'ages',
                         'visit_dates', 'visit_masks',
-                        'time_interval_atts']
+                        'time_interval_atts', 'visit_rank_orders']
 
     def __init__(self, concept_tokenizer: ConceptTokenizer,
                  max_num_of_visits: int,
@@ -377,7 +377,8 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
             'pat_mask': int32,
             'visit_segment': int32,
             'visit_time_delta_att': int32,
-            'visit_mask': int32
+            'visit_mask': int32,
+            'visit_rank_order': int32
         }
         output_dict_schema = {'concept_predictions': int32}
         return input_dict_schema, output_dict_schema
@@ -395,7 +396,8 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
 
         (
             output_concept_masks, masked_concepts, concepts, dates, ages,
-            visit_segments, visit_dates, visit_masks, time_interval_atts
+            visit_segments, visit_dates, visit_masks, time_interval_atts,
+            visit_rank_orders
         ) = zip(*list(map(self._make_record, rows)))
 
         unused_token_id = self._concept_tokenizer.get_unused_token_id()
@@ -424,6 +426,8 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
 
         visit_segments = np.stack(visit_segments)
 
+        visit_rank_orders = np.stack(visit_rank_orders)
+
         # The auxiliary inputs for bert
         dates = np.stack(
             pd.Series(dates) \
@@ -443,7 +447,8 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
                       'pat_seq_age': ages,
                       'visit_segment': visit_segments,
                       'visit_time_delta_att': time_interval_atts,
-                      'visit_mask': visit_masks}
+                      'visit_mask': visit_masks,
+                      'visit_rank_order': visit_rank_orders}
 
         output_concept_masks = np.stack(
             pd.Series(output_concept_masks) \
@@ -473,19 +478,31 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
         concepts = self._pad_visits(row.concept_ids[start_index:end_index], '0')
         dates = self._pad_visits(row.dates[start_index:end_index], 0)
         ages = self._pad_visits(row.ages[start_index:end_index], 0)
-        visit_segments = self._pad_visits(row.visit_segments[start_index:end_index], 0, False)
-        visit_dates = self._pad_visits(row.visit_dates[start_index:end_index], 0, False)
-        visit_masks = self._pad_visits(row.visit_masks[start_index:end_index], 1, False)
+        visit_segments = self._pad_visits(
+            row.visit_segments[start_index:end_index], 0, False
+        )
+        visit_dates = self._pad_visits(
+            row.visit_dates[start_index:end_index], 0, False
+        )
+        visit_masks = self._pad_visits(
+            row.visit_masks[start_index:end_index], 1, False
+        )
         # Skip the first element because there is no time interval for it
-        time_interval_atts = self._pad_visits(row.time_interval_atts[start_index:end_index], '0',
-                                              False)[1:]
+        time_interval_atts = self._pad_visits(
+            row.time_interval_atts[start_index:end_index], '0',
+            False)[1:]
+        visit_rank_orders = self._pad_visits(
+            row.visit_rank_orders[start_index:end_index],
+            row.visit_rank_orders[0],
+            False)
 
         masked_concepts, output_concept_masks = zip(
             *list(map(self._mask_concepts, concepts)))
 
         return (
             output_concept_masks, masked_concepts, concepts, dates, ages,
-            visit_segments, visit_dates, visit_masks, time_interval_atts
+            visit_segments, visit_dates, visit_masks, time_interval_atts,
+            visit_rank_orders
         )
 
     def _pad_visits(self, field_values, pad_value, is_visit_level=True):
