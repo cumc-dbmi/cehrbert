@@ -1,5 +1,4 @@
 from models.custom_layers import *
-import numpy as np
 
 
 def transformer_hierarchical_bert_model(num_of_visits,
@@ -40,10 +39,7 @@ def transformer_hierarchical_bert_model(num_of_visits,
 
     pat_seq = tf.keras.layers.Input(shape=(num_of_visits, num_of_concepts,), dtype='int32',
                                     name='pat_seq')
-    pat_seq_age = tf.keras.layers.Input(shape=(num_of_visits, num_of_concepts,), dtype='int32',
-                                        name='pat_seq_age')
-    pat_seq_time = tf.keras.layers.Input(shape=(num_of_visits, num_of_concepts,), dtype='int32',
-                                         name='pat_seq_time')
+
     pat_mask = tf.keras.layers.Input(shape=(num_of_visits, num_of_concepts,), dtype='int32',
                                      name='pat_mask')
 
@@ -60,15 +56,11 @@ def transformer_hierarchical_bert_model(num_of_visits,
         dtype='int32',
         name='visit_rank_order')
 
-    default_inputs = [pat_seq, pat_seq_age, pat_seq_time, pat_mask,
-                      visit_segment, visit_mask, visit_rank_order]
+    default_inputs = [pat_seq, pat_mask, visit_segment, visit_mask, visit_rank_order]
 
     pat_concept_mask = tf.reshape(pat_mask, (-1, num_of_concepts))[:, tf.newaxis, tf.newaxis, :]
 
-    visit_mask_with_att = tf.reshape(tf.stack([visit_mask, visit_mask], axis=2),
-                                     (-1, num_of_visits * 2))[:, 1:]
-
-    visit_concept_mask = visit_mask_with_att[:, tf.newaxis, tf.newaxis, :]
+    visit_concept_mask = visit_mask[:, tf.newaxis, tf.newaxis, :]
 
     # output the embedding_matrix:
     l2_regularizer = (tf.keras.regularizers.l2(l2_reg_penalty) if l2_reg_penalty else None)
@@ -84,15 +76,6 @@ def transformer_hierarchical_bert_model(num_of_visits,
                                               embedding_size=embedding_size,
                                               name='visit_segment_layer')
 
-    # define the time embedding layer for absolute time stamps (since 1970)
-    time_embedding_layer = TimeEmbeddingLayer(
-        embedding_size=time_embeddings_size,
-        name='time_embedding_layer')
-    # define the age embedding layer for the age w.r.t the medical record
-    age_embedding_layer = TimeEmbeddingLayer(
-        embedding_size=time_embeddings_size,
-        name='age_embedding_layer')
-
     positional_encoding_layer = PositionalEncodingLayer(
         max_sequence_length=num_of_visits * num_of_concepts,
         embedding_size=time_embeddings_size,
@@ -105,8 +88,6 @@ def transformer_hierarchical_bert_model(num_of_visits,
 
     concept_embeddings, embedding_matrix = concept_embedding_layer(pat_seq)
 
-    pt_seq_age_embeddings = age_embedding_layer(pat_seq_age)
-    pt_seq_time_embeddings = time_embedding_layer(pat_seq_time)
     # (batch, num_of_visits, time_embedding_size)
     visit_positional_encoding = positional_encoding_layer(visit_rank_order)
     pat_seq_positional_encoding = tf.tile(
@@ -115,8 +96,6 @@ def transformer_hierarchical_bert_model(num_of_visits,
     concept_embeddings = temporal_transformation_layer(
         tf.concat(
             [concept_embeddings,
-             pt_seq_age_embeddings,
-             pt_seq_time_embeddings,
              pat_seq_positional_encoding],
             axis=-1, name='concat_for_encoder')
     )
