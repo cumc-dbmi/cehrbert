@@ -280,7 +280,7 @@ def transformer_hierarchical_bert_model(num_of_visits,
         )
 
         # Slice out contextualized att embeddings and overwrite att embeddings for next iteration
-        att_embeddings = identity @ augmented_visit_embeddings
+        att_embeddings = identity_inverse @ augmented_visit_embeddings
 
         # Merge the visit embeddings back into the concept embeddings
         concept_embeddings += (
