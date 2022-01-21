@@ -109,6 +109,13 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
             max_seq_len=self._max_num_of_visits
         )
 
+        # Process visit_rank_orders
+        padded_visit_rank_orders = post_pad_pre_truncate(
+            self._dataset.visit_rank_orders,
+            pad_value=0,
+            max_seq_len=self._max_num_of_visits
+        )
+
         padded_visit_mask = post_pad_pre_truncate(
             self._dataset.visit_masks,
             pad_value=1,
@@ -121,6 +128,7 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
             'pat_seq_time': padded_dates,
             'pat_seq_age': padded_ages,
             'visit_segment': padded_visit_segments,
+            'visit_rank_order': padded_visit_rank_orders,
             'visit_time_delta_att': padded_att_tokens,
             'visit_mask': padded_visit_mask,
             'age': np.expand_dims(self._dataset.age, axis=-1)
