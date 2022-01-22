@@ -330,7 +330,7 @@ def transformer_hierarchical_bert_model(num_of_visits,
 
     if include_second_tiered_learning_objectives:
         # Slice out the the visit embeddings (CLS tokens)
-        visit_embeddings_without_att = identity_inverse @ augmented_visit_embeddings
+        visit_embeddings_without_att = identity @ augmented_visit_embeddings
 
         visit_prediction_dense = tf.keras.layers.Dense(
             visit_vocab_size,
