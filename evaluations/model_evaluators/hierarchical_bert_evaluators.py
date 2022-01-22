@@ -48,8 +48,13 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
             map(lambda c: (c == self._tokenizer.get_unused_token_id()).astype(int), concept_ids))
 
     def _pad(self, x, padded_token):
-        return pad_sequences(np.asarray(x), maxlen=self._max_num_of_concepts, padding='post',
-                             value=padded_token, dtype='int32')
+        return pad_sequences(
+            np.asarray(x),
+            maxlen=self._max_num_of_concepts,
+            padding='post',
+            truncating='post',
+            value=padded_token,
+            dtype='int32')
 
     def extract_model_inputs(self):
         max_seq_len = self._max_num_of_concepts * self._max_num_of_visits
@@ -60,6 +65,7 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
             .apply(convert_to_list_of_lists) \
             .apply(self._tokenizer.encode) \
             .apply(lambda tokens: self._pad(tokens, padded_token=unused_token_id))
+
         padded_token_ids = np.reshape(
             post_pad_pre_truncate(
                 token_ids.apply(lambda d: d.flatten()),

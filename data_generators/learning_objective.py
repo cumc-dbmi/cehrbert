@@ -384,8 +384,13 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
         return input_dict_schema, output_dict_schema
 
     def _pad(self, x, padded_token):
-        return pad_sequences(np.asarray(x), maxlen=self._max_num_of_concepts, padding='post',
-                             value=padded_token, dtype='int32')
+        return pad_sequences(
+            np.asarray(x),
+            maxlen=self._max_num_of_concepts,
+            padding='post',
+            truncating='post',
+            value=padded_token,
+            dtype='int32')
 
     def _concept_mask(self, concept_ids):
         return list(map(lambda c: (c == self._concept_tokenizer.get_unused_token_id()).astype(int),
