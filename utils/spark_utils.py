@@ -782,6 +782,7 @@ def create_hierarchical_sequence_data(person, visit_occurrence, patient_event,
              F.first('visit_rank_order').alias('visit_rank_order'),
              F.first('visit_concept_id').alias('visit_concept_id'),
              F.first('is_readmission').alias('is_readmission'),
+             F.first('is_inpatient').alias('is_inpatient'),
              F.first('visit_segment').alias('visit_segment'),
              F.first('time_interval_att').alias('time_interval_att'),
              F.first('prolonged_stay').alias('prolonged_stay'),
@@ -805,6 +806,7 @@ def create_hierarchical_sequence_data(person, visit_occurrence, patient_event,
                                  'visit_segment',
                                  'num_of_concepts',
                                  'is_readmission',
+                                 'is_inpatient',
                                  'time_interval_att',
                                  'visit_concept_orders',
                                  'visit_concept_ids',
@@ -838,6 +840,8 @@ def create_hierarchical_sequence_data(person, visit_occurrence, patient_event,
         .withColumn('time_interval_atts', F.col('patient_list.time_interval_att')) \
         .withColumn('is_readmissions',
                     F.col('patient_list.is_readmission').cast(T.ArrayType(T.IntegerType()))) \
+        .withColumn('is_inpatients',
+                    F.col('patient_list.is_inpatient').cast(T.ArrayType(T.IntegerType()))) \
         .withColumn('visit_prolonged_stays',
                     F.col('patient_list.prolonged_stay').cast(T.ArrayType(T.IntegerType()))) \
         .drop('patient_list')
@@ -853,6 +857,7 @@ def create_visit_person_join(pandas_udf_to_att, person, visit_occurrence):
     visit_windowing = W.partitionBy('person_id').orderBy('visit_start_date',
                                                          'visit_end_date',
                                                          'visit_occurrence_id')
+    is_inpatient_logic = F.col('visit_concept_id').isin([9201, 262]).cast('integer')
     readmission_logic = ((F.col('time_interval') <= 30) \
                          & (F.col('visit_concept_id').isin([9201, 262])) \
                          & (F.col('prev_visit_concept_id').isin([9201, 262]))).cast('integer')
@@ -872,7 +877,9 @@ def create_visit_person_join(pandas_udf_to_att, person, visit_occurrence):
         .withColumn('time_interval',
                     F.when(F.col('time_interval') < 0, F.lit(0)).otherwise(F.col('time_interval'))) \
         .withColumn('time_interval_att', pandas_udf_to_att('time_interval')) \
+        .withColumn('is_inpatient', is_inpatient_logic) \
         .withColumn('is_readmission', readmission_logic)
+
     visit_occurrence = visit_occurrence \
         .withColumn('prolonged_stay',
                     (F.datediff('visit_end_date', 'visit_start_date') >= 7).cast('integer')) \
@@ -881,6 +888,7 @@ def create_visit_person_join(pandas_udf_to_att, person, visit_occurrence):
                 'person_id',
                 'prolonged_stay',
                 'is_readmission',
+                'is_inpatient',
                 'time_interval_att',
                 'visit_rank_order',
                 'visit_start_date',
