@@ -7,6 +7,7 @@ from data_generators.learning_objective import post_pad_pre_truncate
 from evaluations.model_evaluators.model_evaluators import AbstractModelEvaluator, get_metrics
 from models.evaluation_models import create_bi_lstm_model
 from utils.model_utils import *
+from models.loss_schedulers import CosineLRSchedule
 
 
 class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
@@ -83,13 +84,16 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         Standard callbacks for the evaluations
         :return:
         """
+        learning_rate_scheduler = tf.keras.callbacks.LearningRateScheduler(
+            CosineLRSchedule(lr_high=self._learning_rate, lr_low=1e-8, initial_period=10),
+            verbose=1)
         early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
                                                           patience=1,
                                                           restore_best_weights=True)
         model_checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath=self.get_model_path(),
                                                               monitor='val_loss', mode='auto',
                                                               save_best_only=True, verbose=1)
-        return [early_stopping, model_checkpoint]
+        return [learning_rate_scheduler, early_stopping, model_checkpoint]
 
     @abstractmethod
     def extract_model_inputs(self):

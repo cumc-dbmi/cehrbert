@@ -25,12 +25,14 @@ class AbstractModelEvaluator(AbstractModel):
                  num_of_folds,
                  is_transfer_learning: bool = False,
                  training_percentage: float = 1.0,
+                 learning_rate: float = 1e-4,
                  *args, **kwargs):
         self._dataset = copy.copy(dataset)
         self._evaluation_folder = evaluation_folder
         self._num_of_folds = num_of_folds
         self._training_percentage = min(training_percentage, 1.0)
         self._is_transfer_learning = is_transfer_learning
+        self._learning_rate = learning_rate
 
         if is_transfer_learning:
             extension = 'transfer_learning_{:.2f}'.format(self._training_percentage).replace('.',
