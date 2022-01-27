@@ -181,15 +181,6 @@ def transformer_hierarchical_bert_model(num_of_visits,
         dropout_rate=transformer_dropout
     )
 
-    # Second bert applied at the patient level to the visit embeddings
-    visit_encoder_layer = Encoder(
-        name='visit_encoder',
-        num_layers=depth,
-        d_model=embedding_size,
-        num_heads=num_heads,
-        dropout_rate=transformer_dropout
-    )
-
     # Insert the att embeddings between the visit embeddings using the following trick
     identity = tf.constant(
         np.insert(
@@ -210,16 +201,6 @@ def transformer_hierarchical_bert_model(num_of_visits,
             axis=1),
         dtype=tf.float32)
 
-    merge_matrix = tf.constant(
-        [1] + [0] * (num_of_concepts - 1),
-        dtype=tf.float32
-    )[tf.newaxis, tf.newaxis, :, tf.newaxis]
-
-    merge_matrix_inverse = tf.constant(
-        [0] + [1] * (num_of_concepts - 1),
-        dtype=tf.float32
-    )[tf.newaxis, tf.newaxis, :, tf.newaxis]
-
     multi_head_attention_layer = MultiHeadAttention(
         d_model=embedding_size,
         num_heads=num_heads
@@ -232,65 +213,46 @@ def transformer_hierarchical_bert_model(num_of_visits,
         epsilon=1e-6
     )
 
-    for _ in range(num_of_exchanges):
-        # Step 1
-        # (batch_size * num_of_visits, num_of_concepts, embedding_size)
-        concept_embeddings = tf.reshape(
-            concept_embeddings,
-            shape=(-1, num_of_concepts, embedding_size)
-        )
+    # for _ in range(num_of_exchanges):
+    # Step 1
+    # (batch_size * num_of_visits, num_of_concepts, embedding_size)
+    concept_embeddings = tf.reshape(
+        concept_embeddings,
+        shape=(-1, num_of_concepts, embedding_size)
+    )
 
-        concept_embeddings, _ = concept_encoder(
-            concept_embeddings,  # be reused
-            pat_concept_mask  # not change
-        )
+    concept_embeddings, _ = concept_encoder(
+        concept_embeddings,  # be reused
+        pat_concept_mask  # not change
+    )
 
-        # (batch_size, num_of_visits, num_of_concepts, embedding_size)
-        concept_embeddings = tf.reshape(
-            concept_embeddings,
-            shape=(-1, num_of_visits, num_of_concepts, embedding_size)
-        )
-        # Step 2 generate visit embeddings
-        # Slice out the first contextualized embedding of each visit
-        # (batch_size, num_of_visits, embedding_size)
-        visit_embeddings = concept_embeddings[:, :, 0]
+    # (batch_size, num_of_visits, num_of_concepts, embedding_size)
+    concept_embeddings = tf.reshape(
+        concept_embeddings,
+        shape=(-1, num_of_visits, num_of_concepts, embedding_size)
+    )
+    # Step 2 generate visit embeddings
+    # Slice out the first contextualized embedding of each visit
+    # (batch_size, num_of_visits, embedding_size)
+    visit_embeddings = concept_embeddings[:, :, 0]
 
-        # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
-        expanded_visit_embeddings = tf.transpose(
-            tf.transpose(visit_embeddings, perm=[0, 2, 1]) @ identity,
-            perm=[0, 2, 1]
-        )
+    # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
+    expanded_visit_embeddings = tf.transpose(
+        tf.transpose(visit_embeddings, perm=[0, 2, 1]) @ identity,
+        perm=[0, 2, 1]
+    )
 
-        # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
-        expanded_att_embeddings = tf.transpose(
-            tf.transpose(att_embeddings, perm=[0, 2, 1]) @ identity_inverse,
-            perm=[0, 2, 1]
-        )
+    # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
+    expanded_att_embeddings = tf.transpose(
+        tf.transpose(att_embeddings, perm=[0, 2, 1]) @ identity_inverse,
+        perm=[0, 2, 1]
+    )
 
-        # Insert the att embeddings between visit embeddings
-        # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
-        augmented_visit_embeddings = expanded_visit_embeddings + expanded_att_embeddings
+    # Insert the att embeddings between visit embeddings
+    # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
+    contextualized_visit_embeddings = expanded_visit_embeddings + expanded_att_embeddings
 
-        # Step 3 decoder applied to patient level
-        # Feed augmented visit embeddings into encoders to get contextualized visit embeddings
-        # x, enc_output, decoder_mask, encoder_mask
-        contextualized_visit_embeddings, _ = visit_encoder_layer(
-            augmented_visit_embeddings,
-            visit_mask_with_att
-        )
-
-        # Slice out contextualized att embeddings and overwrite att embeddings for next iteration
-        att_embeddings = identity_inverse @ contextualized_visit_embeddings
-
-        # Merge the visit embeddings back into the concept embeddings
-        concept_embeddings += (
-                concept_embeddings * merge_matrix_inverse +
-                tf.expand_dims(
-                    visit_embeddings,
-                    axis=-2
-                ) * merge_matrix
-        )
-
+    # # Step 3 decoder applied to patient level
     # Reshape the data in visit view back to patient view:
     # (batch, num_of_visits * num_of_concepts, embedding_size)
     concept_embeddings = tf.reshape(
