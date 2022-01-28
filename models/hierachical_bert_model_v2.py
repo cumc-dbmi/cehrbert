@@ -74,15 +74,23 @@ def transformer_hierarchical_bert_model(num_of_visits,
         name='visit_time_delta_att'
     )
 
+    visit_rank_order = tf.keras.layers.Input(
+        shape=(num_of_visits,),
+        dtype='int32',
+        name='visit_rank_order')
+
     # Create a list of inputs so the model could reference these later
     default_inputs = [pat_seq, pat_seq_age, pat_seq_time, pat_mask,
-                      visit_segment, visit_mask, visit_time_delta_att]
+                      visit_segment, visit_mask, visit_time_delta_att,
+                      visit_rank_order]
 
+    # Expand dimensions for masking MultiHeadAttention in Concept Encoder
     pat_concept_mask = tf.reshape(
         pat_mask,
         shape=(-1, num_of_concepts)
     )[:, tf.newaxis, tf.newaxis, :]
 
+    # Expand dimension for masking MultiHeadAttention in Visit Encoder
     visit_mask_with_att = (tf.reshape(
         tf.stack([visit_mask, visit_mask], axis=2),
         shape=(-1, num_of_visits * 2)
@@ -97,12 +105,6 @@ def transformer_hierarchical_bert_model(num_of_visits,
         embeddings_regularizer=l2_regularizer
     )
 
-    # define the visit segment layer
-    visit_segment_layer = VisitEmbeddingLayer(
-        visit_order_size=3,
-        embedding_size=embedding_size,
-        name='visit_segment_layer'
-    )
     # define the time embedding layer for absolute time stamps (since 1970)
     time_embedding_layer = TimeEmbeddingLayer(
         embedding_size=time_embeddings_size,
@@ -113,6 +115,14 @@ def transformer_hierarchical_bert_model(num_of_visits,
         embedding_size=time_embeddings_size,
         name='age_embedding_layer'
     )
+    # define positional encoding layer for visit numbers, the visit numbers are normalized
+    # by subtracting visit numbers off the first visit number
+    positional_encoding_layer = PositionalEncodingLayer(
+        max_sequence_length=num_of_visits * num_of_concepts,
+        embedding_size=time_embeddings_size,
+        name='positional_encoding_layer'
+    )
+    # Temporal transformation
     temporal_transformation_layer = tf.keras.layers.Dense(
         embedding_size,
         activation='tanh',
@@ -135,21 +145,21 @@ def transformer_hierarchical_bert_model(num_of_visits,
     pt_seq_time_embeddings = time_embedding_layer(
         pat_seq_time
     )
+    visit_positional_encoding = positional_encoding_layer(
+        visit_rank_order
+    )
+    visit_positional_encoding = tf.tile(
+        visit_positional_encoding[:, :, tf.newaxis, :], [1, 1, num_of_concepts, 1])
 
     # (batch, num_of_visits, num_of_concepts, embedding_size)
     concept_embeddings = temporal_transformation_layer(
         tf.concat(
             [concept_embeddings,
              pt_seq_age_embeddings,
-             pt_seq_time_embeddings],
+             pt_seq_time_embeddings,
+             visit_positional_encoding],
             axis=-1, name='concat_for_encoder'
         )
-    )
-
-    # dense layer for rescale the patient sequence embeddings back to the original size
-    concept_embeddings = visit_segment_layer(
-        [visit_segment[:, :, tf.newaxis],
-         concept_embeddings]
     )
 
     # The first bert applied at the visit level
@@ -193,6 +203,12 @@ def transformer_hierarchical_bert_model(num_of_visits,
         dtype=tf.float32
     )
 
+    # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
+    expanded_visit_embeddings = tf.transpose(
+        tf.transpose(visit_embeddings, perm=[0, 2, 1]) @ identity,
+        perm=[0, 2, 1]
+    )
+
     # Create the inverse "identity" matrix for inserting att embeddings
     identity_inverse = tf.constant(
         np.insert(
@@ -201,12 +217,6 @@ def transformer_hierarchical_bert_model(num_of_visits,
             values=0,
             axis=1),
         dtype=tf.float32)
-
-    # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
-    expanded_visit_embeddings = tf.transpose(
-        tf.transpose(visit_embeddings, perm=[0, 2, 1]) @ identity,
-        perm=[0, 2, 1]
-    )
 
     # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
     expanded_att_embeddings = tf.transpose(
@@ -245,11 +255,21 @@ def transformer_hierarchical_bert_model(num_of_visits,
         num_heads=num_heads
     )
 
+    layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+    dropout1 = tf.keras.layers.Dropout(transformer_dropout)
+
     global_concept_embeddings, _ = multi_head_attention_layer(
         contextualized_visit_embeddings,
         contextualized_visit_embeddings,
         concept_embeddings,
         visit_mask_with_att)
+
+    global_concept_embeddings = layernorm1(dropout1(global_concept_embeddings))
+
+    ffn = point_wise_feed_forward_network(embedding_size, 512)
+    layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+    dropout2 = tf.keras.layers.Dropout(transformer_dropout)
+    global_concept_embeddings = layernorm2(dropout2(ffn(global_concept_embeddings)))
 
     concept_output_layer = TiedOutputEmbedding(
         projection_regularizer=l2_regularizer,
