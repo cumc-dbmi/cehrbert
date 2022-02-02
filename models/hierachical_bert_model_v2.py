@@ -57,12 +57,6 @@ def transformer_hierarchical_bert_model(num_of_visits,
         dtype='int32',
         name='pat_mask'
     )
-    visit_segment = tf.keras.layers.Input(
-        shape=(num_of_visits,),
-        dtype='int32',
-        name='visit_segment'
-    )
-
     visit_mask = tf.keras.layers.Input(
         shape=(num_of_visits,),
         dtype='int32',
@@ -81,8 +75,7 @@ def transformer_hierarchical_bert_model(num_of_visits,
 
     # Create a list of inputs so the model could reference these later
     default_inputs = [pat_seq, pat_seq_age, pat_seq_time, pat_mask,
-                      visit_segment, visit_mask, visit_time_delta_att,
-                      visit_rank_order]
+                      visit_mask, visit_time_delta_att, visit_rank_order]
 
     # Expand dimensions for masking MultiHeadAttention in Concept Encoder
     pat_concept_mask = tf.reshape(
