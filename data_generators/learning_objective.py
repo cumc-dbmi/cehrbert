@@ -536,6 +536,11 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
         if self._is_training:
             # the first position is reserved for cls, so we don't mask the first element
             for word_pos in range(1, len(concepts)):
+
+                # Do no mask the [UNKNOWN] token
+                if word_pos == self._concept_tokenizer.get_unknown_token_id():
+                    continue
+
                 if random.random() < 0.15:
                     dice = random.random()
                     if dice < 0.8:

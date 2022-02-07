@@ -1,3 +1,4 @@
+from utils.spark_utils import UNKNOWN_CONCEPT
 from typing import Optional, Sequence, Union
 from dask.dataframe import Series as dd_series
 from pandas import Series as df_series
@@ -10,6 +11,7 @@ class ConceptTokenizer:
     unused_token = ['[UNUSED]']
     mask_token = ['[MASK]']
     cls_token = ['[CLS]']
+    unknown_token = UNKNOWN_CONCEPT
 
     def __init__(self, special_tokens: Optional[Sequence[str]] = None, oov_token='0'):
         self.special_tokens = special_tokens
@@ -27,6 +29,7 @@ class ConceptTokenizer:
         self.tokenizer.fit_on_texts(self.mask_token)
         self.tokenizer.fit_on_texts(self.unused_token)
         self.tokenizer.fit_on_texts(self.cls_token)
+        self.tokenizer.fit_on_texts(self.unknown_token)
         if self.special_tokens is not None:
             self.tokenizer.fit_on_texts(self.special_tokens)
 
@@ -65,6 +68,12 @@ class ConceptTokenizer:
         while isinstance(unused_token_id, list):
             unused_token_id = unused_token_id[0]
         return unused_token_id
+
+    def get_unknown_token_id(self):
+        unknown_token_id = self.encode(self.unknown_token)
+        while isinstance(unknown_token_id, list):
+            unknown_token_id = unknown_token_id[0]
+        return unknown_token_id
 
     def get_mask_token_id(self):
         mask_token_id = self.encode(self.mask_token)
