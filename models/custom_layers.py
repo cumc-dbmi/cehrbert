@@ -239,11 +239,13 @@ class DecoderLayer(tf.keras.layers.Layer):
     def call(self, x, enc_output, decoder_mask, encoder_mask, **kwargs):
         # enc_output.shape == (batch_size, input_seq_len, d_model)
 
-        attn1, attn_weights_block1 = self.mha1(x, x, x, decoder_mask)  # (batch_size, target_seq_len, d_model)
+        attn1, attn_weights_block1 = self.mha1(x, x, x,
+                                               decoder_mask)  # (batch_size, target_seq_len, d_model)
         attn1 = self.dropout1(attn1)
         out1 = self.layernorm1(attn1 + x)
 
-        attn2, attn_weights_block2 = self.mha2(enc_output, enc_output, out1, encoder_mask)  # (batch_size, target_seq_len, d_model)
+        attn2, attn_weights_block2 = self.mha2(enc_output, enc_output, out1,
+                                               encoder_mask)  # (batch_size, target_seq_len, d_model)
         attn2 = self.dropout2(attn2, **kwargs)
         out2 = self.layernorm2(attn2 + out1)  # (batch_size, target_seq_len, d_model)
 
@@ -463,6 +465,7 @@ class BertLayer(tf.keras.layers.Layer):
         self.visit_segment_layer = [layer for layer in bert_model.layers if
                                     layer.name in ['visit_embedding_layer',
                                                    'visit_segment_layer']][0]
+        self.positional_encoding_layer = bert_model.get_layer('positional_encoding_layer')
         self.time_embedding_layer = bert_model.get_layer('time_embedding_layer')
         self.age_embedding_layer = bert_model.get_layer('age_embedding_layer')
         self.scale_pat_seq_layer = bert_model.get_layer('scale_pat_seq_layer')
@@ -478,17 +481,19 @@ class BertLayer(tf.keras.layers.Layer):
         return config
 
     def call(self, inputs, **kwargs):
-        local_concept_ids, local_visit_segments, local_time_stamps, local_ages, local_mask = inputs
+        (local_concept_ids, local_visit_segments, local_visit_concept_orders,
+         local_time_stamps, local_ages, local_mask) = inputs
 
         batch_size, max_seq_length = local_mask.get_shape().as_list()
 
         concept_embeddings, _ = self.concept_embedding_layer(local_concept_ids)
         time_embeddings = self.time_embedding_layer(local_time_stamps)
         age_embeddings = self.age_embedding_layer(local_ages)
+        positional_encoddings = self.positional_encoding_layer(local_visit_concept_orders)
         concept_mask = create_concept_mask(local_mask, max_seq_length)
 
         input_for_encoder = self.scale_pat_seq_layer(
-            tf.concat([concept_embeddings, time_embeddings, age_embeddings],
+            tf.concat([concept_embeddings, time_embeddings, age_embeddings, positional_encoddings],
                       axis=-1))
         input_for_encoder = self.visit_segment_layer([local_visit_segments, input_for_encoder])
         contextualized_embeddings, _ = self.encoder_layer(input_for_encoder, concept_mask)
@@ -541,7 +546,7 @@ class ConvolutionBertLayer(tf.keras.layers.Layer):
         return config
 
     def call(self, inputs, **kwargs):
-        concept_ids, visit_segments, time_stamps, ages, mask = inputs
+        concept_ids, visit_segments, visit_concept_orders, time_stamps, ages, mask = inputs
 
         bert_outputs = []
         bert_output_masking = []
@@ -553,10 +558,12 @@ class ConvolutionBertLayer(tf.keras.layers.Layer):
             visit_segments_step = visit_segments[:, start_index:end_index]
             time_stamps_step = time_stamps[:, start_index:end_index]
             ages_step = ages[:, start_index:end_index]
+            visit_concept_orders_step = visit_concept_orders[:, start_index:end_index]
             mask_step = mask[:, start_index:end_index]
 
             inputs_step = [concept_ids_step,
                            visit_segments_step,
+                           visit_concept_orders_step,
                            time_stamps_step,
                            ages_step,
                            mask_step]

@@ -95,6 +95,10 @@ def create_sliding_bert_model(model_path, max_seq_length, context_window, stride
     time_stamps = tf.keras.layers.Input(shape=(max_seq_length,),
                                         dtype='int32',
                                         name='time_stamps')
+    visit_concept_orders = tf.keras.layers.Input(
+        shape=(max_seq_length,),
+        dtype='int32',
+        name='visit_concept_orders')
     ages = tf.keras.layers.Input(shape=(max_seq_length,),
                                  dtype='int32',
                                  name='ages')
@@ -107,6 +111,7 @@ def create_sliding_bert_model(model_path, max_seq_length, context_window, stride
 
     conv_bert_output = convolution_bert_layer([concept_ids,
                                                visit_segments,
+                                               visit_concept_orders,
                                                time_stamps,
                                                ages,
                                                mask])
@@ -123,7 +128,7 @@ def create_sliding_bert_model(model_path, max_seq_length, context_window, stride
 
     output = output_layer(dropout_dense_layer(dense_layer(dropout_conv_layer(next_input))))
 
-    model_inputs = [concept_ids, visit_segments, time_stamps, ages, mask]
+    model_inputs = [concept_ids, visit_segments, visit_concept_orders, time_stamps, ages, mask]
     ffd_bert_model = tf.keras.models.Model(inputs=model_inputs + [age_at_index_date],
                                            outputs=output)
 
