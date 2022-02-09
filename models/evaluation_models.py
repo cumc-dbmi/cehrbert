@@ -281,8 +281,14 @@ def create_cher_bert_bi_lstm_model_with_model(model):
     )
 
     mask_embeddings = tf.cast(
-        tf.reshape(pat_mask_reordered == 0, (-1, max_seq_length))[:, :, tf.newaxis],
-        dtype=tf.float32)
+        tf.math.logical_not(
+            tf.cast(
+                tf.reshape(pat_mask_reordered, (-1, max_seq_length)),
+                dtype=tf.bool
+            )
+        ),
+        dtype=tf.float32
+    )[:, :, tf.newaxis]
 
     contextualized_embeddings = tf.math.multiply(contextualized_embeddings, mask_embeddings)
 
