@@ -15,7 +15,7 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
                                             embedding_dropout: float = 0.6,
                                             l2_reg_penalty: float = 1e-4,
                                             time_embeddings_size: int = 16,
-                                            num_hidden_state: int = 20):
+                                            num_hidden_state: int = 10):
     """
     Builds a BERT-based model (Bidirectional Encoder Representations
     from Transformers) following paper "BERT: Pre-training of Deep
