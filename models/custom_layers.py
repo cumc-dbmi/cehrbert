@@ -781,6 +781,88 @@ class HierarchicalBertLayer(tf.keras.layers.Layer):
         return global_concept_embeddings, self.identity @ visit_embeddings
 
 
+class HiddenPhenotypeLayer(tf.keras.layers.Layer):
+
+    def __init__(self,
+                 hidden_unit: int,
+                 embedding_size: int,
+                 num_heads: int,
+                 dropout_rate: float = 0.1,
+                 *args, **kwargs):
+        super(HiddenPhenotypeLayer, self).__init__(*args, **kwargs)
+        self.hidden_unit = hidden_unit
+        self.embedding_size = embedding_size
+        self.num_heads = num_heads
+        self.dropout_rate = dropout_rate
+
+        # num_hidden_state, embedding_size
+        self.hidden_unit_embedding = self.add_weight(
+            shape=(hidden_unit, embedding_size),
+            initializer=tf.keras.initializers.GlorotNormal(),
+            trainable=True,
+            name='phenotype_embeddings'
+        )
+
+        self.mha_layer = MultiHeadAttention(
+            d_model=embedding_size,
+            num_heads=num_heads
+        )
+
+        self.layer_norm_layer = tf.keras.layers.LayerNormalization(
+            epsilon=1e-6
+        )
+        self.dropout_layer = tf.keras.layers.Dropout(dropout_rate)
+
+        self.phenotype_hidden_state_layer = tf.keras.layers.Dense(
+            units=1
+        )
+
+    def get_config(self):
+        config = super().get_config()
+        config['hidden_unit'] = self.hidden_unit
+        config['embedding_size'] = self.embedding_size
+        config['num_heads'] = self.num_heads
+        config['dropout_rate'] = self.dropout_rate
+        return config
+
+    def call(self, inputs, **kwargs):
+        seq_embeddings, mask = inputs
+        # Use broadcasting to copy hidden_unit_embedding
+        # (batch_size, num_hidden_state, embedding_size)
+        expanded_phenotype_embeddings = tf.ones_like(
+            seq_embeddings
+        )[:, 0:1, 0:1] * self.hidden_unit_embedding[tf.newaxis, :, :]
+
+        # (batch_size, num_hidden_state, embedding_size)
+        context_phenotype_embeddings, _ = self.mha_layer(
+            seq_embeddings,
+            seq_embeddings,
+            expanded_phenotype_embeddings,
+            mask,
+        )
+
+        context_phenotype_embeddings = self.dropout_layer(
+            context_phenotype_embeddings,
+            **kwargs
+        )
+
+        context_phenotype_embeddings = self.layer_norm_layer(
+            expanded_phenotype_embeddings + context_phenotype_embeddings,
+            **kwargs
+        )
+
+        # (batch_size, num_hidden_state)
+        phenotype_probability_dist = tf.nn.softmax(
+            tf.squeeze(
+                self.phenotype_hidden_state_layer(
+                    context_phenotype_embeddings
+                )
+            )
+        )
+
+        return context_phenotype_embeddings, phenotype_probability_dist
+
+
 get_custom_objects().update({
     'MultiHeadAttention': MultiHeadAttention,
     'Encoder': Encoder,
@@ -797,5 +879,6 @@ get_custom_objects().update({
     'MaskedPenalizedSparseCategoricalCrossentropy': MaskedPenalizedSparseCategoricalCrossentropy,
     'BertLayer': BertLayer,
     'ConvolutionBertLayer': ConvolutionBertLayer,
-    'HierarchicalBertLayer': HierarchicalBertLayer
+    'HierarchicalBertLayer': HierarchicalBertLayer,
+    'HiddenPhenotypeLayer': HiddenPhenotypeLayer
 })

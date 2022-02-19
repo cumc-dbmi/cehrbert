@@ -3,7 +3,7 @@ import tensorflow as tf
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 
 from models.custom_layers import (VisitEmbeddingLayer, Encoder, PositionalEncodingLayer,
-                                  TimeEmbeddingLayer, MultiHeadAttention)
+                                  TimeEmbeddingLayer, MultiHeadAttention, HiddenPhenotypeLayer)
 
 
 def transformer_bert_model_visit_prediction(max_seq_length: int,
@@ -58,18 +58,6 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
         shape=(max_seq_length,),
         dtype='int32',
         name='ages')
-
-    # num_hidden_state, embedding_size
-    phenotype_matrix = tf.Variable(
-        tf.random_uniform_initializer(
-            minval=-1.,
-            maxval=1.
-        )(
-            shape=[num_hidden_state, embedding_size],
-            dtype=tf.float32
-        ),
-        name='phenotype_embeddings'
-    )
 
     concept_mask = mask[:, tf.newaxis, tf.newaxis, :]
 
@@ -139,52 +127,15 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
         )
     )
 
-    # (batch_size, num_hidden_state, embedding_size)
-    phenotype_embeddings = tf.tile(
-        phenotype_matrix[tf.newaxis, :, :],
-        [tf.shape(temporal_concept_embeddings)[0], 1, 1]
+    hidden_phenotype_layer = HiddenPhenotypeLayer(
+        hidden_unit=num_hidden_state,
+        embedding_size=embedding_size,
+        num_heads=num_heads,
+        dropout_rate=transformer_dropout,
     )
 
-    phenotype_mha_layer = MultiHeadAttention(
-        d_model=embedding_size,
-        num_heads=num_heads
-    )
-
-    layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
-    dropout = tf.keras.layers.Dropout(transformer_dropout)
-
-    # Generate contextualized phenotype embeddings (batch_size, num_hidden_state, embedding_size)
-    phenotype_embeddings, _ = phenotype_mha_layer(
-        temporal_concept_embeddings,
-        temporal_concept_embeddings,
-        phenotype_embeddings,
-        concept_mask
-    )
-
-    phenotype_embeddings = layernorm(
-        dropout(
-            phenotype_embeddings
-        )
-    )
-
-    # This gives us the phenotype embeddings
-    phenotype_hidden_state_layer = tf.keras.layers.Dense(
-        units=1
-    )
-
-    # (batch_size, num_hidden_state)
-    phenotype_probability_dist = tf.nn.softmax(
-        tf.squeeze(
-            phenotype_hidden_state_layer(
-                phenotype_embeddings
-            )
-        )
-    )
-
-    # (batch_size, max_seq, embedding_size)
-    contextualized_embeddings, _ = encoder(
-        temporal_concept_embeddings,
-        concept_mask
+    phenotype_embeddings, phenotype_probability_dist = hidden_phenotype_layer(
+        [temporal_concept_embeddings, concept_mask]
     )
 
     # (batch_size, num_hidden_state, max_seq, embedding_size + embedding_size)
@@ -194,26 +145,45 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
             [1, 1, max_seq_length, 1]
         ),
             tf.tile(
-                contextualized_embeddings[:, tf.newaxis, :, :],
+                temporal_concept_embeddings[:, tf.newaxis, :, :],
                 [1, num_hidden_state, 1, 1]
             )
         ],
         axis=-1
     )
 
-    # (batch_size, num_hidden_state, max_seq, embedding_size)
     scale_layer = tf.keras.layers.Dense(
         embedding_size,
         activation='tanh',
         name='scale_layer'
     )
 
+    # (batch_size, num_hidden_state, max_seq, embedding_size)
     phenotype_concept_embeddings = scale_layer(
         phenotype_concept_embeddings
     )
 
     reshaped_phenotype_concept_embeddings = tf.reshape(
         phenotype_concept_embeddings,
+        (-1, max_seq_length, embedding_size)
+    )
+
+    encoder_mask = tf.reshape(
+        tf.tile(
+            mask[:, tf.newaxis, :],
+            [1, num_hidden_state, 1]
+        ),
+        (-1, max_seq_length)
+    )[:, tf.newaxis, tf.newaxis, :]
+
+    # (batch_size, max_seq, embedding_size)
+    contextualized_embeddings, _ = encoder(
+        reshaped_phenotype_concept_embeddings,
+        encoder_mask
+    )
+
+    reshaped_phenotype_concept_embeddings = tf.reshape(
+        reshaped_phenotype_concept_embeddings,
         [-1, num_hidden_state * max_seq_length, embedding_size]
     )
 
