@@ -864,11 +864,11 @@ class HiddenPhenotypeLayer(tf.keras.layers.Layer):
             phenotype_probability_dist * tf.math.log(phenotype_probability_dist),
             axis=-1
         )
-        self.add_loss(
-            tf.reduce_mean(
-                phenotype_prob_entropy
-            )
-        )
+        # self.add_loss(
+        #     tf.reduce_mean(
+        #         phenotype_prob_entropy
+        #     )
+        # )
 
         self.add_metric(
             phenotype_prob_entropy,
