@@ -6,7 +6,6 @@ from models.parse_args import create_parse_args_base_bert
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
 from utils.model_utils import tokenize_one_field
 from models.probabilistic_cehrbert import transformer_bert_model_visit_prediction
-from models.bert_models import transformer_bert_model
 from models.custom_layers import get_custom_objects
 from data_generators.data_generator_base import *
 
@@ -14,6 +13,7 @@ from keras_transformer.bert import (masked_perplexity,
                                     MaskedPenalizedSparseCategoricalCrossentropy)
 
 from tensorflow.keras import optimizers
+from models.loss_schedulers import CosineLRSchedule
 
 
 class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
@@ -147,6 +147,22 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
                 model.compile(optimizer, loss=losses,
                               metrics={'concept_predictions': masked_perplexity})
         return model
+
+    def _get_callbacks(self):
+        model_checkpoint = tf.keras.callbacks.ModelCheckpoint(
+            filepath=self._model_path,
+            save_best_only=True,
+            save_freq=50000,
+            monitor='loss',
+            verbose=1
+        )
+        learning_rate_scheduler = tf.keras.callbacks.LearningRateScheduler(
+            CosineLRSchedule(lr_high=self._learning_rate, lr_low=1e-8, initial_period=10),
+            verbose=1)
+        return [
+            model_checkpoint,
+            learning_rate_scheduler
+        ]
 
     def eval_model(self):
         pass
