@@ -5,7 +5,7 @@ from models.model_parameters import ModelPathConfig
 from models.parse_args import create_parse_args_base_bert
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
 from utils.model_utils import tokenize_one_field
-from models.probabilistic_cehrbert import transformer_bert_model_visit_prediction
+from models.probabilistic_cehrbert import create_probabilistic_transformer_bert_model
 from models.custom_layers import get_custom_objects
 from data_generators.data_generator_base import *
 
@@ -89,8 +89,6 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
         if self._include_visit_prediction:
             parameters['visit_tokenizer'] = self._visit_tokenizer
             data_generator_class = BertVisitPredictionDataGenerator
-        elif self._include_prolonged_length_stay:
-            data_generator_class = MedBertDataGenerator
 
         return data_generator_class(**parameters)
 
@@ -108,44 +106,25 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
                 optimizer = optimizers.Adam(
                     lr=self._learning_rate, beta_1=0.9, beta_2=0.999)
 
-                if self._include_visit_prediction:
-                    model = transformer_bert_model_visit_prediction(
-                        max_seq_length=self._context_window_size,
-                        concept_vocab_size=self._tokenizer.get_vocab_size(),
-                        visit_vocab_size=self._visit_tokenizer.get_vocab_size(),
-                        embedding_size=self._embedding_size,
-                        depth=self._depth,
-                        num_heads=self._num_heads,
-                        use_time_embedding=self._use_time_embedding,
-                        time_embeddings_size=self._time_embeddings_size
-                    )
+                model = create_probabilistic_transformer_bert_model(
+                    max_seq_length=self._context_window_size,
+                    concept_vocab_size=self._tokenizer.get_vocab_size(),
+                    embedding_size=self._embedding_size,
+                    depth=self._depth,
+                    num_heads=self._num_heads,
+                    time_embeddings_size=self._time_embeddings_size
+                )
 
-                    losses = {
-                        'concept_predictions': MaskedPenalizedSparseCategoricalCrossentropy(
-                            self.confidence_penalty),
-                        'visit_predictions': MaskedPenalizedSparseCategoricalCrossentropy(
-                            self.confidence_penalty)
-                    }
-                else:
-                    model = transformer_bert_model_visit_prediction(
-                        max_seq_length=self._context_window_size,
-                        concept_vocab_size=self._tokenizer.get_vocab_size(),
-                        embedding_size=self._embedding_size,
-                        depth=self._depth,
-                        num_heads=self._num_heads,
-                        time_embeddings_size=self._time_embeddings_size
-                    )
+                losses = {
+                    'concept_predictions': MaskedPenalizedSparseCategoricalCrossentropy(
+                        self.confidence_penalty)
+                }
 
-                    losses = {
-                        'concept_predictions': MaskedPenalizedSparseCategoricalCrossentropy(
-                            self.confidence_penalty)
-                    }
+                if self._include_prolonged_length_stay:
+                    losses['prolonged_length_stay'] = tf.losses.BinaryCrossentropy()
 
-                    if self._include_prolonged_length_stay:
-                        losses['prolonged_length_stay'] = tf.losses.BinaryCrossentropy()
-
-                model.compile(optimizer, loss=losses,
-                              metrics={'concept_predictions': masked_perplexity})
+            model.compile(optimizer, loss=losses,
+                          metrics={'concept_predictions': masked_perplexity})
         return model
 
     def _get_callbacks(self):

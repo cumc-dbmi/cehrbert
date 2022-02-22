@@ -3,19 +3,19 @@ import tensorflow as tf
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 
 from models.custom_layers import (VisitEmbeddingLayer, Encoder, PositionalEncodingLayer,
-                                  TimeEmbeddingLayer, MultiHeadAttention, HiddenPhenotypeLayer)
+                                  TimeEmbeddingLayer, HiddenPhenotypeLayer)
 
 
-def transformer_bert_model_visit_prediction(max_seq_length: int,
-                                            concept_vocab_size: int,
-                                            embedding_size: int,
-                                            depth: int,
-                                            num_heads: int,
-                                            transformer_dropout: float = 0.1,
-                                            embedding_dropout: float = 0.6,
-                                            l2_reg_penalty: float = 1e-4,
-                                            time_embeddings_size: int = 16,
-                                            num_hidden_state: int = 10):
+def create_probabilistic_transformer_bert_model(max_seq_length: int,
+                                                concept_vocab_size: int,
+                                                embedding_size: int,
+                                                depth: int,
+                                                num_heads: int,
+                                                transformer_dropout: float = 0.1,
+                                                embedding_dropout: float = 0.6,
+                                                l2_reg_penalty: float = 1e-4,
+                                                time_embeddings_size: int = 16,
+                                                num_hidden_state: int = 10):
     """
     Builds a BERT-based model (Bidirectional Encoder Representations
     from Transformers) following paper "BERT: Pre-training of Deep
@@ -176,8 +176,8 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
         (-1, max_seq_length)
     )[:, tf.newaxis, tf.newaxis, :]
 
-    # (batch_size, max_seq, embedding_size)
-    contextualized_embeddings, _ = encoder(
+    # (batch_size * num_hidden_state, max_seq, embedding_size)
+    reshaped_phenotype_concept_embeddings, _ = encoder(
         reshaped_phenotype_concept_embeddings,
         encoder_mask
     )
