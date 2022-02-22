@@ -386,22 +386,25 @@ def create_probabilistic_bert_bi_lstm_model(max_seq_length, vanilla_bert_model_p
 
     num_hidden_state = bert_model.get_layer('hidden_phenotype_layer').hidden_unit
 
+    # (batch, max_sequence, embedding_size)
+    concept_embeddings, _ = bert_model.get_layer('concept_embeddings').output
+    _, _, embedding_size = concept_embeddings.get_shape().as_list()
+
     # (batch * num_hidden_state, max_sequence, embedding_size)
-    contextualized_embeddings, _ = bert_model.get_layer('encoder').output
-    _, _, embedding_size = contextualized_embeddings.get_shape().as_list()
+    contextualized_embeddings = bert_model.get_layer('tf.reshape').output
 
     # mask_input = bert_inputs[-1]
     mask_input = [i for i in bert_inputs if
                   'mask' in i.name and 'concept' not in i.name][0]
 
-    # (batch * num_hidden_state, max_sequence, embedding_size)
+    # (batch * num_hidden_state, max_sequence, 1)
     mask_embeddings = tf.reshape(
         tf.tile(
             (mask_input == 0)[:, tf.newaxis, :],
             [1, num_hidden_state, 1]
         ),
         (-1, max_seq_length)
-    )[:, tf.newaxis, tf.newaxis, :]
+    )[:, :, tf.newaxis]
 
     # (batch * num_hidden_state, max_sequence, embedding_size)
     contextualized_embeddings = tf.math.multiply(
@@ -426,7 +429,7 @@ def create_probabilistic_bert_bi_lstm_model(max_seq_length, vanilla_bert_model_p
     output_layer = tf.keras.layers.Dense(1, activation='sigmoid')
 
     # attach a property to the concept embeddings to indicate where are the masks, send the flag
-    # to the downstream layer (batch * num_hidden_state, embedding_size)
+    # to the downstream layer: (batch * num_hidden_state, max_sequence, embedding_size)
     next_input = masking_layer(
         contextualized_embeddings)
 
@@ -455,7 +458,7 @@ def create_probabilistic_bert_bi_lstm_model(max_seq_length, vanilla_bert_model_p
     # (batch, num_hidden_state, 1)
     reshaped_output = tf.reshape(
         output,
-        (-1, num_hidden_state, max_seq_length, embedding_size)
+        (-1, num_hidden_state, 1)
     )
     # (batch, 1)
     weighted_output = tf.squeeze(

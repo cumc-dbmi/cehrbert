@@ -1,9 +1,7 @@
 import argparse
 from sys import argv
 
-from evaluations.evaluation_parameters import SEQUENCE_MODEL, BASELINE_MODEL, EVALUATION_CHOICES, \
-    LSTM, VANILLA_BERT_LSTM, SLIDING_BERT, TEMPORAL_BERT_LSTM, HIERARCHICAL_BERT_LSTM, \
-    RANDOM_HIERARCHICAL_BERT_LSTM, SEQUENCE_MODEL_EVALUATORS
+from evaluations.evaluation_parameters import *
 
 
 def create_evaluation_args():

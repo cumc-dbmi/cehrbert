@@ -1,7 +1,5 @@
 import config.parameters as p
-from evaluations.evaluation_parameters import FULL, SEQUENCE_MODEL, BASELINE_MODEL, LSTM, \
-    VANILLA_BERT_LSTM, VANILLA_BERT_FEED_FORWARD, SLIDING_BERT, TEMPORAL_BERT_LSTM, \
-    RANDOM_VANILLA_BERT_LSTM, HIERARCHICAL_BERT_LSTM, RANDOM_HIERARCHICAL_BERT_LSTM
+from evaluations.evaluation_parameters import *
 from evaluations.evaluation_parse_args import create_evaluation_args
 from evaluations.model_evaluators.hierarchical_bert_evaluators import *
 from evaluations.model_evaluators.bert_model_evaluators import *
@@ -81,6 +79,26 @@ def evaluate_sequence_models(args):
         bert_model_path = os.path.join(args.vanilla_bert_model_folder,
                                        p.bert_model_validation_path)
         BertLstmModelEvaluator(
+            dataset=dataset,
+            evaluation_folder=args.evaluation_folder,
+            num_of_folds=args.num_of_folds,
+            is_transfer_learning=args.is_transfer_learning,
+            training_percentage=args.training_percentage,
+            max_seq_length=args.max_seq_length,
+            batch_size=args.batch_size,
+            epochs=args.epochs,
+            bert_model_path=bert_model_path,
+            tokenizer_path=bert_tokenizer_path,
+            is_temporal=False,
+            sequence_model_name=args.sequence_model_name).eval_model()
+
+    if PROBABILISTIC_BERT_LSTM in args.model_evaluators:
+        validate_folder(args.vanilla_bert_model_folder)
+        bert_tokenizer_path = os.path.join(args.vanilla_bert_model_folder,
+                                           p.tokenizer_path)
+        bert_model_path = os.path.join(args.vanilla_bert_model_folder,
+                                       p.bert_model_validation_path)
+        ProbabilisticBertModelEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
             num_of_folds=args.num_of_folds,

@@ -1,14 +1,11 @@
 import pickle
 
 import numpy as np
-import tensorflow as tf
 
 from data_generators.learning_objective import post_pad_pre_truncate
 from evaluations.model_evaluators.model_evaluators import get_metrics
 from evaluations.model_evaluators.sequence_model_evaluators import SequenceModelEvaluator
-from models.evaluation_models import create_temporal_bert_bi_lstm_model, \
-    create_vanilla_bert_bi_lstm_model, create_vanilla_feed_forward_model, create_sliding_bert_model, \
-    create_random_vanilla_bert_bi_lstm_model
+from models.evaluation_models import *
 
 
 class BertLstmModelEvaluator(SequenceModelEvaluator):
@@ -81,6 +78,33 @@ class BertLstmModelEvaluator(SequenceModelEvaluator):
             'visit_concept_orders': padded_visit_concept_orders
         }
         return inputs, labels
+
+
+class ProbabilisticBertModelEvaluator(BertLstmModelEvaluator):
+
+    def __init__(self,
+                 *args, **kwargs):
+        super(ProbabilisticBertModelEvaluator, self).__init__(*args, **kwargs)
+
+    def _create_model(self):
+        strategy = tf.distribute.MirroredStrategy()
+        self.get_logger().info('Number of devices: {}'.format(strategy.num_replicas_in_sync))
+        with strategy.scope():
+            try:
+                model = create_probabilistic_bert_bi_lstm_model(
+                    self._max_seq_length,
+                    self._bert_model_path
+                )
+            except ValueError as e:
+                self.get_logger().exception(e)
+                model = create_probabilistic_bert_bi_lstm_model(
+                    self._max_seq_length,
+                    self._bert_model_path
+                )
+            model.compile(loss='binary_crossentropy',
+                          optimizer=tf.keras.optimizers.Adam(1e-4),
+                          metrics=get_metrics())
+            return model
 
 
 class BertFeedForwardModelEvaluator(BertLstmModelEvaluator):
