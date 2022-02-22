@@ -878,6 +878,160 @@ class HiddenPhenotypeLayer(tf.keras.layers.Layer):
         return context_phenotype_embeddings, phenotype_probability_dist
 
 
+class VisitPhenotypeLayer(tf.keras.layers.Layer):
+
+    def __init__(self,
+                 hidden_unit: int,
+                 embedding_size: int,
+                 depth: int,
+                 num_heads: int,
+                 num_of_visits: int,
+                 transformer_dropout: float = 0.1,
+                 *args, **kwargs):
+        super(VisitPhenotypeLayer, self).__init__(*args, **kwargs)
+        self.hidden_unit = hidden_unit
+        self.embedding_size = embedding_size
+        self.num_heads = num_heads
+        self.num_of_visits = num_of_visits
+        self.dropout_rate = transformer_dropout
+
+        # Insert the att embeddings between the visit embeddings using the following trick
+        self.identity = tf.constant(
+            np.insert(
+                np.identity(num_of_visits),
+                obj=range(1, num_of_visits),
+                values=0,
+                axis=1
+            ),
+            dtype=tf.float32
+        )
+
+        # Create the inverse "identity" matrix for inserting att embeddings
+        self.identity_inverse = tf.constant(
+            np.insert(
+                np.identity(num_of_visits - 1),
+                obj=range(0, num_of_visits),
+                values=0,
+                axis=1),
+            dtype=tf.float32)
+
+        # num_hidden_state, embedding_size
+        # Second bert applied at the patient level to the visit embeddings
+        self.visit_encoder = Encoder(
+            name='visit_encoder',
+            num_layers=depth,
+            d_model=embedding_size,
+            num_heads=num_heads,
+            dropout_rate=transformer_dropout)
+
+        self.phenotype_hidden_state_layer = tf.keras.layers.Dense(
+            units=hidden_unit * embedding_size
+        )
+
+        self.phenotype_probability_layer = tf.keras.layers.Dense(
+            units=1
+        )
+
+    def get_config(self):
+        config = super().get_config()
+        config['hidden_unit'] = self.hidden_unit
+        config['embedding_size'] = self.embedding_size
+        config['num_heads'] = self.num_heads
+        config['dropout_rate'] = self.dropout_rate
+        config['num_of_visits'] = self.num_of_visits
+        return config
+
+    def call(self, inputs):
+        visit_embeddings, att_embeddings, visit_mask = inputs
+
+        # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
+        expanded_visit_embeddings = tf.transpose(
+            tf.transpose(visit_embeddings, perm=[0, 2, 1]) @ self.identity,
+            perm=[0, 2, 1]
+        )
+
+        # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
+        expanded_att_embeddings = tf.transpose(
+            tf.transpose(att_embeddings, perm=[0, 2, 1]) @ self.identity_inverse,
+            perm=[0, 2, 1]
+        )
+
+        # Insert the att embeddings between visit embeddings
+        # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
+        augmented_visit_embeddings = expanded_visit_embeddings + expanded_att_embeddings
+
+        # Expand dimension for masking MultiHeadAttention in Visit Encoder
+        visit_mask_with_att = (tf.reshape(
+            tf.stack([visit_mask, visit_mask], axis=2),
+            shape=(-1, self.num_of_visits * 2)
+        )[:, 1:])[:, tf.newaxis, tf.newaxis, :]
+
+        num_of_visits_with_att = tf.shape(visit_mask_with_att)[1]
+
+        # (num_of_visits_with_att, num_of_visits_with_att)
+        look_ahead_mask = tf.cast(
+            1 - tf.linalg.band_part(tf.ones((num_of_visits_with_att, num_of_visits_with_att)), -1,
+                                    0),
+            dtype=tf.int32
+        )
+
+        # (batch_size, 1, num_of_visits_with_att, num_of_visits_with_att)
+        look_ahead_mask = tf.maximum(visit_mask_with_att, look_ahead_mask)
+
+        # (batch_size, 2 * num_of_visits - 1, embedding_size)
+        context_phenotype_embeddings, _ = self.visit_encoder(
+            augmented_visit_embeddings,
+            look_ahead_mask,
+        )
+
+        # (batch_size, num_of_visits, num_hidden_units * embedding_size)
+        context_phenotype_embeddings = self.phenotype_hidden_state_layer(
+            self.identity @ context_phenotype_embeddings
+        )
+
+        # (batch_size, num_of_visits, hidden_unit, embedding_size)
+        reshaped_phenotype_embeddings = tf.reshape(
+            context_phenotype_embeddings,
+            (-1, self.num_of_visits, self.hidden_unit, self.embedding_size)
+        )
+
+        # (batch_size, num_of_visits, hidden_unit)
+        phenotype_probability = tf.nn.softmax(
+            tf.squeeze(
+                self.phenotype_probability_layer(
+                    reshaped_phenotype_embeddings
+                )
+            )
+        )
+        # (batch_size, num_of_visits, 1)
+        max_phenotype_indices = tf.argmax(
+            phenotype_probability,
+            axis=-1
+        )[:, :, tf.newaxis]
+
+        # (batch_size, num_of_visits, embedding_size)
+        # Explicit reshaping is required for some reason:979
+        predicted_phenotype_embeddings = tf.reshape(
+            tf.gather_nd(
+                reshaped_phenotype_embeddings,
+                max_phenotype_indices,
+                batch_dims=2
+            ), (-1, self.num_of_visits, self.embedding_size)
+        )
+
+        phenotype_prob_entropy = -tf.reduce_sum(
+            phenotype_probability * tf.math.log(phenotype_probability),
+            axis=-1
+        )
+
+        self.add_metric(
+            phenotype_prob_entropy,
+            name='phenotype_probability_entropy'
+        )
+
+        return predicted_phenotype_embeddings, phenotype_probability
+
+
 get_custom_objects().update({
     'MultiHeadAttention': MultiHeadAttention,
     'Encoder': Encoder,
@@ -895,5 +1049,6 @@ get_custom_objects().update({
     'BertLayer': BertLayer,
     'ConvolutionBertLayer': ConvolutionBertLayer,
     'HierarchicalBertLayer': HierarchicalBertLayer,
-    'HiddenPhenotypeLayer': HiddenPhenotypeLayer
+    'HiddenPhenotypeLayer': HiddenPhenotypeLayer,
+    'VisitPhenotypeLayer': VisitPhenotypeLayer
 })

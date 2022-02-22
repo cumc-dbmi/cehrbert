@@ -18,9 +18,12 @@ class ProbabilisticPhenotypeLearningObjective(HierarchicalMaskedLanguageModelLea
                             .apply(self._concept_tokenizer.encode) \
                             .apply(lambda tokens: self._pad(tokens, padded_token=unused_token_id)))
 
-        # (batch_size, 1)
-        random_concepts = np.stack(pd.Series(random_concepts) \
-                                   .apply(self._concept_tokenizer.encode))
+        # (batch_size, num_of_visits, 1)
+        random_concepts = np.squeeze(
+            np.stack(pd.Series(random_concepts) \
+                     .apply(convert_to_list_of_lists) \
+                     .apply(self._concept_tokenizer.encode))
+        )
 
         pat_mask = (concepts == unused_token_id).astype(int)
 
@@ -58,10 +61,7 @@ class ProbabilisticPhenotypeLearningObjective(HierarchicalMaskedLanguageModelLea
                       'visit_mask': visit_masks,
                       'visit_rank_order': visit_rank_orders}
 
-        random_concepts = np.reshape(random_concepts, (-1, 1))
-        output_concept_masks = np.ones_like(random_concepts)
-        output_concept_masks = np.reshape(output_concept_masks,
-                                          (-1, 1))
+        output_concept_masks = np.ones_like(random_concepts) - visit_masks
         output_dict = {
             'concept_predictions': np.stack([random_concepts, output_concept_masks], axis=-1)
         }
@@ -101,11 +101,10 @@ class ProbabilisticPhenotypeLearningObjective(HierarchicalMaskedLanguageModelLea
             row.visit_rank_orders[0],
             False)
 
-        # last_visit
-        last_visit_concepts = row.concept_ids[start_index:end_index][-1]
-
-        random_concepts = last_visit_concepts[np.random.choice(
-            last_visit_concepts.shape[0], 1, replace=False)]
+        # Randomly pick a concept from each visit for prediction
+        random_concepts = list(
+            map(lambda c: np.random.choice(c.shape[0], 1, replace=False), concepts)
+        )
 
         return (
             random_concepts, concepts, dates, ages, visit_segments, visit_dates, visit_masks,

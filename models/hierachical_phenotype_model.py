@@ -160,58 +160,17 @@ def create_probabilistic_phenotype_model(num_of_visits,
     # (batch_size, num_of_visits, embedding_size)
     visit_embeddings = concept_embeddings[:, :, 0]
 
-    # Insert the att embeddings between the visit embeddings using the following trick
-    identity = tf.constant(
-        np.insert(
-            np.identity(num_of_visits),
-            obj=range(1, num_of_visits),
-            values=0,
-            axis=1
-        ),
-        dtype=tf.float32
-    )
-
-    # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
-    expanded_visit_embeddings = tf.transpose(
-        tf.transpose(visit_embeddings, perm=[0, 2, 1]) @ identity,
-        perm=[0, 2, 1]
-    )
-
-    # Create the inverse "identity" matrix for inserting att embeddings
-    identity_inverse = tf.constant(
-        np.insert(
-            np.identity(num_of_visits - 1),
-            obj=range(0, num_of_visits),
-            values=0,
-            axis=1),
-        dtype=tf.float32)
-
-    # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
-    expanded_att_embeddings = tf.transpose(
-        tf.transpose(att_embeddings, perm=[0, 2, 1]) @ identity_inverse,
-        perm=[0, 2, 1]
-    )
-
-    # Insert the att embeddings between visit embeddings
-    # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
-    contextualized_visit_embeddings = expanded_visit_embeddings + expanded_att_embeddings
-
-    # Expand dimension for masking MultiHeadAttention in Visit Encoder
-    visit_mask_with_att = (tf.reshape(
-        tf.stack([visit_mask, visit_mask], axis=2),
-        shape=(-1, num_of_visits * 2)
-    )[:, 1:])[:, tf.newaxis, tf.newaxis, :]
-
-    # Second bert applied at the patient level to the visit embeddings
-    hidden_phenotype_layer = HiddenPhenotypeLayer(
+    visit_phenotype_layer = VisitPhenotypeLayer(
         hidden_unit=num_hidden_state,
         embedding_size=embedding_size,
+        depth=depth,
         num_heads=num_heads,
-        name='hidden_phenotype_layer'
+        num_of_visits=num_of_visits,
+        name='visit_phenotype_layer'
     )
 
-    phenotype_embeddings, phenotype_probability_dist = hidden_phenotype_layer(
-        [contextualized_visit_embeddings, visit_mask_with_att]
+    phenotype_embeddings, _ = visit_phenotype_layer(
+        [visit_embeddings, att_embeddings, visit_mask]
     )
 
     output_layer = TiedOutputEmbedding(
@@ -220,26 +179,18 @@ def create_probabilistic_phenotype_model(num_of_visits,
         name='concept_prediction_logits'
     )
 
-    # (batch_size, num_hidden_units, vocab_size)
-    concept_predictions = tf.nn.softmax(
+    concept_softmax_layer = tf.keras.layers.Softmax(
+        name='concept_predictions'
+    )
+
+    # (batch_size, num_of_visits, vocab_size)
+    concept_predictions = concept_softmax_layer(
         output_layer(
             [phenotype_embeddings, embedding_matrix]
         )
     )
-
-    reduce_sum_layer = tf.keras.layers.Lambda(
-        lambda x: tf.reduce_sum(x, axis=1)[:, tf.newaxis, :],
-        output_shape=(-1, 1, concept_vocab_size),
-        name='concept_predictions'
-    )
-
-    # (batch_size, 1, vocab_size)
-    weighted_concept_predictions = reduce_sum_layer(
-        phenotype_probability_dist[:, :, tf.newaxis] * concept_predictions,
-    )
-
     probabilistic_phenotype_model = tf.keras.Model(
         inputs=default_inputs,
-        outputs=[weighted_concept_predictions])
+        outputs=[concept_predictions])
 
     return probabilistic_phenotype_model
