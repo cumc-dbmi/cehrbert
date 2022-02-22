@@ -144,7 +144,7 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
             phenotype_embeddings[:, :, tf.newaxis, :],
             [1, 1, max_seq_length, 1]
         ),
-            tf.tile(
+        tf.tile(
                 temporal_concept_embeddings[:, tf.newaxis, :, :],
                 [1, num_hidden_state, 1, 1]
             )
