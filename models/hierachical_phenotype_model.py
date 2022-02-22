@@ -1,17 +1,17 @@
 from models.custom_layers import *
 
 
-def create_probabilistic_transformer_bert_model(num_of_visits,
-                                                num_of_concepts,
-                                                concept_vocab_size,
-                                                embedding_size,
-                                                depth: int,
-                                                num_heads: int,
-                                                transformer_dropout: float = 0.1,
-                                                embedding_dropout: float = 0.6,
-                                                l2_reg_penalty: float = 1e-4,
-                                                time_embeddings_size: int = 16,
-                                                num_hidden_state: int = 10):
+def create_probabilistic_phenotype_model(num_of_visits,
+                                         num_of_concepts,
+                                         concept_vocab_size,
+                                         embedding_size,
+                                         depth: int,
+                                         num_heads: int,
+                                         transformer_dropout: float = 0.1,
+                                         embedding_dropout: float = 0.6,
+                                         l2_reg_penalty: float = 1e-4,
+                                         time_embeddings_size: int = 16,
+                                         num_hidden_state: int = 50):
     pat_seq = tf.keras.layers.Input(
         shape=(num_of_visits, num_of_concepts,),
         dtype='int32',
@@ -206,7 +206,7 @@ def create_probabilistic_transformer_bert_model(num_of_visits,
     hidden_phenotype_layer = HiddenPhenotypeLayer(
         hidden_unit=num_hidden_state,
         embedding_size=embedding_size,
-        num_heads='num_heads',
+        num_heads=num_heads,
         name='hidden_phenotype_layer'
     )
 
@@ -227,12 +227,15 @@ def create_probabilistic_transformer_bert_model(num_of_visits,
         )
     )
 
+    reduce_sum_layer = tf.keras.layers.Lambda(
+        lambda x: tf.reduce_sum(x, axis=1)[:, tf.newaxis, :],
+        output_shape=(-1, 1, concept_vocab_size),
+        name='concept_predictions'
+    )
+
     # (batch_size, 1, vocab_size)
-    weighted_concept_predictions = tf.squeeze(
-        tf.reduce_sum(
-            phenotype_probability_dist[:, :, tf.newaxis] * concept_predictions,
-            axis=1
-        )
+    weighted_concept_predictions = reduce_sum_layer(
+        phenotype_probability_dist[:, :, tf.newaxis] * concept_predictions,
     )
 
     probabilistic_phenotype_model = tf.keras.Model(

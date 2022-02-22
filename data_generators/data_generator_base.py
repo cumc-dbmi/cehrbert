@@ -8,6 +8,7 @@ from pandas import DataFrame
 from itertools import chain
 
 from data_generators.learning_objective import *
+from data_generators.probabilistic_learning_objective import *
 from data_generators.tokenizer import ConceptTokenizer
 
 
@@ -360,6 +361,13 @@ class HierarchicalBertMultiTaskDataGenerator(HierarchicalBertDataGenerator):
         return [
             HierarchicalMaskedLanguageModelLearningObjective,
             HierarchicalBertSecondaryLearningObjective
+        ]
+
+
+class ProbabilisticPhenotypeDataGenerator(HierarchicalBertDataGenerator):
+    def _get_learning_objective_classes(self):
+        return [
+            ProbabilisticPhenotypeLearningObjective
         ]
 
 
