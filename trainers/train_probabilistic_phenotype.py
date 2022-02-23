@@ -19,22 +19,16 @@ from tensorflow.keras import optimizers
 class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
     confidence_penalty = 0.1
 
-    def __init__(self, tokenizer_path: str, visit_tokenizer_path: str,
-                 embedding_size: int, depth: int, max_num_visits: int,
-                 max_num_concepts: int, num_heads: int,
-                 include_visit_prediction: bool, time_embeddings_size: int,
-                 num_of_exchanges: int,
-                 *args, **kwargs):
+    def __init__(self, tokenizer_path: str,  embedding_size: int, depth: int,
+                 max_num_visits: int, max_num_concepts: int, num_heads: int,
+                 time_embeddings_size: int, *args, **kwargs):
 
         self._tokenizer_path = tokenizer_path
-        self._visit_tokenizer_path = visit_tokenizer_path
         self._embedding_size = embedding_size
         self._depth = depth
         self._max_num_visits = max_num_visits
         self._max_num_concepts = max_num_concepts
         self._num_heads = num_heads
-        self._num_of_exchanges = num_of_exchanges
-        self._include_visit_prediction = include_visit_prediction
         self._time_embeddings_size = time_embeddings_size
 
         super(ProbabilisticPhenotypeTrainer, self).__init__(*args, **kwargs)
@@ -42,14 +36,11 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
         self.get_logger().info(
             f'{self} will be trained with the following parameters:\n'
             f'tokenizer_path: {tokenizer_path}\n'
-            f'visit_tokenizer_path: {visit_tokenizer_path}\n'
             f'embedding_size: {embedding_size}\n'
             f'depth: {depth}\n'
             f'max_num_visits: {max_num_visits}\n'
             f'max_num_concepts: {max_num_concepts}\n'
             f'num_heads: {num_heads}\n'
-            f'num_of_exchanges: {num_of_exchanges}\n'
-            f'include_visit_prediction: {include_visit_prediction}\n'
             f'time_embeddings_size: {time_embeddings_size}')
 
     def _load_dependencies(self):
@@ -126,17 +117,14 @@ def main(args):
         training_data_parquet_path=config.parquet_data_path,
         model_path=config.model_path,
         tokenizer_path=config.tokenizer_path,
-        visit_tokenizer_path=config.visit_tokenizer_path,
         embedding_size=args.embedding_size,
         depth=args.depth,
         max_num_visits=args.max_num_visits,
         max_num_concepts=args.max_num_concepts,
         num_heads=args.num_heads,
-        num_of_exchanges=args.num_of_exchanges,
         batch_size=args.batch_size,
         epochs=args.epochs,
         learning_rate=args.learning_rate,
-        include_visit_prediction=args.include_visit_prediction,
         time_embeddings_size=args.time_embeddings_size,
         use_dask=args.use_dask,
         tf_board_log_path=args.tf_board_log_path).train_model()
