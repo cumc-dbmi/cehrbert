@@ -1019,21 +1019,6 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
                 )
             )
         )
-        # (batch_size, num_of_visits, 1)
-        max_phenotype_indices = tf.argmax(
-            phenotype_probability,
-            axis=-1
-        )[:, :, tf.newaxis]
-
-        # (batch_size, num_of_visits, embedding_size)
-        # Explicit reshaping is required for some reason:979
-        predicted_phenotype_embeddings = tf.reshape(
-            tf.gather_nd(
-                reshaped_phenotype_embeddings,
-                max_phenotype_indices,
-                batch_dims=2
-            ), (-1, self.num_of_visits, self.embedding_size)
-        )
 
         phenotype_prob_entropy = -tf.reduce_sum(
             phenotype_probability * tf.math.log(phenotype_probability),
@@ -1045,7 +1030,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             name='phenotype_probability_entropy'
         )
 
-        return predicted_phenotype_embeddings, phenotype_probability
+        return reshaped_phenotype_embeddings, phenotype_probability
 
 
 get_custom_objects().update({

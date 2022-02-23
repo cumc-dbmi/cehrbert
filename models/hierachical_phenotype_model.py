@@ -169,7 +169,7 @@ def create_probabilistic_phenotype_model(num_of_visits,
         name='visit_phenotype_layer'
     )
 
-    phenotype_embeddings, _ = visit_phenotype_layer(
+    phenotype_embeddings, phenotype_probability = visit_phenotype_layer(
         [visit_embeddings, att_embeddings, visit_mask]
     )
 
@@ -180,18 +180,40 @@ def create_probabilistic_phenotype_model(num_of_visits,
         name='concept_prediction_logits'
     )
 
-    concept_softmax_layer = tf.keras.layers.Softmax(
-        name='concept_predictions'
+    # (batch_size * num_of_visits, num_hidden_state, vocab_size)
+    reshaped_phenotype_embeddings = tf.reshape(
+        phenotype_embeddings,
+        (-1, num_hidden_state, embedding_size)
     )
-
-    # (batch_size, num_of_visits, vocab_size)
-    concept_predictions = concept_softmax_layer(
+    # (batch_size * num_of_visits, num_of_visits, vocab_size)
+    concept_predictions = tf.nn.softmax(
         output_layer(
-            [phenotype_embeddings, embedding_matrix]
+            [reshaped_phenotype_embeddings, embedding_matrix]
         )
     )
+
+    reshaped_concept_predictions = tf.reshape(
+        concept_predictions,
+        (-1, num_of_visits, num_hidden_state, concept_vocab_size)
+    )
+
+    weighted_concept_predictions = tf.reduce_sum(
+        phenotype_probability[:, :, :, tf.newaxis] * reshaped_concept_predictions,
+        axis=2
+    )
+
+    squeeze_layer = tf.keras.layers.Lambda(
+        lambda x: tf.squeeze(x),
+        name='concept_predictions',
+        output_shape=(-1, num_of_visits, concept_vocab_size)
+    )
+
+    weighted_concept_predictions = squeeze_layer(
+        weighted_concept_predictions
+    )
+
     probabilistic_phenotype_model = tf.keras.Model(
         inputs=default_inputs,
-        outputs=[concept_predictions])
+        outputs=[weighted_concept_predictions])
 
     return probabilistic_phenotype_model
