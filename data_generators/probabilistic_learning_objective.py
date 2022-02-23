@@ -22,7 +22,8 @@ class ProbabilisticPhenotypeLearningObjective(HierarchicalMaskedLanguageModelLea
         random_concepts = np.squeeze(
             np.stack(pd.Series(random_concepts) \
                      .apply(convert_to_list_of_lists) \
-                     .apply(self._concept_tokenizer.encode))
+                     .apply(self._concept_tokenizer.encode)),
+            axis=2
         )
 
         pat_mask = (concepts == unused_token_id).astype(int)
@@ -62,6 +63,7 @@ class ProbabilisticPhenotypeLearningObjective(HierarchicalMaskedLanguageModelLea
                       'visit_rank_order': visit_rank_orders}
 
         output_concept_masks = np.ones_like(random_concepts) - visit_masks
+
         output_dict = {
             'concept_predictions': np.stack([random_concepts, output_concept_masks], axis=-1)
         }
@@ -101,10 +103,25 @@ class ProbabilisticPhenotypeLearningObjective(HierarchicalMaskedLanguageModelLea
             row.visit_rank_orders[0],
             False)
 
-        # Randomly pick a concept from each visit for prediction
-        random_concepts = list(
-            map(lambda c: np.random.choice(c.shape[0], 1, replace=False), concepts)
+        # Lambda function for excluding the CLS token at the first position
+        exclude_cls_token_fn = (
+            lambda c: c[1:]
         )
+
+        # Lambda function for randomly select a token from the given numpy array
+        random_select_token_fn = (
+            lambda c: c[np.random.choice(c.shape[0], 1, replace=False)]
+        )
+
+        # Randomly pick a concept from each visit for prediction (excluding the first CLS token)
+        random_concepts = list(
+            map(
+                random_select_token_fn,
+                map(exclude_cls_token_fn, row.concept_ids[start_index:end_index]),
+            )
+        )
+        # Pad the random_concepts with num_of_visits
+        random_concepts = self._pad_visits(random_concepts, '0')
 
         return (
             random_concepts, concepts, dates, ages, visit_segments, visit_dates, visit_masks,
