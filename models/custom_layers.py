@@ -925,9 +925,19 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             dropout_rate=transformer_dropout)
 
         self.phenotype_hidden_state_layer = tf.keras.layers.Dense(
-            units=hidden_unit * embedding_size
+            units=hidden_unit * embedding_size,
+            activation='tanh'
         )
-
+        # Apply tanh to the input, otherwise we will run into the exploding gradient problem
+        self.phenotype_hidden_norm = tf.keras.layers.LayerNormalization(
+            epsilon=1e-6,
+            name='phenotype_hidden_normalization'
+        )
+        # Standard practice to randomly drop out some neurons to avoid overfitting
+        self.dropout_layer = tf.keras.layers.Dropout(
+            transformer_dropout,
+            name='phenotype_hidden_dropout'
+        )
         self.phenotype_probability_layer = tf.keras.layers.Dense(
             units=1
         )
@@ -941,7 +951,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         config['num_of_visits'] = self.num_of_visits
         return config
 
-    def call(self, inputs):
+    def call(self, inputs, **kwargs):
         visit_embeddings, att_embeddings, visit_mask = inputs
 
         # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
@@ -988,13 +998,19 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         context_phenotype_embeddings = self.phenotype_hidden_state_layer(
             self.identity @ context_phenotype_embeddings
         )
-
+        # Apply dropout to avoid overfitting and apply Layer normalization across all hidden
+        # units to avoid the exploding gradient problem
+        context_phenotype_embeddings = self.phenotype_hidden_norm(
+            self.dropout_layer(
+                context_phenotype_embeddings,
+                **kwargs
+            )
+        )
         # (batch_size, num_of_visits, hidden_unit, embedding_size)
         reshaped_phenotype_embeddings = tf.reshape(
             context_phenotype_embeddings,
             (-1, self.num_of_visits, self.hidden_unit, self.embedding_size)
         )
-
         # (batch_size, num_of_visits, hidden_unit)
         phenotype_probability = tf.nn.softmax(
             tf.squeeze(

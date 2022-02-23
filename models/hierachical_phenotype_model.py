@@ -176,6 +176,7 @@ def create_probabilistic_phenotype_model(num_of_visits,
     output_layer = TiedOutputEmbedding(
         projection_regularizer=l2_regularization,
         projection_dropout=embedding_dropout,
+        add_biases=True,
         name='concept_prediction_logits'
     )
 
