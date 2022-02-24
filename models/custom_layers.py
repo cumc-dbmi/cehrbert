@@ -893,7 +893,8 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         self.embedding_size = embedding_size
         self.num_heads = num_heads
         self.num_of_visits = num_of_visits
-        self.dropout_rate = transformer_dropout
+        self.transformer_dropout = transformer_dropout
+        self.depth = depth
 
         # Insert the att embeddings between the visit embeddings using the following trick
         self.identity = tf.constant(
@@ -925,8 +926,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             dropout_rate=transformer_dropout)
 
         self.phenotype_hidden_state_layer = tf.keras.layers.Dense(
-            units=hidden_unit * embedding_size,
-            activation='tanh'
+            units=hidden_unit * embedding_size
         )
         # Apply tanh to the input, otherwise we will run into the exploding gradient problem
         self.phenotype_hidden_norm = tf.keras.layers.LayerNormalization(
@@ -944,11 +944,12 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
 
     def get_config(self):
         config = super().get_config()
+        config['num_of_visits'] = self.num_of_visits
         config['hidden_unit'] = self.hidden_unit
         config['embedding_size'] = self.embedding_size
         config['num_heads'] = self.num_heads
-        config['dropout_rate'] = self.dropout_rate
-        config['num_of_visits'] = self.num_of_visits
+        config['depth'] = self.depth
+        config['transformer_dropout'] = self.transformer_dropout
         return config
 
     def call(self, inputs, **kwargs):
@@ -989,26 +990,26 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         look_ahead_mask = tf.maximum(visit_mask_with_att, look_ahead_mask)
 
         # (batch_size, 2 * num_of_visits - 1, embedding_size)
-        context_phenotype_embeddings, _ = self.visit_encoder(
+        context_visit_embeddings, attn_weights = self.visit_encoder(
             augmented_visit_embeddings,
             look_ahead_mask,
         )
 
         # (batch_size, num_of_visits, num_hidden_units * embedding_size)
-        context_phenotype_embeddings = self.phenotype_hidden_state_layer(
-            self.identity @ context_phenotype_embeddings
+        phenotype_embeddings = self.phenotype_hidden_state_layer(
+            self.identity @ context_visit_embeddings
         )
         # Apply dropout to avoid overfitting and apply Layer normalization across all hidden
         # units to avoid the exploding gradient problem
-        context_phenotype_embeddings = self.phenotype_hidden_norm(
+        phenotype_embeddings = self.phenotype_hidden_norm(
             self.dropout_layer(
-                context_phenotype_embeddings,
+                phenotype_embeddings,
                 **kwargs
             )
         )
         # (batch_size, num_of_visits, hidden_unit, embedding_size)
         reshaped_phenotype_embeddings = tf.reshape(
-            context_phenotype_embeddings,
+            phenotype_embeddings,
             (-1, self.num_of_visits, self.hidden_unit, self.embedding_size)
         )
         # (batch_size, num_of_visits, hidden_unit)
@@ -1030,7 +1031,8 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             name='phenotype_probability_entropy'
         )
 
-        return reshaped_phenotype_embeddings, phenotype_probability
+        return (reshaped_phenotype_embeddings, phenotype_probability,
+                context_visit_embeddings, attn_weights)
 
 
 get_custom_objects().update({

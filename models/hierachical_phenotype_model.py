@@ -11,7 +11,7 @@ def create_probabilistic_phenotype_model(num_of_visits,
                                          embedding_dropout: float = 0.6,
                                          l2_reg_penalty: float = 1e-4,
                                          time_embeddings_size: int = 16,
-                                         num_hidden_state: int = 50):
+                                         num_hidden_state: int = 20):
     pat_seq = tf.keras.layers.Input(
         shape=(num_of_visits, num_of_concepts,),
         dtype='int32',
@@ -169,7 +169,7 @@ def create_probabilistic_phenotype_model(num_of_visits,
         name='visit_phenotype_layer'
     )
 
-    phenotype_embeddings, phenotype_probability = visit_phenotype_layer(
+    phenotype_embeddings, phenotype_probability, _, _ = visit_phenotype_layer(
         [visit_embeddings, att_embeddings, visit_mask]
     )
 
