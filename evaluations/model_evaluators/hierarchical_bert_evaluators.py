@@ -1,10 +1,12 @@
+import tensorflow
 from tensorflow.python.keras.preprocessing.sequence import pad_sequences
 
 from data_generators.learning_objective import post_pad_pre_truncate
+from evaluations.model_evaluators.bert_model_evaluators import BertLstmModelEvaluator
 from evaluations.model_evaluators.model_evaluators import get_metrics
 from evaluations.model_evaluators.sequence_model_evaluators import SequenceModelEvaluator
 from models.evaluation_models import create_cher_bert_bi_lstm_model, \
-    create_cher_bert_bi_lstm_model_with_model
+    create_cher_bert_bi_lstm_model_with_model, create_prob_phenotype_bi_lstm_model_with_model
 from models.hierachical_bert_model import transformer_hierarchical_bert_model
 from utils.model_utils import *
 
@@ -192,6 +194,31 @@ class RandomHierarchicalBertEvaluator(HierarchicalBertEvaluator):
                 self.get_logger().exception(e)
                 model = create_cher_bert_bi_lstm_model_with_model(
                     cherbert_model
+                )
+            model.compile(loss='binary_crossentropy',
+                          optimizer=tf.keras.optimizers.Adam(1e-4),
+                          metrics=get_metrics())
+            return model
+
+
+class ProbabilisticPhenotypeModelEvaluator(HierarchicalBertEvaluator):
+
+    def __init__(self,
+                 *args, **kwargs):
+        super(ProbabilisticPhenotypeModelEvaluator, self).__init__(*args, **kwargs)
+
+    def _create_model(self):
+        strategy = tf.distribute.MirroredStrategy()
+        self.get_logger().info('Number of devices: {}'.format(strategy.num_replicas_in_sync))
+        with strategy.scope():
+            try:
+                model = create_prob_phenotype_bi_lstm_model_with_model(
+                    self._bert_model_path
+                )
+            except ValueError as e:
+                self.get_logger().exception(e)
+                model = create_prob_phenotype_bi_lstm_model_with_model(
+                    self._bert_model_path
                 )
             model.compile(loss='binary_crossentropy',
                           optimizer=tf.keras.optimizers.Adam(1e-4),

@@ -326,6 +326,71 @@ def create_cher_bert_bi_lstm_model_with_model(model):
     return lstm_with_cher_bert
 
 
+def create_prob_phenotype_bi_lstm_model_with_model(bert_model_path):
+    """
+
+    :param bert_model_path:
+    :return:
+    """
+    model = tf.keras.models.load_model(bert_model_path, custom_objects=get_custom_objects())
+
+    age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
+
+    _, _, contextual_visit_embeddings, _ = model.get_layer(
+        'visit_phenotype_layer'
+    ).output
+    embedding_size = contextual_visit_embeddings.shape[-1]
+
+    visit_mask = [i for i in model.inputs if i.name == 'visit_mask'][0]
+    num_of_visits = visit_mask.shape[1]
+    # Expand dimension for masking MultiHeadAttention in Visit Encoder
+    visit_mask_with_att = (tf.reshape(
+        tf.stack([visit_mask, visit_mask], axis=2),
+        shape=(-1, num_of_visits * 2)
+    )[:, 1:])
+
+    mask_embeddings = tf.cast(
+        tf.math.logical_not(
+            tf.cast(
+                visit_mask_with_att,
+                dtype=tf.bool
+            )
+        ),
+        dtype=tf.float32
+    )[:, :, tf.newaxis]
+
+    contextual_visit_embeddings = tf.math.multiply(contextual_visit_embeddings, mask_embeddings)
+
+    masking_layer = tf.keras.layers.Masking(
+        mask_value=0.,
+        input_shape=(num_of_visits, embedding_size))
+
+    bi_lstm_layer = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128))
+
+    dropout_lstm_layer = tf.keras.layers.Dropout(0.2)
+
+    dense_layer = tf.keras.layers.Dense(64, activation='tanh')
+
+    dropout_dense_layer = tf.keras.layers.Dropout(0.2)
+
+    output_layer = tf.keras.layers.Dense(1, activation='sigmoid', name='label')
+
+    next_input = masking_layer(contextual_visit_embeddings)
+
+    next_input = dropout_lstm_layer(bi_lstm_layer(next_input))
+
+    next_input = tf.keras.layers.concatenate([next_input, tf.reshape(age_of_visit_input, (-1, 1))])
+
+    next_input = dropout_dense_layer(dense_layer(next_input))
+
+    output = output_layer(next_input)
+
+    lstm_with_cher_bert = tf.keras.models.Model(inputs=model.inputs + [age_of_visit_input],
+                                                outputs=output, name='PROB_PHENOTYPE_PLUS_BI_LSTM')
+
+    return lstm_with_cher_bert
+
+
 def create_temporal_bert_bi_lstm_model(max_seq_length, temporal_bert_model_path):
     temporal_bert_model = tf.keras.models.load_model(temporal_bert_model_path,
                                                      custom_objects=dict(**get_custom_objects()))
