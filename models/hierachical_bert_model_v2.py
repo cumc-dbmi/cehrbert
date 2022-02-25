@@ -230,6 +230,19 @@ def transformer_hierarchical_bert_model(num_of_visits,
         visit_mask_with_att
     )
 
+    # Pad contextualized_visit_embeddings on axis 1 with one extra visit so we can extract the
+    # visit embeddings using the reshape trick
+    expanded_contextualized_visit_embeddings = tf.concat(
+        [contextualized_visit_embeddings,
+         contextualized_visit_embeddings[:, 0:1, :]],
+        axis=1
+    )
+
+    # Extract the visit embeddings elements
+    visit_embeddings_without_att = tf.reshape(
+        expanded_contextualized_visit_embeddings, (-1, num_of_visits, 3 * embedding_size)
+    )[:, :, embedding_size: embedding_size * 2]
+
     # # Step 3 decoder applied to patient level
     # Reshape the data in visit view back to patient view:
     # (batch, num_of_visits * num_of_concepts, embedding_size)
@@ -248,10 +261,10 @@ def transformer_hierarchical_bert_model(num_of_visits,
     dropout1 = tf.keras.layers.Dropout(transformer_dropout)
 
     global_concept_embeddings, _ = multi_head_attention_layer(
-        contextualized_visit_embeddings,
-        contextualized_visit_embeddings,
+        visit_embeddings_without_att,
+        visit_embeddings_without_att,
         concept_embeddings,
-        visit_mask_with_att)
+        visit_mask[:, tf.newaxis, tf.newaxis, :])
 
     global_concept_embeddings = layernorm1(dropout1(global_concept_embeddings))
 
@@ -280,17 +293,6 @@ def transformer_hierarchical_bert_model(num_of_visits,
 
     if include_second_tiered_learning_objectives:
         # Slice out the the visit embeddings (CLS tokens)
-
-        expanded_contextualized_visit_embeddings = tf.concat(
-            [contextualized_visit_embeddings,
-             contextualized_visit_embeddings[:, 0:1, :]],
-            axis=1
-        )
-
-        visit_embeddings_without_att = tf.reshape(
-            expanded_contextualized_visit_embeddings, (-1, num_of_visits, 3 * embedding_size)
-        )[:, :, embedding_size: embedding_size * 2]
-
         visit_prediction_dense = tf.keras.layers.Dense(
             visit_vocab_size,
             name='visit_prediction_dense'
