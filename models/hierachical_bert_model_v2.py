@@ -90,18 +90,12 @@ def transformer_hierarchical_bert_model(num_of_visits,
         shape=(-1, num_of_concepts)
     )[:, tf.newaxis, tf.newaxis, :]
 
-    # Expand dimension for masking MultiHeadAttention in Visit Encoder
-    visit_mask_with_att = (tf.reshape(
-        tf.stack([visit_mask, visit_mask], axis=2),
-        shape=(-1, num_of_visits * 2)
-    )[:, 1:])[:, tf.newaxis, tf.newaxis, :]
-
     # output the embedding_matrix:
     l2_regularizer = (tf.keras.regularizers.l2(l2_reg_penalty) if l2_reg_penalty else None)
     concept_embedding_layer = ReusableEmbedding(
         concept_vocab_size,
         embedding_size,
-        name='bpe_embeddings',
+        name='concept_embedding_layer',
         embeddings_regularizer=l2_regularizer
     )
 
@@ -137,6 +131,14 @@ def transformer_hierarchical_bert_model(num_of_visits,
     # Look up the embeddings for the att tokens
     att_embeddings, _ = concept_embedding_layer(
         visit_time_delta_att
+    )
+
+    # Repurpose token id 0 as the visit start embedding
+    visit_start_embeddings, _ = concept_embedding_layer(
+        tf.zeros_like(
+            visit_mask,
+            dtype=tf.int32
+        )
     )
 
     pt_seq_age_embeddings = age_embedding_layer(
@@ -192,48 +194,35 @@ def transformer_hierarchical_bert_model(num_of_visits,
     # (batch_size, num_of_visits, embedding_size)
     visit_embeddings = concept_embeddings[:, :, 0]
 
-    # Insert the att embeddings between the visit embeddings using the following trick
-    identity = tf.constant(
-        np.insert(
-            np.identity(num_of_visits),
-            obj=range(1, num_of_visits),
-            values=0,
-            axis=1
-        ),
-        dtype=tf.float32
-    )
-
-    # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
-    expanded_visit_embeddings = tf.transpose(
-        tf.transpose(visit_embeddings, perm=[0, 2, 1]) @ identity,
-        perm=[0, 2, 1]
-    )
-
-    # Create the inverse "identity" matrix for inserting att embeddings
-    identity_inverse = tf.constant(
-        np.insert(
-            np.identity(num_of_visits - 1),
-            obj=range(0, num_of_visits),
-            values=0,
-            axis=1),
-        dtype=tf.float32)
-
-    # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
-    expanded_att_embeddings = tf.transpose(
-        tf.transpose(att_embeddings, perm=[0, 2, 1]) @ identity_inverse,
-        perm=[0, 2, 1]
-    )
+    # (batch_size, num_of_visits, embedding_size)
+    expanded_att_embeddings = tf.concat([att_embeddings, att_embeddings[:, 0:1, :]], axis=1)
 
     # Insert the att embeddings between visit embeddings
-    # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
-    contextualized_visit_embeddings = expanded_visit_embeddings + expanded_att_embeddings
+    # (batch_size, num_of_visits + num_of_visits + num_of_visits - 1, embedding_size)
+    contextualized_visit_embeddings = tf.reshape(
+        tf.concat(
+            [visit_start_embeddings,
+             visit_embeddings,
+             expanded_att_embeddings],
+            axis=-1
+        ),
+        (-1, 3 * num_of_visits, embedding_size)
+    )[:, :-1, :]
+
+    # Expand dimension for masking MultiHeadAttention in Visit Encoder
+    visit_mask_with_att = tf.reshape(
+        tf.tile(visit_mask[:, :, tf.newaxis], [1, 1, 3]),
+        (-1, num_of_visits * 3)
+    )[:, tf.newaxis, tf.newaxis, 1:]
 
     # Second bert applied at the patient level to the visit embeddings
-    visit_encoder = Encoder(name='visit_encoder',
-                            num_layers=depth,
-                            d_model=embedding_size,
-                            num_heads=num_heads,
-                            dropout_rate=transformer_dropout)
+    visit_encoder = Encoder(
+        name='visit_encoder',
+        num_layers=depth,
+        d_model=embedding_size,
+        num_heads=num_heads,
+        dropout_rate=transformer_dropout
+    )
 
     # Feed augmented visit embeddings into encoders to get contextualized visit embeddings
     contextualized_visit_embeddings, _ = visit_encoder(
@@ -291,7 +280,16 @@ def transformer_hierarchical_bert_model(num_of_visits,
 
     if include_second_tiered_learning_objectives:
         # Slice out the the visit embeddings (CLS tokens)
-        visit_embeddings_without_att = identity @ contextualized_visit_embeddings
+
+        expanded_contextualized_visit_embeddings = tf.concat(
+            [contextualized_visit_embeddings,
+             contextualized_visit_embeddings[:, 0:1, :]],
+            axis=1
+        )
+
+        visit_embeddings_without_att = tf.reshape(
+            expanded_contextualized_visit_embeddings, (-1, num_of_visits, 3 * embedding_size)
+        )[:, :, embedding_size: embedding_size * 2]
 
         visit_prediction_dense = tf.keras.layers.Dense(
             visit_vocab_size,
