@@ -1,4 +1,4 @@
-from models.custom_layers import *
+from models.layers.custom_layers import *
 
 
 def transformer_hierarchical_bert_model(num_of_visits,
@@ -257,24 +257,34 @@ def transformer_hierarchical_bert_model(num_of_visits,
         num_heads=num_heads
     )
 
-    layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
-    dropout1 = tf.keras.layers.Dropout(transformer_dropout)
+    mha_layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+    mha_dropout = tf.keras.layers.Dropout(transformer_dropout)
 
     global_concept_embeddings, _ = multi_head_attention_layer(
         visit_embeddings_without_att,
         visit_embeddings_without_att,
         concept_embeddings,
-        visit_mask[:, tf.newaxis, tf.newaxis, :])
+        visit_mask[:, tf.newaxis, tf.newaxis, :]
+    )
 
-    global_concept_embeddings = layernorm1(dropout1(global_concept_embeddings))
+    global_attn_norm = mha_layernorm(
+        mha_dropout(global_concept_embeddings) + concept_embeddings
+    )
 
     ffn = point_wise_feed_forward_network(embedding_size, 512)
-    layernorm2 = tf.keras.layers.LayerNormalization(
+    ffn_layernorm = tf.keras.layers.LayerNormalization(
         epsilon=1e-6,
         name='global_concept_embeddings_normalization'
     )
-    dropout2 = tf.keras.layers.Dropout(transformer_dropout)
-    global_concept_embeddings = layernorm2(dropout2(ffn(global_concept_embeddings)))
+    ffn_dropout = tf.keras.layers.Dropout(
+        transformer_dropout
+    )
+
+    ffn_dropout_output = ffn_dropout(ffn(global_attn_norm))
+
+    global_attn = ffn_layernorm(
+        ffn_dropout_output + global_attn_norm
+    )
 
     concept_output_layer = TiedOutputEmbedding(
         projection_regularizer=l2_regularizer,
@@ -286,7 +296,7 @@ def transformer_hierarchical_bert_model(num_of_visits,
     )
 
     concept_predictions = concept_softmax_layer(
-        concept_output_layer([global_concept_embeddings, embedding_matrix])
+        concept_output_layer([global_attn, embedding_matrix])
     )
 
     outputs = [concept_predictions]

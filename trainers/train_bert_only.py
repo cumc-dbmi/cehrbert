@@ -7,7 +7,7 @@ from trainers.model_trainer import AbstractConceptEmbeddingTrainer
 from utils.model_utils import tokenize_one_field
 from models.bert_models_visit_prediction import transformer_bert_model_visit_prediction
 from models.bert_models import transformer_bert_model
-from models.custom_layers import get_custom_objects
+from models.layers.custom_layers import get_custom_objects
 from data_generators.data_generator_base import *
 
 from keras_transformer.bert import (masked_perplexity,

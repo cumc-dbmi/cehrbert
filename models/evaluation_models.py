@@ -3,8 +3,8 @@ import tensorflow as tf
 from tensorflow.keras.initializers import Constant
 from tensorflow.keras.models import Model
 
-from models.custom_layers import get_custom_objects
-from models.custom_layers import ConvolutionBertLayer
+from models.layers.custom_layers import get_custom_objects
+from models.layers.custom_layers import ConvolutionBertLayer
 from models.bert_models_visit_prediction import transformer_bert_model_visit_prediction
 
 

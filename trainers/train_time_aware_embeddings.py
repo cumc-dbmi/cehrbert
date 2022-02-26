@@ -8,7 +8,7 @@ from models.parse_args import create_parse_args
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
 from utils.model_utils import tokenize_one_field
 from data_generators.data_generator_base import TimeAttentionDataGenerator
-from models.custom_layers import get_custom_objects
+from models.layers.custom_layers import get_custom_objects
 from models.time_attention_models import time_attention_cbow_model
 
 
