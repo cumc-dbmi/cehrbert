@@ -99,30 +99,6 @@ def transformer_hierarchical_bert_model(num_of_visits,
         embeddings_regularizer=l2_regularizer
     )
 
-    # define the time embedding layer for absolute time stamps (since 1970)
-    time_embedding_layer = TimeEmbeddingLayer(
-        embedding_size=time_embeddings_size,
-        name='time_embedding_layer'
-    )
-    # define the age embedding layer for the age w.r.t the medical record
-    age_embedding_layer = TimeEmbeddingLayer(
-        embedding_size=time_embeddings_size,
-        name='age_embedding_layer'
-    )
-    # define positional encoding layer for visit numbers, the visit numbers are normalized
-    # by subtracting visit numbers off the first visit number
-    positional_encoding_layer = PositionalEncodingLayer(
-        max_sequence_length=num_of_visits * num_of_concepts,
-        embedding_size=time_embeddings_size,
-        name='positional_encoding_layer'
-    )
-    # Temporal transformation
-    temporal_transformation_layer = tf.keras.layers.Dense(
-        embedding_size,
-        activation='tanh',
-        name='temporal_transformation'
-    )
-
     # Look up the embeddings for the concepts
     concept_embeddings, embedding_matrix = concept_embedding_layer(
         pat_seq
@@ -141,27 +117,18 @@ def transformer_hierarchical_bert_model(num_of_visits,
         )
     )
 
-    pt_seq_age_embeddings = age_embedding_layer(
-        pat_seq_age
+    temporal_transformation_layer = TemporalTransformationLayer(
+        time_embeddings_size=time_embeddings_size,
+        embedding_size=embedding_size,
+        name='temporal_transformation_layer'
     )
-    pt_seq_time_embeddings = time_embedding_layer(
-        pat_seq_time
-    )
-    visit_positional_encoding = positional_encoding_layer(
-        visit_rank_order
-    )
-    visit_positional_encoding = tf.tile(
-        visit_positional_encoding[:, :, tf.newaxis, :], [1, 1, num_of_concepts, 1])
 
     # (batch, num_of_visits, num_of_concepts, embedding_size)
     concept_embeddings = temporal_transformation_layer(
-        tf.concat(
-            [concept_embeddings,
-             pt_seq_age_embeddings,
-             pt_seq_time_embeddings,
-             visit_positional_encoding],
-            axis=-1, name='concat_for_encoder'
-        )
+        concept_embeddings,
+        pat_seq_age,
+        pat_seq_time,
+        visit_rank_order
     )
 
     # The first bert applied at the visit level

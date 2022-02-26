@@ -4,7 +4,6 @@ import numpy as np
 from tensorflow.keras.utils import get_custom_objects
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 from keras_transformer.bert import MaskedPenalizedSparseCategoricalCrossentropy
-from models.layers.hierarchical_custom_layers import HierarchicalBertLayer
 
 from utils.model_utils import create_concept_mask
 
@@ -258,15 +257,14 @@ class DecoderLayer(tf.keras.layers.Layer):
 
 
 class PositionalEncodingLayer(tf.keras.layers.Layer):
-    def __init__(self, max_sequence_length, embedding_size, *args, **kwargs):
+    def __init__(self, embedding_size, *args, **kwargs):
         super(PositionalEncodingLayer, self).__init__(*args, **kwargs)
-        self.max_sequence_length = max_sequence_length
         self.embedding_size = embedding_size
-        self.pos_encoding = tf.squeeze(positional_encoding(max_sequence_length, embedding_size))
+        # TODO: change this to dynamic in the future
+        self.pos_encoding = tf.squeeze(positional_encoding(10000, self.embedding_size))
 
     def get_config(self):
         config = super().get_config()
-        config['max_sequence_length'] = self.max_sequence_length
         config['embedding_size'] = self.embedding_size
         return config
 
@@ -330,6 +328,76 @@ class VisitEmbeddingLayer(tf.keras.layers.Layer):
     def call(self, inputs, **kwargs):
         visit_orders, concept_embeddings = inputs
         return self.visit_embedding_layer(visit_orders, **kwargs) + concept_embeddings
+
+
+class TemporalTransformationLayer(tf.keras.layers.Layer):
+    def __init__(self, time_embeddings_size, embedding_size, *args, **kwargs):
+        super(TemporalTransformationLayer, self).__init__(*args, **kwargs)
+
+        self.time_embeddings_size = time_embeddings_size
+        self.embedding_size = embedding_size
+
+        # define the time embedding layer for absolute time stamps (since 1970)
+        self.time_embedding_layer = TimeEmbeddingLayer(
+            embedding_size=time_embeddings_size,
+            name='time_embedding_layer'
+        )
+        # define the age embedding layer for the age w.r.t the medical record
+        self.age_embedding_layer = TimeEmbeddingLayer(
+            embedding_size=time_embeddings_size,
+            name='age_embedding_layer'
+        )
+
+        # define positional encoding layer for visit numbers, the visit numbers are normalized
+        # by subtracting visit numbers off the first visit number
+        self.positional_encoding_layer = PositionalEncodingLayer(
+            embedding_size=time_embeddings_size,
+            name='positional_encoding_layer'
+        )
+        # Temporal transformation
+        self.temporal_transformation_layer = tf.keras.layers.Dense(
+            embedding_size,
+            activation='tanh',
+            name='temporal_transformation'
+        )
+
+    def get_config(self):
+        config = super().get_config()
+        config['time_embeddings_size'] = self.time_embeddings_size
+        config['embedding_size'] = self.embedding_size
+        return config
+
+    def call(self, concept_embeddings, pat_seq_age, pat_seq_time, visit_rank_order, **kwargs):
+        _, _, num_of_concepts = pat_seq_age.shape
+
+        pt_seq_age_embeddings = self.age_embedding_layer(
+            pat_seq_age,
+            **kwargs
+        )
+        pt_seq_time_embeddings = self.time_embedding_layer(
+            pat_seq_time,
+            **kwargs
+        )
+        visit_positional_encoding = self.positional_encoding_layer(
+            visit_rank_order,
+            **kwargs
+        )
+
+        visit_positional_encoding = tf.tile(
+            visit_positional_encoding[:, :, tf.newaxis, :], [1, 1, num_of_concepts, 1])
+
+        # (batch, num_of_visits, num_of_concepts, embedding_size)
+        temporal_concept_embeddings = self.temporal_transformation_layer(
+            tf.concat(
+                [concept_embeddings,
+                 pt_seq_age_embeddings,
+                 pt_seq_time_embeddings,
+                 visit_positional_encoding],
+                axis=-1
+            )
+        )
+
+        return temporal_concept_embeddings
 
 
 class TimeAttention(tf.keras.layers.Layer):
@@ -610,10 +678,10 @@ get_custom_objects().update({
     'VisitEmbeddingLayer': VisitEmbeddingLayer,
     'PositionalEncodingLayer': PositionalEncodingLayer,
     'TimeEmbeddingLayer': TimeEmbeddingLayer,
+    'TemporalTransformationLayer': TemporalTransformationLayer,
     'ReusableEmbedding': ReusableEmbedding,
     'TiedOutputEmbedding': TiedOutputEmbedding,
     'MaskedPenalizedSparseCategoricalCrossentropy': MaskedPenalizedSparseCategoricalCrossentropy,
     'BertLayer': BertLayer,
-    'ConvolutionBertLayer': ConvolutionBertLayer,
-    'HierarchicalBertLayer': HierarchicalBertLayer
+    'ConvolutionBertLayer': ConvolutionBertLayer
 })

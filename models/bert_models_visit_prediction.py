@@ -113,8 +113,9 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
         default_inputs.extend([ages])
         age_embedding_layer = TimeEmbeddingLayer(embedding_size=embedding_size)
         input_for_encoder = input_for_encoder + age_embedding_layer(ages)
-        positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
-                                                            embedding_size=embedding_size)
+        positional_encoding_layer = PositionalEncodingLayer(
+            embedding_size=embedding_size
+        )
         input_for_encoder += positional_encoding_layer(visit_concept_orders)
 
     elif use_time_embedding:
@@ -134,9 +135,9 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
         age_embedding_layer = TimeEmbeddingLayer(embedding_size=time_embeddings_size,
                                                  name='age_embedding_layer')
         positional_encoding_layer = PositionalEncodingLayer(
-            max_sequence_length=max_seq_length,
             embedding_size=embedding_size,
-            name='positional_encoding_layer')
+            name='positional_encoding_layer'
+        )
 
         # dense layer for rescale the patient sequence embeddings back to the original size
         scale_back_patient_seq_concat_layer = tf.keras.layers.Dense(
@@ -166,8 +167,9 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
                 name='concat_for_decoder')
         )
     else:
-        positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
-                                                            embedding_size=embedding_size)
+        positional_encoding_layer = PositionalEncodingLayer(
+            embedding_size=embedding_size
+        )
         input_for_encoder += positional_encoding_layer(visit_concept_orders)
 
     input_for_encoder, _ = encoder(input_for_encoder, concept_mask)

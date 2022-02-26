@@ -264,7 +264,7 @@ def create_cher_bert_bi_lstm_model_with_model(model):
         'global_concept_embeddings_normalization'
     ).output
     _, num_of_visits, num_of_concepts, embedding_size = model.get_layer(
-        'temporal_transformation'
+        'temporal_transformation_layer'
     ).output.shape
     max_seq_length = num_of_visits * num_of_concepts
 
