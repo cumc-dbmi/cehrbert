@@ -336,16 +336,22 @@ class HierarchicalBertDataGenerator(AbstractDataGeneratorBase):
                 # Skip the patient that doesn't have the min number of concepts
                 if row.num_of_concepts >= self._min_num_of_concepts:
                     # Use a sliding window to slice out a portion of the medical history
-                    for step in range(self._calculate_step(row.num_of_visits)):
-                        end_index = row.num_of_visits - step * self._sliding_window
-                        start_index = max(end_index - self._max_num_of_visits,
-                                          0)
+                    # for step in range(self._calculate_step(row.num_of_visits)):
+                    #     end_index = row.num_of_visits - step * self._sliding_window
+                    #     start_index = max(end_index - self._max_num_of_visits,
+                    #                       0)
+                    if self._max_num_of_visits >= row.num_of_visits:
+                        start_index = 0
+                        end_index = row.num_of_visits
+                    else:
+                        start_index = random.randint(0, row.num_of_visits - self._max_num_of_visits)
+                        end_index = start_index + self._max_num_of_visits
+
+                    if start_index < end_index:
                         yield RowSlicer(row, start_index, end_index)
 
     def estimate_data_size(self):
-        return self._training_data[
-            self._training_data.num_of_concepts >= self._min_num_of_concepts].num_of_visits.apply(
-            self._calculate_step).sum()
+        return len(self._training_data)
 
 
 class HierarchicalBertMultiTaskDataGenerator(HierarchicalBertDataGenerator):
