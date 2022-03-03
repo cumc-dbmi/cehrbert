@@ -272,6 +272,7 @@ def transformer_hierarchical_bert_model(num_of_visits,
         # Slice out the the visit embeddings (CLS tokens)
         visit_prediction_dense = tf.keras.layers.Dense(
             visit_vocab_size,
+            activation='tanh',
             name='visit_prediction_dense'
         )
 
