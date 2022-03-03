@@ -228,10 +228,10 @@ def transformer_hierarchical_bert_model(num_of_visits,
     mha_dropout = tf.keras.layers.Dropout(transformer_dropout)
 
     global_concept_embeddings, _ = multi_head_attention_layer(
-        visit_embeddings_without_att,
-        visit_embeddings_without_att,
+        contextualized_visit_embeddings,
+        contextualized_visit_embeddings,
         concept_embeddings,
-        visit_mask[:, tf.newaxis, tf.newaxis, :]
+        visit_mask_with_att
     )
 
     global_attn_norm = mha_layernorm(
