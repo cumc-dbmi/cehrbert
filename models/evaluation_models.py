@@ -260,13 +260,45 @@ def create_cher_bert_bi_lstm_model(bert_model_path):
 def create_cher_bert_bi_lstm_model_with_model(model):
     age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
 
+    model.trainable = False
+
+    contextualized_visit_embeddings, _ = model.get_layer(
+        'visit_encoder'
+    ).output
+
     contextualized_embeddings = model.get_layer(
         'global_concept_embeddings_normalization'
     ).output
+
     _, num_of_visits, num_of_concepts, embedding_size = model.get_layer(
         'temporal_transformation_layer'
     ).output.shape
     max_seq_length = num_of_visits * num_of_concepts
+
+    # Pad contextualized_visit_embeddings on axis 1 with one extra visit so we can extract the
+    # visit embeddings using the reshape trick
+    expanded_contextualized_visit_embeddings = tf.concat(
+        [contextualized_visit_embeddings,
+         contextualized_visit_embeddings[:, 0:1, :]],
+        axis=1
+    )
+
+    # Extract the visit embeddings elements
+    visit_embeddings_without_att = tf.reshape(
+        expanded_contextualized_visit_embeddings, (-1, num_of_visits, 3 * embedding_size)
+    )[:, :, embedding_size: embedding_size * 2]
+
+    visit_mask = model.get_layer('visit_mask').output
+
+    mask_visit_embeddings = tf.cast(
+        tf.math.logical_not(
+            tf.cast(
+                visit_mask,
+                dtype=tf.bool
+            )
+        ),
+        dtype=tf.float32
+    )[:, :, tf.newaxis]
 
     pat_mask = model.get_layer('pat_mask').output
 
@@ -285,7 +317,7 @@ def create_cher_bert_bi_lstm_model_with_model(model):
         (-1, max_seq_length, embedding_size)
     )
 
-    mask_embeddings = tf.cast(
+    mask_concept_embeddings = tf.cast(
         tf.math.logical_not(
             tf.cast(
                 tf.reshape(pat_mask_reordered, (-1, max_seq_length)),
@@ -295,12 +327,39 @@ def create_cher_bert_bi_lstm_model_with_model(model):
         dtype=tf.float32
     )[:, :, tf.newaxis]
 
-    contextualized_embeddings = tf.math.multiply(contextualized_embeddings, mask_embeddings)
+    contextualized_embeddings = tf.math.multiply(
+        contextualized_embeddings,
+        mask_concept_embeddings
+    )
 
-    masking_layer = tf.keras.layers.Masking(mask_value=0.,
-                                            input_shape=(max_seq_length, embedding_size))
+    visit_embeddings_without_att = tf.math.multiply(
+        visit_embeddings_without_att,
+        mask_visit_embeddings
+    )
 
-    bi_lstm_layer = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128))
+    visit_masking_layer = tf.keras.layers.Masking(
+        mask_value=0.,
+        input_shape=(num_of_visits, embedding_size)
+    )
+
+    concept_masking_layer = tf.keras.layers.Masking(
+        mask_value=0.,
+        input_shape=(max_seq_length, embedding_size)
+    )
+
+    bi_lstm_visit_layer = tf.keras.layers.Bidirectional(
+        tf.keras.layers.LSTM(
+            128,
+            name='visit_lstm'
+        )
+    )
+
+    bi_lstm_concept_layer = tf.keras.layers.Bidirectional(
+        tf.keras.layers.LSTM(
+            128,
+            name='concept_lstm'
+        )
+    )
 
     dropout_lstm_layer = tf.keras.layers.Dropout(0.2)
 
@@ -310,11 +369,19 @@ def create_cher_bert_bi_lstm_model_with_model(model):
 
     output_layer = tf.keras.layers.Dense(1, activation='sigmoid', name='label')
 
-    next_input = masking_layer(contextualized_embeddings)
+    visit_next_input = visit_masking_layer(visit_embeddings_without_att)
 
-    next_input = dropout_lstm_layer(bi_lstm_layer(next_input))
+    visit_next_input = dropout_lstm_layer(bi_lstm_visit_layer(visit_next_input))
 
-    next_input = tf.keras.layers.concatenate([next_input, tf.reshape(age_of_visit_input, (-1, 1))])
+    concept_next_input = concept_masking_layer(contextualized_embeddings)
+
+    concept_next_input = dropout_lstm_layer(bi_lstm_concept_layer(concept_next_input))
+
+    next_input = tf.keras.layers.concatenate(
+        [visit_next_input,
+         concept_next_input,
+         tf.reshape(age_of_visit_input, (-1, 1))]
+    )
 
     next_input = dropout_dense_layer(dense_layer(next_input))
 
