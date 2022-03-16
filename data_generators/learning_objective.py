@@ -6,7 +6,7 @@ from typing import List
 import numpy as np
 import pandas as pd
 from tensorflow.python.keras.preprocessing.sequence import pad_sequences
-from tensorflow.dtypes import int32
+from tensorflow.dtypes import int32, float32
 
 from utils.model_utils import convert_to_list_of_lists
 from data_generators.data_classes import RowSlicer
@@ -358,7 +358,8 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
     required_columns = ['concept_ids', 'dates',
                         'visit_segments', 'ages',
                         'visit_dates', 'visit_masks',
-                        'time_interval_atts', 'visit_rank_orders']
+                        'time_interval_atts',
+                        'visit_rank_orders', 'concept_values', 'concept_value_masks']
 
     def __init__(self, concept_tokenizer: ConceptTokenizer,
                  max_num_of_visits: int,
@@ -378,19 +379,21 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
             'visit_segment': int32,
             'visit_time_delta_att': int32,
             'visit_mask': int32,
-            'visit_rank_order': int32
+            'visit_rank_order': int32,
+            'concept_values': float32,
+            'concept_value_masks': int32
         }
         output_dict_schema = {'concept_predictions': int32}
         return input_dict_schema, output_dict_schema
 
-    def _pad(self, x, padded_token):
+    def _pad(self, x, padded_token, token_dtype='int32'):
         return pad_sequences(
             np.asarray(x),
             maxlen=self._max_num_of_concepts,
             padding='post',
             truncating='post',
             value=padded_token,
-            dtype='int32')
+            dtype=token_dtype)
 
     def _concept_mask(self, concept_ids):
         return list(map(lambda c: (c == self._concept_tokenizer.get_unused_token_id()).astype(int),
@@ -402,9 +405,10 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
         (
             output_concept_masks, masked_concepts, concepts, dates, ages,
             visit_segments, visit_dates, visit_masks, time_interval_atts,
-            visit_rank_orders
+            visit_rank_orders, concept_values, concept_value_masks
         ) = zip(*list(map(self._make_record, rows)))
 
+        # Retrieve the unused token id to pad the visit sequences
         unused_token_id = self._concept_tokenizer.get_unused_token_id()
 
         # The main inputs for bert
@@ -433,6 +437,23 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
 
         visit_rank_orders = np.stack(visit_rank_orders)
 
+        # The concept values for bert
+        concept_values = np.stack(
+            pd.Series(concept_values) \
+                .apply(convert_to_list_of_lists) \
+                .apply(lambda time_stamps: self._pad(time_stamps,
+                                                     padded_token=-1.0,
+                                                     token_dtype='float32'))
+        )
+        # The concept value masks for bert, this indicates which concept in the visit sequence
+        # has a value associated
+        concept_value_masks = np.stack(
+            pd.Series(concept_value_masks) \
+                .apply(convert_to_list_of_lists) \
+                .apply(lambda time_stamps: self._pad(time_stamps,
+                                                     padded_token=0))
+        )
+
         # The auxiliary inputs for bert
         dates = np.stack(
             pd.Series(dates) \
@@ -446,14 +467,18 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
                 .apply(lambda time_stamps: self._pad(time_stamps, padded_token=0))
         )
 
-        input_dict = {'pat_seq': masked_concepts,
-                      'pat_mask': pat_mask,
-                      'pat_seq_time': dates,
-                      'pat_seq_age': ages,
-                      'visit_segment': visit_segments,
-                      'visit_time_delta_att': time_interval_atts,
-                      'visit_mask': visit_masks,
-                      'visit_rank_order': visit_rank_orders}
+        input_dict = {
+            'pat_seq': masked_concepts,
+            'pat_mask': pat_mask,
+            'pat_seq_time': dates,
+            'pat_seq_age': ages,
+            'visit_segment': visit_segments,
+            'visit_time_delta_att': time_interval_atts,
+            'visit_mask': visit_masks,
+            'visit_rank_order': visit_rank_orders,
+            'concept_values': concept_values,
+            'concept_value_masks': concept_value_masks
+        }
 
         output_concept_masks = np.stack(
             pd.Series(output_concept_masks) \
@@ -483,6 +508,11 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
         concepts = self._pad_visits(row.concept_ids[start_index:end_index], '0')
         dates = self._pad_visits(row.dates[start_index:end_index], 0)
         ages = self._pad_visits(row.ages[start_index:end_index], 0)
+
+        # Retrieve the values associated with the concepts, this is mostly for measurements
+        concept_values = self._pad_visits(row.concept_values[start_index:end_index], -1.0)
+        concept_value_masks = self._pad_visits(row.concept_value_masks[start_index:end_index], 0)
+
         visit_segments = self._pad_visits(
             row.visit_segments[start_index:end_index], 0, False
         )
@@ -507,7 +537,7 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
         return (
             output_concept_masks, masked_concepts, concepts, dates, ages,
             visit_segments, visit_dates, visit_masks, time_interval_atts,
-            visit_rank_orders
+            visit_rank_orders, concept_values, concept_value_masks
         )
 
     def _pad_visits(self, field_values, pad_value, is_visit_level=True):
