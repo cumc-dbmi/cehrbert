@@ -57,6 +57,16 @@ def transformer_hierarchical_bert_model(num_of_visits,
         dtype='int32',
         name='pat_mask'
     )
+    concept_values = tf.keras.layers.Input(
+        shape=(num_of_visits, num_of_concepts,),
+        dtype='float32',
+        name='concept_values'
+    )
+    concept_value_masks = tf.keras.layers.Input(
+        shape=(num_of_visits, num_of_concepts,),
+        dtype='int32',
+        name='concept_value_masks'
+    )
     visit_segment = tf.keras.layers.Input(
         shape=(num_of_visits,),
         dtype='int32',
@@ -81,8 +91,8 @@ def transformer_hierarchical_bert_model(num_of_visits,
 
     # Create a list of inputs so the model could reference these later
     default_inputs = [pat_seq, pat_seq_age, pat_seq_time, pat_mask,
-                      visit_segment, visit_mask, visit_time_delta_att,
-                      visit_rank_order]
+                      concept_values, concept_value_masks, visit_segment, visit_mask,
+                      visit_time_delta_att, visit_rank_order]
 
     # Expand dimensions for masking MultiHeadAttention in Concept Encoder
     pat_concept_mask = tf.reshape(
@@ -102,6 +112,19 @@ def transformer_hierarchical_bert_model(num_of_visits,
     # Look up the embeddings for the concepts
     concept_embeddings, embedding_matrix = concept_embedding_layer(
         pat_seq
+    )
+
+    concept_value_transformation_layer = ConceptValueTransformationLayer(
+        embedding_size=embedding_size,
+        name='concept_value_transformation_layer'
+    )
+
+    # Transform the concept embeddings by combining their concept embeddings with the
+    # corresponding val
+    concept_embeddings = concept_value_transformation_layer(
+        concept_embeddings=concept_embeddings,
+        concept_values=concept_values,
+        concept_value_masks=concept_value_masks
     )
 
     # Look up the embeddings for the att tokens

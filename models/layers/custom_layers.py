@@ -330,6 +330,68 @@ class VisitEmbeddingLayer(tf.keras.layers.Layer):
         return self.visit_embedding_layer(visit_orders, **kwargs) + concept_embeddings
 
 
+class ConceptValueTransformationLayer(tf.keras.layers.Layer):
+    def __init__(self, embedding_size, *args, **kwargs):
+        super(ConceptValueTransformationLayer, self).__init__(*args, **kwargs)
+        self.embedding_size = embedding_size
+        self.merge_value_transformation_layer = tf.keras.layers.Dense(
+            embedding_size,
+            name='merge_value_transformation_layer'
+        )
+
+    def get_config(self):
+        config = super().get_config()
+        config['embedding_size'] = self.embedding_size
+        return config
+
+    def call(self, concept_embeddings, concept_values, concept_value_masks):
+        # Mask out the concept embeddings without a value
+        # Combine the concept embeddings with concept_values
+
+        # (batch_size, num_of_visits, num_of_concepts, 1)
+        concept_values = tf.expand_dims(
+            concept_values,
+            axis=-1
+        )
+        # (batch_size, num_of_visits, num_of_concepts, 1)
+        concept_value_masks = tf.expand_dims(
+            concept_value_masks,
+            axis=-1
+        )
+        # (batch_size, num_of_visits, num_of_concepts, 1 + embedding_size)
+        concept_embeddings_with_val = tf.concat(
+            [concept_embeddings, concept_values],
+            axis=-1
+        )
+        # Run through a dense layer to bring the dimension back to embedding_size
+        concept_embeddings_with_val = self.merge_value_transformation_layer(
+            concept_embeddings_with_val
+        )
+        # Zero out the positions without a val
+        concept_embeddings_with_val = tf.multiply(
+            concept_embeddings_with_val,
+            tf.cast(concept_value_masks, dtype=tf.float32)
+        )
+        # Derive the inverse concept value masks for zeroing out the embeddings without a val
+        inverse_concept_value_masks = tf.cast(
+            tf.logical_not(
+                tf.cast(concept_value_masks, dtype=tf.bool)
+            ),
+            dtype=tf.float32
+        )
+
+        # Zero out the position of concept embeddings with a val
+        concept_embeddings_without_val = tf.multiply(
+            inverse_concept_value_masks,
+            concept_embeddings
+        )
+
+        # Merge two sets of concept embeddings
+        concept_embeddings = concept_embeddings_without_val + concept_embeddings_with_val
+
+        return concept_embeddings
+
+
 class TemporalTransformationLayer(tf.keras.layers.Layer):
     def __init__(self, time_embeddings_size, embedding_size, *args, **kwargs):
         super(TemporalTransformationLayer, self).__init__(*args, **kwargs)
@@ -679,6 +741,7 @@ get_custom_objects().update({
     'PositionalEncodingLayer': PositionalEncodingLayer,
     'TimeEmbeddingLayer': TimeEmbeddingLayer,
     'TemporalTransformationLayer': TemporalTransformationLayer,
+    'ConceptValueTransformationLayer': ConceptValueTransformationLayer,
     'ReusableEmbedding': ReusableEmbedding,
     'TiedOutputEmbedding': TiedOutputEmbedding,
     'MaskedPenalizedSparseCategoricalCrossentropy': MaskedPenalizedSparseCategoricalCrossentropy,
