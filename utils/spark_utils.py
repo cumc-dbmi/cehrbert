@@ -8,11 +8,8 @@ import pyspark.sql.types as T
 from pyspark.sql import Window as W
 from pyspark.sql.pandas.functions import pandas_udf
 
+from const.common import PERSON, VISIT_OCCURRENCE, UNKNOWN_CONCEPT, MEASUREMENT
 from utils.logging_utils import *
-
-PERSON = 'person'
-VISIT_OCCURRENCE = 'visit_occurrence'
-UNKNOWN_CONCEPT = '[UNKNOWN]'
 
 DOMAIN_KEY_FIELDS = {
     'condition_occurrence_id': ('condition_concept_id', 'condition_start_date', 'condition'),
@@ -72,6 +69,7 @@ def join_domain_tables(domain_tables):
 
     Keyword arguments:
     domain_tables -- the array containing the OMOOP domain tabls except visit_occurrence
+        except measurement
 
     The the output columns of the domain table is converted to the same standard format as the following
     (person_id, standard_concept_id, date, lower_bound, upper_bound, domain).
@@ -94,7 +92,8 @@ def join_domain_tables(domain_tables):
                                                'standard_concept_id'),
                                            domain_table['date'],
                                            domain_table['visit_occurrence_id'],
-                                           F.lit(table_domain_field).alias('domain')) \
+                                           F.lit(table_domain_field).alias('domain'),
+                                           F.lit(-1).alias('concept_value')) \
             .distinct()
 
         if patient_event is None:
@@ -721,60 +720,102 @@ def get_standard_concept_ids(spark, concept_ids):
     return standard_concept_ids
 
 
-def create_hierarchical_sequence_data(person, visit_occurrence, patient_event,
+def get_table_column_refs(dataframe):
+    return [dataframe[fieldName] for fieldName in
+            dataframe.schema.fieldNames()]
+
+
+def create_hierarchical_sequence_data(person, visit_occurrence, patient_events,
                                       date_filter=None, max_num_of_visits_per_person=200):
-    @pandas_udf('string')
-    def pandas_udf_to_att(time_intervals: pd.Series) -> pd.Series:
-        return time_intervals.apply(time_token_func)
+    """
+    This creates a hierarchical data frame for the hierarchical bert model
+    :param person:
+    :param visit_occurrence:
+    :param patient_events:
+    :param date_filter:
+    :param max_num_of_visits_per_person:
+    :return:
+    """
 
     if date_filter:
-        patient_event = patient_event.where(F.col('date').cast('date') >= date_filter)
+        patient_events = patient_events.where(F.col('date').cast('date') >= date_filter)
 
-    visit_occurrence_person = create_visit_person_join(pandas_udf_to_att, person, visit_occurrence)
+    # Construct visit information with the person demographic
+    visit_occurrence_person = create_visit_person_join(person, visit_occurrence)
 
-    visit_columns = [visit_occurrence_person[fieldName] for fieldName in
-                     visit_occurrence_person.schema.fieldNames()]
+    # Retrieve all visit column references
+    visit_column_refs = get_table_column_refs(visit_occurrence_person)
 
-    patient_columns = [
-        F.coalesce(patient_event['cohort_member_id'], visit_occurrence['person_id']).alias(
-            'cohort_member_id'),
-        F.coalesce(patient_event['standard_concept_id'], F.lit(UNKNOWN_CONCEPT)).alias(
-            'standard_concept_id'),
-        F.coalesce(patient_event['date'],
-                   visit_occurrence['visit_start_date']).alias('date'),
-        F.coalesce(patient_event['domain'], F.lit('unknown')).alias('domain')]
+    # Construct the patient event column references
+    pat_col_refs = [
+        F.coalesce(
+            patient_events['cohort_member_id'],
+            visit_occurrence['person_id']
+        ).alias('cohort_member_id'),
+        F.coalesce(
+            patient_events['standard_concept_id'],
+            F.lit(UNKNOWN_CONCEPT)
+        ).alias('standard_concept_id'),
+        F.coalesce(
+            patient_events['date'],
+            visit_occurrence['visit_start_date']
+        ).alias('date'),
+        F.coalesce(
+            patient_events['domain'],
+            F.lit('unknown')
+        ).alias('domain'),
+        F.coalesce(
+            patient_events['concept_value'],
+            F.lit(-1.0)
+        ).alias('concept_value')
+    ]
 
-    patient_event = visit_occurrence_person.join(patient_event,
-                                                 'visit_occurrence_id',
-                                                 'left_outer') \
-        .select(visit_columns + patient_columns) \
+    # Convert standard_concept_id to string type, this is needed for the tokenization
+    # Calculate the age w.r.t to the event
+    patient_events = visit_occurrence_person.join(
+        patient_events, 'visit_occurrence_id', 'left_outer') \
+        .select(visit_column_refs + pat_col_refs) \
         .withColumn('standard_concept_id', F.col('standard_concept_id').cast('string')) \
-        .withColumn('age',
-                    F.ceil(F.months_between(F.col('date'), F.col("birth_datetime")) / F.lit(12)))
+        .withColumn('age', F.ceil(
+        F.months_between(F.col('date'), F.col("birth_datetime")) / F.lit(12))) \
+        .withColumn('concept_value_mask', (F.col('domain') == MEASUREMENT).cast('int'))
 
-    weeks_since_epoch_udf = (F.unix_timestamp('date') / F.lit(24 * 60 * 60 * 7)).cast('int')
+    # Create the udf for calculating the weeks since the epoch time 1970-01-01
+    weeks_since_epoch_udf = (
+            F.unix_timestamp('date') / F.lit(24 * 60 * 60 * 7)
+    ).cast('int')
 
+    # UDF for creating the concept orders within each visit
     visit_concept_order_udf = F.row_number().over(
         W.partitionBy('cohort_member_id',
                       'person_id',
                       'visit_occurrence_id').orderBy('date', 'standard_concept_id')
     )
 
-    patient_event = patient_event \
+    patient_events = patient_events \
         .withColumn('date', F.col('date').cast('date')) \
         .withColumn('date_in_week', weeks_since_epoch_udf) \
         .withColumn('visit_concept_order', visit_concept_order_udf)
 
-    insert_cls_tokens = patient_event \
+    # Insert a CLS token at the beginning of each visit, this CLS token will be used as the visit
+    # summary in pre-training / fine-tuning. We basically make a copy of the first concept of
+    # each visit and change it to CLS, and set the concept order to 0 to make sure this is always
+    # the first token of each visit
+    insert_cls_tokens = patient_events \
         .where('visit_concept_order == 1') \
         .withColumn('standard_concept_id', F.lit('CLS')) \
         .withColumn('domain', F.lit('CLS')) \
         .withColumn('visit_concept_order', F.lit(0)) \
-        .withColumn('date', F.col('visit_start_date'))
+        .withColumn('date', F.col('visit_start_date')) \
+        .withColumn('concept_value_mask', F.lit(0)) \
+        .withColumn('concept_value', F.lit(-1.0))
 
-    struct_columns = ['visit_concept_order', 'standard_concept_id', 'date_in_week', 'age']
+    # Declare a list of columns that need to be collected per each visit
+    struct_columns = ['visit_concept_order', 'standard_concept_id', 'date_in_week',
+                      'age', 'concept_value_mask', 'concept_value']
 
-    patent_visit_sequence = patient_event.union(insert_cls_tokens) \
+    # Merge the first CLS tokens into patient sequence and collect events for each visit
+    patent_visit_sequence = patient_events.union(insert_cls_tokens) \
         .withColumn('visit_struct_data', F.struct(struct_columns)) \
         .groupBy('cohort_member_id', 'person_id', 'visit_occurrence_id') \
         .agg(F.sort_array(F.collect_set('visit_struct_data')).alias('visit_struct_data'),
@@ -794,6 +835,8 @@ def create_hierarchical_sequence_data(person, visit_occurrence, patient_event,
         .withColumn('visit_concept_ids', F.col('visit_struct_data.standard_concept_id')) \
         .withColumn('visit_concept_dates', F.col('visit_struct_data.date_in_week')) \
         .withColumn('visit_concept_ages', F.col('visit_struct_data.age')) \
+        .withColumn('concept_value_masks', F.col('visit_struct_data.concept_value_mask')) \
+        .withColumn('concept_values', F.col('visit_struct_data.concept_value')) \
         .withColumn('visit_mask', F.lit(0)) \
         .drop('visit_struct_data')
 
@@ -811,7 +854,9 @@ def create_hierarchical_sequence_data(person, visit_occurrence, patient_event,
                                  'visit_concept_orders',
                                  'visit_concept_ids',
                                  'visit_concept_dates',
-                                 'visit_concept_ages']
+                                 'visit_concept_ages',
+                                 'concept_values',
+                                 'concept_value_masks']
 
     visit_weeks_since_epoch_udf = (F.unix_timestamp(F.col('visit_start_date').cast('date')) / F.lit(
         24 * 60 * 60 * 7)).cast('int')
@@ -838,6 +883,8 @@ def create_hierarchical_sequence_data(person, visit_occurrence, patient_event,
         .withColumn('visit_concept_ids',
                     F.col('patient_list.visit_concept_id').cast(T.ArrayType(T.StringType()))) \
         .withColumn('time_interval_atts', F.col('patient_list.time_interval_att')) \
+        .withColumn('concept_values', F.col('patient_list.concept_values')) \
+        .withColumn('concept_value_masks', F.col('patient_list.concept_value_masks')) \
         .withColumn('is_readmissions',
                     F.col('patient_list.is_readmission').cast(T.ArrayType(T.IntegerType()))) \
         .withColumn('is_inpatients',
@@ -849,7 +896,20 @@ def create_hierarchical_sequence_data(person, visit_occurrence, patient_event,
     return patient_sequence
 
 
-def create_visit_person_join(pandas_udf_to_att, person, visit_occurrence):
+def create_visit_person_join(person, visit_occurrence):
+    """
+    Create a new spark data frame based on person and visit_occurrence
+
+    :param person:
+    :param visit_occurrence:
+    :return:
+    """
+
+    # Create a pandas udf for generating the att token between two neighboring visits
+    @pandas_udf('string')
+    def pandas_udf_to_att(time_intervals: pd.Series) -> pd.Series:
+        return time_intervals.apply(time_token_func)
+
     visit_rank_udf = F.row_number().over(
         W.partitionBy('person_id').orderBy('visit_start_date', 'visit_end_date',
                                            'visit_occurrence_id'))
@@ -857,10 +917,15 @@ def create_visit_person_join(pandas_udf_to_att, person, visit_occurrence):
     visit_windowing = W.partitionBy('person_id').orderBy('visit_start_date',
                                                          'visit_end_date',
                                                          'visit_occurrence_id')
+    # Check whehter or not the visit is either an inpatient visit or E-I visit
     is_inpatient_logic = F.col('visit_concept_id').isin([9201, 262]).cast('integer')
+    # Construct the logic for readmission, which is defined as inpatient visit occurred within 30
+    # days of the discharge
     readmission_logic = ((F.col('time_interval') <= 30) \
                          & (F.col('visit_concept_id').isin([9201, 262])) \
                          & (F.col('prev_visit_concept_id').isin([9201, 262]))).cast('integer')
+
+    # Select the subset of columns and create derived colums using the UDF or spark sql functions
     visit_occurrence = visit_occurrence.select('visit_occurrence_id',
                                                'person_id',
                                                'visit_concept_id',
@@ -880,6 +945,7 @@ def create_visit_person_join(pandas_udf_to_att, person, visit_occurrence):
         .withColumn('is_inpatient', is_inpatient_logic) \
         .withColumn('is_readmission', readmission_logic)
 
+    # Create prolonged inpatient stay
     visit_occurrence = visit_occurrence \
         .withColumn('prolonged_stay',
                     (F.datediff('visit_end_date', 'visit_start_date') >= 7).cast('integer')) \
@@ -893,6 +959,7 @@ def create_visit_person_join(pandas_udf_to_att, person, visit_occurrence):
                 'visit_rank_order',
                 'visit_start_date',
                 'visit_segment')
+    # Assume the birthday to be the first day of the birth year if birth_datetime is missing
     person = person.select('person_id', F.coalesce('birth_datetime',
                                                    F.concat('year_of_birth', F.lit('-01-01')).cast(
                                                        'timestamp')).alias('birth_datetime'))

@@ -426,7 +426,7 @@ class NestedCohortBuilder:
             return create_hierarchical_sequence_data(person=self._dependency_dict[PERSON],
                                                      visit_occurrence=self._dependency_dict[
                                                          VISIT_OCCURRENCE],
-                                                     patient_event=cohort_ehr_records)
+                                                     patient_events=cohort_ehr_records)
 
         if self._is_feature_concept_frequency:
             return create_concept_frequency_data(cohort_ehr_records, None)

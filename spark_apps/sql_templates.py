@@ -20,7 +20,7 @@ WITH measurement_percentile AS
 )
 
 SELECT
-    m.measurement_concept_id, 
+    m.measurement_concept_id,
     m.unit_concept_id, 
     MEAN(m.value_as_number) AS value_mean,
     STDDEV(m.value_as_number) AS value_stddev,
@@ -37,5 +37,5 @@ WHERE
     AND m.unit_concept_id <> 0 
     AND m.measurement_concept_id <> 0
 GROUP BY m.measurement_concept_id, m.unit_concept_id
-HAVING COUNT(*) >= 10
+HAVING COUNT(*) >= 100
 '''
