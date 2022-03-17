@@ -359,7 +359,8 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
                         'visit_segments', 'ages',
                         'visit_dates', 'visit_masks',
                         'time_interval_atts',
-                        'visit_rank_orders', 'concept_values', 'concept_value_masks']
+                        'visit_rank_orders',
+                        'concept_values', 'concept_value_masks', 'mlm_skip_values']
 
     def __init__(self, concept_tokenizer: ConceptTokenizer,
                  max_num_of_visits: int,
@@ -506,6 +507,8 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
         row, start_index, end_index, _ = row_slicer
 
         concepts = self._pad_visits(row.concept_ids[start_index:end_index], '0')
+        mlm_skip_values = self._pad_visits(row.mlm_skip_values[start_index:end_index], 1)
+
         dates = self._pad_visits(row.dates[start_index:end_index], 0)
         ages = self._pad_visits(row.ages[start_index:end_index], 0)
 
@@ -532,7 +535,7 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
             False)
 
         masked_concepts, output_concept_masks = zip(
-            *list(map(self._mask_concepts, concepts)))
+            *list(map(self._mask_concepts, zip(concepts, mlm_skip_values))))
 
         return (
             output_concept_masks, masked_concepts, concepts, dates, ages,
@@ -554,12 +557,14 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
             return np.asarray(field_values)
         return field_values
 
-    def _mask_concepts(self, concepts):
+    def _mask_concepts(self, concepts_tuple):
         """
         Mask out 15% of the concepts
-        :param concepts:
+        :param concepts_tuple:
         :return:
         """
+        concepts, mlm_skip_values = concepts_tuple
+
         masked_concepts = np.asarray(concepts).copy()
         output_mask = np.zeros((len(masked_concepts),), dtype=int)
 
@@ -567,6 +572,9 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
             # the first position is reserved for cls, so we don't mask the first element
             for word_pos in range(1, len(concepts)):
 
+                # Check if this position needs to be skipped
+                if mlm_skip_values[word_pos] == 1:
+                    continue
                 # Do no mask the [UNKNOWN] token
                 if word_pos == self._concept_tokenizer.get_unknown_token_id():
                     continue

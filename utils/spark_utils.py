@@ -839,7 +839,7 @@ def create_hierarchical_sequence_data(person, visit_occurrence, patient_events,
         .withColumn('date', F.col('visit_start_date')) \
         .withColumn('concept_value_mask', F.lit(0)) \
         .withColumn('concept_value', F.lit(-1.0)) \
-        .withCOlumn('mlm_skip', F.lit(1))
+        .withColumn('mlm_skip', F.lit(1))
 
     # Declare a list of columns that need to be collected per each visit
     struct_columns = ['visit_concept_order', 'standard_concept_id', 'date_in_week',
