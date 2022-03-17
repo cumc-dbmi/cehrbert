@@ -260,16 +260,9 @@ def create_cher_bert_bi_lstm_model(bert_model_path):
 def create_cher_bert_bi_lstm_model_with_model(model):
     age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
 
-    model.trainable = False
-
     contextualized_visit_embeddings, _ = model.get_layer(
         'visit_encoder'
     ).output
-
-    contextualized_embeddings = model.get_layer(
-        'global_concept_embeddings_normalization'
-    ).output
-
     _, num_of_visits, num_of_concepts, embedding_size = model.get_layer(
         'temporal_transformation_layer'
     ).output.shape
@@ -290,7 +283,7 @@ def create_cher_bert_bi_lstm_model_with_model(model):
 
     visit_mask = model.get_layer('visit_mask').output
 
-    mask_visit_embeddings = tf.cast(
+    mask_embeddings = tf.cast(
         tf.math.logical_not(
             tf.cast(
                 visit_mask,
@@ -300,66 +293,40 @@ def create_cher_bert_bi_lstm_model_with_model(model):
         dtype=tf.float32
     )[:, :, tf.newaxis]
 
-    pat_mask = model.get_layer('pat_mask').output
+    #
+    # pat_mask = model.get_layer('pat_mask').output
+    #
+    # pat_mask_reshaped = tf.reshape(pat_mask, (-1, max_seq_length))
+    #
+    # pat_mask_reordered = tf.sort(pat_mask_reshaped, axis=1)
+    #
+    # sorted_index = tf.argsort(pat_mask_reshaped, axis=1)
+    #
+    # index_1d = tf.cast(tf.where(sorted_index >= 0)[:, 0], dtype=tf.int32)
+    #
+    # index_2d = tf.stack([index_1d, tf.reshape(sorted_index, [-1])], axis=-1)
+    #
+    # contextualized_embeddings = tf.reshape(
+    #     tf.gather_nd(contextualized_embeddings, index_2d),
+    #     (-1, max_seq_length, embedding_size)
+    # )
+    #
+    # mask_embeddings = tf.cast(
+    #     tf.math.logical_not(
+    #         tf.cast(
+    #             tf.reshape(pat_mask_reordered, (-1, max_seq_length)),
+    #             dtype=tf.bool
+    #         )
+    #     ),
+    #     dtype=tf.float32
+    # )[:, :, tf.newaxis]
 
-    pat_mask_reshaped = tf.reshape(pat_mask, (-1, max_seq_length))
+    contextualized_embeddings = tf.math.multiply(visit_embeddings_without_att, mask_embeddings)
 
-    pat_mask_reordered = tf.sort(pat_mask_reshaped, axis=1)
+    masking_layer = tf.keras.layers.Masking(mask_value=0.,
+                                            input_shape=(num_of_visits, embedding_size))
 
-    sorted_index = tf.argsort(pat_mask_reshaped, axis=1)
-
-    index_1d = tf.cast(tf.where(sorted_index >= 0)[:, 0], dtype=tf.int32)
-
-    index_2d = tf.stack([index_1d, tf.reshape(sorted_index, [-1])], axis=-1)
-
-    contextualized_embeddings = tf.reshape(
-        tf.gather_nd(contextualized_embeddings, index_2d),
-        (-1, max_seq_length, embedding_size)
-    )
-
-    mask_concept_embeddings = tf.cast(
-        tf.math.logical_not(
-            tf.cast(
-                tf.reshape(pat_mask_reordered, (-1, max_seq_length)),
-                dtype=tf.bool
-            )
-        ),
-        dtype=tf.float32
-    )[:, :, tf.newaxis]
-
-    contextualized_embeddings = tf.math.multiply(
-        contextualized_embeddings,
-        mask_concept_embeddings
-    )
-
-    visit_embeddings_without_att = tf.math.multiply(
-        visit_embeddings_without_att,
-        mask_visit_embeddings
-    )
-
-    visit_masking_layer = tf.keras.layers.Masking(
-        mask_value=0.,
-        input_shape=(num_of_visits, embedding_size)
-    )
-
-    concept_masking_layer = tf.keras.layers.Masking(
-        mask_value=0.,
-        input_shape=(max_seq_length, embedding_size)
-    )
-
-    bi_lstm_visit_layer = tf.keras.layers.Bidirectional(
-        tf.keras.layers.LSTM(
-            128,
-            name='visit_lstm'
-        )
-    )
-
-    bi_lstm_concept_layer = tf.keras.layers.Bidirectional(
-        tf.keras.layers.LSTM(
-            128,
-            name='concept_lstm'
-        )
-    )
+    bi_lstm_layer = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128))
 
     dropout_lstm_layer = tf.keras.layers.Dropout(0.2)
 
@@ -369,19 +336,11 @@ def create_cher_bert_bi_lstm_model_with_model(model):
 
     output_layer = tf.keras.layers.Dense(1, activation='sigmoid', name='label')
 
-    visit_next_input = visit_masking_layer(visit_embeddings_without_att)
+    next_input = masking_layer(contextualized_embeddings)
 
-    visit_next_input = dropout_lstm_layer(bi_lstm_visit_layer(visit_next_input))
+    next_input = dropout_lstm_layer(bi_lstm_layer(next_input))
 
-    concept_next_input = concept_masking_layer(contextualized_embeddings)
-
-    concept_next_input = dropout_lstm_layer(bi_lstm_concept_layer(concept_next_input))
-
-    next_input = tf.keras.layers.concatenate(
-        [visit_next_input,
-         concept_next_input,
-         tf.reshape(age_of_visit_input, (-1, 1))]
-    )
+    next_input = tf.keras.layers.concatenate([next_input, tf.reshape(age_of_visit_input, (-1, 1))])
 
     next_input = dropout_dense_layer(dense_layer(next_input))
 
