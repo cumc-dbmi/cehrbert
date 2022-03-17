@@ -778,7 +778,8 @@ def create_hierarchical_sequence_data(person, visit_occurrence, patient_events,
         .withColumn('standard_concept_id', F.col('standard_concept_id').cast('string')) \
         .withColumn('age', F.ceil(
         F.months_between(F.col('date'), F.col("birth_datetime")) / F.lit(12))) \
-        .withColumn('concept_value_mask', (F.col('domain') == MEASUREMENT).cast('int'))
+        .withColumn('concept_value_mask', (F.col('domain') == MEASUREMENT).cast('int')) \
+        .withColumn('mlm_skip', (F.col('domain') == MEASUREMENT).cast('int'))
 
     # Create the udf for calculating the weeks since the epoch time 1970-01-01
     weeks_since_epoch_udf = (
@@ -808,11 +809,12 @@ def create_hierarchical_sequence_data(person, visit_occurrence, patient_events,
         .withColumn('visit_concept_order', F.lit(0)) \
         .withColumn('date', F.col('visit_start_date')) \
         .withColumn('concept_value_mask', F.lit(0)) \
-        .withColumn('concept_value', F.lit(-1.0))
+        .withColumn('concept_value', F.lit(-1.0)) \
+        .withCOlumn('mlm_skip', F.lit(1))
 
     # Declare a list of columns that need to be collected per each visit
     struct_columns = ['visit_concept_order', 'standard_concept_id', 'date_in_week',
-                      'age', 'concept_value_mask', 'concept_value']
+                      'age', 'concept_value_mask', 'concept_value', 'mlm_skip']
 
     # Merge the first CLS tokens into patient sequence and collect events for each visit
     patent_visit_sequence = patient_events.union(insert_cls_tokens) \
@@ -837,26 +839,16 @@ def create_hierarchical_sequence_data(person, visit_occurrence, patient_events,
         .withColumn('visit_concept_ages', F.col('visit_struct_data.age')) \
         .withColumn('concept_value_masks', F.col('visit_struct_data.concept_value_mask')) \
         .withColumn('concept_values', F.col('visit_struct_data.concept_value')) \
+        .withColumn('mlm_skip_values', F.col('visit_struct_data.mlm_skip')) \
         .withColumn('visit_mask', F.lit(0)) \
         .drop('visit_struct_data')
 
-    visit_struct_data_columns = ['visit_rank_order',
-                                 'visit_occurrence_id',
-                                 'visit_start_date',
-                                 'visit_concept_id',
-                                 'prolonged_stay',
-                                 'visit_mask',
-                                 'visit_segment',
-                                 'num_of_concepts',
-                                 'is_readmission',
-                                 'is_inpatient',
-                                 'time_interval_att',
-                                 'visit_concept_orders',
-                                 'visit_concept_ids',
-                                 'visit_concept_dates',
-                                 'visit_concept_ages',
-                                 'concept_values',
-                                 'concept_value_masks']
+    visit_struct_data_columns = ['visit_rank_order', 'visit_occurrence_id', 'visit_start_date',
+                                 'visit_concept_id', 'prolonged_stay', 'visit_mask',
+                                 'visit_segment', 'num_of_concepts', 'is_readmission',
+                                 'is_inpatient', 'time_interval_att', 'visit_concept_orders',
+                                 'visit_concept_ids', 'visit_concept_dates', 'visit_concept_ages',
+                                 'concept_values', 'concept_value_masks', 'mlm_skip_values']
 
     visit_weeks_since_epoch_udf = (F.unix_timestamp(F.col('visit_start_date').cast('date')) / F.lit(
         24 * 60 * 60 * 7)).cast('int')
@@ -885,6 +877,7 @@ def create_hierarchical_sequence_data(person, visit_occurrence, patient_events,
         .withColumn('time_interval_atts', F.col('patient_list.time_interval_att')) \
         .withColumn('concept_values', F.col('patient_list.concept_values')) \
         .withColumn('concept_value_masks', F.col('patient_list.concept_value_masks')) \
+        .withColumn('mlm_skip_values', F.col('patient_list.mlm_skip_values')) \
         .withColumn('is_readmissions',
                     F.col('patient_list.is_readmission').cast(T.ArrayType(T.IntegerType()))) \
         .withColumn('is_inpatients',
