@@ -78,7 +78,7 @@ WHERE v.num_of_hospitalizations = 0
 HOSPITALIZATION_TARGET_COHORT = 'hospitalization_target'
 HOSPITALIZATION_OUTCOME_COHORT = 'hopitalization_outcome'
 DEPENDENCY_LIST = ['person', 'condition_occurrence', 'visit_occurrence']
-DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure', 'procedure_occurrence']
+DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure', 'procedure_occurrence', 'measurement']
 
 
 def main(spark_args):

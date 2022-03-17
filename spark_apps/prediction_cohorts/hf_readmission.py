@@ -37,7 +37,7 @@ WHERE v.visit_concept_id IN (9201, 262) --inpatient, er-inpatient
 HF_HOSPITALIZATION_COHORT = 'hf_hospitalization'
 HOSPITALIZATION_COHORT = 'hospitalization'
 DEPENDENCY_LIST = ['person', 'condition_occurrence', 'visit_occurrence']
-DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure', 'procedure_occurrence']
+DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure', 'procedure_occurrence', 'measurement']
 
 
 def main(spark_args):

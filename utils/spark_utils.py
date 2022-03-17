@@ -6,9 +6,12 @@ import pandas as pd
 import pyspark.sql.functions as F
 import pyspark.sql.types as T
 from pyspark.sql import Window as W
+from pyspark.sql.functions import broadcast
 from pyspark.sql.pandas.functions import pandas_udf
 
-from const.common import PERSON, VISIT_OCCURRENCE, UNKNOWN_CONCEPT, MEASUREMENT
+from const.common import PERSON, VISIT_OCCURRENCE, UNKNOWN_CONCEPT, MEASUREMENT, \
+    REQUIRED_MEASUREMENT
+from spark_apps.sql_templates import measurement_unit_stats_query
 from utils.logging_utils import *
 
 DOMAIN_KEY_FIELDS = {
@@ -611,9 +614,35 @@ def extract_ehr_records(spark, input_folder, domain_table_list, include_visit_ty
     """
     domain_tables = []
     for domain_table_name in domain_table_list:
-        domain_tables.append(
-            preprocess_domain_table(spark, input_folder, domain_table_name, with_rollup))
+        if domain_table_name != MEASUREMENT:
+            domain_tables.append(
+                preprocess_domain_table(
+                    spark,
+                    input_folder,
+                    domain_table_name,
+                    with_rollup
+                )
+            )
     patient_ehr_records = join_domain_tables(domain_tables)
+
+    # Process the measurement table if exists
+    if MEASUREMENT in domain_table_list:
+        measurement = preprocess_domain_table(spark, input_folder, MEASUREMENT)
+        required_measurement = preprocess_domain_table(spark, input_folder, REQUIRED_MEASUREMENT)
+        scaled_measurement = process_measurement(
+            spark,
+            measurement,
+            required_measurement
+        )
+
+        if patient_ehr_records:
+            # Union all measurement records together with other domain records
+            patient_ehr_records = patient_ehr_records.union(
+                scaled_measurement
+            )
+        else:
+            patient_ehr_records = scaled_measurement
+
     patient_ehr_records = patient_ehr_records.where('visit_occurrence_id IS NOT NULL').distinct()
     person = preprocess_domain_table(spark, input_folder, PERSON)
     patient_ehr_records = patient_ehr_records.join(person, 'person_id') \
@@ -957,3 +986,48 @@ def create_visit_person_join(person, visit_occurrence):
                                                    F.concat('year_of_birth', F.lit('-01-01')).cast(
                                                        'timestamp')).alias('birth_datetime'))
     return visit_occurrence.join(person, 'person_id')
+
+
+def process_measurement(spark, measurement, required_measurement):
+    """
+    Remove the measurement values that are outside the 0.01-0.99 quantiles. And scale the the
+    measurement value by substracting the mean and dividing by the standard deivation :param
+
+    spark: :param
+    measurement: :param
+    required_measurement:
+
+    :return:
+    """
+    # Register the tables in spark context
+    measurement.createOrReplaceTempView(MEASUREMENT)
+    required_measurement.createOrReplaceTempView(REQUIRED_MEASUREMENT)
+    measurement_unit_stats_df = spark.sql(
+        measurement_unit_stats_query
+    )
+    # Cache the stats in memory
+    measurement_unit_stats_df.cache()
+    # Broadcast df to local executors
+    broadcast(measurement_unit_stats_df)
+    # Create the temp view for this dataframe
+    measurement_unit_stats_df.createOrReplaceTempView('measurement_unit_stats')
+
+    scaled_numeric_lab = spark.sql('''
+        SELECT
+            m.person_id,
+            m.measurement_concept_id AS standard_concept_id,
+            CAST(m.measurement_date AS DATE) AS date,
+            m.visit_occurrence_id,
+            'measurement' AS domain,
+            MEAN((m.value_as_number - s.value_mean) / value_stddev) AS concept_value
+        FROM measurement AS m
+        JOIN measurement_unit_stats AS s
+            ON s.measurement_concept_id = m.measurement_concept_id 
+                AND s.unit_concept_id = m.unit_concept_id
+        WHERE m.visit_occurrence_id IS NOT NULL
+            AND m.value_as_number IS NOT NULL
+            AND m.value_as_number BETWEEN s.lower_bound AND s.upper_bound
+        GROUP BY m.person_id, m.visit_occurrence_id, m.measurement_concept_id, m.measurement_date
+    ''')
+
+    return scaled_numeric_lab
