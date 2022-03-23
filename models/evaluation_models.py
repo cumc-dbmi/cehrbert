@@ -266,27 +266,32 @@ def create_cher_bert_bi_lstm_model_with_model(model):
     _, num_of_visits, num_of_concepts, embedding_size = model.get_layer(
         'temporal_transformation_layer'
     ).output.shape
-    max_seq_length = num_of_visits * num_of_concepts
 
     # Pad contextualized_visit_embeddings on axis 1 with one extra visit so we can extract the
     # visit embeddings using the reshape trick
-    expanded_contextualized_visit_embeddings = tf.concat(
-        [contextualized_visit_embeddings,
-         contextualized_visit_embeddings[:, 0:1, :]],
-        axis=1
-    )
+    # expanded_contextualized_visit_embeddings = tf.concat(
+    #     [contextualized_visit_embeddings,
+    #      contextualized_visit_embeddings[:, 0:1, :]],
+    #     axis=1
+    # )
 
     # Extract the visit embeddings elements
-    visit_embeddings_without_att = tf.reshape(
-        expanded_contextualized_visit_embeddings, (-1, num_of_visits, 3 * embedding_size)
-    )[:, :, embedding_size: embedding_size * 2]
+    # visit_embeddings_without_att = tf.reshape(
+    #     expanded_contextualized_visit_embeddings, (-1, num_of_visits, 3 * embedding_size)
+    # )[:, :, embedding_size: embedding_size * 2]
 
     visit_mask = model.get_layer('visit_mask').output
+
+    # Expand dimension for masking MultiHeadAttention in Visit Encoder
+    visit_mask_with_att = tf.reshape(
+        tf.tile(visit_mask[:, :, tf.newaxis], [1, 1, 3]),
+        (-1, num_of_visits * 3)
+    )[:, 1:]
 
     mask_embeddings = tf.cast(
         tf.math.logical_not(
             tf.cast(
-                visit_mask,
+                visit_mask_with_att,
                 dtype=tf.bool
             )
         ),
@@ -321,7 +326,10 @@ def create_cher_bert_bi_lstm_model_with_model(model):
     #     dtype=tf.float32
     # )[:, :, tf.newaxis]
 
-    contextualized_embeddings = tf.math.multiply(visit_embeddings_without_att, mask_embeddings)
+    contextualized_embeddings = tf.math.multiply(
+        contextualized_visit_embeddings,
+        mask_embeddings
+    )
 
     masking_layer = tf.keras.layers.Masking(mask_value=0.,
                                             input_shape=(num_of_visits, embedding_size))
