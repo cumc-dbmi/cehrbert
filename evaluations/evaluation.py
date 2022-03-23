@@ -159,6 +159,7 @@ def evaluate_sequence_models(args):
             max_num_of_concepts=args.max_num_of_concepts,
             batch_size=args.batch_size,
             epochs=args.epochs,
+            learning_rate=args.learning_rate,
             bert_model_path=bert_model_path,
             tokenizer_path=bert_tokenizer_path,
             sequence_model_name=args.sequence_model_name
@@ -167,9 +168,9 @@ def evaluate_sequence_models(args):
     if RANDOM_HIERARCHICAL_BERT_LSTM in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
         bert_model_path = os.path.join(args.vanilla_bert_model_folder,
-                                       config.parameters.bert_model_validation_path)
+                                       p.bert_model_validation_path)
         bert_tokenizer_path = os.path.join(args.vanilla_bert_model_folder,
-                                           config.parameters.tokenizer_path)
+                                           p.tokenizer_path)
         RandomHierarchicalBertEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,

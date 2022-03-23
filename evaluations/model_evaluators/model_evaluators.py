@@ -42,7 +42,8 @@ class AbstractModelEvaluator(AbstractModel):
         self.get_logger().info(f'evaluation_folder: {self._evaluation_folder}\n'
                                f'num_of_folds: {self._num_of_folds}\n'
                                f'is_transfer_learning {self._is_transfer_learning}\n'
-                               f'training_percentage: {self._training_percentage}\n')
+                               f'training_percentage: {self._training_percentage}\n'
+                               f'learning_rate: {self._learning_rate}')
 
         super().__init__(*args, **kwargs)
 
