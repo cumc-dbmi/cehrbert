@@ -257,15 +257,14 @@ class DecoderLayer(tf.keras.layers.Layer):
 
 
 class PositionalEncodingLayer(tf.keras.layers.Layer):
-    def __init__(self, max_sequence_length, embedding_size, *args, **kwargs):
+    def __init__(self, embedding_size, *args, **kwargs):
         super(PositionalEncodingLayer, self).__init__(*args, **kwargs)
-        self.max_sequence_length = max_sequence_length
         self.embedding_size = embedding_size
-        self.pos_encoding = tf.squeeze(positional_encoding(max_sequence_length, embedding_size))
+        # TODO: change this to dynamic in the future
+        self.pos_encoding = tf.squeeze(positional_encoding(10000, self.embedding_size))
 
     def get_config(self):
         config = super().get_config()
-        config['max_sequence_length'] = self.max_sequence_length
         config['embedding_size'] = self.embedding_size
         return config
 
@@ -329,6 +328,138 @@ class VisitEmbeddingLayer(tf.keras.layers.Layer):
     def call(self, inputs, **kwargs):
         visit_orders, concept_embeddings = inputs
         return self.visit_embedding_layer(visit_orders, **kwargs) + concept_embeddings
+
+
+class ConceptValueTransformationLayer(tf.keras.layers.Layer):
+    def __init__(self, embedding_size, *args, **kwargs):
+        super(ConceptValueTransformationLayer, self).__init__(*args, **kwargs)
+        self.embedding_size = embedding_size
+        self.merge_value_transformation_layer = tf.keras.layers.Dense(
+            embedding_size,
+            name='merge_value_transformation_layer'
+        )
+
+    def get_config(self):
+        config = super().get_config()
+        config['embedding_size'] = self.embedding_size
+        return config
+
+    def call(self, concept_embeddings, concept_values, concept_value_masks):
+        # Mask out the concept embeddings without a value
+        # Combine the concept embeddings with concept_values
+
+        # (batch_size, num_of_visits, num_of_concepts, 1)
+        concept_values = tf.expand_dims(
+            concept_values,
+            axis=-1
+        )
+        # (batch_size, num_of_visits, num_of_concepts, 1)
+        concept_value_masks = tf.expand_dims(
+            concept_value_masks,
+            axis=-1
+        )
+        # (batch_size, num_of_visits, num_of_concepts, 1 + embedding_size)
+        concept_embeddings_with_val = tf.concat(
+            [concept_embeddings, concept_values],
+            axis=-1
+        )
+        # Run through a dense layer to bring the dimension back to embedding_size
+        concept_embeddings_with_val = self.merge_value_transformation_layer(
+            concept_embeddings_with_val
+        )
+        # Zero out the positions without a val
+        concept_embeddings_with_val = tf.multiply(
+            concept_embeddings_with_val,
+            tf.cast(concept_value_masks, dtype=tf.float32)
+        )
+        # Derive the inverse concept value masks for zeroing out the embeddings without a val
+        inverse_concept_value_masks = tf.cast(
+            tf.logical_not(
+                tf.cast(concept_value_masks, dtype=tf.bool)
+            ),
+            dtype=tf.float32
+        )
+
+        # Zero out the position of concept embeddings with a val
+        concept_embeddings_without_val = tf.multiply(
+            inverse_concept_value_masks,
+            concept_embeddings
+        )
+
+        # Merge two sets of concept embeddings
+        concept_embeddings = concept_embeddings_without_val + concept_embeddings_with_val
+
+        return concept_embeddings
+
+
+class TemporalTransformationLayer(tf.keras.layers.Layer):
+    def __init__(self, time_embeddings_size, embedding_size, *args, **kwargs):
+        super(TemporalTransformationLayer, self).__init__(*args, **kwargs)
+
+        self.time_embeddings_size = time_embeddings_size
+        self.embedding_size = embedding_size
+
+        # define the time embedding layer for absolute time stamps (since 1970)
+        self.time_embedding_layer = TimeEmbeddingLayer(
+            embedding_size=time_embeddings_size,
+            name='time_embedding_layer'
+        )
+        # define the age embedding layer for the age w.r.t the medical record
+        self.age_embedding_layer = TimeEmbeddingLayer(
+            embedding_size=time_embeddings_size,
+            name='age_embedding_layer'
+        )
+
+        # define positional encoding layer for visit numbers, the visit numbers are normalized
+        # by subtracting visit numbers off the first visit number
+        self.positional_encoding_layer = PositionalEncodingLayer(
+            embedding_size=time_embeddings_size,
+            name='positional_encoding_layer'
+        )
+        # Temporal transformation
+        self.temporal_transformation_layer = tf.keras.layers.Dense(
+            embedding_size,
+            activation='tanh',
+            name='temporal_transformation'
+        )
+
+    def get_config(self):
+        config = super().get_config()
+        config['time_embeddings_size'] = self.time_embeddings_size
+        config['embedding_size'] = self.embedding_size
+        return config
+
+    def call(self, concept_embeddings, pat_seq_age, pat_seq_time, visit_rank_order, **kwargs):
+        _, _, num_of_concepts = pat_seq_age.shape
+
+        pt_seq_age_embeddings = self.age_embedding_layer(
+            pat_seq_age,
+            **kwargs
+        )
+        pt_seq_time_embeddings = self.time_embedding_layer(
+            pat_seq_time,
+            **kwargs
+        )
+        visit_positional_encoding = self.positional_encoding_layer(
+            visit_rank_order,
+            **kwargs
+        )
+
+        visit_positional_encoding = tf.tile(
+            visit_positional_encoding[:, :, tf.newaxis, :], [1, 1, num_of_concepts, 1])
+
+        # (batch, num_of_visits, num_of_concepts, embedding_size)
+        temporal_concept_embeddings = self.temporal_transformation_layer(
+            tf.concat(
+                [concept_embeddings,
+                 pt_seq_age_embeddings,
+                 pt_seq_time_embeddings,
+                 visit_positional_encoding],
+                axis=-1
+            )
+        )
+
+        return temporal_concept_embeddings
 
 
 class TimeAttention(tf.keras.layers.Layer):
@@ -598,189 +729,6 @@ class ConvolutionBertLayer(tf.keras.layers.Layer):
         return context_representation
 
 
-class HierarchicalBertLayer(tf.keras.layers.Layer):
-    def __init__(self,
-                 num_of_exchanges,
-                 num_of_visits,
-                 num_of_concepts,
-                 depth,
-                 embedding_size,
-                 num_heads,
-                 dropout_rate=0.1,
-                 *args,
-                 **kwargs):
-        super(HierarchicalBertLayer, self).__init__(*args, **kwargs)
-
-        self.num_of_visits = num_of_visits
-        self.num_of_concepts = num_of_concepts
-        self.num_of_exchanges = num_of_exchanges
-        self.embedding_size = embedding_size
-        self.depth = depth
-        self.num_heads = num_heads
-        self.dropout_rate = dropout_rate
-        self.concept_encoder_layer = Encoder(
-            name='concept_encoder',
-            num_layers=depth,
-            d_model=embedding_size,
-            num_heads=num_heads,
-            dropout_rate=dropout_rate)
-        self.visit_encoder_layer = Encoder(
-            name='visit_encoder',
-            num_layers=depth,
-            d_model=embedding_size,
-            num_heads=num_heads,
-            dropout_rate=dropout_rate)
-        self.mha_layer = MultiHeadAttention(
-            self.embedding_size,
-            num_heads,
-            name='mha'
-        )
-
-        # Insert the att embeddings between the visit embeddings using the following trick
-        self.identity = tf.constant(
-            np.insert(
-                np.identity(self.num_of_visits),
-                obj=range(1, self.num_of_visits),
-                values=0,
-                axis=1
-            ),
-            dtype=tf.float32
-        )
-
-        # Create the inverse "identity" matrix for inserting att embeddings
-        self.identity_inverse = tf.constant(
-            np.insert(
-                np.identity(self.num_of_visits - 1),
-                obj=range(0, self.num_of_visits),
-                values=0,
-                axis=1),
-            dtype=tf.float32)
-
-        self.merge_matrix = tf.constant(
-            [1] + [0] * (self.num_of_concepts - 1),
-            dtype=tf.float32
-        )[tf.newaxis, tf.newaxis, :, tf.newaxis]
-
-        self.merge_matrix_inverse = tf.constant(
-            [0] + [1] * (self.num_of_concepts - 1),
-            dtype=tf.float32
-        )[tf.newaxis, tf.newaxis, :, tf.newaxis]
-
-        self.global_embedding_dropout_layer = tf.keras.layers.Dropout(dropout_rate)
-        self.global_concept_embeddings_normalization = tf.keras.layers.LayerNormalization(
-            name='global_concept_embeddings_normalization',
-            epsilon=1e-6
-        )
-
-    def get_config(self):
-        config = super().get_config()
-        config['num_of_visits'] = self.num_of_visits
-        config['num_of_concepts'] = self.num_of_concepts
-        config['num_of_exchanges'] = self.num_of_exchanges
-        config['embedding_size'] = self.embedding_size
-        config['depth'] = self.depth
-        config['num_heads'] = self.num_heads
-        config['dropout_rate'] = self.dropout_rate
-
-        return config
-
-    def call(self,
-             temporal_concept_embeddings,
-             att_embeddings,
-             pat_concept_mask,
-             visit_concept_mask):
-        for i in range(self.num_of_exchanges):
-            # Step 1
-            # (batch_size * num_of_visits, num_of_concepts, embedding_size)
-            contextualized_concept_embeddings, _ = self.concept_encoder_layer(
-                temporal_concept_embeddings,  # be reused
-                pat_concept_mask  # not change
-            )
-
-            # (batch_size, num_of_visits, num_of_concepts, embedding_size)
-            contextualized_concept_embeddings = tf.reshape(
-                contextualized_concept_embeddings,
-                shape=(-1, self.num_of_visits, self.num_of_concepts, self.embedding_size)
-            )
-            # Step 2 generate augmented visit embeddings
-            # Slice out the first contextualized embedding of each visit
-            # (batch_size, num_of_visits, embedding_size)
-            visit_embeddings = contextualized_concept_embeddings[:, :, 0]
-
-            # Reshape the data in visit view back to patient view:
-            # (batch, num_of_visits * num_of_concepts, embedding_size)
-            contextualized_concept_embeddings = tf.reshape(
-                contextualized_concept_embeddings,
-                shape=(-1, self.num_of_visits * self.num_of_concepts, self.embedding_size)
-            )
-
-            # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
-            expanded_visit_embeddings = tf.transpose(
-                tf.transpose(visit_embeddings, perm=[0, 2, 1]) @ self.identity,
-                perm=[0, 2, 1]
-            )
-
-            # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
-            expanded_att_embeddings = tf.transpose(
-                tf.transpose(att_embeddings, perm=[0, 2, 1]) @ self.identity_inverse,
-                perm=[0, 2, 1]
-            )
-
-            # Insert the att embeddings between visit embedidngs
-            # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
-            augmented_visit_embeddings = expanded_visit_embeddings + expanded_att_embeddings
-
-            # Step 3 encoder applied to patient level
-            # Feed augmented visit embeddings into encoders to get contextualized visit embeddings
-            visit_embeddings, _ = self.visit_encoder_layer(
-                augmented_visit_embeddings,
-                visit_concept_mask
-            )
-
-            global_concept_embeddings, _ = self.mha_layer(
-                visit_embeddings,
-                visit_embeddings,
-                contextualized_concept_embeddings,
-                visit_concept_mask)
-
-            global_concept_embeddings = self.global_embedding_dropout_layer(
-                global_concept_embeddings
-            )
-
-            global_concept_embeddings = self.global_concept_embeddings_normalization(
-                global_concept_embeddings + contextualized_concept_embeddings
-            )
-
-            att_embeddings = self.identity_inverse @ visit_embeddings
-
-            visit_embeddings_without_att = self.identity @ visit_embeddings
-
-            global_concept_embeddings = tf.reshape(
-                global_concept_embeddings,
-                (-1, self.num_of_visits, self.num_of_concepts, self.embedding_size)
-            )
-
-            global_concept_embeddings += (
-                    global_concept_embeddings * self.merge_matrix_inverse +
-                    tf.expand_dims(
-                        visit_embeddings_without_att,
-                        axis=-2
-                    ) * self.merge_matrix
-            )
-
-            temporal_concept_embeddings = tf.reshape(
-                global_concept_embeddings,
-                (-1, self.num_of_concepts, self.embedding_size)
-            )
-
-        global_concept_embeddings = tf.reshape(
-            global_concept_embeddings,
-            (-1, self.num_of_visits * self.num_of_concepts, self.embedding_size)
-        )
-
-        return global_concept_embeddings, self.identity @ visit_embeddings
-
-
 class HiddenPhenotypeLayer(tf.keras.layers.Layer):
 
     def __init__(self,
@@ -1046,12 +994,14 @@ get_custom_objects().update({
     'VisitEmbeddingLayer': VisitEmbeddingLayer,
     'PositionalEncodingLayer': PositionalEncodingLayer,
     'TimeEmbeddingLayer': TimeEmbeddingLayer,
+    'TemporalTransformationLayer': TemporalTransformationLayer,
+    'ConceptValueTransformationLayer': ConceptValueTransformationLayer,
     'ReusableEmbedding': ReusableEmbedding,
     'TiedOutputEmbedding': TiedOutputEmbedding,
     'MaskedPenalizedSparseCategoricalCrossentropy': MaskedPenalizedSparseCategoricalCrossentropy,
     'BertLayer': BertLayer,
     'ConvolutionBertLayer': ConvolutionBertLayer,
-    'HierarchicalBertLayer': HierarchicalBertLayer,
     'HiddenPhenotypeLayer': HiddenPhenotypeLayer,
-    'VisitPhenotypeLayer': VisitPhenotypeLayer
+    'VisitPhenotypeLayer': VisitPhenotypeLayer,
+    'ConvolutionBertLayer': ConvolutionBertLayer
 })

@@ -4,7 +4,7 @@ from spark_apps.cohorts import last_visit_discharged_home as last
 
 from spark_apps.spark_parse_args import create_spark_args
 
-DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure', 'procedure_occurrence']
+DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure', 'procedure_occurrence', 'measurement']
 
 if __name__ == '__main__':
     create_prediction_cohort(create_spark_args(),

@@ -1,7 +1,9 @@
 import argparse
 from sys import argv
 
-from evaluations.evaluation_parameters import *
+from evaluations.evaluation_parameters import SEQUENCE_MODEL, BASELINE_MODEL, EVALUATION_CHOICES, \
+    LSTM, VANILLA_BERT_LSTM, SLIDING_BERT, TEMPORAL_BERT_LSTM, HIERARCHICAL_BERT_LSTM, \
+    SEQUENCE_MODEL_EVALUATORS
 
 
 def create_evaluation_args():
@@ -50,6 +52,12 @@ def create_evaluation_args():
                              action='store',
                              type=float,
                              default=1.0)
+    main_parser.add_argument('--learning_rate',
+                             dest='learning_rate',
+                             required=False,
+                             action='store',
+                             type=float,
+                             default=1e-4)
 
     group = main_parser.add_argument_group('sequence model')
     group.add_argument('-me',

@@ -317,15 +317,20 @@ class HierarchicalBertDataGenerator(AbstractDataGeneratorBase):
 
     def _calculate_step(self, num_of_visits):
         """
-        Calculate the number of steps used for the sliding window strategy
+        Calculate the number of steps. We first calculate the ratio of num_of_visits to
+        max_num_of_visits, then apply a log base 2 transformation to the ratio to calculate the
+        number of examples this patient medical history will yield.
+
+        E.g. round(log2(80/20)) = 2; round(log2(200/20)) = 3
+
         :param num_of_visits:
-        :return:
+
+        :return: the num of examples this patient contributes
         """
-        if num_of_visits <= self._max_num_of_visits:
-            return 1
-        else:
-            return math.ceil((num_of_visits - self._max_num_of_visits) /
-                             self._sliding_window) + 1
+        return max(
+            1,
+            math.floor(math.log2(num_of_visits / self._max_num_of_visits))
+        )
 
     def _create_iterator(self):
         """
@@ -336,11 +341,29 @@ class HierarchicalBertDataGenerator(AbstractDataGeneratorBase):
             for row in self._training_data.itertuples():
                 # Skip the patient that doesn't have the min number of concepts
                 if row.num_of_concepts >= self._min_num_of_concepts:
-                    # Use a sliding window to slice out a portion of the medical history
-                    for step in range(self._calculate_step(row.num_of_visits)):
-                        end_index = row.num_of_visits - step * self._sliding_window
-                        start_index = max(end_index - self._max_num_of_visits,
-                                          0)
+                    # Use a sparse sampling strategy to randomly select a portion of the medical
+                    # history
+                    num_of_partitions = self._calculate_step(row.num_of_visits)
+                    partition = row.num_of_visits // num_of_partitions
+
+                    # e.g. num_of_visits = 19, num_of_partitions = 1, partition = 19,
+                    for i in range(num_of_partitions):
+                        # sampling a example from the current partition
+                        lower_bound = i * partition
+                        # Bounded by num_of_visits
+                        upper_bound = min((i + 1) * partition, row.num_of_visits)
+                        # Randomly select a starting point.
+                        start_index = random.randint(
+                            lower_bound,
+                            # This is lower bounded by lower_bound
+                            max(upper_bound - self._max_num_of_visits, lower_bound)
+                        )
+                        # Bounded by num_of_visits
+                        end_index = min(
+                            start_index + self._max_num_of_visits,
+                            row.num_of_visits
+                        )
+
                         yield RowSlicer(row, start_index, end_index)
 
     def estimate_data_size(self):

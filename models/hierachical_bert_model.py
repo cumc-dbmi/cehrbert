@@ -1,4 +1,5 @@
-from models.custom_layers import *
+from models.layers.custom_layers import *
+from models.layers.hierarchical_custom_layers import HierarchicalBertLayer
 
 
 def transformer_hierarchical_bert_model(num_of_visits,

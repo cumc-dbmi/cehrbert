@@ -3,8 +3,8 @@ import tensorflow as tf
 from tensorflow.keras.initializers import Constant
 from tensorflow.keras.models import Model
 
-from models.custom_layers import get_custom_objects
-from models.custom_layers import ConvolutionBertLayer
+from models.layers.custom_layers import get_custom_objects
+from models.layers.custom_layers import ConvolutionBertLayer
 from models.bert_models_visit_prediction import transformer_bert_model_visit_prediction
 
 
@@ -260,45 +260,79 @@ def create_cher_bert_bi_lstm_model(bert_model_path):
 def create_cher_bert_bi_lstm_model_with_model(model):
     age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
 
-    contextualized_embeddings = model.get_layer(
-        'global_concept_embeddings_normalization'
+    contextualized_visit_embeddings, _ = model.get_layer(
+        'visit_encoder'
     ).output
     _, num_of_visits, num_of_concepts, embedding_size = model.get_layer(
-        'temporal_transformation'
+        'temporal_transformation_layer'
     ).output.shape
-    max_seq_length = num_of_visits * num_of_concepts
 
-    pat_mask = model.get_layer('pat_mask').output
+    # Pad contextualized_visit_embeddings on axis 1 with one extra visit so we can extract the
+    # visit embeddings using the reshape trick
+    # expanded_contextualized_visit_embeddings = tf.concat(
+    #     [contextualized_visit_embeddings,
+    #      contextualized_visit_embeddings[:, 0:1, :]],
+    #     axis=1
+    # )
 
-    pat_mask_reshaped = tf.reshape(pat_mask, (-1, max_seq_length))
+    # Extract the visit embeddings elements
+    # visit_embeddings_without_att = tf.reshape(
+    #     expanded_contextualized_visit_embeddings, (-1, num_of_visits, 3 * embedding_size)
+    # )[:, :, embedding_size: embedding_size * 2]
 
-    pat_mask_reordered = tf.sort(pat_mask_reshaped, axis=1)
+    visit_mask = model.get_layer('visit_mask').output
 
-    sorted_index = tf.argsort(pat_mask_reshaped, axis=1)
-
-    index_1d = tf.cast(tf.where(sorted_index >= 0)[:, 0], dtype=tf.int32)
-
-    index_2d = tf.stack([index_1d, tf.reshape(sorted_index, [-1])], axis=-1)
-
-    contextualized_embeddings = tf.reshape(
-        tf.gather_nd(contextualized_embeddings, index_2d),
-        (-1, max_seq_length, embedding_size)
-    )
+    # Expand dimension for masking MultiHeadAttention in Visit Encoder
+    visit_mask_with_att = tf.reshape(
+        tf.tile(visit_mask[:, :, tf.newaxis], [1, 1, 3]),
+        (-1, num_of_visits * 3)
+    )[:, 1:]
 
     mask_embeddings = tf.cast(
         tf.math.logical_not(
             tf.cast(
-                tf.reshape(pat_mask_reordered, (-1, max_seq_length)),
+                visit_mask_with_att,
                 dtype=tf.bool
             )
         ),
         dtype=tf.float32
     )[:, :, tf.newaxis]
 
-    contextualized_embeddings = tf.math.multiply(contextualized_embeddings, mask_embeddings)
+    #
+    # pat_mask = model.get_layer('pat_mask').output
+    #
+    # pat_mask_reshaped = tf.reshape(pat_mask, (-1, max_seq_length))
+    #
+    # pat_mask_reordered = tf.sort(pat_mask_reshaped, axis=1)
+    #
+    # sorted_index = tf.argsort(pat_mask_reshaped, axis=1)
+    #
+    # index_1d = tf.cast(tf.where(sorted_index >= 0)[:, 0], dtype=tf.int32)
+    #
+    # index_2d = tf.stack([index_1d, tf.reshape(sorted_index, [-1])], axis=-1)
+    #
+    # contextualized_embeddings = tf.reshape(
+    #     tf.gather_nd(contextualized_embeddings, index_2d),
+    #     (-1, max_seq_length, embedding_size)
+    # )
+    #
+    # mask_embeddings = tf.cast(
+    #     tf.math.logical_not(
+    #         tf.cast(
+    #             tf.reshape(pat_mask_reordered, (-1, max_seq_length)),
+    #             dtype=tf.bool
+    #         )
+    #     ),
+    #     dtype=tf.float32
+    # )[:, :, tf.newaxis]
+
+    contextualized_embeddings = tf.math.multiply(
+        contextualized_visit_embeddings,
+        mask_embeddings
+    )
 
     masking_layer = tf.keras.layers.Masking(mask_value=0.,
-                                            input_shape=(max_seq_length, embedding_size))
+                                            input_shape=(num_of_visits, embedding_size))
 
     bi_lstm_layer = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128))
 

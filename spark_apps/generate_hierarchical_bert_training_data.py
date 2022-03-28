@@ -5,34 +5,59 @@ import os
 from pyspark.sql import SparkSession
 
 import config.parameters
-import spark_apps.spark_parse_args as p
 from utils.spark_utils import *
-from utils.spark_utils import create_hierarchical_sequence_data
-
-VISIT_OCCURRENCE = 'visit_occurrence'
-PERSON = 'person'
+from utils.spark_utils import create_hierarchical_sequence_data, process_measurement
 
 
 def main(input_folder, output_folder, domain_table_list, date_filter, max_num_of_visits_per_person):
     spark = SparkSession.builder.appName('Generate Hierarchical Bert Training Data').getOrCreate()
 
     domain_tables = []
+    # Exclude measurement from domain_table_list if exists because we need to process measurement
+    # in a different way
     for domain_table_name in domain_table_list:
-        domain_tables.append(preprocess_domain_table(spark, input_folder, domain_table_name))
+        if domain_table_name != MEASUREMENT:
+            domain_tables.append(preprocess_domain_table(spark, input_folder, domain_table_name))
 
     visit_occurrence = preprocess_domain_table(spark, input_folder, VISIT_OCCURRENCE)
     person = preprocess_domain_table(spark, input_folder, PERSON)
-    patient_event = join_domain_tables(domain_tables) \
-        .withColumn('cohort_member_id', F.col('person_id'))
+
+    # Union all domain table records
+    patient_events = join_domain_tables(domain_tables)
+
+    # Process the measurement table if exists
+    if MEASUREMENT in domain_table_list:
+        measurement = preprocess_domain_table(spark, input_folder, MEASUREMENT)
+        required_measurement = preprocess_domain_table(spark, input_folder, REQUIRED_MEASUREMENT)
+        scaled_measurement = process_measurement(
+            spark,
+            measurement,
+            required_measurement
+        )
+
+        if patient_events:
+            # Union all measurement records together with other domain records
+            patient_events = patient_events.union(
+                scaled_measurement
+            )
+        else:
+            patient_events = scaled_measurement
+
+    # cohort_member_id is the same as the person_id
+    patient_events = patient_events.withColumn('cohort_member_id', F.col('person_id'))
 
     sequence_data = create_hierarchical_sequence_data(
-        person, visit_occurrence, patient_event,
+        person, visit_occurrence, patient_events,
         date_filter=date_filter,
         max_num_of_visits_per_person=max_num_of_visits_per_person
     )
 
-    sequence_data.write.mode('overwrite').parquet(os.path.join(output_folder,
-                                                               config.parameters.parquet_data_path))
+    sequence_data.write.mode('overwrite').parquet(
+        os.path.join(
+            output_folder,
+            config.parameters.parquet_data_path
+        )
+    )
 
 
 if __name__ == '__main__':

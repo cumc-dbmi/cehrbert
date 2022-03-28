@@ -402,8 +402,20 @@ class NestedCohortBuilder:
         cohort.write.mode('overwrite').parquet(self._output_data_folder)
 
     def extract_ehr_records_for_cohort(self, cohort: DataFrame):
-        ehr_records = extract_ehr_records(self.spark, self._input_folder, self._ehr_table_list,
-                                          self._include_visit_type, self._is_roll_up_concept)
+        """
+        Create the patient sequence based on the observation window for the given cohort
+
+        :param cohort:
+        :return:
+        """
+        # Extract all ehr records for the patients
+        ehr_records = extract_ehr_records(
+            self.spark,
+            self._input_folder,
+            self._ehr_table_list,
+            self._include_visit_type,
+            self._is_roll_up_concept
+        )
 
         if self._is_observation_post_index:
             record_window_filter = ehr_records['date'].between(
@@ -423,10 +435,11 @@ class NestedCohortBuilder:
                     + ['cohort_member_id'])
 
         if self._is_hierarchical_bert:
-            return create_hierarchical_sequence_data(person=self._dependency_dict[PERSON],
-                                                     visit_occurrence=self._dependency_dict[
-                                                         VISIT_OCCURRENCE],
-                                                     patient_event=cohort_ehr_records)
+            return create_hierarchical_sequence_data(
+                person=self._dependency_dict[PERSON],
+                visit_occurrence=self._dependency_dict[VISIT_OCCURRENCE],
+                patient_events=cohort_ehr_records
+            )
 
         if self._is_feature_concept_frequency:
             return create_concept_frequency_data(cohort_ehr_records, None)
@@ -436,9 +449,11 @@ class NestedCohortBuilder:
                                                  include_visit_type=self._include_visit_type,
                                                  exclude_visit_tokens=self._exclude_visit_tokens)
 
-        return create_sequence_data(cohort_ehr_records, None,
-                                    include_visit_type=self._include_visit_type,
-                                    classic_bert_seq=self._classic_bert_seq)
+        return create_sequence_data(
+            cohort_ehr_records,
+            date_filter=None,
+            include_visit_type=self._include_visit_type,
+            classic_bert_seq=self._classic_bert_seq)
 
     @classmethod
     def get_logger(cls):

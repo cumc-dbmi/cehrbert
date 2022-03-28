@@ -1,4 +1,4 @@
-from utils.spark_utils import UNKNOWN_CONCEPT
+from const.common import UNKNOWN_CONCEPT
 from typing import Optional, Sequence, Union
 from dask.dataframe import Series as dd_series
 from pandas import Series as df_series

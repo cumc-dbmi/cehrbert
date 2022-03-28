@@ -87,6 +87,16 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         learning_rate_scheduler = tf.keras.callbacks.LearningRateScheduler(
             CosineLRSchedule(lr_high=self._learning_rate, lr_low=1e-8, initial_period=10),
             verbose=1)
+
+        # learning_rate_scheduler = tf.keras.callbacks.LearningRateScheduler(
+        #     tf.keras.optimizers.schedules.ExponentialDecay(
+        #         self._learning_rate,
+        #         decay_steps=self._epochs,
+        #         decay_rate=0.5,
+        #         staircase=True
+        #     ),
+        #     verbose=1)
+
         early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
                                                           patience=1,
                                                           restore_best_weights=True)

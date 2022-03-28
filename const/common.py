@@ -1,0 +1,5 @@
+PERSON = 'person'
+VISIT_OCCURRENCE = 'visit_occurrence'
+UNKNOWN_CONCEPT = '[UNKNOWN]'
+MEASUREMENT = 'measurement'
+REQUIRED_MEASUREMENT = 'required_measurement'

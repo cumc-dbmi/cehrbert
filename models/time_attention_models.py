@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from models.custom_layers import TimeAttention
+from models.layers.custom_layers import TimeAttention
 
 
 def time_attention_cbow_negative_sampling_model(max_seq_length: int,

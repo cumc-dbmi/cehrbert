@@ -3,8 +3,8 @@ import tensorflow as tf
 
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 
-from models.custom_layers import (VisitEmbeddingLayer, Encoder, PositionalEncodingLayer,
-                                  TimeEmbeddingLayer)
+from models.layers.custom_layers import (VisitEmbeddingLayer, Encoder, PositionalEncodingLayer,
+                                         TimeEmbeddingLayer)
 from utils.model_utils import create_concept_mask
 
 
@@ -89,8 +89,9 @@ def transformer_bert_model(
         default_inputs.extend([ages])
         age_embedding_layer = TimeEmbeddingLayer(embedding_size=embedding_size)
         next_step_input = next_step_input + age_embedding_layer(ages)
-        positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
-                                                            embedding_size=embedding_size)
+        positional_encoding_layer = PositionalEncodingLayer(
+            embedding_size=embedding_size
+        )
         next_step_input += positional_encoding_layer(visit_concept_orders)
 
     elif use_time_embedding:
@@ -112,9 +113,9 @@ def transformer_bert_model(
             embedding_size=time_embeddings_size,
             name='age_embedding_layer')
         positional_encoding_layer = PositionalEncodingLayer(
-            max_sequence_length=max_seq_length,
             embedding_size=time_embeddings_size,
-            name='positional_encoding_layer')
+            name='positional_encoding_layer'
+        )
 
         scale_back_concat_layer = tf.keras.layers.Dense(
             embedding_size,
@@ -137,8 +138,9 @@ def transformer_bert_model(
             )
         )
     else:
-        positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
-                                                            embedding_size=embedding_size)
+        positional_encoding_layer = PositionalEncodingLayer(
+            embedding_size=embedding_size
+        )
         next_step_input += positional_encoding_layer(visit_concept_orders)
 
     # Building a Vanilla Transformer (described in

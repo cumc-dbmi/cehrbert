@@ -49,14 +49,14 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
         return list(
             map(lambda c: (c == self._tokenizer.get_unused_token_id()).astype(int), concept_ids))
 
-    def _pad(self, x, padded_token):
+    def _pad(self, x, padded_token, dtype='int32'):
         return pad_sequences(
             np.asarray(x),
             maxlen=self._max_num_of_concepts,
             padding='post',
             truncating='post',
             value=padded_token,
-            dtype='int32')
+            dtype=dtype)
 
     def extract_model_inputs(self):
         max_seq_len = self._max_num_of_concepts * self._max_num_of_visits
@@ -101,6 +101,24 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
             (-1, self._max_num_of_visits, self._max_num_of_concepts)
         )
 
+        # Process concept ids
+        # Retrieve the values associated with the concepts, this is mostly for measurements
+        concept_values = self._dataset.concept_values \
+            .apply(convert_to_list_of_lists) \
+            .apply(lambda tokens: self._pad(tokens, padded_token=-1.0, dtype='float32'))
+        padded_concept_values = np.reshape(
+            post_pad_pre_truncate(concept_values.apply(lambda d: d.flatten()), 0, max_seq_len),
+            (-1, self._max_num_of_visits, self._max_num_of_concepts)
+        )
+
+        concept_value_masks = self._dataset.concept_value_masks \
+            .apply(convert_to_list_of_lists) \
+            .apply(lambda tokens: self._pad(tokens, padded_token=0))
+        padded_concept_value_masks = np.reshape(
+            post_pad_pre_truncate(concept_value_masks.apply(lambda d: d.flatten()), 0, max_seq_len),
+            (-1, self._max_num_of_visits, self._max_num_of_concepts)
+        )
+
         # Process att tokens
         att_tokens = self._tokenizer.encode(
             self._dataset.time_interval_atts.apply(lambda t: t.tolist()).tolist())
@@ -139,6 +157,8 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
             'visit_rank_order': padded_visit_rank_orders,
             'visit_time_delta_att': padded_att_tokens,
             'visit_mask': padded_visit_mask,
+            'concept_values': padded_concept_values,
+            'concept_value_masks': padded_concept_value_masks,
             'age': np.expand_dims(self._dataset.age, axis=-1)
         }
         labels = self._dataset.label

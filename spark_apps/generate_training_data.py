@@ -6,7 +6,6 @@ from pyspark.sql import SparkSession
 
 import config.parameters
 from utils.spark_utils import *
-import spark_apps.spark_parse_args as p
 
 VISIT_OCCURRENCE = 'visit_occurrence'
 PERSON = 'person'
