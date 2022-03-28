@@ -1,5 +1,6 @@
 PERSON = 'person'
 VISIT_OCCURRENCE = 'visit_occurrence'
+CONDITION_OCCURRENCE = 'condition_occurrence'
 UNKNOWN_CONCEPT = '[UNKNOWN]'
 MEASUREMENT = 'measurement'
 REQUIRED_MEASUREMENT = 'required_measurement'
