@@ -1,17 +1,48 @@
-from models.custom_layers import *
+from models.layers.custom_layers import *
+import tensorflow_probability as tfp
+
+tfd = tfp.distributions
+tfpl = tfp.layers
 
 
-def create_probabilistic_phenotype_model(num_of_visits,
-                                         num_of_concepts,
-                                         concept_vocab_size,
-                                         embedding_size,
-                                         depth: int,
-                                         num_heads: int,
-                                         transformer_dropout: float = 0.1,
-                                         embedding_dropout: float = 0.6,
-                                         l2_reg_penalty: float = 1e-4,
-                                         time_embeddings_size: int = 16,
-                                         num_hidden_state: int = 20):
+def create_probabilistic_phenotype_model(
+        num_of_visits,
+        num_of_concepts,
+        concept_vocab_size,
+        embedding_size,
+        depth: int,
+        num_heads: int,
+        transformer_dropout: float = 0.1,
+        embedding_dropout: float = 0.6,
+        l2_reg_penalty: float = 1e-4,
+        time_embeddings_size: int = 16,
+        include_second_tiered_learning_objectives: bool = False,
+        visit_vocab_size: int = None,
+        num_of_phenotypes: int = 20
+):
+    """
+    Create a hierarchical bert model
+
+    :param num_of_visits:
+    :param num_of_concepts:
+    :param concept_vocab_size:
+    :param embedding_size:
+    :param depth:
+    :param num_heads:
+    :param num_of_exchanges:
+    :param transformer_dropout:
+    :param embedding_dropout:
+    :param l2_reg_penalty:
+    :param time_embeddings_size:
+    :param include_second_tiered_learning_objectives:
+    :param visit_vocab_size:
+    :return:
+    """
+    # If the second tiered learning objectives are enabled, visit_vocab_size needs to be provided
+    if include_second_tiered_learning_objectives and not visit_vocab_size:
+        raise RuntimeError(f'visit_vocab_size can not be null '
+                           f'when the second learning objectives are enabled')
+
     pat_seq = tf.keras.layers.Input(
         shape=(num_of_visits, num_of_concepts,),
         dtype='int32',
@@ -31,6 +62,16 @@ def create_probabilistic_phenotype_model(num_of_visits,
         shape=(num_of_visits, num_of_concepts,),
         dtype='int32',
         name='pat_mask'
+    )
+    concept_values = tf.keras.layers.Input(
+        shape=(num_of_visits, num_of_concepts,),
+        dtype='float32',
+        name='concept_values'
+    )
+    concept_value_masks = tf.keras.layers.Input(
+        shape=(num_of_visits, num_of_concepts,),
+        dtype='int32',
+        name='concept_value_masks'
     )
     visit_segment = tf.keras.layers.Input(
         shape=(num_of_visits,),
@@ -56,8 +97,8 @@ def create_probabilistic_phenotype_model(num_of_visits,
 
     # Create a list of inputs so the model could reference these later
     default_inputs = [pat_seq, pat_seq_age, pat_seq_time, pat_mask,
-                      visit_segment, visit_mask, visit_time_delta_att,
-                      visit_rank_order]
+                      concept_values, concept_value_masks, visit_segment, visit_mask,
+                      visit_time_delta_att, visit_rank_order]
 
     # Expand dimensions for masking MultiHeadAttention in Concept Encoder
     pat_concept_mask = tf.reshape(
@@ -66,71 +107,60 @@ def create_probabilistic_phenotype_model(num_of_visits,
     )[:, tf.newaxis, tf.newaxis, :]
 
     # output the embedding_matrix:
-    l2_regularization = (tf.keras.regularizers.l2(l2_reg_penalty) if l2_reg_penalty else None)
+    l2_regularizer = (tf.keras.regularizers.l2(l2_reg_penalty) if l2_reg_penalty else None)
     concept_embedding_layer = ReusableEmbedding(
         concept_vocab_size,
         embedding_size,
         name='concept_embedding_layer',
-        embeddings_regularizer=l2_regularization
-    )
-
-    # define the time embedding layer for absolute time stamps (since 1970)
-    time_embedding_layer = TimeEmbeddingLayer(
-        embedding_size=time_embeddings_size,
-        name='time_embedding_layer'
-    )
-    # define the age embedding layer for the age w.r.t the medical record
-    age_embedding_layer = TimeEmbeddingLayer(
-        embedding_size=time_embeddings_size,
-        name='age_embedding_layer'
-    )
-    # define positional encoding layer for visit numbers, the visit numbers are normalized
-    # by subtracting visit numbers off the first visit number
-    positional_encoding_layer = PositionalEncodingLayer(
-        max_sequence_length=num_of_visits * num_of_concepts,
-        embedding_size=time_embeddings_size,
-        name='positional_encoding_layer'
-    )
-    # Temporal transformation
-    temporal_transformation_layer = tf.keras.layers.Dense(
-        embedding_size,
-        activation='tanh',
-        name='temporal_transformation'
+        embeddings_regularizer=l2_regularizer
     )
 
     # Look up the embeddings for the concepts
     concept_embeddings, embedding_matrix = concept_embedding_layer(
         pat_seq
     )
+
+    concept_value_transformation_layer = ConceptValueTransformationLayer(
+        embedding_size=embedding_size,
+        name='concept_value_transformation_layer'
+    )
+
+    # Transform the concept embeddings by combining their concept embeddings with the
+    # corresponding val
+    concept_embeddings = concept_value_transformation_layer(
+        concept_embeddings=concept_embeddings,
+        concept_values=concept_values,
+        concept_value_masks=concept_value_masks
+    )
+
     # Look up the embeddings for the att tokens
     att_embeddings, _ = concept_embedding_layer(
         visit_time_delta_att
     )
 
-    pt_seq_age_embeddings = age_embedding_layer(
-        pat_seq_age
-    )
-    pt_seq_time_embeddings = time_embedding_layer(
-        pat_seq_time
-    )
-    visit_positional_encoding = positional_encoding_layer(
-        visit_rank_order
-    )
-    visit_positional_encoding = tf.tile(
-        visit_positional_encoding[:, :, tf.newaxis, :], [1, 1, num_of_concepts, 1])
-
-    # (batch, num_of_visits, num_of_concepts, embedding_size)
-    concept_embeddings = temporal_transformation_layer(
-        tf.concat(
-            [concept_embeddings,
-             pt_seq_age_embeddings,
-             pt_seq_time_embeddings,
-             visit_positional_encoding],
-            axis=-1
+    # Repurpose token id 0 as the visit start embedding
+    visit_start_embeddings, _ = concept_embedding_layer(
+        tf.zeros_like(
+            visit_mask,
+            dtype=tf.int32
         )
     )
 
-    # The first encoder applied at the visit level
+    temporal_transformation_layer = TemporalTransformationLayer(
+        time_embeddings_size=time_embeddings_size,
+        embedding_size=embedding_size,
+        name='temporal_transformation_layer'
+    )
+
+    # (batch, num_of_visits, num_of_concepts, embedding_size)
+    concept_embeddings = temporal_transformation_layer(
+        concept_embeddings,
+        pat_seq_age,
+        pat_seq_time,
+        visit_rank_order
+    )
+
+    # The first bert applied at the visit level
     concept_encoder = Encoder(
         name='concept_encoder',
         num_layers=depth,
@@ -160,60 +190,190 @@ def create_probabilistic_phenotype_model(num_of_visits,
     # (batch_size, num_of_visits, embedding_size)
     visit_embeddings = concept_embeddings[:, :, 0]
 
-    visit_phenotype_layer = VisitPhenotypeLayer(
-        hidden_unit=num_hidden_state,
-        embedding_size=embedding_size,
-        depth=depth,
+    # (batch_size, num_of_visits, embedding_size)
+    expanded_att_embeddings = tf.concat([att_embeddings, att_embeddings[:, 0:1, :]], axis=1)
+
+    # Insert the att embeddings between visit embeddings
+    # (batch_size, num_of_visits + num_of_visits + num_of_visits - 1, embedding_size)
+    contextualized_visit_embeddings = tf.reshape(
+        tf.concat(
+            [visit_start_embeddings,
+             visit_embeddings,
+             expanded_att_embeddings],
+            axis=-1
+        ),
+        (-1, 3 * num_of_visits, embedding_size)
+    )[:, :-1, :]
+
+    # Expand dimension for masking MultiHeadAttention in Visit Encoder
+    visit_mask_with_att = tf.reshape(
+        tf.tile(visit_mask[:, :, tf.newaxis], [1, 1, 3]),
+        (-1, num_of_visits * 3)
+    )[:, tf.newaxis, tf.newaxis, 1:]
+
+    # (num_of_visits_with_att, num_of_visits_with_att)
+    look_ahead_mask_base = tf.cast(
+        1 - tf.linalg.band_part(tf.ones((num_of_visits, num_of_visits)), -1, 0),
+        dtype=tf.int32
+    )
+    look_ahead_visit_mask = tf.reshape(
+        tf.tile(
+            look_ahead_mask_base[:, tf.newaxis, :, tf.newaxis],
+            [1, 3, 1, 3]
+        ),
+        shape=(num_of_visits * 3, num_of_visits * 3)
+    )[:-1, :-1]
+
+    look_ahead_concept_mask = tf.reshape(
+        tf.tile(
+            look_ahead_mask_base[:, tf.newaxis, :, tf.newaxis],
+            [1, num_of_concepts, 1, 3]
+        ),
+        (num_of_concepts * num_of_visits, -1)
+    )[:, :-1]
+
+    # (batch_size, 1, num_of_visits_with_att, num_of_visits_with_att)
+    look_ahead_visit_mask = tf.maximum(visit_mask_with_att, look_ahead_visit_mask)
+    # print(look_ahead_visit_mask)
+
+    # (batch_size, 1, num_of_visits * num_of_concepts, num_of_visits_with_att)
+    look_ahead_concept_mask = tf.maximum(visit_mask_with_att, look_ahead_concept_mask)
+
+    # Second bert applied at the patient level to the visit embeddings
+    visit_encoder = Encoder(
+        name='visit_encoder',
+        num_layers=depth,
+        d_model=embedding_size,
         num_heads=num_heads,
-        num_of_visits=num_of_visits,
-        name='visit_phenotype_layer'
+        dropout_rate=transformer_dropout
     )
 
-    phenotype_embeddings, phenotype_probability, _, _ = visit_phenotype_layer(
-        [visit_embeddings, att_embeddings, visit_mask]
+    # Feed augmented visit embeddings into encoders to get contextualized visit embeddings
+    contextualized_visit_embeddings, _ = visit_encoder(
+        contextualized_visit_embeddings,
+        look_ahead_visit_mask
     )
 
-    output_layer = TiedOutputEmbedding(
-        projection_regularizer=l2_regularization,
+    # Pad contextualized_visit_embeddings on axis 1 with one extra visit so we can extract the
+    # visit embeddings using the reshape trick
+    expanded_contextualized_visit_embeddings = tf.concat(
+        [contextualized_visit_embeddings,
+         contextualized_visit_embeddings[:, 0:1, :]],
+        axis=1
+    )
+
+    # Extract the visit embeddings elements
+    visit_embeddings_without_att = tf.reshape(
+        expanded_contextualized_visit_embeddings, (-1, num_of_visits, 3 * embedding_size)
+    )[:, :, embedding_size: embedding_size * 2]
+
+    # # Step 3 decoder applied to patient level
+    # Reshape the data in visit view back to patient view:
+    # (batch, num_of_visits * num_of_concepts, embedding_size)
+    concept_embeddings = tf.reshape(
+        concept_embeddings,
+        shape=(-1, num_of_visits * num_of_concepts, embedding_size)
+    )
+
+    # Let local concept embeddings access the global representatives of each visit
+    multi_head_attention_layer = MultiHeadAttention(
+        d_model=embedding_size,
+        num_heads=num_heads
+    )
+
+    mha_layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+    mha_dropout = tf.keras.layers.Dropout(transformer_dropout)
+
+    global_concept_embeddings, _ = multi_head_attention_layer(
+        contextualized_visit_embeddings,
+        contextualized_visit_embeddings,
+        concept_embeddings,
+        look_ahead_concept_mask
+    )
+
+    global_attn_norm = mha_layernorm(
+        mha_dropout(global_concept_embeddings) + concept_embeddings
+    )
+
+    ffn = point_wise_feed_forward_network(embedding_size, 512)
+    ffn_layernorm = tf.keras.layers.LayerNormalization(
+        epsilon=1e-6,
+        name='global_concept_embeddings_normalization'
+    )
+    ffn_dropout = tf.keras.layers.Dropout(
+        transformer_dropout
+    )
+
+    ffn_dropout_output = ffn_dropout(ffn(global_attn_norm))
+
+    global_attn = ffn_layernorm(
+        ffn_dropout_output + global_attn_norm
+    )
+
+    concept_output_layer = TiedOutputEmbedding(
+        projection_regularizer=l2_regularizer,
         projection_dropout=embedding_dropout,
-        add_biases=True,
-        name='concept_prediction_logits'
+        name='concept_prediction_logits')
+
+    concept_softmax_layer = tf.keras.layers.Softmax(
+        name='concept_predictions'
     )
 
-    # (batch_size * num_of_visits, num_hidden_state, vocab_size)
-    reshaped_phenotype_embeddings = tf.reshape(
-        phenotype_embeddings,
-        (-1, num_hidden_state, embedding_size)
+    concept_predictions = concept_softmax_layer(
+        concept_output_layer([global_attn, embedding_matrix])
     )
-    # (batch_size * num_of_visits, num_of_visits, vocab_size)
-    concept_predictions = tf.nn.softmax(
-        output_layer(
-            [reshaped_phenotype_embeddings, embedding_matrix]
+
+    # Step 4: Assuming there is a generative process that generates diagnosis embeddings from a
+    # Multivariate Gaussian Distribution Declare phenotype distribution prior
+    phenotype_prior = tfd.OneHotCategorical(np.zeros(num_of_phenotypes))
+    # Declare the phenotype embeddings prior
+    phenotype_embedding_prior = tfd.MultivariateNormalDiag(loc=tf.zeros(embedding_size))
+
+    # Define the generative model that generates the
+    diagnosis_code_model = tf.keras.models.Sequential([
+        tf.keras.layers.Dense(num_of_phenotypes),
+        tfp.layers.OneHotCategorical(
+            event_size=num_of_phenotypes,
+            convert_to_tensor_fn=tfp.distributions.Distribution.sample
+        ),
+        tfpl.KLDivergenceAddLoss(
+            phenotype_prior,
+            use_exact_kl=False
+        ),
+        tf.keras.layers.Dense(embedding_size),
+        tf.keras.layers.Dense(tfpl.MultivariateNormalTriL.params_size(embedding_size)),
+        tfpl.MultivariateNormalTriL(embedding_size),
+        tfpl.KLDivergenceAddLoss(phenotype_embedding_prior),  # estimate KL[ q(z|x) || p(z,
+        tf.keras.layers.Lambda(lambda t: t @ tf.transpose(embedding_matrix, [1, 0]))
+    ])
+
+    # (batch_size, num_of_visits, embedding_size)
+    diagnosis_predictions = diagnosis_code_model(
+        visit_embeddings_without_att
+    )
+
+    outputs = [concept_predictions, diagnosis_predictions]
+
+    if include_second_tiered_learning_objectives:
+        # Slice out the the visit embeddings (CLS tokens)
+        visit_prediction_dense = tf.keras.layers.Dense(
+            visit_vocab_size,
+            activation='tanh',
+            name='visit_prediction_dense'
         )
-    )
 
-    reshaped_concept_predictions = tf.reshape(
-        concept_predictions,
-        (-1, num_of_visits, num_hidden_state, concept_vocab_size)
-    )
+        visit_softmax_layer = tf.keras.layers.Softmax(
+            name='visit_predictions'
+        )
 
-    weighted_concept_predictions = tf.reduce_sum(
-        phenotype_probability[:, :, :, tf.newaxis] * reshaped_concept_predictions,
-        axis=2
-    )
+        visit_predictions = visit_softmax_layer(
+            visit_prediction_dense(visit_embeddings_without_att)
+        )
 
-    squeeze_layer = tf.keras.layers.Lambda(
-        lambda x: tf.squeeze(x),
-        name='concept_predictions',
-        output_shape=(-1, num_of_visits, concept_vocab_size)
-    )
+        outputs.extend([visit_predictions])
 
-    weighted_concept_predictions = squeeze_layer(
-        weighted_concept_predictions
-    )
-
-    probabilistic_phenotype_model = tf.keras.Model(
+    hierarchical_bert = tf.keras.Model(
         inputs=default_inputs,
-        outputs=[weighted_concept_predictions])
+        outputs=outputs)
 
-    return probabilistic_phenotype_model
+    return hierarchical_bert
