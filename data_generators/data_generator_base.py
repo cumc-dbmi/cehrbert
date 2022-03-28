@@ -390,7 +390,8 @@ class HierarchicalBertMultiTaskDataGenerator(HierarchicalBertDataGenerator):
 class ProbabilisticPhenotypeDataGenerator(HierarchicalBertDataGenerator):
     def _get_learning_objective_classes(self):
         return [
-            ProbabilisticPhenotypeLearningObjective
+            HierarchicalMaskedLanguageModelLearningObjective,
+            ProbabilisticPhenotypeConditionCodeLearningObjective
         ]
 
 

@@ -19,7 +19,7 @@ from tensorflow.keras import optimizers
 class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
     confidence_penalty = 0.1
 
-    def __init__(self, tokenizer_path: str,  embedding_size: int, depth: int,
+    def __init__(self, tokenizer_path: str, embedding_size: int, depth: int,
                  max_num_visits: int, max_num_concepts: int, num_heads: int,
                  time_embeddings_size: int, *args, **kwargs):
 
@@ -98,6 +98,9 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
 
                 losses = {
                     'concept_predictions':
+                        MaskedPenalizedSparseCategoricalCrossentropy(
+                            self.confidence_penalty),
+                    'condition_predictions':
                         MaskedPenalizedSparseCategoricalCrossentropy(
                             self.confidence_penalty)
                 }

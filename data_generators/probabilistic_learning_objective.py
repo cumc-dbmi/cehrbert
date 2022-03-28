@@ -1,6 +1,102 @@
 from data_generators.learning_objective import *
 
 
+class ProbabilisticPhenotypeConditionCodeLearningObjective(
+    HierarchicalMaskedLanguageModelLearningObjective
+):
+    def __init__(self, concept_tokenizer: ConceptTokenizer,
+                 max_num_of_visits: int,
+                 max_num_of_concepts: int,
+                 is_training: bool):
+        self._concept_tokenizer = concept_tokenizer
+        self._max_num_of_visits = max_num_of_visits
+        self._max_num_of_concepts = max_num_of_concepts
+        self._is_training = is_training
+
+    def get_tf_dataset_schema(self):
+        output_dict_schema = {'condition_predictions': int32}
+        return {}, output_dict_schema
+
+    @validate_columns_decorator
+    def process_batch(self, rows: List[RowSlicer]):
+        condition_concepts, visit_masks = zip(*list(map(self._make_record, rows)))
+
+        # (batch_size, num_of_visits, 1)
+        condition_concepts = np.squeeze(
+            np.stack(pd.Series(condition_concepts) \
+                     .apply(convert_to_list_of_lists) \
+                     .apply(self._concept_tokenizer.encode)),
+            axis=2
+        )
+
+        unused_token_id = self._concept_tokenizer.get_unused_token_id()
+
+        # Create the condition concept masks
+        condition_concept_masks = condition_concepts == unused_token_id
+
+        output_concept_masks = np.cast(
+            condition_concept_masks + visit_masks > 0,
+            np.int
+        )
+
+        output_dict = {
+            'condition_predictions': np.stack(
+                [condition_concepts,
+                 output_concept_masks], axis=-1
+            )
+        }
+
+        return {}, output_dict
+
+    def _make_record(self, row_slicer: RowSlicer):
+        """
+        A method for making a bert record for the bert data generator to yield
+
+        :param row_slicer: a tuple containing a pandas row,
+        left_index and right_index for slicing the sequences such as concepts
+
+        :return:
+        """
+
+        row, start_index, end_index, _ = row_slicer
+
+        concepts = self._pad_visits(row.concept_ids[start_index:end_index], '0')
+
+        condition_masks = self._pad_visits(row.condition_masks[start_index:end_index], 0)
+
+        random_conditions = zip(
+            *list(map(self._pick_condition_concepts, zip(concepts, condition_masks)))
+        )
+
+        visit_masks = self._pad_visits(
+            row.visit_masks[start_index:end_index], 1, False
+        )
+
+        return (
+            random_conditions, visit_masks
+        )
+
+    def _pick_condition_concepts(self, concepts_tuple):
+        """
+        Randomly pick a condition code
+
+        :param concepts_tuple:
+        :return:
+        """
+        concepts, condition_masks = concepts_tuple
+
+        condition_indexes = np.squeeze(
+            np.argwhere(
+                condition_masks == 1
+            )
+        )
+
+        if len(condition_indexes) == 0:
+            return self._concept_tokenizer.unused_token
+
+        return concepts[np.random.choice(condition_indexes)]
+
+
 class ProbabilisticPhenotypeLearningObjective(HierarchicalMaskedLanguageModelLearningObjective):
 
     @validate_columns_decorator

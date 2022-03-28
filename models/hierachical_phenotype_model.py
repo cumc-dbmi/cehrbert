@@ -36,6 +36,7 @@ def create_probabilistic_phenotype_model(
     :param time_embeddings_size:
     :param include_second_tiered_learning_objectives:
     :param visit_vocab_size:
+    :param num_of_phenotypes:
     :return:
     """
     # If the second tiered learning objectives are enabled, visit_vocab_size needs to be provided
