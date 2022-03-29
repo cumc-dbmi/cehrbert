@@ -344,16 +344,23 @@ def create_probabilistic_phenotype_model(
         tf.keras.layers.Dense(embedding_size),
         tf.keras.layers.Dense(tfpl.MultivariateNormalTriL.params_size(embedding_size)),
         tfpl.MultivariateNormalTriL(embedding_size),
-        tfpl.KLDivergenceAddLoss(phenotype_embedding_prior),  # estimate KL[ q(z|x) || p(z,
-        tf.keras.layers.Lambda(lambda t: t @ tf.transpose(embedding_matrix, [1, 0]))
+        tfpl.KLDivergenceAddLoss(phenotype_embedding_prior)  # estimate KL[ q(z|x) || p(z,
     ])
 
     # (batch_size, num_of_visits, embedding_size)
-    diagnosis_predictions = diagnosis_code_model(
+    phenotype_embeddings = diagnosis_code_model(
         visit_embeddings_without_att
     )
 
-    outputs = [concept_predictions, diagnosis_predictions]
+    # (batch_size, num_of_visits, vocab_size)
+    condition_softmax_layer = tf.keras.layers.Softmax(
+        name='condition_predictions'
+    )
+    condition_predictions = condition_softmax_layer(
+        phenotype_embeddings @ tf.transpose(embedding_matrix, [1, 0])
+    )
+
+    outputs = [concept_predictions, condition_predictions]
 
     if include_second_tiered_learning_objectives:
         # Slice out the the visit embeddings (CLS tokens)

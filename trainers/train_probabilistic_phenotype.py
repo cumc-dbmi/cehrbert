@@ -6,7 +6,7 @@ from models.parse_args import create_parse_args_hierarchical_bert
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
 from utils.model_utils import tokenize_multiple_fields
 from models.hierachical_phenotype_model import create_probabilistic_phenotype_model
-from models.custom_layers import get_custom_objects
+from models.layers.custom_layers import get_custom_objects
 from data_generators.data_generator_base import *
 from data_generators.data_classes import TokenizeFieldInfo
 

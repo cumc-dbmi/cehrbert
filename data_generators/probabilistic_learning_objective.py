@@ -19,30 +19,26 @@ class ProbabilisticPhenotypeConditionCodeLearningObjective(
 
     @validate_columns_decorator
     def process_batch(self, rows: List[RowSlicer]):
-        condition_concepts, visit_masks = zip(*list(map(self._make_record, rows)))
+        condition_concepts = list(map(self._make_record, rows))
 
         # (batch_size, num_of_visits, 1)
         condition_concepts = np.squeeze(
             np.stack(pd.Series(condition_concepts) \
-                     .apply(convert_to_list_of_lists) \
                      .apply(self._concept_tokenizer.encode)),
             axis=2
         )
-
         unused_token_id = self._concept_tokenizer.get_unused_token_id()
 
         # Create the condition concept masks
-        condition_concept_masks = condition_concepts == unused_token_id
-
-        output_concept_masks = np.cast(
-            condition_concept_masks + visit_masks > 0,
-            np.int
-        )
+        # condition_concept_masks = 1 means this position has a prediction task
+        condition_concept_masks = (
+                condition_concepts != unused_token_id
+        ).astype(int)
 
         output_dict = {
             'condition_predictions': np.stack(
                 [condition_concepts,
-                 output_concept_masks], axis=-1
+                 condition_concept_masks], axis=-1
             )
         }
 
@@ -64,17 +60,19 @@ class ProbabilisticPhenotypeConditionCodeLearningObjective(
 
         condition_masks = self._pad_visits(row.condition_masks[start_index:end_index], 0)
 
-        random_conditions = zip(
-            *list(map(self._pick_condition_concepts, zip(concepts, condition_masks)))
+        random_conditions = list(
+            map(
+                self._pick_condition_concepts,
+                zip(concepts, condition_masks)
+            )
         )
 
-        visit_masks = self._pad_visits(
-            row.visit_masks[start_index:end_index], 1, False
+        random_conditions = self._pad_visits(
+            random_conditions,
+            self._concept_tokenizer.unused_token
         )
 
-        return (
-            random_conditions, visit_masks
-        )
+        return random_conditions
 
     def _pick_condition_concepts(self, concepts_tuple):
         """
@@ -85,16 +83,12 @@ class ProbabilisticPhenotypeConditionCodeLearningObjective(
         """
         concepts, condition_masks = concepts_tuple
 
-        condition_indexes = np.squeeze(
-            np.argwhere(
-                condition_masks == 1
-            )
-        )
+        condition_indexes = np.argwhere(condition_masks == 1).flatten()
 
-        if len(condition_indexes) == 0:
-            return self._concept_tokenizer.unused_token
+        if condition_indexes.size > 0:
+            return concepts[np.random.choice(condition_indexes)]
 
-        return concepts[np.random.choice(condition_indexes)]
+        return self._concept_tokenizer.unused_token
 
 
 class ProbabilisticPhenotypeLearningObjective(HierarchicalMaskedLanguageModelLearningObjective):
