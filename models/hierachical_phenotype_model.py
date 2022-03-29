@@ -1,8 +1,4 @@
 from models.layers.custom_layers import *
-import tensorflow_probability as tfp
-
-tfd = tfp.distributions
-tfpl = tfp.layers
 
 
 def create_probabilistic_phenotype_model(
@@ -326,38 +322,15 @@ def create_probabilistic_phenotype_model(
 
     # Step 4: Assuming there is a generative process that generates diagnosis embeddings from a
     # Multivariate Gaussian Distribution Declare phenotype distribution prior
-    phenotype_prior = tfd.OneHotCategorical(np.zeros(num_of_phenotypes))
-    # Declare the phenotype embeddings prior
-    phenotype_embedding_prior = tfd.MultivariateNormalDiag(loc=tf.zeros(embedding_size))
-
-    # Define the generative model that generates the
-    diagnosis_code_model = tf.keras.models.Sequential([
-        tf.keras.layers.Dense(num_of_phenotypes),
-        tfp.layers.OneHotCategorical(
-            event_size=num_of_phenotypes,
-            convert_to_tensor_fn=tfp.distributions.Distribution.sample
-        ),
-        tfpl.KLDivergenceAddLoss(
-            phenotype_prior,
-            use_exact_kl=False
-        ),
-        tf.keras.layers.Dense(embedding_size),
-        tf.keras.layers.Dense(tfpl.MultivariateNormalTriL.params_size(embedding_size)),
-        tfpl.MultivariateNormalTriL(embedding_size),
-        tfpl.KLDivergenceAddLoss(phenotype_embedding_prior)  # estimate KL[ q(z|x) || p(z,
-    ])
-
-    # (batch_size, num_of_visits, embedding_size)
-    phenotype_embeddings = diagnosis_code_model(
-        visit_embeddings_without_att
+    visit_phenotype_layer = VisitPhenotypeLayer(
+        num_of_phenotypes=num_of_phenotypes,
+        embedding_size=embedding_size,
+        name='condition_predictions'
     )
 
     # (batch_size, num_of_visits, vocab_size)
-    condition_softmax_layer = tf.keras.layers.Softmax(
-        name='condition_predictions'
-    )
-    condition_predictions = condition_softmax_layer(
-        phenotype_embeddings @ tf.transpose(embedding_matrix, [1, 0])
+    condition_predictions = visit_phenotype_layer(
+        [visit_embeddings_without_att, embedding_matrix]
     )
 
     outputs = [concept_predictions, condition_predictions]

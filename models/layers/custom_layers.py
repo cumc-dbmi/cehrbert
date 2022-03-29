@@ -1,4 +1,5 @@
 import tensorflow as tf
+import tensorflow_probability as tfp
 import numpy as np
 
 from tensorflow.keras.utils import get_custom_objects
@@ -6,6 +7,9 @@ from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 from keras_transformer.bert import MaskedPenalizedSparseCategoricalCrossentropy
 
 from utils.model_utils import create_concept_mask
+
+tfd = tfp.distributions
+tfpl = tfp.layers
 
 
 def get_angles(pos, i, d_model):
@@ -829,148 +833,54 @@ class HiddenPhenotypeLayer(tf.keras.layers.Layer):
 class VisitPhenotypeLayer(tf.keras.layers.Layer):
 
     def __init__(self,
-                 hidden_unit: int,
+                 num_of_phenotypes: int,
                  embedding_size: int,
-                 depth: int,
-                 num_heads: int,
-                 num_of_visits: int,
-                 transformer_dropout: float = 0.1,
                  *args, **kwargs):
         super(VisitPhenotypeLayer, self).__init__(*args, **kwargs)
-        self.hidden_unit = hidden_unit
+        self.num_of_phenotypes = num_of_phenotypes
         self.embedding_size = embedding_size
-        self.num_heads = num_heads
-        self.num_of_visits = num_of_visits
-        self.transformer_dropout = transformer_dropout
-        self.depth = depth
 
-        # Insert the att embeddings between the visit embeddings using the following trick
-        self.identity = tf.constant(
-            np.insert(
-                np.identity(num_of_visits),
-                obj=range(1, num_of_visits),
-                values=0,
-                axis=1
+        # Assuming there is a generative process that generates diagnosis embeddings from a
+        # Multivariate Gaussian Distribution Declare phenotype distribution prior
+        self.phenotype_prior = tfd.OneHotCategorical(np.zeros(num_of_phenotypes))
+        # Declare the phenotype embeddings prior
+        self.phenotype_embedding_prior = tfd.MultivariateNormalDiag(loc=tf.zeros(embedding_size))
+
+        # Define the generative model that generates the
+        self.phenotype_logits = tf.keras.layers.Dense(num_of_phenotypes)
+        self.diagnosis_code_model = tf.keras.models.Sequential([
+            tfp.layers.OneHotCategorical(
+                event_size=num_of_phenotypes,
+                convert_to_tensor_fn=tfp.distributions.Distribution.sample
             ),
-            dtype=tf.float32
-        )
-
-        # Create the inverse "identity" matrix for inserting att embeddings
-        self.identity_inverse = tf.constant(
-            np.insert(
-                np.identity(num_of_visits - 1),
-                obj=range(0, num_of_visits),
-                values=0,
-                axis=1),
-            dtype=tf.float32)
-
-        # num_hidden_state, embedding_size
-        # Second bert applied at the patient level to the visit embeddings
-        self.visit_encoder = Encoder(
-            name='visit_encoder',
-            num_layers=depth,
-            d_model=embedding_size,
-            num_heads=num_heads,
-            dropout_rate=transformer_dropout)
-
-        self.phenotype_hidden_state_layer = tf.keras.layers.Dense(
-            units=hidden_unit * embedding_size
-        )
-        # Apply tanh to the input, otherwise we will run into the exploding gradient problem
-        self.phenotype_hidden_norm = tf.keras.layers.LayerNormalization(
-            epsilon=1e-6,
-            name='phenotype_hidden_normalization'
-        )
-        # Standard practice to randomly drop out some neurons to avoid overfitting
-        self.dropout_layer = tf.keras.layers.Dropout(
-            transformer_dropout,
-            name='phenotype_hidden_dropout'
-        )
-        self.phenotype_probability_layer = tf.keras.layers.Dense(
-            units=1
-        )
+            tfpl.KLDivergenceAddLoss(
+                self.phenotype_prior,
+                use_exact_kl=False
+            ),
+            tf.keras.layers.Dense(embedding_size),
+            tf.keras.layers.Dense(tfpl.MultivariateNormalTriL.params_size(embedding_size)),
+            tfpl.MultivariateNormalTriL(embedding_size),
+            tfpl.KLDivergenceAddLoss(self.phenotype_embedding_prior)  # estimate KL[ q(z|x) || p(z,
+        ])
 
     def get_config(self):
         config = super().get_config()
-        config['num_of_visits'] = self.num_of_visits
-        config['hidden_unit'] = self.hidden_unit
+        config['num_of_phenotypes'] = self.num_of_phenotypes
         config['embedding_size'] = self.embedding_size
-        config['num_heads'] = self.num_heads
-        config['depth'] = self.depth
-        config['transformer_dropout'] = self.transformer_dropout
         return config
 
     def call(self, inputs, **kwargs):
-        visit_embeddings, att_embeddings, visit_mask = inputs
+        visit_embeddings, embedding_matrix = inputs
 
-        # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
-        expanded_visit_embeddings = tf.transpose(
-            tf.transpose(visit_embeddings, perm=[0, 2, 1]) @ self.identity,
-            perm=[0, 2, 1]
-        )
-
-        # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
-        expanded_att_embeddings = tf.transpose(
-            tf.transpose(att_embeddings, perm=[0, 2, 1]) @ self.identity_inverse,
-            perm=[0, 2, 1]
-        )
-
-        # Insert the att embeddings between visit embeddings
-        # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
-        augmented_visit_embeddings = expanded_visit_embeddings + expanded_att_embeddings
-
-        # Expand dimension for masking MultiHeadAttention in Visit Encoder
-        visit_mask_with_att = (tf.reshape(
-            tf.stack([visit_mask, visit_mask], axis=2),
-            shape=(-1, self.num_of_visits * 2)
-        )[:, 1:])[:, tf.newaxis, tf.newaxis, :]
-
-        num_of_visits_with_att = tf.shape(visit_mask_with_att)[1]
-
-        # (num_of_visits_with_att, num_of_visits_with_att)
-        look_ahead_mask = tf.cast(
-            1 - tf.linalg.band_part(tf.ones((num_of_visits_with_att, num_of_visits_with_att)), -1,
-                                    0),
-            dtype=tf.int32
-        )
-
-        # (batch_size, 1, num_of_visits_with_att, num_of_visits_with_att)
-        look_ahead_mask = tf.maximum(visit_mask_with_att, look_ahead_mask)
-
-        # (batch_size, 2 * num_of_visits - 1, embedding_size)
-        context_visit_embeddings, attn_weights = self.visit_encoder(
-            augmented_visit_embeddings,
-            look_ahead_mask,
-        )
-
-        # (batch_size, num_of_visits, num_hidden_units * embedding_size)
-        phenotype_embeddings = self.phenotype_hidden_state_layer(
-            self.identity @ context_visit_embeddings
-        )
-        # Apply dropout to avoid overfitting and apply Layer normalization across all hidden
-        # units to avoid the exploding gradient problem
-        phenotype_embeddings = self.phenotype_hidden_norm(
-            self.dropout_layer(
-                phenotype_embeddings,
-                **kwargs
-            )
-        )
-        # (batch_size, num_of_visits, hidden_unit, embedding_size)
-        reshaped_phenotype_embeddings = tf.reshape(
-            phenotype_embeddings,
-            (-1, self.num_of_visits, self.hidden_unit, self.embedding_size)
-        )
-        # (batch_size, num_of_visits, hidden_unit)
-        phenotype_probability = tf.nn.softmax(
-            tf.squeeze(
-                self.phenotype_probability_layer(
-                    reshaped_phenotype_embeddings
-                )
+        # (batch_size, num_of_visits, num_of_phenotypes)
+        visit_phenotype_probs = tf.nn.softmax(
+            self.phenotype_logits(
+                visit_embeddings
             )
         )
 
         phenotype_prob_entropy = -tf.reduce_sum(
-            phenotype_probability * tf.math.log(phenotype_probability),
+            visit_phenotype_probs * tf.math.log(visit_phenotype_probs),
             axis=-1
         )
 
@@ -979,8 +889,17 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             name='phenotype_probability_entropy'
         )
 
-        return (reshaped_phenotype_embeddings, phenotype_probability,
-                context_visit_embeddings, attn_weights)
+        # (batch_size, num_of_visits, embedding_size)
+        phenotype_embeddings = self.diagnosis_code_model(
+            visit_phenotype_probs
+        )
+
+        # (batch_size, num_of_visits, vocab_size)
+        condition_predictions = tf.nn.softmax(
+            phenotype_embeddings @ tf.transpose(embedding_matrix, [1, 0])
+        )
+
+        return condition_predictions
 
 
 get_custom_objects().update({
