@@ -4,7 +4,7 @@ import tensorflow as tf
 from models.model_parameters import ModelPathConfig
 from models.parse_args import create_parse_args_hierarchical_bert_phenotype
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
-from utils.model_utils import tokenize_multiple_fields
+from utils.model_utils import tokenize_multiple_fields, tokenize_one_field
 from models.hierachical_phenotype_model import create_probabilistic_phenotype_model
 from models.layers.custom_layers import get_custom_objects
 from data_generators.data_generator_base import *
@@ -19,11 +19,13 @@ from tensorflow.keras import optimizers
 class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
     confidence_penalty = 0.1
 
-    def __init__(self, tokenizer_path: str, embedding_size: int, depth: int,
-                 num_of_phenotypes: int, max_num_visits: int, max_num_concepts: int,
-                 num_heads: int, time_embeddings_size: int, *args, **kwargs):
+    def __init__(self, tokenizer_path: str, visit_tokenizer_path: str, embedding_size: int,
+                 depth: int, num_of_phenotypes: int, max_num_visits: int, max_num_concepts: int,
+                 num_heads: int, time_embeddings_size: int, include_visit_prediction: bool,
+                 *args, **kwargs):
 
         self._tokenizer_path = tokenizer_path
+        self._visit_tokenizer_path = visit_tokenizer_path
         self._embedding_size = embedding_size
         self._depth = depth
         self._max_num_visits = max_num_visits
@@ -31,19 +33,22 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
         self._num_of_phenotypes = num_of_phenotypes
         self._num_heads = num_heads
         self._time_embeddings_size = time_embeddings_size
+        self._include_visit_prediction = include_visit_prediction
 
         super(ProbabilisticPhenotypeTrainer, self).__init__(*args, **kwargs)
 
         self.get_logger().info(
             f'{self} will be trained with the following parameters:\n'
             f'tokenizer_path: {tokenizer_path}\n'
+            f'visit_tokenizer_path: {visit_tokenizer_path}\n'
             f'embedding_size: {embedding_size}\n'
             f'depth: {depth}\n'
             f'max_num_visits: {max_num_visits}\n'
             f'max_num_concepts: {max_num_concepts}\n'
             f'num_of_phenotypes: {num_of_phenotypes}\n'
             f'num_heads: {num_heads}\n'
-            f'time_embeddings_size: {time_embeddings_size}')
+            f'time_embeddings_size: {time_embeddings_size}\n'
+            f'include_visit_prediction: {include_visit_prediction}')
 
     def _load_dependencies(self):
 
@@ -57,7 +62,15 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
             self._tokenizer_path,
             encode=False)
 
-    def create_data_generator(self) -> ProbabilisticPhenotypeDataGenerator:
+        if self._include_visit_prediction:
+            self._visit_tokenizer = tokenize_one_field(
+                self._training_data,
+                'visit_concept_ids',
+                'visit_token_ids',
+                self._visit_tokenizer_path
+            )
+
+    def create_data_generator(self) -> HierarchicalBertDataGenerator:
 
         parameters = {
             'training_data': self._training_data,
@@ -67,7 +80,12 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
             'max_num_of_concepts': self._max_num_concepts
         }
 
-        data_generator_class = ProbabilisticPhenotypeDataGenerator
+        data_generator_class = HierarchicalBertDataGenerator
+
+        if self._include_visit_prediction:
+            parameters['visit_tokenizer'] = self._visit_tokenizer
+            data_generator_class = HierarchicalBertMultiTaskDataGenerator
+
         return data_generator_class(**parameters)
 
     def _create_model(self):
@@ -88,22 +106,40 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
                                             epsilon=1e-5,
                                             clipnorm=1.0)
 
+                visit_vocab_size = (
+                    self._visit_tokenizer.get_vocab_size() if
+                    self._include_visit_prediction else None
+                )
+
                 model = create_probabilistic_phenotype_model(
                     num_of_visits=self._max_num_visits,
                     num_of_concepts=self._max_num_concepts,
                     num_of_phenotypes=self._num_of_phenotypes,
                     concept_vocab_size=self._tokenizer.get_vocab_size(),
+                    visit_vocab_size=visit_vocab_size,
                     embedding_size=self._embedding_size,
                     depth=self._depth,
                     num_heads=self._num_heads,
-                    time_embeddings_size=self._time_embeddings_size
+                    time_embeddings_size=self._time_embeddings_size,
+                    include_second_tiered_learning_objectives=self._include_visit_prediction
                 )
 
-                losses = {
-                    'concept_predictions':
-                        MaskedPenalizedSparseCategoricalCrossentropy(
-                            self.confidence_penalty)
-                }
+                if self._include_visit_prediction:
+                    losses = {
+                        'concept_predictions':
+                            MaskedPenalizedSparseCategoricalCrossentropy(
+                                self.confidence_penalty),
+                        'visit_predictions':
+                            MaskedPenalizedSparseCategoricalCrossentropy(
+                                self.confidence_penalty)
+                    }
+                else:
+                    losses = {
+                        'concept_predictions':
+                            MaskedPenalizedSparseCategoricalCrossentropy(
+                                self.confidence_penalty)
+                    }
+
                 model.compile(
                     optimizer,
                     loss=losses,
@@ -120,6 +156,7 @@ def main(args):
         training_data_parquet_path=config.parquet_data_path,
         model_path=config.model_path,
         tokenizer_path=config.tokenizer_path,
+        visit_tokenizer_path=config.visit_tokenizer_path,
         embedding_size=args.embedding_size,
         depth=args.depth,
         max_num_visits=args.max_num_visits,
@@ -129,6 +166,7 @@ def main(args):
         batch_size=args.batch_size,
         epochs=args.epochs,
         learning_rate=args.learning_rate,
+        include_visit_prediction=args.include_visit_prediction,
         time_embeddings_size=args.time_embeddings_size,
         use_dask=args.use_dask,
         tf_board_log_path=args.tf_board_log_path
