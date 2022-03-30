@@ -213,7 +213,7 @@ def create_probabilistic_phenotype_model(
         1 - tf.linalg.band_part(tf.ones((num_of_visits, num_of_visits)), -1, 0),
         dtype=tf.int32
     )
-    look_ahead_visit_mask = tf.reshape(
+    look_ahead_visit_mask_with_att = tf.reshape(
         tf.tile(
             look_ahead_mask_base[:, tf.newaxis, :, tf.newaxis],
             [1, 3, 1, 3]
@@ -224,17 +224,40 @@ def create_probabilistic_phenotype_model(
     look_ahead_concept_mask = tf.reshape(
         tf.tile(
             look_ahead_mask_base[:, tf.newaxis, :, tf.newaxis],
-            [1, num_of_concepts, 1, 3]
+            [1, num_of_concepts, 1, 1]
         ),
         (num_of_concepts * num_of_visits, -1)
-    )[:, :-1]
+    )
 
     # (batch_size, 1, num_of_visits_with_att, num_of_visits_with_att)
-    look_ahead_visit_mask = tf.maximum(visit_mask_with_att, look_ahead_visit_mask)
-    # print(look_ahead_visit_mask)
+    look_ahead_visit_mask_with_att = tf.maximum(
+        visit_mask_with_att,
+        look_ahead_visit_mask_with_att
+    )
 
-    # (batch_size, 1, num_of_visits * num_of_concepts, num_of_visits_with_att)
-    look_ahead_concept_mask = tf.maximum(visit_mask_with_att, look_ahead_concept_mask)
+    # (batch_size, 1, num_of_visits * num_of_concepts, num_of_visits)
+    look_ahead_concept_mask = tf.maximum(
+        visit_mask[:, tf.newaxis, tf.newaxis, :],
+        look_ahead_concept_mask
+    )
+
+    # (batch_size, 1, num_of_visits * num_of_concepts, num_of_visits)
+    look_ahead_concept_mask = tf.maximum(
+        tf.cast(
+            tf.reshape(
+                tf.tile(
+                    tf.expand_dims(
+                        1 - tf.eye(num_of_visits),
+                        axis=1
+                    ),
+                    [1, num_of_concepts, 1]
+                ),
+                (num_of_concepts * num_of_visits, num_of_visits)
+            ),
+            dtype=tf.int32
+        ),
+        look_ahead_concept_mask
+    )
 
     # Second bert applied at the patient level to the visit embeddings
     visit_encoder = Encoder(
@@ -248,7 +271,7 @@ def create_probabilistic_phenotype_model(
     # Feed augmented visit embeddings into encoders to get contextualized visit embeddings
     contextualized_visit_embeddings, _ = visit_encoder(
         contextualized_visit_embeddings,
-        look_ahead_visit_mask
+        look_ahead_visit_mask_with_att
     )
 
     # Pad contextualized_visit_embeddings on axis 1 with one extra visit so we can extract the
@@ -263,6 +286,20 @@ def create_probabilistic_phenotype_model(
     visit_embeddings_without_att = tf.reshape(
         expanded_contextualized_visit_embeddings, (-1, num_of_visits, 3 * embedding_size)
     )[:, :, embedding_size: embedding_size * 2]
+
+    # Step 4: Assuming there is a generative process that generates diagnosis embeddings from a
+    # Multivariate Gaussian Distribution Declare phenotype distribution prior
+    visit_phenotype_layer = VisitPhenotypeLayer(
+        num_of_phenotypes=num_of_phenotypes,
+        embedding_size=embedding_size,
+        transformer_dropout=transformer_dropout,
+        name='hidden_visit_embeddings'
+    )
+
+    # (batch_size, num_of_visits, vocab_size)
+    visit_embeddings_without_att = visit_phenotype_layer(
+        [visit_embeddings_without_att, visit_mask]
+    )
 
     # # Step 3 decoder applied to patient level
     # Reshape the data in visit view back to patient view:
@@ -282,8 +319,8 @@ def create_probabilistic_phenotype_model(
     mha_dropout = tf.keras.layers.Dropout(transformer_dropout)
 
     global_concept_embeddings, _ = multi_head_attention_layer(
-        contextualized_visit_embeddings,
-        contextualized_visit_embeddings,
+        visit_embeddings_without_att,
+        visit_embeddings_without_att,
         concept_embeddings,
         look_ahead_concept_mask
     )
@@ -320,21 +357,7 @@ def create_probabilistic_phenotype_model(
         concept_output_layer([global_attn, embedding_matrix])
     )
 
-    # Step 4: Assuming there is a generative process that generates diagnosis embeddings from a
-    # Multivariate Gaussian Distribution Declare phenotype distribution prior
-    visit_phenotype_layer = VisitPhenotypeLayer(
-        num_of_phenotypes=num_of_phenotypes,
-        embedding_size=embedding_size,
-        dropout_rate=transformer_dropout,
-        name='condition_predictions'
-    )
-
-    # (batch_size, num_of_visits, vocab_size)
-    condition_predictions = visit_phenotype_layer(
-        [visit_embeddings_without_att, embedding_matrix]
-    )
-
-    outputs = [concept_predictions, condition_predictions]
+    outputs = [concept_predictions]
 
     if include_second_tiered_learning_objectives:
         # Slice out the the visit embeddings (CLS tokens)

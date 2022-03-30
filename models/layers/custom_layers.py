@@ -836,68 +836,89 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
     def __init__(self,
                  num_of_phenotypes: int,
                  embedding_size: int,
-                 dropout_rate: float,
+                 transformer_dropout: float,
                  *args, **kwargs):
         super(VisitPhenotypeLayer, self).__init__(*args, **kwargs)
         self.num_of_phenotypes = num_of_phenotypes
         self.embedding_size = embedding_size
-        self.dropout_rate = dropout_rate
+        self.transformer_dropout = transformer_dropout
 
-        # Assuming there is a generative process that generates diagnosis embeddings from a
-        # Multivariate Gaussian Distribution Declare phenotype distribution prior
-        self.phenotype_prior = tfd.OneHotCategorical(np.zeros(num_of_phenotypes))
-        # Declare the phenotype embeddings prior
-        self.phenotype_embedding_prior = tfd.MultivariateNormalDiag(loc=tf.zeros(embedding_size))
+        # We assume there exists hidden phenotype embeddings
+        # (num_of_phenotypes, embedding_size)
+        self.phenotype_embeddings = self.add_weight(
+            shape=(num_of_phenotypes, embedding_size),
+            initializer=tf.keras.initializers.GlorotNormal(),
+            trainable=True,
+            name='phenotype_embeddings_matrix'
+        )
 
-        # Define the generative model that generates the
-        self.phenotype_logits = tf.keras.layers.Dense(num_of_phenotypes)
-        self.diagnosis_code_model = tf.keras.models.Sequential([
-            tfp.layers.OneHotCategorical(
-                event_size=num_of_phenotypes,
-                convert_to_tensor_fn=tfp.distributions.Distribution.sample
-            ),
-            tfpl.KLDivergenceAddLoss(
-                self.phenotype_prior,
-                use_exact_kl=False
-            ),
-            tf.keras.layers.Dense(
-                embedding_size,
-                activation='relu'
-            ),
-            tf.keras.layers.Dropout(
-                dropout_rate
-            ),
-            tf.keras.layers.Dense(
-                embedding_size,
-                activation='relu'
-            ),
-            tf.keras.layers.Dropout(
-                dropout_rate
-            ),
-            tf.keras.layers.Dense(tfpl.MultivariateNormalTriL.params_size(embedding_size)),
-            tfpl.MultivariateNormalTriL(embedding_size),
-            tfpl.KLDivergenceAddLoss(self.phenotype_embedding_prior)  # estimate KL[ q(z|x) || p(z,
-        ])
+        self.layer_norm_layer = tf.keras.layers.LayerNormalization(
+            epsilon=1e-6
+        )
+        self.dropout_layer = tf.keras.layers.Dropout(transformer_dropout)
+
+        # # Assuming there is a generative process that generates diagnosis embeddings from a
+        # # Multivariate Gaussian Distribution Declare phenotype distribution prior
+        # self.phenotype_prior = tfd.OneHotCategorical(np.zeros(num_of_phenotypes))
+        # # Declare the phenotype embeddings prior
+        # self.phenotype_embedding_prior = tfd.MultivariateNormalDiag(loc=tf.zeros(embedding_size))
+        #
+        # # Define the generative model that generates the
+        # self.phenotype_logits = tf.keras.layers.Dense(num_of_phenotypes)
+        # self.diagnosis_code_model = tf.keras.models.Sequential([
+        #     tfp.layers.OneHotCategorical(
+        #         event_size=num_of_phenotypes,
+        #         convert_to_tensor_fn=tfp.distributions.Distribution.sample
+        #     ),
+        #     tfpl.KLDivergenceAddLoss(
+        #         self.phenotype_prior,
+        #         use_exact_kl=False
+        #     ),
+        #     tf.keras.layers.Dense(
+        #         embedding_size,
+        #         activation='relu'
+        #     ),
+        #     tf.keras.layers.Dropout(
+        #         dropout_rate
+        #     ),
+        #     tf.keras.layers.Dense(
+        #         embedding_size,
+        #         activation='relu'
+        #     ),
+        #     tf.keras.layers.Dropout(
+        #         dropout_rate
+        #     ),
+        #     tf.keras.layers.Dense(tfpl.MultivariateNormalTriL.params_size(embedding_size)),
+        #     tfpl.MultivariateNormalTriL(embedding_size),
+        #     tfpl.KLDivergenceAddLoss(self.phenotype_embedding_prior)  # estimate KL[ q(z|x) || p(z,
+        # ])
 
     def get_config(self):
         config = super().get_config()
         config['num_of_phenotypes'] = self.num_of_phenotypes
         config['embedding_size'] = self.embedding_size
-        config['dropout_rate'] = self.dropout_rate
+        config['transformer_dropout'] = self.transformer_dropout
         return config
 
     def call(self, inputs, **kwargs):
-        visit_embeddings, embedding_matrix = inputs
-
+        visit_embeddings, visit_mask = inputs
         # (batch_size, num_of_visits, num_of_phenotypes)
         visit_phenotype_probs = tf.nn.softmax(
-            self.phenotype_logits(
-                visit_embeddings
-            )
+            visit_embeddings @ tf.transpose(self.phenotype_embeddings, [1, 0])
         )
 
+        converted_visit_mask = tf.cast(
+            tf.logical_not(
+                tf.cast(
+                    visit_mask,
+                    dtype=tf.bool
+                )
+            ),
+            dtype=tf.float32
+        )[:, :, tf.newaxis]
+
         phenotype_prob_entropy = -tf.reduce_sum(
-            visit_phenotype_probs * tf.math.log(visit_phenotype_probs),
+            visit_phenotype_probs * tf.math.log(visit_phenotype_probs) * converted_visit_mask,
             axis=-1
         )
 
@@ -907,17 +928,19 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         )
 
         # (batch_size, num_of_visits, embedding_size)
-        phenotype_embeddings = self.diagnosis_code_model(
-            visit_phenotype_probs,
+        contextualized_visit_embeddings = visit_phenotype_probs @ self.phenotype_embeddings
+
+        contextualized_visit_embeddings = self.dropout_layer(
+            contextualized_visit_embeddings,
             **kwargs
         )
 
-        # (batch_size, num_of_visits, vocab_size)
-        condition_predictions = tf.nn.softmax(
-            phenotype_embeddings @ tf.transpose(embedding_matrix, [1, 0])
+        contextualized_visit_embeddings = self.layer_norm_layer(
+            visit_embeddings + contextualized_visit_embeddings,
+            **kwargs
         )
 
-        return condition_predictions
+        return contextualized_visit_embeddings
 
 
 get_custom_objects().update({
