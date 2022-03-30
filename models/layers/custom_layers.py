@@ -838,12 +838,16 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             num_of_phenotypes: int,
             embedding_size: int,
             transformer_dropout: float,
+            phenotype_entropy_weight: float = 1e-04,
+            phenotype_euclidean_weight: float = 1e-02,
             *args, **kwargs
     ):
         super(VisitPhenotypeLayer, self).__init__(*args, **kwargs)
         self.num_of_phenotypes = num_of_phenotypes
         self.embedding_size = embedding_size
         self.transformer_dropout = transformer_dropout
+        self.phenotype_entropy_weight = phenotype_entropy_weight
+        self.phenotype_euclidean_weight = phenotype_euclidean_weight
 
         # We assume there exists hidden phenotype embeddings
         # (num_of_phenotypes, embedding_size)
@@ -862,33 +866,35 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             transformer_dropout
         )
 
-        self.cov_parameter_size = (
-                tfpl.MultivariateNormalTriL.params_size(embedding_size) - embedding_size
-        )
-
-        self.cov_parameter_matrix = self.add_weight(
-            shape=(embedding_size, self.cov_parameter_size),
-            initializer=tf.keras.initializers.GlorotNormal(),
-            trainable=True,
-            name='cov_matrix'
-        )
-
-        # Assuming there is a generative process that generates diagnosis embeddings from a
-        self.phenotype_embedding_prior = tfd.MultivariateNormalDiag(loc=tf.zeros(embedding_size))
-        # Define the generative model that generates the
-        self.hidden_visit_embedding_layer = tf.keras.models.Sequential([
-            tfpl.MultivariateNormalTriL(embedding_size),
-            tfpl.KLDivergenceAddLoss(
-                self.phenotype_embedding_prior,
-                use_exact_kl=True
-            )  # estimate KL[ q(z|x) || p(z,
-        ])
+        # self.cov_parameter_size = (
+        #         tfpl.MultivariateNormalTriL.params_size(embedding_size) - embedding_size
+        # )
+        #
+        # self.cov_parameter_matrix = self.add_weight(
+        #     shape=(embedding_size, self.cov_parameter_size),
+        #     initializer=tf.keras.initializers.GlorotNormal(),
+        #     trainable=True,
+        #     name='cov_matrix'
+        # )
+        #
+        # # Assuming there is a generative process that generates diagnosis embeddings from a
+        # self.phenotype_embedding_prior = tfd.MultivariateNormalDiag(loc=tf.zeros(embedding_size))
+        # # Define the generative model that generates the
+        # self.hidden_visit_embedding_layer = tf.keras.models.Sequential([
+        #     tfpl.MultivariateNormalTriL(embedding_size),
+        #     tfpl.KLDivergenceAddLoss(
+        #         self.phenotype_embedding_prior,
+        #         use_exact_kl=True
+        #     )  # estimate KL[ q(z|x) || p(z,
+        # ])
 
     def get_config(self):
         config = super().get_config()
         config['num_of_phenotypes'] = self.num_of_phenotypes
         config['embedding_size'] = self.embedding_size
         config['transformer_dropout'] = self.transformer_dropout
+        config['phenotype_entropy_weight'] = self.phenotype_entropy_weight
+        config['phenotype_euclidean_weight'] = self.phenotype_euclidean_weight
         return config
 
     def call(self, inputs, **kwargs):
@@ -920,6 +926,23 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             name='phenotype_probability_entropy'
         )
 
+        # Add the entropy as a loss to encourage the model to focus on a subset of phenotypes
+        self.add_loss(
+            tf.reduce_mean(phenotype_prob_entropy) * self.phenotype_entropy_weight,
+        )
+
+        # Add the inverse euclidean distance as a loss to drive phenotypes away from each other
+        phenotype_euclidean_distance = self.calculate_phenotype_euclidean_distance()
+
+        self.add_metric(
+            phenotype_euclidean_distance,
+            name='phenotype_euclidean_distance'
+        )
+
+        self.add_loss(
+            phenotype_euclidean_distance * self.phenotype_euclidean_weight,
+        )
+
         # Calculate the contextualized visit embeddings using the pre-defined phenotype embeddings
         # (batch_size, num_of_visits, embedding_size)
         contextualized_visit_embeddings = self.dropout_layer(
@@ -929,24 +952,35 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
 
         # Sum the original visit embeddings and the phenotype contextualized visit embeddings
         contextualized_visit_embeddings = self.layer_norm_layer(
-            visit_embeddings + contextualized_visit_embeddings,
+            contextualized_visit_embeddings,
             **kwargs
         )
 
-        # Get the trainable covariance parameters for the multivariate gaussian
-        covariance_parameters = (
-                contextualized_visit_embeddings @ self.cov_parameter_matrix
-        )
+        # # Get the trainable covariance parameters for the multivariate gaussian
+        # covariance_parameters = (
+        #         contextualized_visit_embeddings @ self.cov_parameter_matrix
+        # )
+        #
+        # # Get a sample from the multivariate gaussian
+        # hidden_visit_embeddings = self.hidden_visit_embedding_layer(
+        #     tf.concat(
+        #         [contextualized_visit_embeddings, covariance_parameters],
+        #         axis=-1
+        #     )
+        # )
 
-        # Get a sample from the multivariate gaussian
-        hidden_visit_embeddings = self.hidden_visit_embedding_layer(
-            tf.concat(
-                [contextualized_visit_embeddings, covariance_parameters],
-                axis=-1
-            )
-        )
+        return contextualized_visit_embeddings
 
-        return hidden_visit_embeddings
+    def calculate_phenotype_euclidean_distance(self):
+        r = tf.reduce_sum(self.phenotype_embeddings * self.phenotype_embeddings, 1)
+        # turn r into column vector
+        r = tf.reshape(r, [-1, 1])
+        euclidean_distances = r - 2 * tf.matmul(self.phenotype_embeddings, tf.transpose(
+            self.phenotype_embeddings)) + tf.transpose(r)
+
+        return tf.reduce_mean(
+            tf.math.exp(-euclidean_distances)
+        )
 
 
 get_custom_objects().update({

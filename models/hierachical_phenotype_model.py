@@ -297,7 +297,7 @@ def create_probabilistic_phenotype_model(
     )
 
     # (batch_size, num_of_visits, vocab_size)
-    visit_embeddings_without_att = visit_phenotype_layer(
+    hidden_visit_embeddings_without_att = visit_phenotype_layer(
         [visit_embeddings_without_att, visit_mask]
     )
 
@@ -319,8 +319,8 @@ def create_probabilistic_phenotype_model(
     mha_dropout = tf.keras.layers.Dropout(transformer_dropout)
 
     global_concept_embeddings, _ = multi_head_attention_layer(
-        visit_embeddings_without_att,
-        visit_embeddings_without_att,
+        hidden_visit_embeddings_without_att,
+        hidden_visit_embeddings_without_att,
         concept_embeddings,
         look_ahead_concept_mask
     )
