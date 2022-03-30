@@ -2,8 +2,8 @@ import tensorflow as tf
 
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 
-from models.custom_layers import (VisitEmbeddingLayer, Encoder, PositionalEncodingLayer,
-                                  TimeEmbeddingLayer, HiddenPhenotypeLayer)
+from models.layers.custom_layers import (VisitEmbeddingLayer, Encoder, PositionalEncodingLayer,
+                                         TimeEmbeddingLayer, HiddenPhenotypeLayer)
 
 
 def create_probabilistic_transformer_bert_model(max_seq_length: int,
@@ -144,7 +144,7 @@ def create_probabilistic_transformer_bert_model(max_seq_length: int,
             phenotype_embeddings[:, :, tf.newaxis, :],
             [1, 1, max_seq_length, 1]
         ),
-        tf.tile(
+            tf.tile(
                 temporal_concept_embeddings[:, tf.newaxis, :, :],
                 [1, num_hidden_state, 1, 1]
             )

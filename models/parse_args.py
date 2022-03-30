@@ -142,3 +142,15 @@ def create_parse_args_hierarchical_bert():
                         help='Number of information exchanges between visit and concept embeddings',
                         required=True)
     return parser
+
+
+def create_parse_args_hierarchical_bert_phenotype():
+    parser = create_parse_args_hierarchical_bert()
+    parser.add_argument('--num_of_phenotypes',
+                        dest='num_of_phenotypes',
+                        action='store',
+                        type=int,
+                        help='Num of phenotypes',
+                        default=20,
+                        required=False)
+    return parser

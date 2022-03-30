@@ -2,7 +2,7 @@ import os
 
 import tensorflow as tf
 from models.model_parameters import ModelPathConfig
-from models.parse_args import create_parse_args_hierarchical_bert
+from models.parse_args import create_parse_args_hierarchical_bert_phenotype
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
 from utils.model_utils import tokenize_multiple_fields
 from models.hierachical_phenotype_model import create_probabilistic_phenotype_model
@@ -20,14 +20,15 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
     confidence_penalty = 0.1
 
     def __init__(self, tokenizer_path: str, embedding_size: int, depth: int,
-                 max_num_visits: int, max_num_concepts: int, num_heads: int,
-                 time_embeddings_size: int, *args, **kwargs):
+                 num_of_phenotypes: int, max_num_visits: int, max_num_concepts: int,
+                 num_heads: int, time_embeddings_size: int, *args, **kwargs):
 
         self._tokenizer_path = tokenizer_path
         self._embedding_size = embedding_size
         self._depth = depth
         self._max_num_visits = max_num_visits
         self._max_num_concepts = max_num_concepts
+        self._num_of_phenotypes = num_of_phenotypes
         self._num_heads = num_heads
         self._time_embeddings_size = time_embeddings_size
 
@@ -40,6 +41,7 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
             f'depth: {depth}\n'
             f'max_num_visits: {max_num_visits}\n'
             f'max_num_concepts: {max_num_concepts}\n'
+            f'num_of_phenotypes: {num_of_phenotypes}\n'
             f'num_heads: {num_heads}\n'
             f'time_embeddings_size: {time_embeddings_size}')
 
@@ -89,6 +91,7 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
                 model = create_probabilistic_phenotype_model(
                     num_of_visits=self._max_num_visits,
                     num_of_concepts=self._max_num_concepts,
+                    num_of_phenotypes=self._num_of_phenotypes,
                     concept_vocab_size=self._tokenizer.get_vocab_size(),
                     embedding_size=self._embedding_size,
                     depth=self._depth,
@@ -98,9 +101,6 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
 
                 losses = {
                     'concept_predictions':
-                        MaskedPenalizedSparseCategoricalCrossentropy(
-                            self.confidence_penalty),
-                    'condition_predictions':
                         MaskedPenalizedSparseCategoricalCrossentropy(
                             self.confidence_penalty)
                 }
@@ -124,14 +124,16 @@ def main(args):
         depth=args.depth,
         max_num_visits=args.max_num_visits,
         max_num_concepts=args.max_num_concepts,
+        num_of_phenotypes=args.num_of_phenotypes,
         num_heads=args.num_heads,
         batch_size=args.batch_size,
         epochs=args.epochs,
         learning_rate=args.learning_rate,
         time_embeddings_size=args.time_embeddings_size,
         use_dask=args.use_dask,
-        tf_board_log_path=args.tf_board_log_path).train_model()
+        tf_board_log_path=args.tf_board_log_path
+    ).train_model()
 
 
 if __name__ == "__main__":
-    main(create_parse_args_hierarchical_bert().parse_args())
+    main(create_parse_args_hierarchical_bert_phenotype().parse_args())
