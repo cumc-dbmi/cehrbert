@@ -325,6 +325,7 @@ def create_probabilistic_phenotype_model(
     visit_phenotype_layer = VisitPhenotypeLayer(
         num_of_phenotypes=num_of_phenotypes,
         embedding_size=embedding_size,
+        dropout_rate=transformer_dropout,
         name='condition_predictions'
     )
 

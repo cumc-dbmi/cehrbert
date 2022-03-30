@@ -10,6 +10,7 @@ from utils.model_utils import create_concept_mask
 
 tfd = tfp.distributions
 tfpl = tfp.layers
+tfb = tfp.bijectors
 
 
 def get_angles(pos, i, d_model):
@@ -835,10 +836,12 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
     def __init__(self,
                  num_of_phenotypes: int,
                  embedding_size: int,
+                 dropout_rate: float,
                  *args, **kwargs):
         super(VisitPhenotypeLayer, self).__init__(*args, **kwargs)
         self.num_of_phenotypes = num_of_phenotypes
         self.embedding_size = embedding_size
+        self.dropout_rate = dropout_rate
 
         # Assuming there is a generative process that generates diagnosis embeddings from a
         # Multivariate Gaussian Distribution Declare phenotype distribution prior
@@ -857,7 +860,20 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
                 self.phenotype_prior,
                 use_exact_kl=False
             ),
-            tf.keras.layers.Dense(embedding_size),
+            tf.keras.layers.Dense(
+                embedding_size,
+                activation='relu'
+            ),
+            tf.keras.layers.Dropout(
+                dropout_rate
+            ),
+            tf.keras.layers.Dense(
+                embedding_size,
+                activation='relu'
+            ),
+            tf.keras.layers.Dropout(
+                dropout_rate
+            ),
             tf.keras.layers.Dense(tfpl.MultivariateNormalTriL.params_size(embedding_size)),
             tfpl.MultivariateNormalTriL(embedding_size),
             tfpl.KLDivergenceAddLoss(self.phenotype_embedding_prior)  # estimate KL[ q(z|x) || p(z,
@@ -867,6 +883,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         config = super().get_config()
         config['num_of_phenotypes'] = self.num_of_phenotypes
         config['embedding_size'] = self.embedding_size
+        config['dropout_rate'] = self.dropout_rate
         return config
 
     def call(self, inputs, **kwargs):
@@ -891,7 +908,8 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
 
         # (batch_size, num_of_visits, embedding_size)
         phenotype_embeddings = self.diagnosis_code_model(
-            visit_phenotype_probs
+            visit_phenotype_probs,
+            **kwargs
         )
 
         # (batch_size, num_of_visits, vocab_size)
