@@ -839,7 +839,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             embedding_size: int,
             transformer_dropout: float,
             phenotype_entropy_weight: float = 1e-05,
-            phenotype_euclidean_weight: float = 1e-03,
+            phenotype_euclidean_weight: float = 1e-05,
             *args, **kwargs
     ):
         super(VisitPhenotypeLayer, self).__init__(*args, **kwargs)
@@ -899,10 +899,6 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
 
     def call(self, inputs, **kwargs):
         visit_embeddings, visit_mask = inputs
-        # (batch_size, num_of_visits, num_of_phenotypes)
-        visit_phenotype_probs = tf.nn.softmax(
-            visit_embeddings @ tf.transpose(self.phenotype_embeddings, [1, 0])
-        )
 
         # Do not compute the entropy for the masked visits
         converted_visit_mask = tf.cast(
@@ -914,6 +910,12 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             ),
             dtype=tf.float32
         )[:, :, tf.newaxis]
+
+        # (batch_size, num_of_visits, num_of_phenotypes)
+        visit_phenotype_probs = tf.nn.softmax(
+            visit_embeddings @ tf.transpose(self.phenotype_embeddings,
+                                            [1, 0]) * converted_visit_mask
+        )
 
         # Calculate the probability distribution entropy
         phenotype_prob_entropy = -tf.reduce_sum(
@@ -946,7 +948,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         # Calculate the contextualized visit embeddings using the pre-defined phenotype embeddings
         # (batch_size, num_of_visits, embedding_size)
         contextualized_visit_embeddings = self.dropout_layer(
-            visit_phenotype_probs @ self.phenotype_embeddings,
+            visit_phenotype_probs @ self.phenotype_embeddings * converted_visit_mask,
             **kwargs
         )
 
