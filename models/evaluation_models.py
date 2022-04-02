@@ -280,6 +280,8 @@ def create_cher_bert_bi_lstm_model_with_model(model):
     #     expanded_contextualized_visit_embeddings, (-1, num_of_visits, 3 * embedding_size)
     # )[:, :, embedding_size: embedding_size * 2]
 
+    num_of_visits_with_att = num_of_visits * 3 - 1
+
     visit_mask = model.get_layer('visit_mask').output
 
     # Expand dimension for masking MultiHeadAttention in Visit Encoder
@@ -331,8 +333,10 @@ def create_cher_bert_bi_lstm_model_with_model(model):
         mask_embeddings
     )
 
-    masking_layer = tf.keras.layers.Masking(mask_value=0.,
-                                            input_shape=(num_of_visits, embedding_size))
+    masking_layer = tf.keras.layers.Masking(
+        mask_value=0.,
+        input_shape=(num_of_visits_with_att, embedding_size)
+    )
 
     bi_lstm_layer = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128))
 
