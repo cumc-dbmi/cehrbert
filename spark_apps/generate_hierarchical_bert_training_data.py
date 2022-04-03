@@ -3,13 +3,20 @@ import datetime
 import os
 
 from pyspark.sql import SparkSession
+from pyspark.sql.functions import countDistinct
 
 import config.parameters
 from utils.spark_utils import *
 from utils.spark_utils import create_hierarchical_sequence_data, process_measurement
 
 
-def main(input_folder, output_folder, domain_table_list, date_filter, max_num_of_visits_per_person):
+def main(input_folder,
+         output_folder,
+         domain_table_list,
+         date_filter,
+         max_num_of_visits_per_person,
+         min_num_of_patients
+         ):
     spark = SparkSession.builder.appName('Generate Hierarchical Bert Training Data').getOrCreate()
 
     domain_tables = []
@@ -24,6 +31,20 @@ def main(input_folder, output_folder, domain_table_list, date_filter, max_num_of
 
     # Union all domain table records
     patient_events = join_domain_tables(domain_tables)
+
+    # Filter out concepts that are linked to less than 100 patients
+    qualified_concepts = patient_events.groupBy('standard_concept_id') \
+        .agg(countDistinct('person_id').alias('freq')) \
+        .where(F.col('freq') >= min_num_of_patients) \
+        .select('standard_concept_id')
+
+    qualified_concepts.cache()
+    broadcast(qualified_concepts)
+
+    patient_events = patient_events.join(
+        qualified_concepts,
+        'standard_concept_id'
+    )
 
     # Process the measurement table if exists
     if MEASUREMENT in domain_table_list:
@@ -96,6 +117,13 @@ if __name__ == '__main__':
                         default=200,
                         help='Max no.of visits per patient to be included',
                         required=False)
+    parser.add_argument('--min_num_of_patients',
+                        dest='min_num_of_patients',
+                        action='store',
+                        type=int,
+                        default=0,
+                        help='Min no.of patients linked to concepts to be included',
+                        required=False)
 
     ARGS = parser.parse_args()
 
@@ -103,4 +131,5 @@ if __name__ == '__main__':
          ARGS.output_folder,
          ARGS.domain_table_list,
          ARGS.date_filter,
-         ARGS.max_num_of_visits)
+         ARGS.max_num_of_visits,
+         ARGS.min_num_of_patients)
