@@ -3,7 +3,6 @@ import datetime
 import os
 
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import countDistinct
 
 import config.parameters
 from utils.spark_utils import *
@@ -15,7 +14,7 @@ def main(input_folder,
          domain_table_list,
          date_filter,
          max_num_of_visits_per_person,
-         min_num_of_patients
+         include_concept_list: bool = True,
          ):
     spark = SparkSession.builder.appName('Generate Hierarchical Bert Training Data').getOrCreate()
 
@@ -32,19 +31,18 @@ def main(input_folder,
     # Union all domain table records
     patient_events = join_domain_tables(domain_tables)
 
-    # Filter out concepts that are linked to less than 100 patients
-    qualified_concepts = patient_events.groupBy('standard_concept_id') \
-        .agg(countDistinct('person_id').alias('freq')) \
-        .where(F.col('freq') >= min_num_of_patients) \
-        .select('standard_concept_id')
+    if include_concept_list and patient_events:
+        # Filter out concepts
+        qualified_concepts = preprocess_domain_table(
+            spark,
+            input_folder,
+            config.parameters.qualified_concept_list_path
+        ).select('standard_concept_id')
 
-    qualified_concepts.cache()
-    broadcast(qualified_concepts)
-
-    patient_events = patient_events.join(
-        qualified_concepts,
-        'standard_concept_id'
-    )
+        patient_events = patient_events.join(
+            qualified_concepts,
+            'standard_concept_id'
+        )
 
     # Process the measurement table if exists
     if MEASUREMENT in domain_table_list:
@@ -117,13 +115,10 @@ if __name__ == '__main__':
                         default=200,
                         help='Max no.of visits per patient to be included',
                         required=False)
-    parser.add_argument('--min_num_of_patients',
-                        dest='min_num_of_patients',
-                        action='store',
-                        type=int,
-                        default=0,
-                        help='Min no.of patients linked to concepts to be included',
-                        required=False)
+
+    parser.add_argument('--include_concept_list',
+                        dest='include_concept_list',
+                        action='store_true')
 
     ARGS = parser.parse_args()
 
@@ -132,4 +127,4 @@ if __name__ == '__main__':
          ARGS.domain_table_list,
          ARGS.date_filter,
          ARGS.max_num_of_visits,
-         ARGS.min_num_of_patients)
+         ARGS.include_concept_list)
