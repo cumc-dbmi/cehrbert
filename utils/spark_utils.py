@@ -13,6 +13,7 @@ from const.common import PERSON, VISIT_OCCURRENCE, UNKNOWN_CONCEPT, MEASUREMENT,
     REQUIRED_MEASUREMENT
 from spark_apps.sql_templates import measurement_unit_stats_query
 from utils.logging_utils import *
+from config.parameters import qualified_concept_list_path
 
 DOMAIN_KEY_FIELDS = {
     'condition_occurrence_id': ('condition_concept_id', 'condition_start_date', 'condition'),
@@ -608,7 +609,7 @@ def create_retain_data(patient_event):
 
 
 def extract_ehr_records(spark, input_folder, domain_table_list, include_visit_type=False,
-                        with_rollup=False):
+                        with_rollup=False, include_concept_list=False):
     """
     Extract the ehr records for domain_table_list from input_folder.
 
@@ -617,6 +618,7 @@ def extract_ehr_records(spark, input_folder, domain_table_list, include_visit_ty
     :param domain_table_list:
     :param include_visit_type: whether or not to include the visit type to the ehr records
     :param with_rollup: whether ot not to roll up the concepts to the parent levels
+    :param include_concept_list:
     :return:
     """
     domain_tables = []
@@ -631,6 +633,19 @@ def extract_ehr_records(spark, input_folder, domain_table_list, include_visit_ty
                 )
             )
     patient_ehr_records = join_domain_tables(domain_tables)
+
+    if include_concept_list and patient_ehr_records:
+        # Filter out concepts
+        qualified_concepts = preprocess_domain_table(
+            spark,
+            input_folder,
+            qualified_concept_list_path
+        ).select('standard_concept_id')
+
+        patient_ehr_records = patient_ehr_records.join(
+            qualified_concepts,
+            'standard_concept_id'
+        )
 
     # Process the measurement table if exists
     if MEASUREMENT in domain_table_list:

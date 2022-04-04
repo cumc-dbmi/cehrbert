@@ -242,6 +242,7 @@ class NestedCohortBuilder:
                  exclude_visit_tokens: bool = False,
                  is_feature_concept_frequency: bool = False,
                  is_roll_up_concept: bool = False,
+                 include_concept_list: bool = True,
                  is_new_patient_representation: bool = False,
                  is_hierarchical_bert: bool = False,
                  classic_bert_seq: bool = False,
@@ -275,6 +276,7 @@ class NestedCohortBuilder:
         self._is_remove_index_prediction_starts = is_remove_index_prediction_starts
         self._is_questionable_outcome_existed = is_questionable_outcome_existed
         self._is_prediction_window_unbounded = is_prediction_window_unbounded
+        self._include_concept_list = include_concept_list
         self._output_data_folder = os.path.join(self._output_folder,
                                                 re.sub('[^a-z0-9]+', '_',
                                                        self._cohort_name.lower()))
@@ -300,6 +302,7 @@ class NestedCohortBuilder:
                                f'is_questionable_outcome_existed: {is_questionable_outcome_existed}\n'
                                f'is_remove_index_prediction_starts: {is_remove_index_prediction_starts}\n'
                                f'is_prediction_window_unbounded: {is_prediction_window_unbounded}\n'
+                               f'include_concept_list: {include_concept_list}\n'
                                f'is_observation_window_unbounded: {is_observation_window_unbounded}\n')
 
         self.spark = SparkSession.builder.appName(f'Generate {self._cohort_name}').getOrCreate()
@@ -414,7 +417,8 @@ class NestedCohortBuilder:
             self._input_folder,
             self._ehr_table_list,
             self._include_visit_type,
-            self._is_roll_up_concept
+            self._is_roll_up_concept,
+            self._include_concept_list
         )
 
         if self._is_observation_post_index:
@@ -549,6 +553,7 @@ def create_prediction_cohort(spark_args,
                         exclude_visit_tokens=exclude_visit_tokens,
                         is_feature_concept_frequency=is_feature_concept_frequency,
                         is_roll_up_concept=is_roll_up_concept,
+                        include_concept_list=spark_args.include_concept_list,
                         is_new_patient_representation=is_new_patient_representation,
                         is_hierarchical_bert=is_hierarchical_bert,
                         classic_bert_seq=classic_bert_seq,
