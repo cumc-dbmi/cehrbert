@@ -31,28 +31,35 @@ def main(input_folder,
     # Union all domain table records
     patient_events = join_domain_tables(domain_tables)
 
+    column_names = patient_events.schema.fieldNames()
+
     if include_concept_list and patient_events:
         # Filter out concepts
-        qualified_concepts = preprocess_domain_table(
-            spark,
-            input_folder,
-            config.parameters.qualified_concept_list_path
-        ).select('standard_concept_id')
-
+        qualified_concepts = broadcast(
+            preprocess_domain_table(
+                spark,
+                input_folder,
+                config.parameters.qualified_concept_list_path
+            )
+        )
+        # The select is necessary to make sure the order of the columns is the same as the
+        # original dataframe
         patient_events = patient_events.join(
             qualified_concepts,
             'standard_concept_id'
-        )
+        ).select(column_names)
 
     # Process the measurement table if exists
     if MEASUREMENT in domain_table_list:
         measurement = preprocess_domain_table(spark, input_folder, MEASUREMENT)
         required_measurement = preprocess_domain_table(spark, input_folder, REQUIRED_MEASUREMENT)
+        # The select is necessary to make sure the order of the columns is the same as the
+        # original dataframe, otherwise the union might use the wrong columns
         scaled_measurement = process_measurement(
             spark,
             measurement,
             required_measurement
-        )
+        ).select(column_names)
 
         if patient_events:
             # Union all measurement records together with other domain records
