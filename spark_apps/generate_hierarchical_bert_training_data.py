@@ -115,7 +115,6 @@ if __name__ == '__main__':
                         default=200,
                         help='Max no.of visits per patient to be included',
                         required=False)
-
     parser.add_argument('--include_concept_list',
                         dest='include_concept_list',
                         action='store_true')
