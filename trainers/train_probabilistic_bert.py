@@ -6,7 +6,7 @@ from models.parse_args import create_parse_args_base_bert
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
 from utils.model_utils import tokenize_one_field
 from models.probabilistic_cehrbert import create_probabilistic_transformer_bert_model
-from models.custom_layers import get_custom_objects
+from models.layers.custom_layers import get_custom_objects
 from data_generators.data_generator_base import *
 
 from keras_transformer.bert import (masked_perplexity,

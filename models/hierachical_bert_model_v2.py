@@ -221,38 +221,18 @@ def transformer_hierarchical_bert_model(num_of_visits,
     look_ahead_concept_mask = tf.reshape(
         tf.tile(
             look_ahead_mask_base[:, tf.newaxis, :, tf.newaxis],
-            [1, num_of_concepts, 1, 1]
+            [1, num_of_concepts, 1, 3]
         ),
         (num_of_concepts * num_of_visits, -1)
-    )
+    )[:, :-1]
 
     # (batch_size, 1, num_of_visits_with_att, num_of_visits_with_att)
     look_ahead_visit_mask = tf.maximum(visit_mask_with_att, look_ahead_visit_mask)
     # print(look_ahead_visit_mask)
 
-    # (batch_size, 1, num_of_visits * num_of_concepts, num_of_visits)
-    look_ahead_concept_mask = tf.maximum(
-        visit_mask[:, tf.newaxis, tf.newaxis, :],
-        look_ahead_concept_mask
-    )
+    # (batch_size, 1, num_of_visits * num_of_concepts, num_of_visits_with_att)
+    look_ahead_concept_mask = tf.maximum(visit_mask_with_att, look_ahead_concept_mask)
 
-    # (batch_size, 1, num_of_visits * num_of_concepts, num_of_visits)
-    look_ahead_concept_mask = tf.maximum(
-        tf.cast(
-            tf.reshape(
-                tf.tile(
-                    tf.expand_dims(
-                        1 - tf.eye(num_of_visits),
-                        axis=1
-                    ),
-                    [1, num_of_concepts, 1]
-                ),
-                (num_of_concepts * num_of_visits, num_of_visits)
-            ),
-            dtype=tf.int32
-        ),
-        look_ahead_concept_mask
-    )
     # Second bert applied at the patient level to the visit embeddings
     visit_encoder = Encoder(
         name='visit_encoder',
@@ -299,8 +279,8 @@ def transformer_hierarchical_bert_model(num_of_visits,
     mha_dropout = tf.keras.layers.Dropout(transformer_dropout)
 
     global_concept_embeddings, _ = multi_head_attention_layer(
-        visit_embeddings_without_att,
-        visit_embeddings_without_att,
+        contextualized_visit_embeddings,
+        contextualized_visit_embeddings,
         concept_embeddings,
         look_ahead_concept_mask
     )

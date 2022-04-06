@@ -242,22 +242,22 @@ def create_probabilistic_phenotype_model(
     )
 
     # (batch_size, 1, num_of_visits * num_of_concepts, num_of_visits)
-    look_ahead_concept_mask = tf.maximum(
-        tf.cast(
-            tf.reshape(
-                tf.tile(
-                    tf.expand_dims(
-                        1 - tf.eye(num_of_visits),
-                        axis=1
-                    ),
-                    [1, num_of_concepts, 1]
-                ),
-                (num_of_concepts * num_of_visits, num_of_visits)
-            ),
-            dtype=tf.int32
-        ),
-        look_ahead_concept_mask
-    )
+    # look_ahead_concept_mask = tf.maximum(
+    #     tf.cast(
+    #         tf.reshape(
+    #             tf.tile(
+    #                 tf.expand_dims(
+    #                     1 - tf.eye(num_of_visits),
+    #                     axis=1
+    #                 ),
+    #                 [1, num_of_concepts, 1]
+    #             ),
+    #             (num_of_concepts * num_of_visits, num_of_visits)
+    #         ),
+    #         dtype=tf.int32
+    #     ),
+    #     look_ahead_concept_mask
+    # )
 
     # Second bert applied at the patient level to the visit embeddings
     visit_encoder = Encoder(
