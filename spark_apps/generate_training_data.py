@@ -13,7 +13,7 @@ PERSON = 'person'
 
 def main(input_folder, output_folder, domain_table_list, date_filter,
          include_visit_type, is_new_patient_representation, exclude_visit_tokens,
-         is_classic_bert, include_prolonged_stay):
+         is_classic_bert, include_prolonged_stay, include_concept_list: bool):
     spark = SparkSession.builder.appName('Generate Bert Training Data').getOrCreate()
     domain_tables = []
     for domain_table_name in domain_table_list:
@@ -29,6 +29,20 @@ def main(input_folder, output_folder, domain_table_list, date_filter,
     visit_occurrence_person = visit_occurrence.join(person, 'person_id')
 
     patient_event = join_domain_tables(domain_tables)
+
+    if include_concept_list and patient_event:
+        # Filter out concepts
+        qualified_concepts = preprocess_domain_table(
+            spark,
+            input_folder,
+            config.parameters.qualified_concept_list_path
+        ).select('standard_concept_id')
+
+        patient_event = patient_event.join(
+            qualified_concepts,
+            'standard_concept_id'
+        )
+
     patient_event = patient_event.join(visit_occurrence_person, 'visit_occurrence_id') \
         .select([patient_event[fieldName] for fieldName in patient_event.schema.fieldNames()] +
                 ['visit_concept_id', 'birth_datetime']) \
@@ -118,8 +132,11 @@ if __name__ == '__main__':
                         action='store_true',
                         help='Specify whether or not to include the data for the second learning '
                              'objective for Med-BERT')
+    parser.add_argument('--include_concept_list',
+                        dest='include_concept_list',
+                        action='store_true')
     ARGS = parser.parse_args()
 
     main(ARGS.input_folder, ARGS.output_folder, ARGS.domain_table_list, ARGS.date_filter,
          ARGS.include_visit_type, ARGS.is_new_patient_representation, ARGS.exclude_visit_tokens,
-         ARGS.is_classic_bert_sequence, ARGS.include_prolonged_stay)
+         ARGS.is_classic_bert_sequence, ARGS.include_prolonged_stay, ARGS.include_concept_list)

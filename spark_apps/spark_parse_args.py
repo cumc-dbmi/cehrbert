@@ -168,4 +168,8 @@ def create_spark_args():
                         dest='is_observation_window_unbounded',
                         action='store_true',
                         help='is the observation window unbounded?')
+    parser.add_argument('--include_concept_list',
+                        dest='include_concept_list',
+                        action='store_true',
+                        help='Apply the filter to remove low-frequency concepts')
     return parser.parse_args()

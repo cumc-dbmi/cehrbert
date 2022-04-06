@@ -1,4 +1,5 @@
 parquet_data_path = 'patient_sequence'
+qualified_concept_list_path = 'qualified_concept_list'
 feather_data_path = 'patient_sequence.pickle'
 tokenizer_path = 'tokenizer.pickle'
 visit_tokenizer_path = 'visit_tokenizer.pickle'

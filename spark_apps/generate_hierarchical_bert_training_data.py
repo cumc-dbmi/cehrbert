@@ -9,7 +9,13 @@ from utils.spark_utils import *
 from utils.spark_utils import create_hierarchical_sequence_data, process_measurement
 
 
-def main(input_folder, output_folder, domain_table_list, date_filter, max_num_of_visits_per_person):
+def main(input_folder,
+         output_folder,
+         domain_table_list,
+         date_filter,
+         max_num_of_visits_per_person,
+         include_concept_list: bool = True,
+         ):
     spark = SparkSession.builder.appName('Generate Hierarchical Bert Training Data').getOrCreate()
 
     domain_tables = []
@@ -25,15 +31,35 @@ def main(input_folder, output_folder, domain_table_list, date_filter, max_num_of
     # Union all domain table records
     patient_events = join_domain_tables(domain_tables)
 
+    column_names = patient_events.schema.fieldNames()
+
+    if include_concept_list and patient_events:
+        # Filter out concepts
+        qualified_concepts = broadcast(
+            preprocess_domain_table(
+                spark,
+                input_folder,
+                config.parameters.qualified_concept_list_path
+            )
+        )
+        # The select is necessary to make sure the order of the columns is the same as the
+        # original dataframe
+        patient_events = patient_events.join(
+            qualified_concepts,
+            'standard_concept_id'
+        ).select(column_names)
+
     # Process the measurement table if exists
     if MEASUREMENT in domain_table_list:
         measurement = preprocess_domain_table(spark, input_folder, MEASUREMENT)
         required_measurement = preprocess_domain_table(spark, input_folder, REQUIRED_MEASUREMENT)
+        # The select is necessary to make sure the order of the columns is the same as the
+        # original dataframe, otherwise the union might use the wrong columns
         scaled_measurement = process_measurement(
             spark,
             measurement,
             required_measurement
-        )
+        ).select(column_names)
 
         if patient_events:
             # Union all measurement records together with other domain records
@@ -96,6 +122,9 @@ if __name__ == '__main__':
                         default=200,
                         help='Max no.of visits per patient to be included',
                         required=False)
+    parser.add_argument('--include_concept_list',
+                        dest='include_concept_list',
+                        action='store_true')
 
     ARGS = parser.parse_args()
 
@@ -103,4 +132,5 @@ if __name__ == '__main__':
          ARGS.output_folder,
          ARGS.domain_table_list,
          ARGS.date_filter,
-         ARGS.max_num_of_visits)
+         ARGS.max_num_of_visits,
+         ARGS.include_concept_list)
