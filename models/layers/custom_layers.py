@@ -928,10 +928,10 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             name='phenotype_probability_entropy'
         )
 
-        # # Add the entropy as a loss to encourage the model to focus on a subset of phenotypes
-        # self.add_loss(
-        #     tf.reduce_mean(phenotype_prob_entropy) * self.phenotype_entropy_weight,
-        # )
+        # Add the entropy as a loss to encourage the model to focus on a subset of phenotypes
+        self.add_loss(
+            tf.reduce_mean(phenotype_prob_entropy) * self.phenotype_entropy_weight,
+        )
 
         # Add the inverse euclidean distance as a loss to drive phenotypes away from each other
         phenotype_euclidean_distance = self.calculate_phenotype_euclidean_distance()
@@ -941,9 +941,9 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             name='phenotype_euclidean_distance'
         )
 
-        self.add_loss(
-            phenotype_euclidean_distance * self.phenotype_euclidean_weight,
-        )
+        # self.add_loss(
+        #     phenotype_euclidean_distance * self.phenotype_euclidean_weight,
+        # )
 
         # Calculate the contextualized visit embeddings using the pre-defined phenotype embeddings
         # (batch_size, num_of_visits, embedding_size)
