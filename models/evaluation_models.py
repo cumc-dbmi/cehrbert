@@ -260,8 +260,8 @@ def create_cher_bert_bi_lstm_model(bert_model_path):
 def create_cher_bert_bi_lstm_model_with_model(model):
     age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
 
-    contextualized_visit_embeddings, _ = model.get_layer(
-        'visit_encoder'
+    contextualized_visit_embeddings = model.get_layer(
+        'hidden_visit_embeddings'
     ).output
     _, num_of_visits, num_of_concepts, embedding_size = model.get_layer(
         'temporal_transformation_layer'
@@ -280,20 +280,20 @@ def create_cher_bert_bi_lstm_model_with_model(model):
     #     expanded_contextualized_visit_embeddings, (-1, num_of_visits, 3 * embedding_size)
     # )[:, :, embedding_size: embedding_size * 2]
 
-    num_of_visits_with_att = num_of_visits * 3 - 1
+    # num_of_visits_with_att = num_of_visits * 3 - 1
 
     visit_mask = model.get_layer('visit_mask').output
 
     # Expand dimension for masking MultiHeadAttention in Visit Encoder
-    visit_mask_with_att = tf.reshape(
-        tf.tile(visit_mask[:, :, tf.newaxis], [1, 1, 3]),
-        (-1, num_of_visits * 3)
-    )[:, 1:]
+    #visit_mask_with_att = tf.reshape(
+    #    tf.tile(visit_mask[:, :, tf.newaxis], [1, 1, 3]),
+    #    (-1, num_of_visits * 3)
+    #)[:, 1:]
 
     mask_embeddings = tf.cast(
         tf.math.logical_not(
             tf.cast(
-                visit_mask_with_att,
+                visit_mask,
                 dtype=tf.bool
             )
         ),
@@ -335,7 +335,7 @@ def create_cher_bert_bi_lstm_model_with_model(model):
 
     masking_layer = tf.keras.layers.Masking(
         mask_value=0.,
-        input_shape=(num_of_visits_with_att, embedding_size)
+        input_shape=(num_of_visits, embedding_size)
     )
 
     bi_lstm_layer = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128))
