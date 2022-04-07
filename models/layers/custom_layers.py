@@ -866,27 +866,27 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             transformer_dropout
         )
 
-        self.cov_parameter_size = (
-                tfpl.MultivariateNormalTriL.params_size(embedding_size) - embedding_size
-        )
-
-        self.cov_parameter_matrix = self.add_weight(
-            shape=(embedding_size, self.cov_parameter_size),
-            initializer=tf.keras.initializers.GlorotNormal(),
-            trainable=True,
-            name='cov_matrix'
-        )
-
-        # Assuming there is a generative process that generates diagnosis embeddings from a
-        self.phenotype_embedding_prior = tfd.MultivariateNormalDiag(loc=tf.zeros(embedding_size))
-        # Define the generative model that generates the
-        self.hidden_visit_embedding_layer = tf.keras.models.Sequential([
-            tfpl.MultivariateNormalTriL(embedding_size),
-            tfpl.KLDivergenceAddLoss(
-                self.phenotype_embedding_prior,
-                use_exact_kl=True
-            )  # estimate KL[ q(z|x) || p(z,
-        ])
+        # self.cov_parameter_size = (
+        #         tfpl.MultivariateNormalTriL.params_size(embedding_size) - embedding_size
+        # )
+        #
+        # self.cov_parameter_matrix = self.add_weight(
+        #     shape=(embedding_size, self.cov_parameter_size),
+        #     initializer=tf.keras.initializers.GlorotNormal(),
+        #     trainable=True,
+        #     name='cov_matrix'
+        # )
+        #
+        # # Assuming there is a generative process that generates diagnosis embeddings from a
+        # self.phenotype_embedding_prior = tfd.MultivariateNormalDiag(loc=tf.zeros(embedding_size))
+        # # Define the generative model that generates the
+        # self.hidden_visit_embedding_layer = tf.keras.models.Sequential([
+        #     tfpl.MultivariateNormalTriL(embedding_size),
+        #     tfpl.KLDivergenceAddLoss(
+        #         self.phenotype_embedding_prior,
+        #         use_exact_kl=True
+        #     )  # estimate KL[ q(z|x) || p(z,
+        # ])
 
     def get_config(self):
         config = super().get_config()
@@ -948,7 +948,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         # Calculate the contextualized visit embeddings using the pre-defined phenotype embeddings
         # (batch_size, num_of_visits, embedding_size)
         contextualized_visit_embeddings = self.dropout_layer(
-            visit_phenotype_probs @ self.phenotype_embeddings * converted_visit_mask,
+            visit_phenotype_probs @ self.phenotype_embeddings,
             **kwargs
         )
 
@@ -956,22 +956,22 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         contextualized_visit_embeddings = self.layer_norm_layer(
             visit_embeddings + contextualized_visit_embeddings,
             **kwargs
-        )
+        ) * converted_visit_mask
 
-        # Get the trainable covariance parameters for the multivariate gaussian
-        covariance_parameters = (
-                contextualized_visit_embeddings @ self.cov_parameter_matrix
-        )
+        # # Get the trainable covariance parameters for the multivariate gaussian
+        # covariance_parameters = (
+        #         contextualized_visit_embeddings @ self.cov_parameter_matrix
+        # )
+        #
+        # # Get a sample from the multivariate gaussian
+        # hidden_visit_embeddings = self.hidden_visit_embedding_layer(
+        #     tf.concat(
+        #         [contextualized_visit_embeddings, covariance_parameters],
+        #         axis=-1
+        #     )
+        # )
 
-        # Get a sample from the multivariate gaussian
-        hidden_visit_embeddings = self.hidden_visit_embedding_layer(
-            tf.concat(
-                [contextualized_visit_embeddings, covariance_parameters],
-                axis=-1
-            )
-        )
-
-        return hidden_visit_embeddings
+        return contextualized_visit_embeddings
 
     def calculate_phenotype_euclidean_distance(self):
         r = tf.reduce_sum(self.phenotype_embeddings * self.phenotype_embeddings, 1)
