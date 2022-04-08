@@ -335,7 +335,27 @@ def transformer_hierarchical_bert_model(num_of_visits,
             visit_prediction_dense(visit_embeddings_without_att)
         )
 
-        outputs.extend([visit_predictions])
+        visit_prolonged_stay_layer = tf.keras.layers.Dense(
+            1,
+            activation='sigmoid',
+            name='visit_prolonged_stay'
+        )
+
+        is_readmission_layer = tf.keras.layers.Dense(
+            1,
+            activation='sigmoid',
+            name='is_readmission'
+        )
+
+        visit_prolonged_stay_output = visit_prolonged_stay_layer(
+            visit_embeddings_without_att
+        )
+
+        is_readmission_output = is_readmission_layer(
+            visit_embeddings_without_att
+        )
+
+        outputs.extend([visit_predictions, visit_prolonged_stay_output, is_readmission_output])
 
     hierarchical_bert = tf.keras.Model(
         inputs=default_inputs,

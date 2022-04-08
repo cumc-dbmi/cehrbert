@@ -11,7 +11,7 @@ from data_generators.data_generator_base import *
 from data_generators.data_classes import TokenizeFieldInfo
 
 from keras_transformer.bert import (
-    masked_perplexity, MaskedPenalizedSparseCategoricalCrossentropy)
+    masked_perplexity, MaskedPenalizedSparseCategoricalCrossentropy, SequenceCrossentropy)
 
 from tensorflow.keras import optimizers
 
@@ -132,7 +132,9 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
                                 self.confidence_penalty),
                         'visit_predictions':
                             MaskedPenalizedSparseCategoricalCrossentropy(
-                                self.confidence_penalty)
+                                self.confidence_penalty),
+                        'visit_prolonged_stay': SequenceCrossentropy(),
+                        'is_readmission': SequenceCrossentropy()
                     }
                 else:
                     losses = {

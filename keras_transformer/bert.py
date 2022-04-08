@@ -89,7 +89,9 @@ class SequenceCrossentropy(object):
         y_true_val = K.cast(y_true[:, :, 0], dtype='float32')
         mask = K.cast(y_true[:, :, 1], dtype='float32')
         num_items_masked = K.sum(mask, axis=-1) + 1e-6
-        loss = binary_crossentropy(y_true_val * mask, tf.squeeze(y_pred))
+        loss = K.sum(
+            binary_crossentropy(y_true_val[:, :, tf.newaxis], y_pred) * mask,
+            axis=-1)
         return loss / num_items_masked
 
 

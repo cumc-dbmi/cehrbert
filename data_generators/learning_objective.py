@@ -594,7 +594,8 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
 
 
 class HierarchicalBertSecondaryLearningObjective(HierarchicalMaskedLanguageModelLearningObjective):
-    required_columns = ['visit_token_ids']
+    required_columns = ['visit_token_ids', 'is_readmissions',
+                        'visit_prolonged_stays', 'is_inpatients']
 
     def __init__(self, visit_tokenizer: ConceptTokenizer,
                  max_num_of_visits: int,
@@ -605,7 +606,9 @@ class HierarchicalBertSecondaryLearningObjective(HierarchicalMaskedLanguageModel
 
     def get_tf_dataset_schema(self):
         output_dict_schema = {
-            'visit_predictions': int32
+            'visit_predictions': int32,
+            'visit_prolonged_stay': int32,
+            'is_readmission': int32
         }
         return {}, output_dict_schema
 
@@ -617,7 +620,7 @@ class HierarchicalBertSecondaryLearningObjective(HierarchicalMaskedLanguageModel
         :return:
         """
         (
-            visit_token_ids, visit_prolonged_stays, is_readmissions
+            visit_token_ids, visit_prolonged_stays, is_readmissions, is_inpatients
         ) = zip(*list(map(self._make_record, rows)))
 
         padded_visit_token_ids = self._pad(
@@ -626,19 +629,28 @@ class HierarchicalBertSecondaryLearningObjective(HierarchicalMaskedLanguageModel
         )
 
         visit_masks = padded_visit_token_ids != self._visit_tokenizer.get_unused_token_id()
-        #
-        # padded_visit_prolonged_stays = self._pad(
-        #     visit_prolonged_stays,
-        #     padded_token=-1
-        # )
 
-        # padded_is_readmissions = self._pad(
-        #     is_readmissions,
-        #     padded_token=-1
-        # )
+        padded_visit_prolonged_stays = self._pad(
+            visit_prolonged_stays,
+            padded_token=0
+        )
+
+        padded_is_readmissions = self._pad(
+            is_readmissions,
+            padded_token=0
+        )
+
+        padded_is_inpatients = self._pad(
+            is_inpatients,
+            padded_token=0
+        )
 
         output_dict = {
-            'visit_predictions': np.stack([padded_visit_token_ids, visit_masks], axis=-1)
+            'visit_predictions': np.stack([padded_visit_token_ids, visit_masks], axis=-1),
+            'visit_prolonged_stay': np.stack([padded_visit_prolonged_stays, padded_is_inpatients],
+                                             axis=-1),
+            'is_readmission': np.stack([padded_is_readmissions, padded_is_inpatients],
+                                       axis=-1),
         }
 
         return {}, output_dict
@@ -660,11 +672,12 @@ class HierarchicalBertSecondaryLearningObjective(HierarchicalMaskedLanguageModel
         row, start_index, end_index, _ = row_slicer
 
         visit_token_ids = row.visit_token_ids[start_index:end_index]
-        visit_prolonged_stays = row.visit_prolonged_stays[start_index:end_index]
-        is_readmissions = row.is_readmissions[start_index:end_index]
+        visit_prolonged_stays = row.visit_prolonged_stays[start_index:end_index].astype(int)
+        is_readmissions = row.is_readmissions[start_index:end_index].astype(int)
+        is_inpatients = row.is_inpatients[start_index:end_index]
 
         return (
-            visit_token_ids, visit_prolonged_stays, is_readmissions
+            visit_token_ids, visit_prolonged_stays, is_readmissions, is_inpatients
         )
 
 
