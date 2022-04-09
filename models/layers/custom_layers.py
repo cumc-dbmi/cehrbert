@@ -840,6 +840,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             transformer_dropout: float,
             phenotype_entropy_weight: float = 1e-05,
             phenotype_euclidean_weight: float = 1e-05,
+            phenotype_concept_distance_weight: float = 1e-03,
             *args, **kwargs
     ):
         super(VisitPhenotypeLayer, self).__init__(*args, **kwargs)
@@ -848,6 +849,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         self.transformer_dropout = transformer_dropout
         self.phenotype_entropy_weight = phenotype_entropy_weight
         self.phenotype_euclidean_weight = phenotype_euclidean_weight
+        self.phenotype_concept_distance_weight = phenotype_concept_distance_weight
 
         # We assume there exists hidden phenotype embeddings
         # (num_of_phenotypes, embedding_size)
@@ -895,10 +897,11 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         config['transformer_dropout'] = self.transformer_dropout
         config['phenotype_entropy_weight'] = self.phenotype_entropy_weight
         config['phenotype_euclidean_weight'] = self.phenotype_euclidean_weight
+        config['phenotype_concept_distance_weight'] = self.phenotype_concept_distance_weight
         return config
 
     def call(self, inputs, **kwargs):
-        visit_embeddings, visit_mask = inputs
+        visit_embeddings, visit_mask, embedding_matrix = inputs
 
         # Do not compute the entropy for the masked visits
         converted_visit_mask = tf.cast(
@@ -913,8 +916,28 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
 
         # (batch_size, num_of_visits, num_of_phenotypes)
         visit_phenotype_probs = tf.nn.softmax(
-            visit_embeddings @ tf.transpose(self.phenotype_embeddings,
-                                            [1, 0]) * converted_visit_mask
+            visit_embeddings @ tf.transpose(
+                self.phenotype_embeddings,
+                [1, 0]
+            ) * converted_visit_mask
+        )
+
+        # num_of_phenotypes, vocab_size
+        phenotype_concept_dist = tf.reduce_mean(
+            distance_matrix(
+                self.phenotype_embeddings,
+                embedding_matrix
+            )
+        )
+
+        # Add the entropy as a loss to encourage the model to focus on a subset of phenotypes
+        self.add_loss(
+            phenotype_concept_dist * self.phenotype_concept_distance_weight
+        )
+
+        self.add_metric(
+            phenotype_concept_dist,
+            name='phenotype_concept_dist'
         )
 
         # Calculate the probability distribution entropy
@@ -934,10 +957,8 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         )
 
         # Add the inverse euclidean distance as a loss to drive phenotypes away from each other
-        phenotype_euclidean_distance = self.calculate_phenotype_euclidean_distance()
-
         self.add_metric(
-            phenotype_euclidean_distance,
+            self.get_inverse_phenotype_dist(),
             name='phenotype_euclidean_distance'
         )
 
@@ -973,16 +994,33 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
 
         return contextualized_visit_embeddings
 
-    def calculate_phenotype_euclidean_distance(self):
+    def get_inverse_phenotype_dist(self):
         r = tf.reduce_sum(self.phenotype_embeddings * self.phenotype_embeddings, 1)
         # turn r into column vector
         r = tf.reshape(r, [-1, 1])
         euclidean_distances = r - 2 * tf.matmul(self.phenotype_embeddings, tf.transpose(
             self.phenotype_embeddings)) + tf.transpose(r)
-
         return tf.reduce_mean(
-            tf.math.exp(-euclidean_distances)
+            euclidean_distances
         )
+        # return tf.reduce_mean(
+        #     tf.math.exp(-euclidean_distances)
+        # )
+
+
+def distance_matrix(matrix_1, matrix_2):
+    m = matrix_1.shape[0]
+    n = matrix_2.shape[0]
+
+    assert matrix_1.shape[1] == matrix_2.shape[1], f"The number of components for vectors in A \
+            {matrix_1.shape[1]} does not match that of B {matrix_2.shape[1]}!"
+
+    matrix_1_dots = tf.reshape(tf.reduce_sum(matrix_1 * matrix_1, axis=1), (m, 1)) * tf.ones((1, n))
+    matrix_2_dots = tf.reduce_sum(matrix_2 * matrix_2, axis=1) * tf.ones((m, 1))
+
+    matrix_distance_squared = matrix_1_dots + matrix_2_dots - 2 * matrix_1 @ tf.transpose(matrix_2)
+
+    return tf.sqrt(matrix_distance_squared)
 
 
 get_custom_objects().update({
