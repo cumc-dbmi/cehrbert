@@ -974,8 +974,13 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         )
 
         # Sum the original visit embeddings and the phenotype contextualized visit embeddings
+        # contextualized_visit_embeddings = self.layer_norm_layer(
+        #     visit_embeddings + contextualized_visit_embeddings,
+        #     **kwargs
+        # ) * converted_visit_mask
+        #
         contextualized_visit_embeddings = self.layer_norm_layer(
-            visit_embeddings + contextualized_visit_embeddings,
+            contextualized_visit_embeddings,
             **kwargs
         ) * converted_visit_mask
 

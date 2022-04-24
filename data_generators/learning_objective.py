@@ -554,7 +554,7 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
             field_values = field_values.tolist() if not isinstance(field_values,
                                                                    list) else field_values
             field_values = field_values + pad_values
-            return np.asarray(field_values)
+            return np.asarray(field_values, dtype=object)
         return field_values
 
     def _mask_concepts(self, concepts_tuple):
