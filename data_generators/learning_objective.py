@@ -389,7 +389,7 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
 
     def _pad(self, x, padded_token, token_dtype='int32'):
         return pad_sequences(
-            np.asarray(x),
+            np.asarray(x, dtype=object),
             maxlen=self._max_num_of_concepts,
             padding='post',
             truncating='post',
@@ -656,8 +656,11 @@ class HierarchicalBertSecondaryLearningObjective(HierarchicalMaskedLanguageModel
         return {}, output_dict
 
     def _pad(self, x, padded_token):
-        return pad_sequences(np.asarray(x), maxlen=self._max_num_of_visits, padding='post',
-                             value=padded_token, dtype='int32')
+        return pad_sequences(
+            np.asarray(x, dtype=object),
+            maxlen=self._max_num_of_visits,
+            padding='post',
+            value=padded_token, dtype='int32')
 
     def _make_record(self, row_slicer: RowSlicer):
         """

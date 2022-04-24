@@ -860,6 +860,11 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             name='phenotype_embeddings_matrix'
         )
 
+        self.gate_layer = tf.keras.layers.Dense(
+            1,
+            activation='sigmoid'
+        )
+
         self.layer_norm_layer = tf.keras.layers.LayerNormalization(
             epsilon=1e-6
         )
@@ -973,14 +978,16 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             **kwargs
         )
 
+        # (batch_size, num_of_visits, 1)
+        gate_value = tf.clip_by_value(
+            self.gate_layer(visit_embeddings),
+            clip_value_min=0.5,
+            clip_value_max=0.7
+        )
+
         # Sum the original visit embeddings and the phenotype contextualized visit embeddings
-        # contextualized_visit_embeddings = self.layer_norm_layer(
-        #     visit_embeddings + contextualized_visit_embeddings,
-        #     **kwargs
-        # ) * converted_visit_mask
-        #
         contextualized_visit_embeddings = self.layer_norm_layer(
-            contextualized_visit_embeddings,
+            gate_value * visit_embeddings + (1 - gate_value) * contextualized_visit_embeddings,
             **kwargs
         ) * converted_visit_mask
 
