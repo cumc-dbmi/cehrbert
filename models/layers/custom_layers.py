@@ -859,11 +859,11 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             trainable=True,
             name='phenotype_embeddings_matrix'
         )
-
-        self.gate_layer = tf.keras.layers.Dense(
-            1,
-            activation='sigmoid'
-        )
+        #
+        # self.gate_layer = tf.keras.layers.Dense(
+        #     1,
+        #     activation='sigmoid'
+        # )
 
         self.layer_norm_layer = tf.keras.layers.LayerNormalization(
             epsilon=1e-6
@@ -935,7 +935,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             )
         )
 
-        # Add the entropy as a loss to encourage the model to focus on a subset of phenotypes
+        # Encourage the model to move the phenotype embeddings closer to concept embeddings
         self.add_loss(
             phenotype_concept_dist * self.phenotype_concept_distance_weight
         )
@@ -962,13 +962,25 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         )
 
         # Add the inverse euclidean distance as a loss to drive phenotypes away from each other
+        phe_dist_loss, phe_dist_metric = self.get_inverse_phenotype_dist_loss_metric()
+        self.add_loss(
+            phe_dist_loss * self.phenotype_euclidean_weight,
+        )
         self.add_metric(
-            self.get_inverse_phenotype_dist(),
+            phe_dist_metric,
             name='phenotype_euclidean_distance'
         )
 
+        # Add loss the encourage the center of "gravity" of concept embeddings and phenotype
+        # embeddings to be as close as possible
         # self.add_loss(
-        #     phenotype_euclidean_distance * self.phenotype_euclidean_weight,
+        #     tf.reduce_sum(
+        #         tf.pow(
+        #             x=tf.reduce_mean(self.phenotype_embeddings)
+        #             - tf.reduce_mean(embedding_matrix),
+        #             y=2
+        #         )
+        #     )
         # )
 
         # Calculate the contextualized visit embeddings using the pre-defined phenotype embeddings
@@ -979,15 +991,15 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         )
 
         # (batch_size, num_of_visits, 1)
-        gate_value = tf.clip_by_value(
-            self.gate_layer(visit_embeddings),
-            clip_value_min=0.5,
-            clip_value_max=0.7
-        )
+        # gate_value = tf.clip_by_value(
+        #     self.gate_layer(visit_embeddings),
+        #     clip_value_min=0.5,
+        #     clip_value_max=0.7
+        # )
 
         # Sum the original visit embeddings and the phenotype contextualized visit embeddings
         contextualized_visit_embeddings = self.layer_norm_layer(
-            gate_value * visit_embeddings + (1 - gate_value) * contextualized_visit_embeddings,
+            visit_embeddings + contextualized_visit_embeddings,
             **kwargs
         ) * converted_visit_mask
 
@@ -1006,18 +1018,22 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
 
         return contextualized_visit_embeddings
 
-    def get_inverse_phenotype_dist(self):
+    def get_inverse_phenotype_dist_loss_metric(self):
         r = tf.reduce_sum(self.phenotype_embeddings * self.phenotype_embeddings, 1)
         # turn r into column vector
         r = tf.reshape(r, [-1, 1])
         euclidean_distances = r - 2 * tf.matmul(self.phenotype_embeddings, tf.transpose(
             self.phenotype_embeddings)) + tf.transpose(r)
-        return tf.reduce_mean(
+
+        loss = tf.reduce_mean(
+            tf.math.exp(-euclidean_distances)
+        )
+
+        metric = tf.reduce_mean(
             euclidean_distances
         )
-        # return tf.reduce_mean(
-        #     tf.math.exp(-euclidean_distances)
-        # )
+
+        return loss, metric
 
 
 def distance_matrix(matrix_1, matrix_2):
