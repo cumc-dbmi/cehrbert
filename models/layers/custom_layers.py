@@ -838,9 +838,9 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             num_of_phenotypes: int,
             embedding_size: int,
             transformer_dropout: float,
-            phenotype_entropy_weight: float = 1e-05,
-            phenotype_euclidean_weight: float = 1e-05,
-            phenotype_concept_distance_weight: float = 1e-03,
+            phenotype_entropy_weight: float = 1e-04,
+            phenotype_euclidean_weight: float = 1e-04,
+            phenotype_concept_distance_weight: float = 1e-04,
             *args, **kwargs
     ):
         super(VisitPhenotypeLayer, self).__init__(*args, **kwargs)
@@ -962,15 +962,25 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         )
 
         # Add the inverse euclidean distance as a loss to drive phenotypes away from each other
-        phe_dist_loss, phe_dist_metric = self.get_inverse_phenotype_dist_loss_metric()
+        phe_inv_dist, phe_dist_metric, phe_dist_var = self.get_inverse_phenotype_dist_loss_metric()
+        gravity_center_dist = tf.reduce_sum(
+            tf.pow(
+                x=tf.reduce_mean(self.phenotype_embeddings) - tf.reduce_mean(embedding_matrix),
+                y=2
+            )
+        )
+        phenotype_dist_loss = phe_inv_dist + phe_dist_var + gravity_center_dist
         self.add_loss(
-            phe_dist_loss * self.phenotype_euclidean_weight,
+            phenotype_dist_loss * self.phenotype_euclidean_weight,
         )
         self.add_metric(
             phe_dist_metric,
             name='phenotype_euclidean_distance'
         )
-
+        self.add_metric(
+            phe_dist_var,
+            name='phenotype_euclidean_distance_variance'
+        )
         # Add loss the encourage the center of "gravity" of concept embeddings and phenotype
         # embeddings to be as close as possible
         # self.add_loss(
@@ -1025,15 +1035,19 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         euclidean_distances = r - 2 * tf.matmul(self.phenotype_embeddings, tf.transpose(
             self.phenotype_embeddings)) + tf.transpose(r)
 
-        loss = tf.reduce_mean(
+        inv_loss = tf.reduce_mean(
             tf.math.exp(-euclidean_distances)
         )
 
-        metric = tf.reduce_mean(
+        var_loss = tf.math.reduce_variance(
             euclidean_distances
         )
 
-        return loss, metric
+        dist_metric = tf.reduce_mean(
+            euclidean_distances
+        )
+
+        return inv_loss, dist_metric, var_loss
 
 
 def distance_matrix(matrix_1, matrix_2):
