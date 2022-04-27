@@ -840,7 +840,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             transformer_dropout: float,
             phenotype_entropy_weight: float = 1e-04,
             phenotype_euclidean_weight: float = 1e-04,
-            phenotype_concept_distance_weight: float = 1e-03,
+            phenotype_concept_distance_weight: float = 1e-04,
             *args, **kwargs
     ):
         super(VisitPhenotypeLayer, self).__init__(*args, **kwargs)
@@ -969,7 +969,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
                 y=2
             )
         )
-        phenotype_dist_loss = phe_inv_dist + phe_dist_var + gravity_center_dist
+        phenotype_dist_loss = phe_inv_dist + gravity_center_dist
         self.add_loss(
             phenotype_dist_loss * self.phenotype_euclidean_weight,
         )
