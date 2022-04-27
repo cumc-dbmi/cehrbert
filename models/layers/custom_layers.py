@@ -840,7 +840,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             transformer_dropout: float,
             phenotype_entropy_weight: float = 1e-04,
             phenotype_euclidean_weight: float = 1e-04,
-            phenotype_concept_distance_weight: float = 1e-04,
+            phenotype_concept_distance_weight: float = 1e-03,
             *args, **kwargs
     ):
         super(VisitPhenotypeLayer, self).__init__(*args, **kwargs)
