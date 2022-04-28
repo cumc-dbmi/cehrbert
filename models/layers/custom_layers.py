@@ -841,6 +841,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             phenotype_entropy_weight: float = 1e-04,
             phenotype_euclidean_weight: float = 1e-04,
             phenotype_concept_distance_weight: float = 1e-04,
+            gravity_center_dist_weight: float = 1e-03,
             *args, **kwargs
     ):
         super(VisitPhenotypeLayer, self).__init__(*args, **kwargs)
@@ -850,6 +851,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         self.phenotype_entropy_weight = phenotype_entropy_weight
         self.phenotype_euclidean_weight = phenotype_euclidean_weight
         self.phenotype_concept_distance_weight = phenotype_concept_distance_weight
+        self.gravity_center_dist_weight = gravity_center_dist_weight
 
         # We assume there exists hidden phenotype embeddings
         # (num_of_phenotypes, embedding_size)
@@ -903,6 +905,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         config['phenotype_entropy_weight'] = self.phenotype_entropy_weight
         config['phenotype_euclidean_weight'] = self.phenotype_euclidean_weight
         config['phenotype_concept_distance_weight'] = self.phenotype_concept_distance_weight
+        config['gravity_center_dist_weight'] = self.gravity_center_dist_weight
         return config
 
     def call(self, inputs, **kwargs):
@@ -969,9 +972,12 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
                 y=2
             )
         )
-        phenotype_dist_loss = phe_inv_dist + gravity_center_dist
+
         self.add_loss(
-            phenotype_dist_loss * self.phenotype_euclidean_weight,
+            phe_inv_dist * self.phenotype_euclidean_weight
+        )
+        self.add_loss(
+            gravity_center_dist * self.gravity_center_dist_weight
         )
         self.add_metric(
             phe_dist_metric,
