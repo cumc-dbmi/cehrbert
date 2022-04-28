@@ -593,22 +593,23 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
         return masked_concepts, output_mask
 
 
-class HierarchicalBertSecondaryLearningObjective(HierarchicalMaskedLanguageModelLearningObjective):
-    required_columns = ['visit_token_ids', 'is_readmissions',
-                        'visit_prolonged_stays', 'is_inpatients']
+class HierarchicalVisitTypePredictionLearningObjective(
+    HierarchicalMaskedLanguageModelLearningObjective
+):
+    required_columns = ['visit_token_ids']
 
-    def __init__(self, visit_tokenizer: ConceptTokenizer,
-                 max_num_of_visits: int,
-                 is_training: bool):
+    def __init__(
+            self, visit_tokenizer: ConceptTokenizer,
+            max_num_of_visits: int,
+            is_training: bool
+    ):
         self._visit_tokenizer = visit_tokenizer
         self._max_num_of_visits = max_num_of_visits
         self._is_training = is_training
 
     def get_tf_dataset_schema(self):
         output_dict_schema = {
-            'visit_predictions': int32,
-            'visit_prolonged_stay': int32,
-            'is_readmission': int32
+            'visit_predictions': int32
         }
         return {}, output_dict_schema
 
@@ -619,9 +620,7 @@ class HierarchicalBertSecondaryLearningObjective(HierarchicalMaskedLanguageModel
         :param rows:
         :return:
         """
-        (
-            visit_token_ids, visit_prolonged_stays, is_readmissions, is_inpatients
-        ) = zip(*list(map(self._make_record, rows)))
+        visit_token_ids = list(map(self._make_record, rows))
 
         padded_visit_token_ids = self._pad(
             visit_token_ids,
@@ -630,27 +629,8 @@ class HierarchicalBertSecondaryLearningObjective(HierarchicalMaskedLanguageModel
 
         visit_masks = padded_visit_token_ids != self._visit_tokenizer.get_unused_token_id()
 
-        padded_visit_prolonged_stays = self._pad(
-            visit_prolonged_stays,
-            padded_token=0
-        )
-
-        padded_is_readmissions = self._pad(
-            is_readmissions,
-            padded_token=0
-        )
-
-        padded_is_inpatients = self._pad(
-            is_inpatients,
-            padded_token=0
-        )
-
         output_dict = {
-            'visit_predictions': np.stack([padded_visit_token_ids, visit_masks], axis=-1),
-            'visit_prolonged_stay': np.stack([padded_visit_prolonged_stays, padded_is_inpatients],
-                                             axis=-1),
-            'is_readmission': np.stack([padded_is_readmissions, padded_is_inpatients],
-                                       axis=-1),
+            'visit_predictions': np.stack([padded_visit_token_ids, visit_masks], axis=-1)
         }
 
         return {}, output_dict
@@ -660,7 +640,8 @@ class HierarchicalBertSecondaryLearningObjective(HierarchicalMaskedLanguageModel
             np.asarray(x, dtype=object),
             maxlen=self._max_num_of_visits,
             padding='post',
-            value=padded_token, dtype='int32')
+            value=padded_token, dtype='int32'
+        )
 
     def _make_record(self, row_slicer: RowSlicer):
         """
@@ -675,12 +656,139 @@ class HierarchicalBertSecondaryLearningObjective(HierarchicalMaskedLanguageModel
         row, start_index, end_index, _ = row_slicer
 
         visit_token_ids = row.visit_token_ids[start_index:end_index]
-        visit_prolonged_stays = row.visit_prolonged_stays[start_index:end_index].astype(int)
+
+        return visit_token_ids
+
+
+class HierarchicalReadmissionLearningObjective(
+    HierarchicalVisitTypePredictionLearningObjective
+):
+    required_columns = ['is_readmissions', 'is_inpatients']
+
+    def __init__(
+            self,
+            max_num_of_visits: int,
+            is_training: bool
+    ):
+        self._max_num_of_visits = max_num_of_visits
+        self._is_training = is_training
+
+    def get_tf_dataset_schema(self):
+        output_dict_schema = {
+            'is_readmission': int32
+        }
+        return {}, output_dict_schema
+
+    @validate_columns_decorator
+    def process_batch(self, rows: List[RowSlicer]):
+        """
+        Process a batch of rows to generate input and output data for the learning objective
+        :param rows:
+        :return:
+        """
+        is_readmissions, is_inpatients = zip(*list(map(self._make_record, rows)))
+
+        padded_is_readmissions = self._pad(
+            is_readmissions,
+            padded_token=0
+        )
+
+        padded_is_inpatients = self._pad(
+            is_inpatients,
+            padded_token=0
+        )
+
+        output_dict = {
+            'is_readmission': np.stack([padded_is_readmissions, padded_is_inpatients], axis=-1)
+        }
+
+        return {}, output_dict
+
+    def _make_record(self, row_slicer: RowSlicer):
+        """
+        A method for making a bert record for the bert data generator to yield
+
+        :param row_slicer: a tuple containing a pandas row,
+        left_index and right_index for slicing the sequences such as concepts
+
+        :return:
+        """
+
+        row, start_index, end_index, _ = row_slicer
+
         is_readmissions = row.is_readmissions[start_index:end_index].astype(int)
         is_inpatients = row.is_inpatients[start_index:end_index]
 
         return (
-            visit_token_ids, visit_prolonged_stays, is_readmissions, is_inpatients
+            is_readmissions, is_inpatients
+        )
+
+
+class HierarchicalProlongedLengthStayLearningObjective(
+    HierarchicalVisitTypePredictionLearningObjective
+):
+    required_columns = ['visit_prolonged_stays', 'is_inpatients']
+
+    def __init__(
+            self,
+            max_num_of_visits: int,
+            is_training: bool
+    ):
+        self._max_num_of_visits = max_num_of_visits
+        self._is_training = is_training
+
+    def get_tf_dataset_schema(self):
+        output_dict_schema = {
+            'visit_prolonged_stay': int32
+        }
+        return {}, output_dict_schema
+
+    @validate_columns_decorator
+    def process_batch(self, rows: List[RowSlicer]):
+        """
+        Process a batch of rows to generate input and output data for the learning objective
+        :param rows:
+        :return:
+        """
+        visit_prolonged_stays, is_inpatients = zip(*list(map(self._make_record, rows)))
+
+        padded_visit_prolonged_stays = self._pad(
+            visit_prolonged_stays,
+            padded_token=0
+        )
+
+        padded_is_inpatients = self._pad(
+            is_inpatients,
+            padded_token=0
+        )
+
+        output_dict = {
+            'visit_prolonged_stay':
+                np.stack(
+                    [padded_visit_prolonged_stays, padded_is_inpatients],
+                    axis=-1
+                )
+        }
+
+        return {}, output_dict
+
+    def _make_record(self, row_slicer: RowSlicer):
+        """
+        A method for making a bert record for the bert data generator to yield
+
+        :param row_slicer: a tuple containing a pandas row,
+        left_index and right_index for slicing the sequences such as concepts
+
+        :return:
+        """
+
+        row, start_index, end_index, _ = row_slicer
+
+        visit_prolonged_stays = row.visit_prolonged_stays[start_index:end_index].astype(int)
+        is_inpatients = row.is_inpatients[start_index:end_index]
+
+        return (
+            visit_prolonged_stays, is_inpatients
         )
 
 

@@ -141,6 +141,9 @@ def create_parse_args_hierarchical_bert():
                         type=int,
                         help='Number of information exchanges between visit and concept embeddings',
                         required=True)
+    parser.add_argument('--include_readmission',
+                        dest='include_readmission',
+                        action='store_true')
     return parser
 
 

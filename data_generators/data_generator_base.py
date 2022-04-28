@@ -373,18 +373,42 @@ class HierarchicalBertDataGenerator(AbstractDataGeneratorBase):
 
 
 class HierarchicalBertMultiTaskDataGenerator(HierarchicalBertDataGenerator):
-    def __init__(self, visit_tokenizer: ConceptTokenizer, *args, **kwargs):
+    def __init__(
+            self,
+            include_visit_prediction: bool,
+            include_readmission: bool,
+            include_prolonged_length_stay: bool,
+            visit_tokenizer: ConceptTokenizer = None,
+            *args,
+            **kwargs
+    ):
+        self._include_visit_prediction = include_visit_prediction
+        self._include_readmission = include_readmission
+        self._include_prolonged_length_stay = include_prolonged_length_stay
         self._visit_tokenizer = visit_tokenizer
-        super(HierarchicalBertMultiTaskDataGenerator,
-              self).__init__(visit_tokenizer=self._visit_tokenizer,
-                             *args,
-                             **kwargs)
+        super(
+            HierarchicalBertMultiTaskDataGenerator,
+            self
+        ).__init__(
+            visit_tokenizer=self._visit_tokenizer,
+            *args,
+            **kwargs
+        )
 
     def _get_learning_objective_classes(self):
-        return [
-            HierarchicalMaskedLanguageModelLearningObjective,
-            HierarchicalBertSecondaryLearningObjective
-        ]
+
+        learning_objectives = [HierarchicalMaskedLanguageModelLearningObjective]
+
+        if self._include_visit_prediction:
+            learning_objectives.append(HierarchicalVisitTypePredictionLearningObjective)
+
+        if self._include_readmission:
+            learning_objectives.append(HierarchicalReadmissionLearningObjective)
+
+        if self._include_prolonged_length_stay:
+            learning_objectives.append(HierarchicalProlongedLengthStayLearningObjective)
+
+        return learning_objectives
 
 
 class ProbabilisticPhenotypeDataGenerator(HierarchicalBertDataGenerator):
