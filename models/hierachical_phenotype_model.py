@@ -301,7 +301,7 @@ def create_probabilistic_phenotype_model(
     )
 
     # (batch_size, num_of_visits, vocab_size)
-    visit_embeddings_without_att = visit_phenotype_layer(
+    visit_embeddings_without_att, _ = visit_phenotype_layer(
         [visit_embeddings_without_att, visit_mask, embedding_matrix]
     )
 

@@ -1063,7 +1063,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         #     )
         # )
 
-        return contextualized_visit_embeddings
+        return contextualized_visit_embeddings, visit_phenotype_probs
 
     def get_inverse_phenotype_dist_loss_metric(self):
         r = tf.reduce_sum(self.phenotype_embeddings * self.phenotype_embeddings, 1)
