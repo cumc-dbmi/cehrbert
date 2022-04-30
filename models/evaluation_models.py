@@ -260,7 +260,7 @@ def create_cher_bert_bi_lstm_model(bert_model_path):
 def create_cher_bert_bi_lstm_model_with_model(model):
     age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
 
-    contextualized_visit_embeddings = model.get_layer(
+    contextualized_visit_embeddings, _ = model.get_layer(
         'hidden_visit_embeddings'
     ).output
     _, num_of_visits, num_of_concepts, embedding_size = model.get_layer(
