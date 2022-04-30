@@ -49,11 +49,11 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
 
     def k_fold(self):
         inputs, labels = self.extract_model_inputs()
-        k_fold = KFold(n_splits=self._num_of_folds, shuffle=True, random_state=1)
+        k_fold = KFold(n_splits=self._num_of_folds, shuffle=True)
 
         for train, val_test in k_fold.split(labels):
             # further split val_test using a 2:3 ratio between val and test
-            val, test = train_test_split(val_test, test_size=0.6, random_state=1)
+            val, test = train_test_split(val_test, test_size=0.6)
 
             if self._is_transfer_learning:
                 size = int(len(train) * self._training_percentage)
