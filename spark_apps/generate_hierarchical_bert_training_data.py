@@ -6,17 +6,30 @@ from pyspark.sql import SparkSession
 
 import config.parameters
 from utils.spark_utils import *
-from utils.spark_utils import create_hierarchical_sequence_data, process_measurement
+from const.common import CDM_TABLES
 
 
-def main(input_folder,
-         output_folder,
-         domain_table_list,
-         date_filter,
-         max_num_of_visits_per_person,
-         include_concept_list: bool = True,
-         ):
+def main(
+        input_folder,
+        output_folder,
+        domain_table_list,
+        date_filter,
+        mlm_skip_domains,
+        max_num_of_visits_per_person,
+        include_concept_list: bool = True
+):
     spark = SparkSession.builder.appName('Generate Hierarchical Bert Training Data').getOrCreate()
+
+    logger = logging.getLogger(__name__)
+    logger.info(
+        f'input_folder: {input_folder}\n'
+        f'output_folder: {output_folder}\n'
+        f'domain_table_list: {domain_table_list}\n'
+        f'date_filter: {date_filter}\n'
+        f'mlm_skip_domains: {mlm_skip_domains}\n'
+        f'max_num_of_visits_per_person: {max_num_of_visits_per_person}\n'
+        f'include_concept_list: {include_concept_list}'
+    )
 
     domain_tables = []
     # Exclude measurement from domain_table_list if exists because we need to process measurement
@@ -75,6 +88,7 @@ def main(input_folder,
     sequence_data = create_hierarchical_sequence_data(
         person, visit_occurrence, patient_events,
         date_filter=date_filter,
+        mlm_skip_domains=mlm_skip_domains,
         max_num_of_visits_per_person=max_num_of_visits_per_person
     )
 
@@ -84,6 +98,13 @@ def main(input_folder,
             config.parameters.parquet_data_path
         )
     )
+
+
+def validate_domain_names(domain_names):
+    for domain_name in domain_names.split(' '):
+        if domain_name not in CDM_TABLES:
+            raise argparse.ArgumentTypeError(f'{domain_name} is an invalid CDM table name')
+    return domain_names
 
 
 if __name__ == '__main__':
@@ -107,7 +128,16 @@ if __name__ == '__main__':
                         nargs='+',
                         action='store',
                         help='The list of domain tables you want to download',
+                        type=validate_domain_names,
                         required=True)
+    parser.add_argument('--mlm_skip_domains',
+                        dest='mlm_skip_domains',
+                        nargs='+',
+                        action='store',
+                        help='The list of domains that will be skipped in MLM',
+                        required=False,
+                        type=validate_domain_names,
+                        default=[])
     parser.add_argument('-d',
                         '--date_filter',
                         dest='date_filter',
@@ -128,9 +158,12 @@ if __name__ == '__main__':
 
     ARGS = parser.parse_args()
 
-    main(ARGS.input_folder,
-         ARGS.output_folder,
-         ARGS.domain_table_list,
-         ARGS.date_filter,
-         ARGS.max_num_of_visits,
-         ARGS.include_concept_list)
+    main(
+        input_folder=ARGS.input_folder,
+        output_folder=ARGS.output_folder,
+        domain_table_list=ARGS.domain_table_list,
+        date_filter=ARGS.date_filter,
+        mlm_skip_domains=ARGS.mlm_skip_domains,
+        max_num_of_visits_per_person=ARGS.max_num_of_visits,
+        include_concept_list=ARGS.include_concept_list
+    )

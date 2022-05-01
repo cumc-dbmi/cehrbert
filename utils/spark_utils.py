@@ -776,14 +776,21 @@ def get_table_column_refs(dataframe):
             dataframe.schema.fieldNames()]
 
 
-def create_hierarchical_sequence_data(person, visit_occurrence, patient_events,
-                                      date_filter=None, max_num_of_visits_per_person=200):
+def create_hierarchical_sequence_data(
+        person,
+        visit_occurrence,
+        patient_events,
+        date_filter=None,
+        mlm_skip_domains=[],
+        max_num_of_visits_per_person=200
+):
     """
     This creates a hierarchical data frame for the hierarchical bert model
     :param person:
     :param visit_occurrence:
     :param patient_events:
     :param date_filter:
+    :param mlm_skip_domains:
     :param max_num_of_visits_per_person:
     :return:
     """
@@ -830,7 +837,7 @@ def create_hierarchical_sequence_data(person, visit_occurrence, patient_events,
         .withColumn('age', F.ceil(
         F.months_between(F.col('date'), F.col("birth_datetime")) / F.lit(12))) \
         .withColumn('concept_value_mask', (F.col('domain') == MEASUREMENT).cast('int')) \
-        .withColumn('mlm_skip', (F.col('domain') == MEASUREMENT).cast('int')) \
+        .withColumn('mlm_skip', (F.col('domain').isin(mlm_skip_domains)).cast('int')) \
         .withColumn('condition_mask', (F.col('domain') == 'condition').cast('int'))
 
     # Create the udf for calculating the weeks since the epoch time 1970-01-01
