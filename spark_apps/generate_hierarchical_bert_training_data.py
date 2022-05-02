@@ -14,11 +14,18 @@ def main(
         output_folder,
         domain_table_list,
         date_filter,
-        mlm_skip_domains,
+        mlm_skip_table_list,
         max_num_of_visits_per_person,
         include_concept_list: bool = True
 ):
     spark = SparkSession.builder.appName('Generate Hierarchical Bert Training Data').getOrCreate()
+
+    # Translate the cdm tables to domain names
+    mlm_skip_domains = get_mlm_skip_domains(
+        spark=spark,
+        input_folder=input_folder,
+        mlm_skip_table_list=mlm_skip_table_list
+    )
 
     logger = logging.getLogger(__name__)
     logger.info(
@@ -26,6 +33,7 @@ def main(
         f'output_folder: {output_folder}\n'
         f'domain_table_list: {domain_table_list}\n'
         f'date_filter: {date_filter}\n'
+        f'mlm_skip_table_list: {mlm_skip_table_list}\n'
         f'mlm_skip_domains: {mlm_skip_domains}\n'
         f'max_num_of_visits_per_person: {max_num_of_visits_per_person}\n'
         f'include_concept_list: {include_concept_list}'
@@ -100,7 +108,24 @@ def main(
     )
 
 
-def validate_domain_names(domain_names):
+def get_mlm_skip_domains(spark, input_folder, mlm_skip_table_list):
+    """
+    Translate the domain_table_name to the domain name
+
+    :param spark:
+    :param input_folder:
+    :param mlm_skip_table_list:
+    :return:
+    """
+    domain_tables = [
+        preprocess_domain_table(spark, input_folder, domain_table_name)
+        for domain_table_name in mlm_skip_table_list
+    ]
+
+    return list(map(get_domain_field, domain_tables))
+
+
+def validate_table_names(domain_names):
     for domain_name in domain_names.split(' '):
         if domain_name not in CDM_TABLES:
             raise argparse.ArgumentTypeError(f'{domain_name} is an invalid CDM table name')
@@ -128,15 +153,15 @@ if __name__ == '__main__':
                         nargs='+',
                         action='store',
                         help='The list of domain tables you want to download',
-                        type=validate_domain_names,
+                        type=validate_table_names,
                         required=True)
-    parser.add_argument('--mlm_skip_domains',
-                        dest='mlm_skip_domains',
+    parser.add_argument('--mlm_skip_table_list',
+                        dest='mlm_skip_table_list',
                         nargs='+',
                         action='store',
                         help='The list of domains that will be skipped in MLM',
                         required=False,
-                        type=validate_domain_names,
+                        type=validate_table_names,
                         default=[])
     parser.add_argument('-d',
                         '--date_filter',
@@ -163,7 +188,7 @@ if __name__ == '__main__':
         output_folder=ARGS.output_folder,
         domain_table_list=ARGS.domain_table_list,
         date_filter=ARGS.date_filter,
-        mlm_skip_domains=ARGS.mlm_skip_domains,
+        mlm_skip_table_list=ARGS.mlm_skip_table_list,
         max_num_of_visits_per_person=ARGS.max_num_of_visits,
         include_concept_list=ARGS.include_concept_list
     )
