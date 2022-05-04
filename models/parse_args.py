@@ -135,12 +135,6 @@ def create_parse_args_hierarchical_bert():
                         type=int,
                         help='Max no.of concepts per visit per patient',
                         required=True)
-    parser.add_argument('--num_of_exchanges',
-                        dest='num_of_exchanges',
-                        action='store',
-                        type=int,
-                        help='Number of information exchanges between visit and concept embeddings',
-                        required=True)
     parser.add_argument('--include_readmission',
                         dest='include_readmission',
                         action='store_true')

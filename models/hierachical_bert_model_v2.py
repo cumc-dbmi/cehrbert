@@ -1,19 +1,20 @@
 from models.layers.custom_layers import *
 
 
-def transformer_hierarchical_bert_model(num_of_visits,
-                                        num_of_concepts,
-                                        concept_vocab_size,
-                                        embedding_size,
-                                        depth: int,
-                                        num_heads: int,
-                                        num_of_exchanges: int,
-                                        transformer_dropout: float = 0.1,
-                                        embedding_dropout: float = 0.6,
-                                        l2_reg_penalty: float = 1e-4,
-                                        time_embeddings_size: int = 16,
-                                        include_second_tiered_learning_objectives: bool = False,
-                                        visit_vocab_size: int = None):
+def transformer_hierarchical_bert_model(
+        num_of_visits,
+        num_of_concepts,
+        concept_vocab_size,
+        embedding_size,
+        depth: int,
+        num_heads: int,
+        transformer_dropout: float = 0.1,
+        embedding_dropout: float = 0.6,
+        l2_reg_penalty: float = 1e-4,
+        time_embeddings_size: int = 16,
+        include_second_tiered_learning_objectives: bool = False,
+        visit_vocab_size: int = None
+):
     """
     Create a hierarchical bert model
 

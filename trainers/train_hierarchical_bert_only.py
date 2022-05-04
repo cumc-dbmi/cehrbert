@@ -19,12 +19,19 @@ from tensorflow.keras import optimizers
 class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
     confidence_penalty = 0.1
 
-    def __init__(self, tokenizer_path: str, visit_tokenizer_path: str,
-                 embedding_size: int, depth: int, max_num_visits: int,
-                 max_num_concepts: int, num_heads: int,
-                 include_visit_prediction: bool, time_embeddings_size: int,
-                 num_of_exchanges: int,
-                 *args, **kwargs):
+    def __init__(
+            self,
+            tokenizer_path: str,
+            visit_tokenizer_path: str,
+            embedding_size: int,
+            depth: int,
+            max_num_visits: int,
+            max_num_concepts: int,
+            num_heads: int,
+            include_visit_prediction: bool,
+            time_embeddings_size: int,
+            *args, **kwargs
+    ):
 
         self._tokenizer_path = tokenizer_path
         self._visit_tokenizer_path = visit_tokenizer_path
@@ -120,7 +127,6 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
                     embedding_size=self._embedding_size,
                     depth=self._depth,
                     num_heads=self._num_heads,
-                    num_of_exchanges=self._num_of_exchanges,
                     time_embeddings_size=self._time_embeddings_size,
                     include_second_tiered_learning_objectives=self._include_visit_prediction
                 )
@@ -165,14 +171,14 @@ def main(args):
         max_num_visits=args.max_num_visits,
         max_num_concepts=args.max_num_concepts,
         num_heads=args.num_heads,
-        num_of_exchanges=args.num_of_exchanges,
         batch_size=args.batch_size,
         epochs=args.epochs,
         learning_rate=args.learning_rate,
         include_visit_prediction=args.include_visit_prediction,
         time_embeddings_size=args.time_embeddings_size,
         use_dask=args.use_dask,
-        tf_board_log_path=args.tf_board_log_path).train_model()
+        tf_board_log_path=args.tf_board_log_path
+    ).train_model()
 
 
 if __name__ == "__main__":
