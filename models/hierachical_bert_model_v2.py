@@ -12,7 +12,9 @@ def transformer_hierarchical_bert_model(
         embedding_dropout: float = 0.6,
         l2_reg_penalty: float = 1e-4,
         time_embeddings_size: int = 16,
-        include_second_tiered_learning_objectives: bool = False,
+        include_visit_type_prediction: bool = False,
+        include_readmission: bool = False,
+        include_prolonged_length_stay: bool = False,
         visit_vocab_size: int = None
 ):
     """
@@ -24,17 +26,18 @@ def transformer_hierarchical_bert_model(
     :param embedding_size:
     :param depth:
     :param num_heads:
-    :param num_of_exchanges:
     :param transformer_dropout:
     :param embedding_dropout:
     :param l2_reg_penalty:
     :param time_embeddings_size:
-    :param include_second_tiered_learning_objectives:
+    :param include_visit_type_prediction:
+    :param include_readmission:
+    :param include_prolonged_length_stay:
     :param visit_vocab_size:
     :return:
     """
     # If the second tiered learning objectives are enabled, visit_vocab_size needs to be provided
-    if include_second_tiered_learning_objectives and not visit_vocab_size:
+    if include_visit_type_prediction and not visit_vocab_size:
         raise RuntimeError(f'visit_vocab_size can not be null '
                            f'when the second learning objectives are enabled')
 
@@ -320,7 +323,7 @@ def transformer_hierarchical_bert_model(
 
     outputs = [concept_predictions]
 
-    if include_second_tiered_learning_objectives:
+    if include_visit_type_prediction:
         # Slice out the the visit embeddings (CLS tokens)
         visit_prediction_dense = tf.keras.layers.Dense(
             visit_vocab_size,
@@ -336,27 +339,33 @@ def transformer_hierarchical_bert_model(
             visit_prediction_dense(visit_embeddings_without_att)
         )
 
-        visit_prolonged_stay_layer = tf.keras.layers.Dense(
-            1,
-            activation='sigmoid',
-            name='visit_prolonged_stay'
-        )
+        outputs.append(visit_predictions)
 
+    if include_readmission:
         is_readmission_layer = tf.keras.layers.Dense(
             1,
             activation='sigmoid',
             name='is_readmission'
         )
 
-        visit_prolonged_stay_output = visit_prolonged_stay_layer(
-            visit_embeddings_without_att
-        )
-
         is_readmission_output = is_readmission_layer(
             visit_embeddings_without_att
         )
 
-        outputs.extend([visit_predictions, visit_prolonged_stay_output, is_readmission_output])
+        outputs.append(is_readmission_output)
+
+    if include_prolonged_length_stay:
+        visit_prolonged_stay_layer = tf.keras.layers.Dense(
+            1,
+            activation='sigmoid',
+            name='visit_prolonged_stay'
+        )
+
+        visit_prolonged_stay_output = visit_prolonged_stay_layer(
+            visit_embeddings_without_att
+        )
+
+        outputs.append(visit_prolonged_stay_output)
 
     hierarchical_bert = tf.keras.Model(
         inputs=default_inputs,

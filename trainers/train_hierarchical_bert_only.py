@@ -28,8 +28,10 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
             max_num_visits: int,
             max_num_concepts: int,
             num_heads: int,
-            include_visit_prediction: bool,
             time_embeddings_size: int,
+            include_visit_prediction: bool,
+            include_readmission: bool,
+            include_prolonged_length_stay: bool,
             *args, **kwargs
     ):
 
@@ -40,9 +42,10 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
         self._max_num_visits = max_num_visits
         self._max_num_concepts = max_num_concepts
         self._num_heads = num_heads
-        self._num_of_exchanges = num_of_exchanges
-        self._include_visit_prediction = include_visit_prediction
         self._time_embeddings_size = time_embeddings_size
+        self._include_visit_prediction = include_visit_prediction
+        self._include_readmission = include_readmission
+        self._include_prolonged_length_stay = include_prolonged_length_stay
 
         super(HierarchicalBertTrainer, self).__init__(*args, **kwargs)
 
@@ -55,9 +58,11 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
             f'max_num_visits: {max_num_visits}\n'
             f'max_num_concepts: {max_num_concepts}\n'
             f'num_heads: {num_heads}\n'
-            f'num_of_exchanges: {num_of_exchanges}\n'
+            f'time_embeddings_size: {time_embeddings_size}\n'
             f'include_visit_prediction: {include_visit_prediction}\n'
-            f'time_embeddings_size: {time_embeddings_size}')
+            f'include_prolonged_length_stay: {include_prolonged_length_stay}\n'
+            f'include_readmission: {include_readmission}'
+        )
 
     def _load_dependencies(self):
 
@@ -91,8 +96,14 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
 
         data_generator_class = HierarchicalBertDataGenerator
 
-        if self._include_visit_prediction:
-            parameters['visit_tokenizer'] = self._visit_tokenizer
+        if self.has_secondary_learning_objectives():
+            # parameters['visit_tokenizer'] = self._visit_tokenizer
+            parameters.update({
+                'include_visit_prediction': self._include_visit_prediction,
+                'include_readmission': self._include_readmission,
+                'include_prolonged_length_stay': self._include_prolonged_length_stay,
+                'visit_tokenizer': getattr(self, '_visit_tokenizer', None)
+            })
             data_generator_class = HierarchicalBertMultiTaskDataGenerator
 
         return data_generator_class(**parameters)
@@ -128,32 +139,40 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
                     depth=self._depth,
                     num_heads=self._num_heads,
                     time_embeddings_size=self._time_embeddings_size,
-                    include_second_tiered_learning_objectives=self._include_visit_prediction
+                    include_visit_type_prediction=self._include_visit_prediction,
+                    include_readmission=self._include_readmission,
+                    include_prolonged_length_stay=self._include_prolonged_length_stay
                 )
 
+                losses = {
+                    'concept_predictions':
+                        MaskedPenalizedSparseCategoricalCrossentropy(self.confidence_penalty)
+                }
+
                 if self._include_visit_prediction:
-                    losses = {
-                        'concept_predictions':
-                            MaskedPenalizedSparseCategoricalCrossentropy(
-                                self.confidence_penalty),
-                        'visit_predictions':
-                            MaskedPenalizedSparseCategoricalCrossentropy(
-                                self.confidence_penalty),
-                        'visit_prolonged_stay': SequenceCrossentropy(),
-                        'is_readmission': SequenceCrossentropy()
-                    }
-                else:
-                    losses = {
-                        'concept_predictions':
-                            MaskedPenalizedSparseCategoricalCrossentropy(
-                                self.confidence_penalty)
-                    }
+                    losses['visit_predictions'] = (
+                        MaskedPenalizedSparseCategoricalCrossentropy(self.confidence_penalty)
+                    )
+
+                if self._include_readmission:
+                    losses['is_readmission'] = SequenceCrossentropy()
+
+                if self._include_prolonged_length_stay:
+                    losses['visit_prolonged_stay'] = SequenceCrossentropy()
 
                 model.compile(
                     optimizer,
                     loss=losses,
-                    metrics={'concept_predictions': masked_perplexity})
+                    metrics={'concept_predictions': masked_perplexity}
+                )
         return model
+
+    def has_secondary_learning_objectives(self):
+        return (
+                self._include_visit_prediction
+                or self._include_readmission
+                or self._include_prolonged_length_stay
+        )
 
     def eval_model(self):
         pass
@@ -175,6 +194,8 @@ def main(args):
         epochs=args.epochs,
         learning_rate=args.learning_rate,
         include_visit_prediction=args.include_visit_prediction,
+        include_prolonged_length_stay=args.include_prolonged_length_stay,
+        include_readmission=args.include_readmission,
         time_embeddings_size=args.time_embeddings_size,
         use_dask=args.use_dask,
         tf_board_log_path=args.tf_board_log_path

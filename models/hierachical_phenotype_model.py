@@ -27,7 +27,6 @@ def create_probabilistic_phenotype_model(
     :param embedding_size:
     :param depth:
     :param num_heads:
-    :param num_of_exchanges:
     :param transformer_dropout:
     :param embedding_dropout:
     :param l2_reg_penalty:
