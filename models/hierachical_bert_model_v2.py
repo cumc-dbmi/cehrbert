@@ -160,40 +160,35 @@ def transformer_hierarchical_bert_model(
 
     # (batch, num_of_visits, embedding_size)
     # Test a simple average as a way to summerize the visit after excluding the CLS embedding
-    visit_embeddings = tf.reduce_mean(
-        concept_embeddings[:, :, 1:, :],
-        axis=2
+    # The first bert applied at the visit level
+    concept_encoder = Encoder(
+        name='concept_encoder',
+        num_layers=depth,
+        d_model=embedding_size,
+        num_heads=num_heads,
+        dropout_rate=transformer_dropout
     )
 
-    # The first bert applied at the visit level
-    # concept_encoder = Encoder(
-    #     name='concept_encoder',
-    #     num_layers=depth,
-    #     d_model=embedding_size,
-    #     num_heads=num_heads,
-    #     dropout_rate=transformer_dropout
-    # )
-    #
-    # concept_embeddings = tf.reshape(
-    #     concept_embeddings,
-    #     shape=(-1, num_of_concepts, embedding_size)
-    # )
-    #
-    # concept_embeddings, _ = concept_encoder(
-    #     concept_embeddings,  # be reused
-    #     pat_concept_mask  # not change
-    # )
-    #
-    # # (batch_size, num_of_visits, num_of_concepts, embedding_size)
-    # concept_embeddings = tf.reshape(
-    #     concept_embeddings,
-    #     shape=(-1, num_of_visits, num_of_concepts, embedding_size)
-    # )
+    concept_embeddings = tf.reshape(
+        concept_embeddings,
+        shape=(-1, num_of_concepts, embedding_size)
+    )
+
+    concept_embeddings, _ = concept_encoder(
+        concept_embeddings,  # be reused
+        pat_concept_mask  # not change
+    )
+
+    # (batch_size, num_of_visits, num_of_concepts, embedding_size)
+    concept_embeddings = tf.reshape(
+        concept_embeddings,
+        shape=(-1, num_of_visits, num_of_concepts, embedding_size)
+    )
 
     # Step 2 generate visit embeddings
     # Slice out the first contextualized embedding of each visit
     # (batch_size, num_of_visits, embedding_size)
-    # visit_embeddings = concept_embeddings[:, :, 0]
+    visit_embeddings = concept_embeddings[:, :, 0]
 
     # (batch_size, num_of_visits, embedding_size)
     expanded_att_embeddings = tf.concat([att_embeddings, att_embeddings[:, 0:1, :]], axis=1)
