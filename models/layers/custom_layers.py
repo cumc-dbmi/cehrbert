@@ -840,7 +840,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             transformer_dropout: float,
             phenotype_entropy_weight: float = 1e-04,
             phenotype_euclidean_weight: float = 1e-04,
-            phenotype_concept_distance_weight: float = 1e-03,
+            phenotype_concept_distance_weight: float = 1e-04,
             gravity_center_dist_weight: float = 1e-04,
             *args, **kwargs
     ):
@@ -931,23 +931,20 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         )
 
         # calculate phenotype concept distance matrix (num_of_phenotypes, vocab_size)
-        phe_concept_dist_matrix = distance_matrix(
-            self.phenotype_embeddings,
-            embedding_matrix
-        )
-
-        # Calculate the mean phenotype concept distance
-        phenotype_concept_dist_loss = tf.reduce_mean(
-            phe_concept_dist_matrix
+        phenotype_concept_dist = tf.reduce_mean(
+            distance_matrix(
+                self.phenotype_embeddings,
+                embedding_matrix
+            )
         )
 
         # Encourage the model to move the phenotype embeddings closer to concept embeddings
         self.add_loss(
-            phenotype_concept_dist_loss * self.phenotype_concept_distance_weight
+            phenotype_concept_dist * self.phenotype_concept_distance_weight
         )
 
         self.add_metric(
-            phenotype_concept_dist_loss,
+            phenotype_concept_dist,
             name='phenotype_concept_dist'
         )
 
@@ -967,67 +964,33 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             tf.reduce_mean(phenotype_prob_entropy) * self.phenotype_entropy_weight,
         )
 
-        # We want the phenotype embeddings to be more uniformly distributed in the concept
-        # embedding cluster
-        phenotype_assignment = tf.one_hot(
-            indices=tf.argmin(
-                phe_concept_dist_matrix,
-                axis=0
-            ),
-            depth=self.num_of_phenotypes
+        # Add loss the encourage the center of "gravity" of concept embeddings and phenotype
+        # embeddings to be as close as possible
+        gravity_center_dist = tf.reduce_sum(
+            tf.pow(
+                x=tf.reduce_mean(self.phenotype_embeddings) - tf.reduce_mean(embedding_matrix),
+                y=2
+            )
         )
-
-        phenotype_assignment_sum = tf.reduce_sum(
-            phenotype_assignment,
-            axis=0
-        ) + 1e-03
-
-        phenotype_assignment_proportion = (
-                phenotype_assignment_sum / tf.reduce_sum(phenotype_assignment_sum)
-        )
-        phenotype_assignment_entropy = tf.reduce_sum(
-            -tf.math.log(phenotype_assignment_proportion) * phenotype_assignment_proportion
-        )
-        phenotype_assignment_entropy_loss = tf.exp(
-            -phenotype_assignment_entropy
-        )
-
         self.add_loss(
-            phenotype_assignment_entropy_loss * self.phenotype_euclidean_weight
+            gravity_center_dist * self.gravity_center_dist_weight
         )
 
         self.add_metric(
-            phenotype_assignment_entropy,
-            name='phenotype_assignment_entropy'
+            gravity_center_dist,
+            name='gravity_center_dist'
         )
 
-        # Add loss the encourage the center of "gravity" of concept embeddings and phenotype
-        # embeddings to be as close as possible
-        # gravity_center_dist = tf.reduce_sum(
-        #     tf.pow(
-        #         x=tf.reduce_mean(self.phenotype_embeddings) - tf.reduce_mean(embedding_matrix),
-        #         y=2
-        #     )
-        # )
-        # self.add_loss(
-        #     gravity_center_dist * self.gravity_center_dist_weight
-        # )
-        #
-        # self.add_metric(
-        #     gravity_center_dist,
-        #     name='gravity_center_dist'
-        # )
-
         # Get phenotype pairwise distance metrics
-        _, phe_dist_metric, phe_dist_var = self.get_inverse_phenotype_dist_loss_metric()
+        phe_inv_loss, phe_dist_metric, _ = self.get_inverse_phenotype_dist_loss_metric()
+
+        self.add_loss(
+            phe_inv_loss * self.phenotype_euclidean_weight
+        )
 
         self.add_metric(
             phe_dist_metric,
             name='phenotype_euclidean_distance'
-        )
-        self.add_metric(
-            phe_dist_var,
-            name='phenotype_euclidean_distance_variance'
         )
 
         # Calculate the contextualized visit embeddings using the pre-defined phenotype embeddings
