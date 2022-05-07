@@ -861,11 +861,6 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             trainable=True,
             name='phenotype_embeddings_matrix'
         )
-        #
-        # self.gate_layer = tf.keras.layers.Dense(
-        #     1,
-        #     activation='sigmoid'
-        # )
 
         self.layer_norm_layer = tf.keras.layers.LayerNormalization(
             epsilon=1e-6
@@ -874,28 +869,6 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         self.dropout_layer = tf.keras.layers.Dropout(
             transformer_dropout
         )
-
-        # self.cov_parameter_size = (
-        #         tfpl.MultivariateNormalTriL.params_size(embedding_size) - embedding_size
-        # )
-        #
-        # self.cov_parameter_matrix = self.add_weight(
-        #     shape=(embedding_size, self.cov_parameter_size),
-        #     initializer=tf.keras.initializers.GlorotNormal(),
-        #     trainable=True,
-        #     name='cov_matrix'
-        # )
-        #
-        # # Assuming there is a generative process that generates diagnosis embeddings from a
-        # self.phenotype_embedding_prior = tfd.MultivariateNormalDiag(loc=tf.zeros(embedding_size))
-        # # Define the generative model that generates the
-        # self.hidden_visit_embedding_layer = tf.keras.models.Sequential([
-        #     tfpl.MultivariateNormalTriL(embedding_size),
-        #     tfpl.KLDivergenceAddLoss(
-        #         self.phenotype_embedding_prior,
-        #         use_exact_kl=True
-        #     )  # estimate KL[ q(z|x) || p(z,
-        # ])
 
     def get_config(self):
         config = super().get_config()
@@ -1000,31 +973,11 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             **kwargs
         )
 
-        # (batch_size, num_of_visits, 1)
-        # gate_value = tf.clip_by_value(
-        #     self.gate_layer(visit_embeddings),
-        #     clip_value_min=0.5,
-        #     clip_value_max=0.7
-        # )
-
         # Sum the original visit embeddings and the phenotype contextualized visit embeddings
         contextualized_visit_embeddings = self.layer_norm_layer(
             visit_embeddings + contextualized_visit_embeddings,
             **kwargs
         ) * converted_visit_mask
-
-        # # Get the trainable covariance parameters for the multivariate gaussian
-        # covariance_parameters = (
-        #         contextualized_visit_embeddings @ self.cov_parameter_matrix
-        # )
-        #
-        # # Get a sample from the multivariate gaussian
-        # hidden_visit_embeddings = self.hidden_visit_embedding_layer(
-        #     tf.concat(
-        #         [contextualized_visit_embeddings, covariance_parameters],
-        #         axis=-1
-        #     )
-        # )
 
         return contextualized_visit_embeddings, visit_phenotype_probs
 
