@@ -144,7 +144,6 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             filepath=self._model_path,
             save_best_only=True,
             monitor='loss',
-            save_freq=10,
             verbose=1
         )
         learning_rate_scheduler = tf.keras.callbacks.LearningRateScheduler(

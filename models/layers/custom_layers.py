@@ -838,10 +838,10 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             embedding_size: int,
             transformer_dropout: float,
             num_of_neighbors: int = 3,
-            phenotype_entropy_weight: float = 1e-05,
-            phenotype_euclidean_weight: float = 1e-05,
-            phenotype_concept_distance_weight: float = 1e-05,
-            gravity_center_dist_weight: float = 1e-05,
+            phenotype_entropy_weight: float = 2e-05,
+            phenotype_euclidean_weight: float = 2e-05,
+            phenotype_concept_distance_weight: float = 1e-04,
+            gravity_center_dist_weight: float = 2e-05,
             *args, **kwargs
     ):
         super(VisitPhenotypeLayer, self).__init__(*args, **kwargs)
@@ -906,14 +906,16 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         )
 
         # calculate phenotype concept distance matrix (num_of_phenotypes, top_k)
+        phe_concept_dist_matrix = distance_matrix(
+            self.phenotype_embeddings,
+            embedding_matrix
+        )
         phenotype_concept_dist = tf.reduce_mean(
-            tf.math.top_k(
-                distance_matrix(
-                    self.phenotype_embeddings,
-                    embedding_matrix
-                ),
-                k=tf.shape(visit_embeddings)[0] // self.num_of_phenotypes
-            ).values
+            -tf.math.top_k(
+                -phe_concept_dist_matrix,
+                k=tf.shape(embedding_matrix)[0] // self.num_of_phenotypes
+            ).values,
+            axis=-1
         )
 
         # Encourage the model to move the phenotype embeddings closer to concept embeddings
@@ -954,6 +956,15 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             name='phenotype_euclidean_distance'
         )
 
+        self.add_loss(
+            phe_dist_var * self.phenotype_euclidean_weight
+        )
+
+        self.add_metric(
+            phe_dist_var,
+            name='phenotype_euclidean_variance'
+        )
+
         # Calculate the contextualized visit embeddings using the pre-defined phenotype embeddings
         # (batch_size, num_of_visits, embedding_size)
         contextualized_visit_embeddings = self.dropout_layer(
@@ -976,8 +987,8 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         euclidean_distances_full = r - 2 * tf.matmul(self.phenotype_embeddings, tf.transpose(
             self.phenotype_embeddings)) + tf.transpose(r)
 
-        euclidean_distances = tf.math.top_k(
-            euclidean_distances_full,
+        euclidean_distances = -tf.math.top_k(
+            -euclidean_distances_full,
             k=self.num_of_neighbors
         ).values
 
