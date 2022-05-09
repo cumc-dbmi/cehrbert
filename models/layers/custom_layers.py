@@ -904,22 +904,22 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         )
 
         # calculate phenotype concept distance matrix (num_of_phenotypes, vocab_size)
-        phenotype_concept_dist = tf.reduce_mean(
-            distance_matrix(
-                self.phenotype_embeddings,
-                embedding_matrix
-            )
-        )
-
-        # Encourage the model to move the phenotype embeddings closer to concept embeddings
-        self.add_loss(
-            phenotype_concept_dist * self.phenotype_concept_distance_weight
-        )
-
-        self.add_metric(
-            phenotype_concept_dist,
-            name='phenotype_concept_dist'
-        )
+        # phenotype_concept_dist = tf.reduce_mean(
+        #     distance_matrix(
+        #         self.phenotype_embeddings,
+        #         embedding_matrix
+        #     )
+        # )
+        #
+        # # Encourage the model to move the phenotype embeddings closer to concept embeddings
+        # self.add_loss(
+        #     phenotype_concept_dist * self.phenotype_concept_distance_weight
+        # )
+        #
+        # self.add_metric(
+        #     phenotype_concept_dist,
+        #     name='phenotype_concept_dist'
+        # )
 
         # Calculate the probability distribution entropy
         phenotype_prob_entropy = -tf.reduce_sum(
@@ -939,20 +939,20 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
 
         # Add loss the encourage the center of "gravity" of concept embeddings and phenotype
         # embeddings to be as close as possible
-        gravity_center_dist = tf.reduce_sum(
-            tf.pow(
-                x=tf.reduce_mean(self.phenotype_embeddings) - tf.reduce_mean(embedding_matrix),
-                y=2
-            )
-        )
-        self.add_loss(
-            gravity_center_dist * self.gravity_center_dist_weight
-        )
-
-        self.add_metric(
-            gravity_center_dist,
-            name='gravity_center_dist'
-        )
+        # gravity_center_dist = tf.reduce_sum(
+        #     tf.pow(
+        #         x=tf.reduce_mean(self.phenotype_embeddings) - tf.reduce_mean(embedding_matrix),
+        #         y=2
+        #     )
+        # )
+        # self.add_loss(
+        #     gravity_center_dist * self.gravity_center_dist_weight
+        # )
+        # 
+        # self.add_metric(
+        #     gravity_center_dist,
+        #     name='gravity_center_dist'
+        # )
 
         # Get phenotype pairwise distance metrics
         phe_inv_loss, phe_dist_metric, _ = self.get_inverse_phenotype_dist_loss_metric()
