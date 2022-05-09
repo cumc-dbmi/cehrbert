@@ -1,11 +1,10 @@
+import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
-import numpy as np
-
 from tensorflow.keras.utils import get_custom_objects
-from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
-from keras_transformer.bert import MaskedPenalizedSparseCategoricalCrossentropy
 
+from keras_transformer.bert import MaskedPenalizedSparseCategoricalCrossentropy
+from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 from utils.model_utils import create_concept_mask
 
 tfd = tfp.distributions
@@ -838,16 +837,18 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             num_of_phenotypes: int,
             embedding_size: int,
             transformer_dropout: float,
-            phenotype_entropy_weight: float = 1e-04,
-            phenotype_euclidean_weight: float = 1e-04,
-            phenotype_concept_distance_weight: float = 1e-04,
-            gravity_center_dist_weight: float = 1e-04,
+            num_of_neighbors: int = 3,
+            phenotype_entropy_weight: float = 1e-05,
+            phenotype_euclidean_weight: float = 1e-05,
+            phenotype_concept_distance_weight: float = 1e-05,
+            gravity_center_dist_weight: float = 1e-05,
             *args, **kwargs
     ):
         super(VisitPhenotypeLayer, self).__init__(*args, **kwargs)
         self.num_of_phenotypes = num_of_phenotypes
         self.embedding_size = embedding_size
         self.transformer_dropout = transformer_dropout
+        self.num_of_neighbors = num_of_neighbors
         self.phenotype_entropy_weight = phenotype_entropy_weight
         self.phenotype_euclidean_weight = phenotype_euclidean_weight
         self.phenotype_concept_distance_weight = phenotype_concept_distance_weight
@@ -875,6 +876,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         config['num_of_phenotypes'] = self.num_of_phenotypes
         config['embedding_size'] = self.embedding_size
         config['transformer_dropout'] = self.transformer_dropout
+        config['num_of_neighbors'] = self.num_of_neighbors
         config['phenotype_entropy_weight'] = self.phenotype_entropy_weight
         config['phenotype_euclidean_weight'] = self.phenotype_euclidean_weight
         config['phenotype_concept_distance_weight'] = self.phenotype_concept_distance_weight
@@ -903,23 +905,26 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             ) * converted_visit_mask
         )
 
-        # calculate phenotype concept distance matrix (num_of_phenotypes, vocab_size)
-        # phenotype_concept_dist = tf.reduce_mean(
-        #     distance_matrix(
-        #         self.phenotype_embeddings,
-        #         embedding_matrix
-        #     )
-        # )
-        #
-        # # Encourage the model to move the phenotype embeddings closer to concept embeddings
-        # self.add_loss(
-        #     phenotype_concept_dist * self.phenotype_concept_distance_weight
-        # )
-        #
-        # self.add_metric(
-        #     phenotype_concept_dist,
-        #     name='phenotype_concept_dist'
-        # )
+        # calculate phenotype concept distance matrix (num_of_phenotypes, top_k)
+        phenotype_concept_dist = tf.reduce_mean(
+            tf.math.top_k(
+                distance_matrix(
+                    self.phenotype_embeddings,
+                    embedding_matrix
+                ),
+                k=tf.shape(visit_embeddings)[0] // self.num_of_phenotypes
+            ).values
+        )
+
+        # Encourage the model to move the phenotype embeddings closer to concept embeddings
+        self.add_loss(
+            phenotype_concept_dist * self.phenotype_concept_distance_weight
+        )
+
+        self.add_metric(
+            phenotype_concept_dist,
+            name='phenotype_concept_dist'
+        )
 
         # Calculate the probability distribution entropy
         phenotype_prob_entropy = -tf.reduce_sum(
@@ -937,25 +942,8 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             tf.reduce_mean(phenotype_prob_entropy) * self.phenotype_entropy_weight,
         )
 
-        # Add loss the encourage the center of "gravity" of concept embeddings and phenotype
-        # embeddings to be as close as possible
-        # gravity_center_dist = tf.reduce_sum(
-        #     tf.pow(
-        #         x=tf.reduce_mean(self.phenotype_embeddings) - tf.reduce_mean(embedding_matrix),
-        #         y=2
-        #     )
-        # )
-        # self.add_loss(
-        #     gravity_center_dist * self.gravity_center_dist_weight
-        # )
-        # 
-        # self.add_metric(
-        #     gravity_center_dist,
-        #     name='gravity_center_dist'
-        # )
-
         # Get phenotype pairwise distance metrics
-        phe_inv_loss, phe_dist_metric, _ = self.get_inverse_phenotype_dist_loss_metric()
+        phe_inv_loss, phe_dist_metric, phe_dist_var = self.get_inverse_phenotype_dist_loss_metric()
 
         self.add_loss(
             phe_inv_loss * self.phenotype_euclidean_weight
@@ -985,8 +973,13 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         r = tf.reduce_sum(self.phenotype_embeddings * self.phenotype_embeddings, 1)
         # turn r into column vector
         r = tf.reshape(r, [-1, 1])
-        euclidean_distances = r - 2 * tf.matmul(self.phenotype_embeddings, tf.transpose(
+        euclidean_distances_full = r - 2 * tf.matmul(self.phenotype_embeddings, tf.transpose(
             self.phenotype_embeddings)) + tf.transpose(r)
+
+        euclidean_distances = tf.math.top_k(
+            euclidean_distances_full,
+            k=self.num_of_neighbors
+        ).values
 
         inv_loss = tf.reduce_mean(
             tf.math.exp(-euclidean_distances)
