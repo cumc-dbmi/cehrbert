@@ -840,7 +840,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             num_of_neighbors: int = 3,
             phenotype_entropy_weight: float = 2e-05,
             phenotype_euclidean_weight: float = 2e-05,
-            phenotype_concept_distance_weight: float = 1e-04,
+            phenotype_concept_distance_weight: float = 4e-05,
             gravity_center_dist_weight: float = 2e-05,
             *args, **kwargs
     ):
@@ -906,16 +906,14 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         )
 
         # calculate phenotype concept distance matrix (num_of_phenotypes, top_k)
-        phe_concept_dist_matrix = distance_matrix(
-            self.phenotype_embeddings,
-            embedding_matrix
-        )
         phenotype_concept_dist = tf.reduce_mean(
             -tf.math.top_k(
-                -phe_concept_dist_matrix,
+                -distance_matrix(
+                    self.phenotype_embeddings,
+                    embedding_matrix
+                ),
                 k=tf.shape(embedding_matrix)[0] // self.num_of_phenotypes
-            ).values,
-            axis=-1
+            ).values
         )
 
         # Encourage the model to move the phenotype embeddings closer to concept embeddings
