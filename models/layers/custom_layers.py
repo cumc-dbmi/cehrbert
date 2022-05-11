@@ -839,9 +839,8 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             transformer_dropout: float,
             num_of_neighbors: int = 5,
             phenotype_entropy_weight: float = 1e-05,
-            phenotype_euclidean_weight: float = 1e-04,
+            phenotype_euclidean_weight: float = 1e-05,
             phenotype_concept_distance_weight: float = 1e-03,
-            gravity_center_dist_weight: float = 2e-05,
             *args, **kwargs
     ):
         super(VisitPhenotypeLayer, self).__init__(*args, **kwargs)
@@ -852,7 +851,6 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         self.phenotype_entropy_weight = phenotype_entropy_weight
         self.phenotype_euclidean_weight = phenotype_euclidean_weight
         self.phenotype_concept_distance_weight = phenotype_concept_distance_weight
-        self.gravity_center_dist_weight = gravity_center_dist_weight
 
         # We assume there exists hidden phenotype embeddings
         # (num_of_phenotypes, embedding_size)
@@ -880,7 +878,6 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         config['phenotype_entropy_weight'] = self.phenotype_entropy_weight
         config['phenotype_euclidean_weight'] = self.phenotype_euclidean_weight
         config['phenotype_concept_distance_weight'] = self.phenotype_concept_distance_weight
-        config['gravity_center_dist_weight'] = self.gravity_center_dist_weight
         return config
 
     def call(self, inputs, **kwargs):
@@ -905,22 +902,24 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             ) * converted_visit_mask
         )
 
-        # calculate phenotype concept distance matrix (num_of_phenotypes, top_k)
-        phe_concept_dist_matrix = distance_matrix(self.phenotype_embeddings, embedding_matrix)
-        phenotype_concept_dist = tf.reduce_mean(
-            -tf.math.top_k(
-                -phe_concept_dist_matrix,
-                k=tf.shape(embedding_matrix)[0] // self.num_of_phenotypes
-            ).values
+        # calculate phenotype concept distance matrix (num_of_phenotypes, vocab_size)
+        phe_concept_dist_matrix = distance_matrix(
+            self.phenotype_embeddings,
+            embedding_matrix
+        )
+
+        # Calculate the mean phenotype concept distance
+        phenotype_concept_dist_loss = tf.reduce_mean(
+            phe_concept_dist_matrix
         )
 
         # Encourage the model to move the phenotype embeddings closer to concept embeddings
         self.add_loss(
-            phenotype_concept_dist * self.phenotype_concept_distance_weight
+            phenotype_concept_dist_loss * self.phenotype_concept_distance_weight
         )
 
         self.add_metric(
-            phenotype_concept_dist,
+            phenotype_concept_dist_loss,
             name='phenotype_concept_dist'
         )
 
@@ -938,6 +937,40 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         # Add the entropy as a loss to encourage the model to focus on a subset of phenotypes
         self.add_loss(
             tf.reduce_mean(phenotype_prob_entropy) * self.phenotype_entropy_weight,
+        )
+
+        # We want the phenotype embeddings to be more uniformly distributed in the concept
+        # embedding cluster
+        phenotype_assignment = tf.one_hot(
+            indices=tf.argmin(
+                phe_concept_dist_matrix,
+                axis=0
+            ),
+            depth=self.num_of_phenotypes
+        )
+
+        phenotype_assignment_sum = tf.reduce_sum(
+            phenotype_assignment,
+            axis=0
+        ) + 1e-03
+
+        phenotype_assignment_proportion = (
+                phenotype_assignment_sum / tf.reduce_sum(phenotype_assignment_sum)
+        )
+        phenotype_assignment_entropy = tf.reduce_sum(
+            -tf.math.log(phenotype_assignment_proportion) * phenotype_assignment_proportion
+        )
+        phenotype_assignment_entropy_loss = tf.exp(
+            -phenotype_assignment_entropy
+        )
+
+        self.add_loss(
+            phenotype_assignment_entropy_loss * self.phenotype_euclidean_weight
+        )
+
+        self.add_metric(
+            phenotype_assignment_entropy,
+            name='phenotype_assignment_entropy'
         )
 
         # Get phenotype pairwise distance metrics
