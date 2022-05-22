@@ -840,7 +840,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             num_of_neighbors: int = 3,
             phenotype_entropy_weight: float = 2e-05,
             phenotype_euclidean_weight: float = 2e-05,
-            phenotype_concept_distance_weight: float = 6e-05,
+            phenotype_concept_distance_weight: float = 8e-05,
             *args, **kwargs
     ):
         super(VisitPhenotypeLayer, self).__init__(*args, **kwargs)
@@ -859,12 +859,6 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             initializer=tf.keras.initializers.GlorotNormal(),
             trainable=True,
             name='phenotype_embeddings_matrix'
-        )
-
-        self.gate_layer = tf.keras.layers.Dense(
-            1,
-            activation='sigmoid',
-            name='gate_layer'
         )
 
         self.layer_norm_layer = tf.keras.layers.LayerNormalization(
@@ -968,25 +962,14 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
 
         # Calculate the contextualized visit embeddings using the pre-defined phenotype embeddings
         # (batch_size, num_of_visits, embedding_size)
-        contextualized_phenotype_embeddings = self.dropout_layer(
+        contextualized_visit_embeddings = self.dropout_layer(
             visit_phenotype_probs @ self.phenotype_embeddings,
             **kwargs
         )
 
-        # Clip the gate value so that visit_embeddings is more important than the phenotype
-        # embeddings
-        # (batch_size, num_of_visits, 1)
-        gate_value = tf.clip_by_value(
-            self.gate_layer(
-                tf.concat([visit_embeddings, contextualized_phenotype_embeddings], axis=-1)
-            ),
-            clip_value_min=0.4,
-            clip_value_max=1.0
-        )
-
         # Sum the original visit embeddings and the phenotype contextualized visit embeddings
         contextualized_visit_embeddings = self.layer_norm_layer(
-            gate_value * visit_embeddings + (1 - gate_value) * contextualized_phenotype_embeddings,
+            visit_embeddings + contextualized_visit_embeddings,
             **kwargs
         ) * converted_visit_mask
 
