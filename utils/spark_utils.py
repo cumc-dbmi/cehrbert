@@ -10,7 +10,7 @@ from pyspark.sql.functions import broadcast
 from pyspark.sql.pandas.functions import pandas_udf
 
 from const.common import PERSON, VISIT_OCCURRENCE, UNKNOWN_CONCEPT, MEASUREMENT, \
-    REQUIRED_MEASUREMENT, CONDITION_OCCURRENCE
+    REQUIRED_MEASUREMENT
 from spark_apps.sql_templates import measurement_unit_stats_query
 from utils.logging_utils import *
 from config.parameters import qualified_concept_list_path

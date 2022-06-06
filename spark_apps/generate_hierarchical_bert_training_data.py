@@ -6,7 +6,7 @@ from pyspark.sql import SparkSession
 
 import config.parameters
 from utils.spark_utils import *
-from const.common import CDM_TABLES
+from const.common import CDM_TABLES, OBSERVATION_PERIOD, VISIT_OCCURRENCE, PERSON
 
 
 def main(
@@ -16,6 +16,7 @@ def main(
         date_filter,
         mlm_skip_table_list,
         max_num_of_visits_per_person,
+        min_observation_period: int = 360,
         include_concept_list: bool = True
 ):
     spark = SparkSession.builder.appName('Generate Hierarchical Bert Training Data').getOrCreate()
@@ -36,6 +37,7 @@ def main(
         f'mlm_skip_table_list: {mlm_skip_table_list}\n'
         f'mlm_skip_domains: {mlm_skip_domains}\n'
         f'max_num_of_visits_per_person: {max_num_of_visits_per_person}\n'
+        f'min_observation_period: {min_observation_period}\n'
         f'include_concept_list: {include_concept_list}'
     )
 
@@ -46,8 +48,27 @@ def main(
         if domain_table_name != MEASUREMENT:
             domain_tables.append(preprocess_domain_table(spark, input_folder, domain_table_name))
 
+    observation_period = (
+        preprocess_domain_table(spark, input_folder, OBSERVATION_PERIOD).withColumn(
+            'observation_period_start_date',
+            F.col('observation_period_start_date').cast('date')
+        ).withColumn(
+            'observation_period_end_date',
+            F.col('observation_period_end_date').cast('date')
+        ).withColumn(
+            'period',
+            F.datediff('observation_period_end_date', 'observation_period_start_date')
+        ).where(F.col('period') >= min_observation_period).select('person_id')
+    )
+
     visit_occurrence = preprocess_domain_table(spark, input_folder, VISIT_OCCURRENCE)
     person = preprocess_domain_table(spark, input_folder, PERSON)
+
+    # Filter for the persons that have enough observation period
+    person = person.join(
+        observation_period,
+        'person_id'
+    ).select([person[f] for f in person.schema.fieldNames()])
 
     # Union all domain table records
     patient_events = join_domain_tables(domain_tables)
@@ -177,6 +198,13 @@ if __name__ == '__main__':
                         default=200,
                         help='Max no.of visits per patient to be included',
                         required=False)
+    parser.add_argument('--min_observation_period',
+                        dest='min_observation_period',
+                        action='store',
+                        type=int,
+                        default=360,
+                        help='Minimum observation period in days',
+                        required=False)
     parser.add_argument('--include_concept_list',
                         dest='include_concept_list',
                         action='store_true')
@@ -190,5 +218,6 @@ if __name__ == '__main__':
         date_filter=ARGS.date_filter,
         mlm_skip_table_list=ARGS.mlm_skip_table_list,
         max_num_of_visits_per_person=ARGS.max_num_of_visits,
+        min_observation_period=ARGS.min_observation_period,
         include_concept_list=ARGS.include_concept_list
     )
