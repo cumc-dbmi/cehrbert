@@ -202,7 +202,7 @@ if __name__ == '__main__':
                         dest='min_observation_period',
                         action='store',
                         type=int,
-                        default=360,
+                        default=1,
                         help='Minimum observation period in days',
                         required=False)
     parser.add_argument('--include_concept_list',
