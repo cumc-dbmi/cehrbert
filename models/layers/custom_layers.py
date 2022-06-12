@@ -837,17 +837,15 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             num_of_phenotypes: int,
             embedding_size: int,
             transformer_dropout: float,
-            num_of_neighbors: int = 3,
-            phenotype_entropy_weight: float = 2e-05,
-            phenotype_euclidean_weight: float = 2e-05,
-            phenotype_concept_distance_weight: float = 1e-04,
+            phenotype_entropy_weight: float = 1e-05,
+            phenotype_euclidean_weight: float = 1e-05,
+            phenotype_concept_distance_weight: float = 1e-03,
             *args, **kwargs
     ):
         super(VisitPhenotypeLayer, self).__init__(*args, **kwargs)
         self.num_of_phenotypes = num_of_phenotypes
         self.embedding_size = embedding_size
         self.transformer_dropout = transformer_dropout
-        self.num_of_neighbors = num_of_neighbors
         self.phenotype_entropy_weight = phenotype_entropy_weight
         self.phenotype_euclidean_weight = phenotype_euclidean_weight
         self.phenotype_concept_distance_weight = phenotype_concept_distance_weight
@@ -869,12 +867,33 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             transformer_dropout
         )
 
+        # self.cov_parameter_size = (
+        #         tfpl.MultivariateNormalTriL.params_size(embedding_size) - embedding_size
+        # )
+        #
+        # self.cov_parameter_matrix = self.add_weight(
+        #     shape=(embedding_size, self.cov_parameter_size),
+        #     initializer=tf.keras.initializers.GlorotNormal(),
+        #     trainable=True,
+        #     name='cov_matrix'
+        # )
+        #
+        # # Assuming there is a generative process that generates diagnosis embeddings from a
+        # self.phenotype_embedding_prior = tfd.MultivariateNormalDiag(loc=tf.zeros(embedding_size))
+        # # Define the generative model that generates the
+        # self.hidden_visit_embedding_layer = tf.keras.models.Sequential([
+        #     tfpl.MultivariateNormalTriL(embedding_size),
+        #     tfpl.KLDivergenceAddLoss(
+        #         self.phenotype_embedding_prior,
+        #         use_exact_kl=True
+        #     )  # estimate KL[ q(z|x) || p(z,
+        # ])
+
     def get_config(self):
         config = super().get_config()
         config['num_of_phenotypes'] = self.num_of_phenotypes
         config['embedding_size'] = self.embedding_size
         config['transformer_dropout'] = self.transformer_dropout
-        config['num_of_neighbors'] = self.num_of_neighbors
         config['phenotype_entropy_weight'] = self.phenotype_entropy_weight
         config['phenotype_euclidean_weight'] = self.phenotype_euclidean_weight
         config['phenotype_concept_distance_weight'] = self.phenotype_concept_distance_weight
@@ -902,18 +921,15 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             ) * converted_visit_mask
         )
 
-        # calculate phenotype concept distance matrix (num_of_phenotypes, top_k)
+        # num_of_phenotypes, vocab_size
         phenotype_concept_dist = tf.reduce_mean(
-            -tf.math.top_k(
-                -distance_matrix(
-                    self.phenotype_embeddings,
-                    embedding_matrix
-                ),
-                k=tf.shape(embedding_matrix)[0] // self.num_of_phenotypes
-            ).values
+            distance_matrix(
+                self.phenotype_embeddings,
+                embedding_matrix
+            )
         )
 
-        # Encourage the model to move the phenotype embeddings closer to concept embeddings
+        # Add the entropy as a loss to encourage the model to focus on a subset of phenotypes
         self.add_loss(
             phenotype_concept_dist * self.phenotype_concept_distance_weight
         )
@@ -939,26 +955,15 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             tf.reduce_mean(phenotype_prob_entropy) * self.phenotype_entropy_weight,
         )
 
-        # Get phenotype pairwise distance metrics
-        phe_inv_loss, phe_dist_metric, phe_dist_var = self.get_inverse_phenotype_dist_loss_metric()
-
-        self.add_loss(
-            phe_inv_loss * self.phenotype_euclidean_weight
-        )
-
+        # Add the inverse euclidean distance as a loss to drive phenotypes away from each other
         self.add_metric(
-            phe_dist_metric,
+            self.get_inverse_phenotype_dist(),
             name='phenotype_euclidean_distance'
         )
 
-        self.add_loss(
-            phe_dist_var * self.phenotype_euclidean_weight
-        )
-
-        self.add_metric(
-            phe_dist_var,
-            name='phenotype_euclidean_variance'
-        )
+        # self.add_loss(
+        #     phenotype_euclidean_distance * self.phenotype_euclidean_weight,
+        # )
 
         # Calculate the contextualized visit embeddings using the pre-defined phenotype embeddings
         # (batch_size, num_of_visits, embedding_size)
@@ -973,33 +978,33 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             **kwargs
         ) * converted_visit_mask
 
+        # # Get the trainable covariance parameters for the multivariate gaussian
+        # covariance_parameters = (
+        #         contextualized_visit_embeddings @ self.cov_parameter_matrix
+        # )
+        #
+        # # Get a sample from the multivariate gaussian
+        # hidden_visit_embeddings = self.hidden_visit_embedding_layer(
+        #     tf.concat(
+        #         [contextualized_visit_embeddings, covariance_parameters],
+        #         axis=-1
+        #     )
+        # )
+
         return contextualized_visit_embeddings, visit_phenotype_probs
 
-    def get_inverse_phenotype_dist_loss_metric(self):
+    def get_inverse_phenotype_dist(self):
         r = tf.reduce_sum(self.phenotype_embeddings * self.phenotype_embeddings, 1)
         # turn r into column vector
         r = tf.reshape(r, [-1, 1])
-        euclidean_distances_full = r - 2 * tf.matmul(self.phenotype_embeddings, tf.transpose(
+        euclidean_distances = r - 2 * tf.matmul(self.phenotype_embeddings, tf.transpose(
             self.phenotype_embeddings)) + tf.transpose(r)
-
-        euclidean_distances = -tf.math.top_k(
-            -euclidean_distances_full,
-            k=self.num_of_neighbors
-        ).values
-
-        inv_loss = tf.reduce_mean(
-            tf.math.exp(-euclidean_distances)
-        )
-
-        var_loss = tf.math.reduce_variance(
+        return tf.reduce_mean(
             euclidean_distances
         )
-
-        dist_metric = tf.reduce_mean(
-            euclidean_distances
-        )
-
-        return inv_loss, dist_metric, var_loss
+        # return tf.reduce_mean(
+        #     tf.math.exp(-euclidean_distances)
+        # )
 
 
 def distance_matrix(matrix_1, matrix_2):
