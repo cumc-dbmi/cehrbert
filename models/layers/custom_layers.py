@@ -835,11 +835,12 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
     def __init__(
             self,
             num_of_phenotypes: int,
+            num_of_phenotype_neighbors: int,
+            num_of_concept_neighbors: int,
             embedding_size: int,
             transformer_dropout: float,
-            num_of_neighbors: int = 3,
-            phenotype_entropy_weight: float = 3e-05,
-            phenotype_euclidean_weight: float = 3e-05,
+            phenotype_entropy_weight: float = 2e-05,
+            phenotype_euclidean_weight: float = 1e-05,
             phenotype_concept_distance_weight: float = 6e-05,
             *args, **kwargs
     ):
@@ -847,7 +848,8 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         self.num_of_phenotypes = num_of_phenotypes
         self.embedding_size = embedding_size
         self.transformer_dropout = transformer_dropout
-        self.num_of_neighbors = num_of_neighbors
+        self.num_of_concept_neighbors = num_of_concept_neighbors
+        self.num_of_phenotype_neighbors = num_of_phenotype_neighbors
         self.phenotype_entropy_weight = phenotype_entropy_weight
         self.phenotype_euclidean_weight = phenotype_euclidean_weight
         self.phenotype_concept_distance_weight = phenotype_concept_distance_weight
@@ -874,7 +876,8 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         config['num_of_phenotypes'] = self.num_of_phenotypes
         config['embedding_size'] = self.embedding_size
         config['transformer_dropout'] = self.transformer_dropout
-        config['num_of_neighbors'] = self.num_of_neighbors
+        config['num_of_concept_neighbors'] = self.num_of_concept_neighbors
+        config['num_of_phenotype_neighbors'] = self.num_of_phenotype_neighbors
         config['phenotype_entropy_weight'] = self.phenotype_entropy_weight
         config['phenotype_euclidean_weight'] = self.phenotype_euclidean_weight
         config['phenotype_concept_distance_weight'] = self.phenotype_concept_distance_weight
@@ -909,7 +912,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
                     self.phenotype_embeddings,
                     embedding_matrix
                 ),
-                k=tf.shape(embedding_matrix)[0] // self.num_of_phenotypes
+                k=self.num_of_concept_neighbors
             ).values
         )
 
@@ -984,7 +987,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
 
         euclidean_distances = -tf.math.top_k(
             -euclidean_distances_full,
-            k=self.num_of_neighbors
+            k=self.num_of_phenotype_neighbors
         ).values
 
         inv_loss = tf.reduce_mean(

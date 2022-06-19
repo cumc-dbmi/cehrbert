@@ -150,4 +150,20 @@ def create_parse_args_hierarchical_bert_phenotype():
                         help='Num of phenotypes',
                         default=20,
                         required=False)
+    parser.add_argument('--num_of_phenotype_neighbors',
+                        dest='num_of_phenotype_neighbors',
+                        action='store',
+                        type=int,
+                        help='Num of phenotype neighbors to consider when driving the phenotypes '
+                             'apart from each other',
+                        default=3,
+                        required=False)
+    parser.add_argument('--num_of_concept_neighbors',
+                        dest='num_of_concept_neighbors',
+                        action='store',
+                        type=int,
+                        help='Num of concept neighbors to consider when minimizing the '
+                             'phenotype-concept distances',
+                        default=10,
+                        required=False)
     return parser

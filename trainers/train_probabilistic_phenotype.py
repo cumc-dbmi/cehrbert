@@ -26,6 +26,8 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
             embedding_size: int,
             depth: int,
             num_of_phenotypes: int,
+            num_of_phenotype_neighbors: int,
+            num_of_concept_neighbors: int,
             max_num_visits: int,
             max_num_concepts: int,
             num_heads: int,
@@ -43,6 +45,8 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
         self._max_num_visits = max_num_visits
         self._max_num_concepts = max_num_concepts
         self._num_of_phenotypes = num_of_phenotypes
+        self._num_of_phenotype_neighbors = num_of_phenotype_neighbors
+        self._num_of_concept_neighbors = num_of_concept_neighbors
         self._num_heads = num_heads
         self._time_embeddings_size = time_embeddings_size
         self._include_visit_prediction = include_visit_prediction
@@ -138,6 +142,8 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
                     num_of_visits=self._max_num_visits,
                     num_of_concepts=self._max_num_concepts,
                     num_of_phenotypes=self._num_of_phenotypes,
+                    num_of_phenotype_neighbors=self._num_of_phenotype_neighbors,
+                    num_of_concept_neighbors=self._num_of_concept_neighbors,
                     concept_vocab_size=self._tokenizer.get_vocab_size(),
                     visit_vocab_size=visit_vocab_size,
                     embedding_size=self._embedding_size,
@@ -196,6 +202,8 @@ def main(args):
         max_num_visits=args.max_num_visits,
         max_num_concepts=args.max_num_concepts,
         num_of_phenotypes=args.num_of_phenotypes,
+        num_of_phenotype_neighbors=args.num_of_phenotype_neighbors,
+        num_of_concept_neighbors=args.num_of_concept_neighbors,
         num_heads=args.num_heads,
         batch_size=args.batch_size,
         epochs=args.epochs,

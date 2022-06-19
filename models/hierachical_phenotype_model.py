@@ -16,10 +16,13 @@ def create_probabilistic_phenotype_model(
         include_readmission: bool = False,
         include_prolonged_length_stay: bool = False,
         visit_vocab_size: int = None,
-        num_of_phenotypes: int = 20
+        num_of_phenotypes: int = 20,
+        num_of_phenotype_neighbors: int = 3,
+        num_of_concept_neighbors: int = 10
 ):
     """
     Create a hierarchical bert model
+
 
     :param num_of_visits:
     :param num_of_concepts:
@@ -36,6 +39,8 @@ def create_probabilistic_phenotype_model(
     :param include_prolonged_length_stay:
     :param visit_vocab_size:
     :param num_of_phenotypes:
+    :param num_of_phenotype_neighbors:
+    :param num_of_concept_neighbors:
     :return:
     """
     # If the second tiered learning objectives are enabled, visit_vocab_size needs to be provided
@@ -294,6 +299,8 @@ def create_probabilistic_phenotype_model(
     # Multivariate Gaussian Distribution Declare phenotype distribution prior
     visit_phenotype_layer = VisitPhenotypeLayer(
         num_of_phenotypes=num_of_phenotypes,
+        num_of_phenotype_neighbors=num_of_phenotype_neighbors,
+        num_of_concept_neighbors=num_of_concept_neighbors,
         embedding_size=embedding_size,
         transformer_dropout=transformer_dropout,
         name='hidden_visit_embeddings'
