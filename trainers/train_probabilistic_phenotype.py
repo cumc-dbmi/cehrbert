@@ -64,6 +64,8 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
             f'max_num_visits: {max_num_visits}\n'
             f'max_num_concepts: {max_num_concepts}\n'
             f'num_of_phenotypes: {num_of_phenotypes}\n'
+            f'num_of_phenotype_neighbors: {num_of_phenotype_neighbors}\n'
+            f'num_of_concept_neighbors: {num_of_concept_neighbors}\n'
             f'num_heads: {num_heads}\n'
             f'time_embeddings_size: {time_embeddings_size}\n'
             f'include_visit_prediction: {include_visit_prediction}\n'
