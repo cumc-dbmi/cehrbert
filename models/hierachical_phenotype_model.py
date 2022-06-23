@@ -229,12 +229,33 @@ def create_probabilistic_phenotype_model(
         shape=(num_of_visits * 3, num_of_visits * 3)
     )[:-1, :-1]
 
+    # (batch_size, 1, num_of_visits * num_of_concepts, num_of_visits)
+    # Construct the concept mask such that concepts attend to all previous visits
     look_ahead_concept_mask = tf.reshape(
         tf.tile(
             look_ahead_mask_base[:, tf.newaxis, :, tf.newaxis],
             [1, num_of_concepts, 1, 1]
         ),
         (num_of_concepts * num_of_visits, -1)
+    )
+
+    # (batch_size, 1, num_of_visits * num_of_concepts, num_of_visits)
+    # Create the concept mask such that the concept only attends to the corresponding visits
+    look_ahead_concept_mask = tf.maximum(
+        tf.cast(
+            tf.reshape(
+                tf.tile(
+                    tf.expand_dims(
+                        1 - tf.eye(num_of_visits),
+                        axis=1
+                    ),
+                    [1, num_of_concepts, 1]
+                ),
+                (num_of_concepts * num_of_visits, num_of_visits)
+            ),
+            dtype=tf.int32
+        ),
+        look_ahead_concept_mask
     )
 
     # (batch_size, 1, num_of_visits_with_att, num_of_visits_with_att)
@@ -248,24 +269,6 @@ def create_probabilistic_phenotype_model(
         visit_mask[:, tf.newaxis, tf.newaxis, :],
         look_ahead_concept_mask
     )
-
-    # (batch_size, 1, num_of_visits * num_of_concepts, num_of_visits)
-    # look_ahead_concept_mask = tf.maximum(
-    #     tf.cast(
-    #         tf.reshape(
-    #             tf.tile(
-    #                 tf.expand_dims(
-    #                     1 - tf.eye(num_of_visits),
-    #                     axis=1
-    #                 ),
-    #                 [1, num_of_concepts, 1]
-    #             ),
-    #             (num_of_concepts * num_of_visits, num_of_visits)
-    #         ),
-    #         dtype=tf.int32
-    #     ),
-    #     look_ahead_concept_mask
-    # )
 
     # Second bert applied at the patient level to the visit embeddings
     visit_encoder = Encoder(
