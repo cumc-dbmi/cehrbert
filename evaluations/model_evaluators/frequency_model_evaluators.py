@@ -38,7 +38,7 @@ class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
 
     def k_fold(self):
         inputs, age, labels = self.extract_model_inputs()
-        k_fold = KFold(n_splits=self._num_of_folds, shuffle=True)
+        k_fold = KFold(n_splits=self._num_of_folds, shuffle=True, random_state=1)
 
         for train, val_test in k_fold.split(labels):
             # further split val_test using a 2:3 ratio between val and test
