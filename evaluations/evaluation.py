@@ -92,7 +92,9 @@ def evaluate_sequence_models(args):
             bert_model_path=bert_model_path,
             tokenizer_path=bert_tokenizer_path,
             is_temporal=False,
-            sequence_model_name=args.sequence_model_name).eval_model()
+            sequence_model_name=args.sequence_model_name,
+            learning_rate=args.learning_rate
+        ).eval_model()
 
     if PROBABILISTIC_BERT_LSTM in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
@@ -180,7 +182,8 @@ def evaluate_sequence_models(args):
             depth=args.depth,
             num_heads=args.num_heads,
             use_time_embedding=args.use_time_embedding,
-            time_embeddings_size=args.time_embeddings_size
+            time_embeddings_size=args.time_embeddings_size,
+            learning_rate=args.learning_rate,
         ).eval_model()
 
     if HIERARCHICAL_BERT_LSTM in args.model_evaluators:
