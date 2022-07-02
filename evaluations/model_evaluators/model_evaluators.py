@@ -63,5 +63,9 @@ class AbstractModelEvaluator(AbstractModel):
         return os.path.join(model_folder, f'{self.get_model_name()}.h5')
 
     @abstractmethod
-    def k_fold(self):
+    def k_fold(self, features, labels):
+        pass
+
+    @abstractmethod
+    def eval_model_cross_validation_test(self):
         pass

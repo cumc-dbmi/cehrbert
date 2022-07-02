@@ -159,7 +159,7 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
             'concept_value_masks': padded_concept_value_masks,
             'age': np.expand_dims(self._dataset.age, axis=-1)
         }
-        labels = self._dataset.label
+        labels = self._dataset.label.to_numpy()
 
         return inputs, labels
 

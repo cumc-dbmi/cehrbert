@@ -58,6 +58,10 @@ def create_evaluation_args():
                              action='store',
                              type=float,
                              default=1e-4)
+    main_parser.add_argument('--cross_validation_test',
+                             dest='cross_validation_test',
+                             action='store_true',
+                             required=False)
 
     group = main_parser.add_argument_group('sequence model')
     group.add_argument('-me',

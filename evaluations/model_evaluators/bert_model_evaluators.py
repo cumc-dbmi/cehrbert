@@ -55,7 +55,7 @@ class BertLstmModelEvaluator(SequenceModelEvaluator):
         index_age = np.asarray(
             ((self._dataset['age'] - self._dataset['age'].mean()) / self._dataset[
                 'age'].std()).astype(float).apply(lambda c: [c]).tolist())
-        labels = self._dataset.label
+        labels = self._dataset.label.to_numpy()
         padded_token_ides = post_pad_pre_truncate(token_ids, self._tokenizer.get_unused_token_id(),
                                                   self._max_seq_length)
         padded_visit_segments = post_pad_pre_truncate(visit_segments, 0, self._max_seq_length)

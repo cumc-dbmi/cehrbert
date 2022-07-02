@@ -3,8 +3,6 @@ from evaluations.evaluation_parameters import *
 from evaluations.evaluation_parse_args import create_evaluation_args
 from evaluations.model_evaluators.hierarchical_bert_evaluators import *
 from evaluations.model_evaluators.bert_model_evaluators import *
-from evaluations.model_evaluators.hierarchical_bert_evaluators import \
-    ProbabilisticPhenotypeModelEvaluator
 from evaluations.model_evaluators.sequence_model_evaluators import *
 from evaluations.model_evaluators.frequency_model_evaluators import *
 from utils.model_utils import *
@@ -30,7 +28,9 @@ def evaluate_sequence_models(args):
             epochs=args.epochs,
             time_aware_model_path=time_aware_model_path,
             tokenizer_path=time_attention_tokenizer_path,
-            sequence_model_name=args.sequence_model_name
+            sequence_model_name=args.sequence_model_name,
+            learning_rate=args.learning_rate,
+            cross_validation_test=args.cross_validation_test
         ).eval_model()
 
     if VANILLA_BERT_FEED_FORWARD in args.model_evaluators:
@@ -51,7 +51,10 @@ def evaluate_sequence_models(args):
             bert_model_path=bert_model_path,
             tokenizer_path=bert_tokenizer_path,
             is_temporal=False,
-            sequence_model_name=args.sequence_model_name).eval_model()
+            sequence_model_name=args.sequence_model_name,
+            learning_rate=args.learning_rate,
+            cross_validation_test=args.cross_validation_test
+        ).eval_model()
 
     if SLIDING_BERT in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
@@ -72,7 +75,10 @@ def evaluate_sequence_models(args):
             tokenizer_path=bert_tokenizer_path,
             stride=args.stride,
             context_window=args.context_window,
-            sequence_model_name=args.sequence_model_name).eval_model()
+            sequence_model_name=args.sequence_model_name,
+            learning_rate=args.learning_rate,
+            cross_validation_test=args.cross_validation_test
+        ).eval_model()
 
     if VANILLA_BERT_LSTM in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
@@ -93,68 +99,9 @@ def evaluate_sequence_models(args):
             tokenizer_path=bert_tokenizer_path,
             is_temporal=False,
             sequence_model_name=args.sequence_model_name,
-            learning_rate=args.learning_rate
+            learning_rate=args.learning_rate,
+            cross_validation_test=args.cross_validation_test
         ).eval_model()
-
-    if PROBABILISTIC_BERT_LSTM in args.model_evaluators:
-        validate_folder(args.vanilla_bert_model_folder)
-        bert_tokenizer_path = os.path.join(args.vanilla_bert_model_folder,
-                                           p.tokenizer_path)
-        bert_model_path = os.path.join(args.vanilla_bert_model_folder,
-                                       p.bert_model_validation_path)
-        ProbabilisticBertModelEvaluator(
-            dataset=dataset,
-            evaluation_folder=args.evaluation_folder,
-            num_of_folds=args.num_of_folds,
-            is_transfer_learning=args.is_transfer_learning,
-            training_percentage=args.training_percentage,
-            max_seq_length=args.max_seq_length,
-            batch_size=args.batch_size,
-            epochs=args.epochs,
-            bert_model_path=bert_model_path,
-            tokenizer_path=bert_tokenizer_path,
-            is_temporal=False,
-            sequence_model_name=args.sequence_model_name).eval_model()
-
-    if PROBABILISTIC_PHENOTYPE_LSTM in args.model_evaluators:
-        validate_folder(args.vanilla_bert_model_folder)
-        bert_tokenizer_path = os.path.join(args.vanilla_bert_model_folder,
-                                           p.tokenizer_path)
-        bert_model_path = os.path.join(args.vanilla_bert_model_folder,
-                                       p.bert_model_validation_path)
-        ProbabilisticPhenotypeModelEvaluator(
-            dataset=dataset,
-            evaluation_folder=args.evaluation_folder,
-            num_of_folds=args.num_of_folds,
-            is_transfer_learning=args.is_transfer_learning,
-            training_percentage=args.training_percentage,
-            max_num_of_visits=args.max_num_of_visits,
-            max_num_of_concepts=args.max_num_of_concepts,
-            batch_size=args.batch_size,
-            epochs=args.epochs,
-            bert_model_path=bert_model_path,
-            tokenizer_path=bert_tokenizer_path,
-            sequence_model_name=args.sequence_model_name).eval_model()
-
-    if TEMPORAL_BERT_LSTM in args.model_evaluators:
-        validate_folder(args.temporal_bert_model_folder)
-        temporal_bert_tokenizer_path = os.path.join(args.temporal_bert_model_folder,
-                                                    p.tokenizer_path)
-        temporal_bert_model_path = os.path.join(args.temporal_bert_model_folder,
-                                                p.temporal_bert_validation_model_path)
-        BertLstmModelEvaluator(
-            dataset=dataset,
-            evaluation_folder=args.evaluation_folder,
-            num_of_folds=args.num_of_folds,
-            is_transfer_learning=args.is_transfer_learning,
-            training_percentage=args.training_percentage,
-            max_seq_length=args.max_seq_length,
-            batch_size=args.batch_size,
-            epochs=args.epochs,
-            bert_model_path=temporal_bert_model_path,
-            tokenizer_path=temporal_bert_tokenizer_path,
-            is_temporal=True,
-            sequence_model_name=args.sequence_model_name).eval_model()
 
     if RANDOM_VANILLA_BERT_LSTM in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
@@ -184,6 +131,7 @@ def evaluate_sequence_models(args):
             use_time_embedding=args.use_time_embedding,
             time_embeddings_size=args.time_embeddings_size,
             learning_rate=args.learning_rate,
+            cross_validation_test=args.cross_validation_test
         ).eval_model()
 
     if HIERARCHICAL_BERT_LSTM in args.model_evaluators:
@@ -202,10 +150,11 @@ def evaluate_sequence_models(args):
             max_num_of_concepts=args.max_num_of_concepts,
             batch_size=args.batch_size,
             epochs=args.epochs,
-            learning_rate=args.learning_rate,
             bert_model_path=bert_model_path,
             tokenizer_path=bert_tokenizer_path,
-            sequence_model_name=args.sequence_model_name
+            sequence_model_name=args.sequence_model_name,
+            learning_rate=args.learning_rate,
+            cross_validation_test=args.cross_validation_test
         ).eval_model()
 
     if RANDOM_HIERARCHICAL_BERT_LSTM in args.model_evaluators:
@@ -232,7 +181,9 @@ def evaluate_sequence_models(args):
             epochs=args.epochs,
             bert_model_path=bert_model_path,
             tokenizer_path=bert_tokenizer_path,
-            sequence_model_name=args.sequence_model_name
+            sequence_model_name=args.sequence_model_name,
+            learning_rate=args.learning_rate,
+            cross_validation_test=args.cross_validation_test
         ).eval_model()
 
 

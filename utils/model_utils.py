@@ -137,14 +137,19 @@ def convert_to_list_of_lists(concept_lists):
 
 
 @log_function_decorator
-def compute_binary_metrics(model, test_data: Union[Dataset, Tuple[np.ndarray, np.ndarray]],
-                           metrics_folder):
+def compute_binary_metrics(
+        model,
+        test_data: Union[Dataset, Tuple[np.ndarray, np.ndarray]],
+        metrics_folder,
+        model_name: str = None
+):
     """
     Compute Recall, Precision, F1-score and PR-AUC for the test data
 
     :param model:
     :param test_data:
     :param metrics_folder:
+    :param model_name:
     :return:
     """
 
@@ -186,16 +191,19 @@ def compute_binary_metrics(model, test_data: Union[Dataset, Tuple[np.ndarray, np
                     'pr_auc': [pr_auc],
                     'roc_auc': [roc_auc]}
 
-    pd.DataFrame(data_metrics).to_parquet(os.path.join(metrics_folder, f'{current_time}.parquet'))
+    data_metrics_pd = pd.DataFrame(data_metrics)
+    data_metrics_pd.insert(0, 'model_name', model_name)
+    data_metrics_pd.to_parquet(os.path.join(metrics_folder, f'{current_time}.parquet'))
 
 
-def save_training_history(history: Dict, history_folder):
+def save_training_history(history: Dict, history_folder, model_name: str = None):
     """
     Save the training metrics in the history dictionary as pandas dataframe to the file
     system in parquet format
 
     :param history:
     :param history_folder:
+    :param model_name:
     :return:
     """
 
@@ -204,6 +212,8 @@ def save_training_history(history: Dict, history_folder):
     current_time = datetime.datetime.now().strftime("%m-%d-%Y-%H-%M-%S")
     history_parquet_file_path = f'{current_time}.parquet'
     data_frame = pd.DataFrame(dict(sorted(history.history.items())))
+    data_frame.insert(0, 'time_stamp', current_time)
+    data_frame.insert(0, 'model_name', model_name)
     data_frame.columns = data_frame.columns.astype(str)
     data_frame.to_parquet(os.path.join(history_folder, history_parquet_file_path))
 

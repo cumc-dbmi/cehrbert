@@ -782,7 +782,7 @@ def create_hierarchical_sequence_data(
         patient_events,
         date_filter=None,
         mlm_skip_domains=[],
-        max_num_of_visits_per_person=200
+        max_num_of_visits_per_person=2000
 ):
     """
     This creates a hierarchical data frame for the hierarchical bert model

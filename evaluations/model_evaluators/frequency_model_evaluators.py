@@ -5,7 +5,7 @@ import numpy as np
 
 from scipy.sparse import csr_matrix, hstack
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import GridSearchCV, KFold, train_test_split
+from sklearn.model_selection import GridSearchCV, StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import normalize, StandardScaler
 from tensorflow.python.keras.preprocessing.text import Tokenizer
@@ -24,7 +24,11 @@ class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
         pass
 
     def eval_model(self):
-        for train, test in self.k_fold():
+        inputs, age, labels = self.extract_model_inputs()
+        for train, test in self.k_fold(
+                features=(inputs, age),
+                labels=labels
+        ):
             x, y = train
             self._model = self._create_model()
             if isinstance(self._model, GridSearchCV):
@@ -36,9 +40,10 @@ class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
     def get_model_name(self):
         return type(self._model).__name__
 
-    def k_fold(self):
-        inputs, age, labels = self.extract_model_inputs()
-        k_fold = KFold(n_splits=self._num_of_folds, shuffle=True, random_state=1)
+    def k_fold(self, features, labels):
+
+        (inputs, age) = features
+        k_fold = StratifiedKFold(n_splits=self._num_of_folds, shuffle=True, random_state=1)
 
         for train, val_test in k_fold.split(labels):
             # further split val_test using a 2:3 ratio between val and test
