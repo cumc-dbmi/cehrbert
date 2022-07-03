@@ -977,9 +977,11 @@ def create_visit_person_join(person, visit_occurrence):
     is_inpatient_logic = F.col('visit_concept_id').isin([9201, 262]).cast('integer')
     # Construct the logic for readmission, which is defined as inpatient visit occurred within 30
     # days of the discharge
-    readmission_logic = ((F.col('time_interval') <= 30) \
-                         & (F.col('visit_concept_id').isin([9201, 262])) \
-                         & (F.col('prev_visit_concept_id').isin([9201, 262]))).cast('integer')
+    readmission_logic = F.coalesce(
+        ((F.col('time_interval') <= 30) \
+         & (F.col('visit_concept_id').isin([9201, 262])) \
+         & (F.col('prev_visit_concept_id').isin([9201, 262]))).cast('integer'), F.lit(0)
+    )
 
     # Select the subset of columns and create derived colums using the UDF or spark sql functions
     visit_occurrence = visit_occurrence.select('visit_occurrence_id',
