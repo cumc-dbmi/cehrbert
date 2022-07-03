@@ -31,6 +31,12 @@ def create_spark_args():
                         action='store',
                         help='The path for your output_folder',
                         required=True)
+    parser.add_argument('--ehr_table_list',
+                        dest='ehr_table_list',
+                        nargs='+',
+                        action='store',
+                        help='The list of domain tables you want to include for feature extraction',
+                        required=False)
     parser.add_argument('-dl',
                         '--date_lower_bound',
                         dest='date_lower_bound',

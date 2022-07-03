@@ -7,7 +7,12 @@ from spark_apps.spark_parse_args import create_spark_args
 DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure', 'procedure_occurrence', 'measurement']
 
 if __name__ == '__main__':
-    create_prediction_cohort(create_spark_args(),
-                             last.query_builder(),
-                             death.query_builder(),
-                             DOMAIN_TABLE_LIST)
+    spark_args = create_spark_args()
+    ehr_table_list = spark_args.ehr_table_list if spark_args.ehr_table_list else DOMAIN_TABLE_LIST
+
+    create_prediction_cohort(
+        spark_args,
+        last.query_builder(),
+        death.query_builder(),
+        ehr_table_list
+    )

@@ -76,7 +76,7 @@ WHERE v.num_of_hospitalizations = 0
 """
 
 HOSPITALIZATION_TARGET_COHORT = 'hospitalization_target'
-HOSPITALIZATION_OUTCOME_COHORT = 'hopitalization_outcome'
+HOSPITALIZATION_OUTCOME_COHORT = 'hospitalization_outcome'
 DEPENDENCY_LIST = ['person', 'condition_occurrence', 'visit_occurrence']
 DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure', 'procedure_occurrence', 'measurement']
 
@@ -97,10 +97,14 @@ def main(spark_args):
                                    dependency_list=DEPENDENCY_LIST,
                                    query=hospitalization_outcome_query)
 
-    create_prediction_cohort(spark_args,
-                             hf_inpatient,
-                             hospitalization,
-                             DOMAIN_TABLE_LIST)
+    ehr_table_list = spark_args.ehr_table_list if spark_args.ehr_table_list else DOMAIN_TABLE_LIST
+
+    create_prediction_cohort(
+        spark_args,
+        hf_inpatient,
+        hospitalization,
+        ehr_table_list
+    )
 
 
 if __name__ == '__main__':

@@ -7,7 +7,13 @@ DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure',
                      'procedure_occurrence', 'measurement']
 
 if __name__ == '__main__':
-    create_prediction_cohort(create_spark_args(),
-                             t2dm.query_builder(),
-                             hf.query_builder(),
-                             DOMAIN_TABLE_LIST)
+    spark_args = create_spark_args()
+
+    ehr_table_list = spark_args.ehr_table_list if spark_args.ehr_table_list else DOMAIN_TABLE_LIST
+
+    create_prediction_cohort(
+        spark_args,
+        t2dm.query_builder(),
+        hf.query_builder(),
+        ehr_table_list
+    )
