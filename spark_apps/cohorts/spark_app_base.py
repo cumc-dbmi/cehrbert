@@ -402,7 +402,9 @@ class NestedCohortBuilder:
         cohort = cohort.join(ehr_records_for_cohorts, ['person_id', 'cohort_member_id']) \
             .where(F.col('num_of_visits') >= self._num_of_visits) \
             .where(F.col('num_of_concepts') >= self._num_of_concepts)
-        cohort.write.mode('overwrite').parquet(self._output_data_folder)
+
+        cohort.orderBy('person_id', 'cohort_member_id') \
+            .write.mode('overwrite').parquet(self._output_data_folder)
 
     def extract_ehr_records_for_cohort(self, cohort: DataFrame):
         """
@@ -464,10 +466,12 @@ class NestedCohortBuilder:
         return logging.getLogger(cls.__name__)
 
 
-def create_prediction_cohort(spark_args,
-                             target_query_builder: QueryBuilder,
-                             outcome_query_builder: QueryBuilder,
-                             ehr_table_list):
+def create_prediction_cohort(
+        spark_args,
+        target_query_builder: QueryBuilder,
+        outcome_query_builder: QueryBuilder,
+        ehr_table_list
+):
     """
     TODO
     :param spark_args:
@@ -522,7 +526,8 @@ def create_prediction_cohort(spark_args,
         age_lower_bound=age_lower_bound,
         age_upper_bound=age_upper_bound,
         prior_observation_period=prior_observation_period,
-        post_observation_period=post_observation_period).build().load_cohort()
+        post_observation_period=post_observation_period
+    ).build().load_cohort()
 
     # Generate the outcome cohort
     outcome_cohort = BaseCohortBuilder(
@@ -534,31 +539,34 @@ def create_prediction_cohort(spark_args,
         age_lower_bound=age_lower_bound,
         age_upper_bound=age_upper_bound,
         prior_observation_period=0,
-        post_observation_period=0).build().load_cohort()
+        post_observation_period=0
+    ).build().load_cohort()
 
-    NestedCohortBuilder(cohort_name=cohort_name,
-                        input_folder=input_folder,
-                        output_folder=output_folder,
-                        target_cohort=target_cohort,
-                        outcome_cohort=outcome_cohort,
-                        ehr_table_list=ehr_table_list,
-                        observation_window=observation_window,
-                        hold_off_window=hold_off_window,
-                        prediction_start_days=prediction_start_days,
-                        prediction_window=prediction_window,
-                        num_of_visits=num_of_visits,
-                        num_of_concepts=num_of_concepts,
-                        is_window_post_index=is_window_post_index,
-                        include_visit_type=include_visit_type,
-                        exclude_visit_tokens=exclude_visit_tokens,
-                        is_feature_concept_frequency=is_feature_concept_frequency,
-                        is_roll_up_concept=is_roll_up_concept,
-                        include_concept_list=spark_args.include_concept_list,
-                        is_new_patient_representation=is_new_patient_representation,
-                        is_hierarchical_bert=is_hierarchical_bert,
-                        classic_bert_seq=classic_bert_seq,
-                        is_first_time_outcome=is_first_time_outcome,
-                        is_questionable_outcome_existed=is_questionable_outcome_existed,
-                        is_prediction_window_unbounded=is_prediction_window_unbounded,
-                        is_remove_index_prediction_starts=is_remove_index_prediction_starts,
-                        is_observation_window_unbounded=is_observation_window_unbounded).build()
+    NestedCohortBuilder(
+        cohort_name=cohort_name,
+        input_folder=input_folder,
+        output_folder=output_folder,
+        target_cohort=target_cohort,
+        outcome_cohort=outcome_cohort,
+        ehr_table_list=ehr_table_list,
+        observation_window=observation_window,
+        hold_off_window=hold_off_window,
+        prediction_start_days=prediction_start_days,
+        prediction_window=prediction_window,
+        num_of_visits=num_of_visits,
+        num_of_concepts=num_of_concepts,
+        is_window_post_index=is_window_post_index,
+        include_visit_type=include_visit_type,
+        exclude_visit_tokens=exclude_visit_tokens,
+        is_feature_concept_frequency=is_feature_concept_frequency,
+        is_roll_up_concept=is_roll_up_concept,
+        include_concept_list=spark_args.include_concept_list,
+        is_new_patient_representation=is_new_patient_representation,
+        is_hierarchical_bert=is_hierarchical_bert,
+        classic_bert_seq=classic_bert_seq,
+        is_first_time_outcome=is_first_time_outcome,
+        is_questionable_outcome_existed=is_questionable_outcome_existed,
+        is_prediction_window_unbounded=is_prediction_window_unbounded,
+        is_remove_index_prediction_starts=is_remove_index_prediction_starts,
+        is_observation_window_unbounded=is_observation_window_unbounded
+    ).build()
