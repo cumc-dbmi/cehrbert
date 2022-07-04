@@ -585,29 +585,6 @@ def create_concept_frequency_data(patient_event, date_filter=None):
     return patient_event
 
 
-def create_retain_data(patient_event):
-    import pandas as pd
-    from tensorflow.python.keras.preprocessing.text import Tokenizer
-
-    training_data = patient_event.where('visit_occurrence_id IS NOT NULL').distinct() \
-        .groupby('person_id', 'visit_occurrence_id') \
-        .agg(F.collect_list(F.col('standard_concept_id').cast('string')).alias('concept_ids')) \
-        .groupby('person_id').agg(F.collect_list('concept_ids').alias('visit_concept_ids'))
-
-    tokenizer = Tokenizer(filters='', lower=False)
-    training_data_pd = training_data.toPandas()
-    tokenizer.fit_on_texts(training_data_pd['visit_concept_ids'].explode())
-
-    training_data_pd = training_data_pd.set_index('person_id')
-    person_ids = training_data_pd['visit_concept_ids'].explode().index
-    token_ids = tokenizer.texts_to_sequences(training_data_pd['visit_concept_ids'].explode())
-    tokenized_training_data_pd = pd.DataFrame(zip(person_ids, token_ids),
-                                              columns=['person_id', 'token_ids'])
-    retain_training_data = tokenized_training_data_pd.groupby('person_id')['token_ids'].apply(
-        list).reset_index()
-    return retain_training_data
-
-
 def extract_ehr_records(spark, input_folder, domain_table_list, include_visit_type=False,
                         with_rollup=False, include_concept_list=False):
     """
@@ -983,13 +960,16 @@ def create_visit_person_join(person, visit_occurrence):
          & (F.col('prev_visit_concept_id').isin([9201, 262]))).cast('integer'), F.lit(0)
     )
 
-    # Select the subset of columns and create derived colums using the UDF or spark sql functions
-    visit_occurrence = visit_occurrence.select('visit_occurrence_id',
-                                               'person_id',
-                                               'visit_concept_id',
-                                               'visit_start_date',
-                                               'visit_end_date') \
-        .where('visit_start_date IS NOT NULL AND visit_end_date IS NOT NULL') \
+    # Select the subset of columns and create derived columns using the UDF or spark sql
+    # functions. In addition, we allow visits where visit_end_date IS NOT NULL, indicating the
+    # visit is still on-going
+    visit_occurrence = visit_occurrence.select(
+        'visit_occurrence_id',
+        'person_id',
+        'visit_concept_id',
+        'visit_start_date',
+        'visit_end_date'
+    ).where('visit_start_date IS NOT NULL') \
         .withColumn('visit_rank_order', visit_rank_udf) \
         .withColumn('visit_segment', visit_segment_udf) \
         .withColumn('prev_visit_occurrence_id', F.lag('visit_occurrence_id').over(visit_windowing)) \
