@@ -3,8 +3,8 @@ from tensorflow.python.keras.preprocessing.sequence import pad_sequences
 from data_generators.learning_objective import post_pad_pre_truncate
 from evaluations.model_evaluators.model_evaluators import get_metrics
 from evaluations.model_evaluators.sequence_model_evaluators import SequenceModelEvaluator
-from models.evaluation_models import create_cher_bert_bi_lstm_model, \
-    create_cher_bert_bi_lstm_model_with_model, create_prob_phenotype_bi_lstm_model_with_model
+from models.evaluation_models import create_hierarchical_bert_bi_lstm_model, \
+    create_hierarchical_bert_bi_lstm_model_with_model, create_prob_phenotype_bi_lstm_model_with_model
 from models.hierachical_bert_model_v2 import transformer_hierarchical_bert_model
 from utils.model_utils import *
 
@@ -33,10 +33,10 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
         self.get_logger().info('Number of devices: {}'.format(strategy.num_replicas_in_sync))
         with strategy.scope():
             try:
-                model = create_cher_bert_bi_lstm_model(self._bert_model_path)
+                model = create_hierarchical_bert_bi_lstm_model(self._bert_model_path)
             except ValueError as e:
                 self.get_logger().exception(e)
-                model = create_cher_bert_bi_lstm_model(self._bert_model_path)
+                model = create_hierarchical_bert_bi_lstm_model(self._bert_model_path)
 
             model.compile(loss='binary_crossentropy',
                           optimizer=tf.keras.optimizers.Adam(1e-4),
@@ -205,12 +205,12 @@ class RandomHierarchicalBertEvaluator(HierarchicalBertEvaluator):
                     num_of_exchanges=self._num_of_exchanges,
                     time_embeddings_size=self._time_embeddings_size
                 )
-                model = create_cher_bert_bi_lstm_model_with_model(
+                model = create_hierarchical_bert_bi_lstm_model_with_model(
                     cherbert_model
                 )
             except ValueError as e:
                 self.get_logger().exception(e)
-                model = create_cher_bert_bi_lstm_model_with_model(
+                model = create_hierarchical_bert_bi_lstm_model_with_model(
                     cherbert_model
                 )
             model.compile(loss='binary_crossentropy',

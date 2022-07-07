@@ -252,43 +252,26 @@ def create_random_vanilla_bert_bi_lstm_model(max_seq_length,
     return lstm_with_vanilla_bert
 
 
-def create_cher_bert_bi_lstm_model(bert_model_path):
+def create_hierarchical_bert_bi_lstm_model(
+        bert_model_path
+):
     model = tf.keras.models.load_model(bert_model_path, custom_objects=get_custom_objects())
-    return create_cher_bert_bi_lstm_model_with_model(model)
+    return create_hierarchical_bert_bi_lstm_model_with_model(model)
 
 
-def create_cher_bert_bi_lstm_model_with_model(model):
+def create_hierarchical_bert_bi_lstm_model_with_model(
+        hierarchical_bert_model
+):
     age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
 
-    contextualized_visit_embeddings, _ = model.get_layer(
+    contextualized_visit_embeddings, _ = hierarchical_bert_model.get_layer(
         'hidden_visit_embeddings'
     ).output
-    _, num_of_visits, num_of_concepts, embedding_size = model.get_layer(
+    _, num_of_visits, num_of_concepts, embedding_size = hierarchical_bert_model.get_layer(
         'temporal_transformation_layer'
     ).output.shape
 
-    # Pad contextualized_visit_embeddings on axis 1 with one extra visit so we can extract the
-    # visit embeddings using the reshape trick
-    # expanded_contextualized_visit_embeddings = tf.concat(
-    #     [contextualized_visit_embeddings,
-    #      contextualized_visit_embeddings[:, 0:1, :]],
-    #     axis=1
-    # )
-
-    # Extract the visit embeddings elements
-    # visit_embeddings_without_att = tf.reshape(
-    #     expanded_contextualized_visit_embeddings, (-1, num_of_visits, 3 * embedding_size)
-    # )[:, :, embedding_size: embedding_size * 2]
-
-    # num_of_visits_with_att = num_of_visits * 3 - 1
-
-    visit_mask = model.get_layer('visit_mask').output
-
-    # Expand dimension for masking MultiHeadAttention in Visit Encoder
-    #visit_mask_with_att = tf.reshape(
-    #    tf.tile(visit_mask[:, :, tf.newaxis], [1, 1, 3]),
-    #    (-1, num_of_visits * 3)
-    #)[:, 1:]
+    visit_mask = hierarchical_bert_model.get_layer('visit_mask').output
 
     mask_embeddings = tf.cast(
         tf.math.logical_not(
@@ -299,34 +282,6 @@ def create_cher_bert_bi_lstm_model_with_model(model):
         ),
         dtype=tf.float32
     )[:, :, tf.newaxis]
-
-    #
-    # pat_mask = model.get_layer('pat_mask').output
-    #
-    # pat_mask_reshaped = tf.reshape(pat_mask, (-1, max_seq_length))
-    #
-    # pat_mask_reordered = tf.sort(pat_mask_reshaped, axis=1)
-    #
-    # sorted_index = tf.argsort(pat_mask_reshaped, axis=1)
-    #
-    # index_1d = tf.cast(tf.where(sorted_index >= 0)[:, 0], dtype=tf.int32)
-    #
-    # index_2d = tf.stack([index_1d, tf.reshape(sorted_index, [-1])], axis=-1)
-    #
-    # contextualized_embeddings = tf.reshape(
-    #     tf.gather_nd(contextualized_embeddings, index_2d),
-    #     (-1, max_seq_length, embedding_size)
-    # )
-    #
-    # mask_embeddings = tf.cast(
-    #     tf.math.logical_not(
-    #         tf.cast(
-    #             tf.reshape(pat_mask_reordered, (-1, max_seq_length)),
-    #             dtype=tf.bool
-    #         )
-    #     ),
-    #     dtype=tf.float32
-    # )[:, :, tf.newaxis]
 
     contextualized_embeddings = tf.math.multiply(
         contextualized_visit_embeddings,
@@ -358,10 +313,13 @@ def create_cher_bert_bi_lstm_model_with_model(model):
 
     output = output_layer(next_input)
 
-    lstm_with_cher_bert = tf.keras.models.Model(inputs=model.inputs + [age_of_visit_input],
-                                                outputs=output, name='CHER_BERT_PLUS_BI_LSTM')
+    lstm_with_hierarchical_bert = tf.keras.models.Model(
+        inputs=hierarchical_bert_model.inputs + [age_of_visit_input],
+        outputs=output,
+        name='HIERARCHICAL_BERT_PLUS_BI_LSTM'
+    )
 
-    return lstm_with_cher_bert
+    return lstm_with_hierarchical_bert
 
 
 def create_prob_phenotype_bi_lstm_model_with_model(bert_model_path):
