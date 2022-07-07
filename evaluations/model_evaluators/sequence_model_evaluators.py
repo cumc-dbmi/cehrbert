@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 
 from statistics import mode
-from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold, train_test_split
+from sklearn.model_selection import StratifiedShuffleSplit, RepeatedStratifiedKFold, \
+    train_test_split
 from tensorflow.python.keras.utils.generic_utils import get_custom_objects
 
 from data_generators.learning_objective import post_pad_pre_truncate
@@ -17,8 +18,9 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             self,
             epochs,
             batch_size,
-            sequence_model_name=None,
-            cross_validation_test=False,
+            sequence_model_name: bool = None,
+            cross_validation_test: bool = False,
+            num_of_repeats: int = 1,
             *args, **kwargs
     ):
         self.get_logger().info(
@@ -26,11 +28,13 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             f'batch_size: {batch_size}\n'
             f'sequence_model_name: {sequence_model_name}\n'
             f'cross_validation_test: {cross_validation_test}\n'
+            f'num_of_repeats: {num_of_repeats}\n'
         )
         self._epochs = epochs
         self._batch_size = batch_size
         self._sequence_model_name = sequence_model_name
         self._cross_validation_test = cross_validation_test
+        self._num_of_repeats = num_of_repeats
         super(SequenceModelEvaluator, self).__init__(*args, **kwargs)
 
     def train_model(
@@ -177,13 +181,23 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             model_name=f'{self._sequence_model_name}_final'
         )
 
-    def k_fold(self, features, labels):
+    def k_fold(
+            self,
+            features,
+            labels
+    ):
+        """
 
+        :param features:
+        :param labels:
+        :param n_repeats:
+
+        """
         # This preserves the percentage of samples for each class (0 and 1 for binary
         # classification)
-        stratified_k_fold = StratifiedKFold(
+        stratified_k_fold = RepeatedStratifiedKFold(
             n_splits=self._num_of_folds,
-            shuffle=True,
+            n_repeats=self._num_of_repeats,
             random_state=1
         )
 

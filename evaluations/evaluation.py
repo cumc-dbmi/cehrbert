@@ -30,7 +30,8 @@ def evaluate_sequence_models(args):
             tokenizer_path=time_attention_tokenizer_path,
             sequence_model_name=args.sequence_model_name,
             learning_rate=args.learning_rate,
-            cross_validation_test=args.cross_validation_test
+            cross_validation_test=args.cross_validation_test,
+            num_of_repeats=args.num_of_repeats
         ).eval_model()
 
     if VANILLA_BERT_FEED_FORWARD in args.model_evaluators:
@@ -53,7 +54,8 @@ def evaluate_sequence_models(args):
             is_temporal=False,
             sequence_model_name=args.sequence_model_name,
             learning_rate=args.learning_rate,
-            cross_validation_test=args.cross_validation_test
+            cross_validation_test=args.cross_validation_test,
+            num_of_repeats=args.num_of_repeats
         ).eval_model()
 
     if SLIDING_BERT in args.model_evaluators:
@@ -77,7 +79,8 @@ def evaluate_sequence_models(args):
             context_window=args.context_window,
             sequence_model_name=args.sequence_model_name,
             learning_rate=args.learning_rate,
-            cross_validation_test=args.cross_validation_test
+            cross_validation_test=args.cross_validation_test,
+            num_of_repeats=args.num_of_repeats
         ).eval_model()
 
     if VANILLA_BERT_LSTM in args.model_evaluators:
@@ -100,7 +103,8 @@ def evaluate_sequence_models(args):
             is_temporal=False,
             sequence_model_name=args.sequence_model_name,
             learning_rate=args.learning_rate,
-            cross_validation_test=args.cross_validation_test
+            cross_validation_test=args.cross_validation_test,
+            num_of_repeats=args.num_of_repeats
         ).eval_model()
 
     if RANDOM_VANILLA_BERT_LSTM in args.model_evaluators:
@@ -131,7 +135,8 @@ def evaluate_sequence_models(args):
             use_time_embedding=args.use_time_embedding,
             time_embeddings_size=args.time_embeddings_size,
             learning_rate=args.learning_rate,
-            cross_validation_test=args.cross_validation_test
+            cross_validation_test=args.cross_validation_test,
+            num_of_repeats=args.num_of_repeats
         ).eval_model()
 
     if HIERARCHICAL_BERT_LSTM in args.model_evaluators:
@@ -154,7 +159,8 @@ def evaluate_sequence_models(args):
             tokenizer_path=bert_tokenizer_path,
             sequence_model_name=args.sequence_model_name,
             learning_rate=args.learning_rate,
-            cross_validation_test=args.cross_validation_test
+            cross_validation_test=args.cross_validation_test,
+            num_of_repeats=args.num_of_repeats
         ).eval_model()
 
     if RANDOM_HIERARCHICAL_BERT_LSTM in args.model_evaluators:
@@ -183,7 +189,8 @@ def evaluate_sequence_models(args):
             tokenizer_path=bert_tokenizer_path,
             sequence_model_name=args.sequence_model_name,
             learning_rate=args.learning_rate,
-            cross_validation_test=args.cross_validation_test
+            cross_validation_test=args.cross_validation_test,
+            num_of_repeats = args.num_of_repeats
         ).eval_model()
 
 
@@ -191,16 +198,21 @@ def evaluate_baseline_models(args):
     # Load the training data
     dataset = pd.read_parquet(args.data_path)
 
-    LogisticRegressionModelEvaluator(dataset=dataset,
-                                     evaluation_folder=args.evaluation_folder,
-                                     num_of_folds=args.num_of_folds,
-                                     is_transfer_learning=args.is_transfer_learning,
-                                     training_percentage=args.training_percentage).eval_model()
-    XGBClassifierEvaluator(dataset=dataset,
-                           evaluation_folder=args.evaluation_folder,
-                           num_of_folds=args.num_of_folds,
-                           is_transfer_learning=args.is_transfer_learning,
-                           training_percentage=args.training_percentage).eval_model()
+    LogisticRegressionModelEvaluator(
+        dataset=dataset,
+        evaluation_folder=args.evaluation_folder,
+        num_of_folds=args.num_of_folds,
+        is_transfer_learning=args.is_transfer_learning,
+        training_percentage=args.training_percentage
+    ).eval_model()
+
+    XGBClassifierEvaluator(
+        dataset=dataset,
+        evaluation_folder=args.evaluation_folder,
+        num_of_folds=args.num_of_folds,
+        is_transfer_learning=args.is_transfer_learning,
+        training_percentage=args.training_percentage
+    ).eval_model()
 
 
 def main(args):

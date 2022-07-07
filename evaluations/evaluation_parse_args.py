@@ -62,6 +62,12 @@ def create_evaluation_args():
                              dest='cross_validation_test',
                              action='store_true',
                              required=False)
+    main_parser.add_argument('--num_of_repeats',
+                             dest='num_of_repeats',
+                             required=False,
+                             action='store',
+                             type=int,
+                             default=1)
 
     group = main_parser.add_argument_group('sequence model')
     group.add_argument('-me',
