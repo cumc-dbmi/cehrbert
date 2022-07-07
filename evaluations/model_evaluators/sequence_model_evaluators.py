@@ -145,7 +145,7 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         self._epochs = sorted(
             stats.mode(
                 num_of_epochs
-            )
+            ).mode
         )[0]
 
         # Recreate the model
