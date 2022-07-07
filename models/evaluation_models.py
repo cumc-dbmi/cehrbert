@@ -253,14 +253,22 @@ def create_random_vanilla_bert_bi_lstm_model(max_seq_length,
 
 
 def create_hierarchical_bert_bi_lstm_model(
-        bert_model_path
+        bert_model_path,
+        **kwargs
 ):
     model = tf.keras.models.load_model(bert_model_path, custom_objects=get_custom_objects())
-    return create_hierarchical_bert_bi_lstm_model_with_model(model)
+    return create_hierarchical_bert_bi_lstm_model_with_model(
+        model,
+        **kwargs
+    )
 
 
 def create_hierarchical_bert_bi_lstm_model_with_model(
-        hierarchical_bert_model
+        hierarchical_bert_model,
+        dropout_rate=0.2,
+        lstm_activation_unit=128,
+        activation='tanh',
+        is_bi_lstm=True
 ):
     age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
 
@@ -293,13 +301,16 @@ def create_hierarchical_bert_bi_lstm_model_with_model(
         input_shape=(num_of_visits, embedding_size)
     )
 
-    bi_lstm_layer = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128))
+    bi_lstm_layer = tf.keras.layers.LSTM(lstm_activation_unit)
 
-    dropout_lstm_layer = tf.keras.layers.Dropout(0.2)
+    if is_bi_lstm:
+        bi_lstm_layer = tf.keras.layers.Bidirectional(bi_lstm_layer)
 
-    dense_layer = tf.keras.layers.Dense(64, activation='tanh')
+    dropout_lstm_layer = tf.keras.layers.Dropout(dropout_rate)
 
-    dropout_dense_layer = tf.keras.layers.Dropout(0.2)
+    dense_layer = tf.keras.layers.Dense(64, activation=activation)
+
+    dropout_dense_layer = tf.keras.layers.Dropout(dropout_rate)
 
     output_layer = tf.keras.layers.Dense(1, activation='sigmoid', name='label')
 

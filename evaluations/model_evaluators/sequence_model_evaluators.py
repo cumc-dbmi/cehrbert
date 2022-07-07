@@ -96,7 +96,7 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         stratified_splitter = StratifiedShuffleSplit(
             n_splits=1,
             test_size=0.2,
-            random_state=0
+            random_state=1
         )
         training_val_test_set_idx, held_out_set_idx = next(
             stratified_splitter.split(
@@ -184,7 +184,7 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         stratified_k_fold = StratifiedKFold(
             n_splits=self._num_of_folds,
             shuffle=True,
-            random_state=0
+            random_state=1
         )
 
         for train, val_test in stratified_k_fold.split(
@@ -194,8 +194,8 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             # further split val_test using a 1:1 ratio between val and test
             val, test = train_test_split(
                 val_test,
-                test_size=0.5,
-                random_state=0,
+                test_size=0.6,
+                random_state=1,
                 stratify=labels[val_test]
             )
 
