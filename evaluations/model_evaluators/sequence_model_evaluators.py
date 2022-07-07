@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from statistics import mode
+from scipy import stats
 from sklearn.model_selection import StratifiedShuffleSplit, RepeatedStratifiedKFold, \
     train_test_split
 from tensorflow.python.keras.utils.generic_utils import get_custom_objects
@@ -140,10 +140,13 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             )
 
         # Now that we know the most optimal configurations. Let's retrain the model with the full
-        # set using the most frequent number of epochs in k-fold validation
-        self._epochs = mode(
-            num_of_epochs
-        )
+        # set using the most frequent number of epochs in k-fold validation. In case of multiple
+        # modes, we always take the smallest mode
+        self._epochs = sorted(
+            stats.mode(
+                num_of_epochs
+            )
+        )[0]
 
         # Recreate the model
         self._model = self._create_model()
