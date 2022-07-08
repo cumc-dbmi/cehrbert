@@ -28,17 +28,28 @@ class BertLstmModelEvaluator(SequenceModelEvaluator):
 
         super(BertLstmModelEvaluator, self).__init__(*args, **kwargs)
 
-    def _create_model(self):
+    def _create_model(
+            self,
+            **kwargs
+    ):
         strategy = tf.distribute.MirroredStrategy()
         self.get_logger().info('Number of devices: {}'.format(strategy.num_replicas_in_sync))
         with strategy.scope():
             create_model_fn = (create_temporal_bert_bi_lstm_model if self._is_temporal
                                else create_vanilla_bert_bi_lstm_model)
             try:
-                model = create_model_fn(self._max_seq_length, self._bert_model_path)
+                model = create_model_fn(
+                    self._max_seq_length,
+                    self._bert_model_path,
+                    **kwargs
+                )
             except ValueError as e:
                 self.get_logger().exception(e)
-                model = create_model_fn(self._max_seq_length, self._bert_model_path)
+                model = create_model_fn(
+                    self._max_seq_length,
+                    self._bert_model_path,
+                    **kwargs
+                )
 
             model.compile(loss='binary_crossentropy',
                           optimizer=tf.keras.optimizers.Adam(1e-4),

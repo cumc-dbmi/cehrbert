@@ -135,11 +135,17 @@ def create_sliding_bert_model(model_path, max_seq_length, context_window, stride
     return ffd_bert_model
 
 
-def create_vanilla_bert_bi_lstm_model(max_seq_length, vanilla_bert_model_path):
+def create_vanilla_bert_bi_lstm_model(
+        max_seq_length,
+        vanilla_bert_model_path,
+        **kwargs
+):
     age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
 
-    vanilla_bert_model = tf.keras.models.load_model(vanilla_bert_model_path,
-                                                    custom_objects=dict(**get_custom_objects()))
+    vanilla_bert_model = tf.keras.models.load_model(
+        vanilla_bert_model_path,
+        custom_objects=dict(**get_custom_objects())
+    )
     bert_inputs = [i for i in vanilla_bert_model.inputs if
                    'visit' not in i.name or ('visit_segment' in i.name
                                              or 'visit_concept_order' in i.name)]
@@ -169,8 +175,11 @@ def create_vanilla_bert_bi_lstm_model(max_seq_length, vanilla_bert_model_path):
 
     output_layer = tf.keras.layers.Dense(1, activation='sigmoid')
 
+    # attach a property to the concept embeddings to indicate where are the masks, send the flag
+    # to the downstream layer
     next_input = masking_layer(
-        contextualized_embeddings)  # attach a property to the concept embeddings to indicate where are the masks, send the flag to the downstream layer
+        contextualized_embeddings
+    )
 
     next_input = dropout_lstm_layer(bi_lstm_layer(next_input))
 
