@@ -141,7 +141,8 @@ def compute_binary_metrics(
         model,
         test_data: Union[Dataset, Tuple[np.ndarray, np.ndarray]],
         metrics_folder,
-        model_name: str = None
+        model_name: str = None,
+        extra_info: dict = None
 ):
     """
     Compute Recall, Precision, F1-score and PR-AUC for the test data
@@ -150,6 +151,7 @@ def compute_binary_metrics(
     :param test_data:
     :param metrics_folder:
     :param model_name:
+    :param extra_info:
     :return:
     """
 
@@ -184,16 +186,25 @@ def compute_binary_metrics(
     roc_auc = metrics.roc_auc_score(labels, probabilities)
 
     current_time = datetime.datetime.now().strftime("%m-%d-%Y-%H-%M-%S")
-    data_metrics = {'time_stamp': [current_time],
-                    'recall': [recall],
-                    'precision': [precision],
-                    'f1-score': [f1_score],
-                    'pr_auc': [pr_auc],
-                    'roc_auc': [roc_auc]}
+    data_metrics = {
+        'model_name': model_name,
+        'time_stamp': [current_time],
+        'recall': [recall],
+        'precision': [precision],
+        'f1-score': [f1_score],
+        'pr_auc': [pr_auc],
+        'roc_auc': [roc_auc]
+    }
+
+    if extra_info:
+        # Add the additional information to the metrics
+        data_metrics.update(
+            extra_info
+        )
 
     data_metrics_pd = pd.DataFrame(data_metrics)
-    data_metrics_pd.insert(0, 'model_name', model_name)
     data_metrics_pd.to_parquet(os.path.join(metrics_folder, f'{current_time}.parquet'))
+    return data_metrics
 
 
 def save_training_history(history: Dict, history_folder, model_name: str = None):

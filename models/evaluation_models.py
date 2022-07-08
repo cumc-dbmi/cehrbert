@@ -266,9 +266,9 @@ def create_hierarchical_bert_bi_lstm_model(
 def create_hierarchical_bert_bi_lstm_model_with_model(
         hierarchical_bert_model,
         dropout_rate=0.2,
-        lstm_activation_unit=128,
+        lstm_unit=128,
         activation='tanh',
-        is_bi_lstm=True
+        is_bi_directional=True
 ):
     age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
 
@@ -301,9 +301,9 @@ def create_hierarchical_bert_bi_lstm_model_with_model(
         input_shape=(num_of_visits, embedding_size)
     )
 
-    bi_lstm_layer = tf.keras.layers.LSTM(lstm_activation_unit)
+    bi_lstm_layer = tf.keras.layers.LSTM(lstm_unit)
 
-    if is_bi_lstm:
+    if is_bi_directional:
         bi_lstm_layer = tf.keras.layers.Bidirectional(bi_lstm_layer)
 
     dropout_lstm_layer = tf.keras.layers.Dropout(dropout_rate)

@@ -4,18 +4,22 @@ from data_generators.learning_objective import post_pad_pre_truncate
 from evaluations.model_evaluators.model_evaluators import get_metrics
 from evaluations.model_evaluators.sequence_model_evaluators import SequenceModelEvaluator
 from models.evaluation_models import create_hierarchical_bert_bi_lstm_model, \
-    create_hierarchical_bert_bi_lstm_model_with_model, create_prob_phenotype_bi_lstm_model_with_model
+    create_hierarchical_bert_bi_lstm_model_with_model, \
+    create_prob_phenotype_bi_lstm_model_with_model
 from models.hierachical_bert_model_v2 import transformer_hierarchical_bert_model
 from utils.model_utils import *
 
 
 class HierarchicalBertEvaluator(SequenceModelEvaluator):
-    def __init__(self,
-                 bert_model_path: str,
-                 tokenizer_path: str,
-                 max_num_of_visits: int,
-                 max_num_of_concepts: int,
-                 *args, **kwargs):
+    def __init__(
+            self,
+            bert_model_path: str,
+            tokenizer_path: str,
+            max_num_of_visits: int,
+            max_num_of_concepts: int,
+            *args,
+            **kwargs
+    ):
         self._max_num_of_visits = max_num_of_visits
         self._max_num_of_concepts = max_num_of_concepts
         self._bert_model_path = bert_model_path
@@ -28,15 +32,24 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
 
         super(HierarchicalBertEvaluator, self).__init__(*args, **kwargs)
 
-    def _create_model(self):
+    def _create_model(
+            self,
+            **kwargs
+    ):
         strategy = tf.distribute.MirroredStrategy()
         self.get_logger().info('Number of devices: {}'.format(strategy.num_replicas_in_sync))
         with strategy.scope():
             try:
-                model = create_hierarchical_bert_bi_lstm_model(self._bert_model_path)
+                model = create_hierarchical_bert_bi_lstm_model(
+                    self._bert_model_path,
+                    **kwargs
+                )
             except ValueError as e:
                 self.get_logger().exception(e)
-                model = create_hierarchical_bert_bi_lstm_model(self._bert_model_path)
+                model = create_hierarchical_bert_bi_lstm_model(
+                    self._bert_model_path,
+                    **kwargs
+                )
 
             model.compile(loss='binary_crossentropy',
                           optimizer=tf.keras.optimizers.Adam(1e-4),

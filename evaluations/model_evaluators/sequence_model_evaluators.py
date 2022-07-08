@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 
 from scipy import stats
+from itertools import product
 from sklearn.model_selection import StratifiedShuffleSplit, RepeatedStratifiedKFold, \
     train_test_split
 from tensorflow.python.keras.utils.generic_utils import get_custom_objects
@@ -10,6 +11,13 @@ from evaluations.model_evaluators.model_evaluators import AbstractModelEvaluator
 from models.evaluation_models import create_bi_lstm_model
 from utils.model_utils import *
 from models.loss_schedulers import CosineLRSchedule
+
+# Define a list of learning rates to fine-tune the model with
+LEARNING_RATES = [0.5e-4, 0.8e-4, 1.0e-4, 1.2e-4]
+# Define whether the LSTM is uni-directional or bi-directional
+LSTM_BI_DIRECTIONS = [True]
+# Define a list of LSTM units
+LSTM_UNITS = [128]
 
 
 class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
@@ -116,40 +124,82 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         }
         training_val_test_set_labels = labels[training_val_test_set_idx]
 
-        # Conduct k-fold cross validation to get a sense of the model
-        num_of_epochs = []
-        for i, (train, val, test) in enumerate(
-                self.k_fold(
-                    features=training_val_test_set_inputs,
-                    labels=training_val_test_set_labels
-                )
+        all_param_configs = []
+
+        for idx, (lr, is_bi_directional, lstm_unit) in enumerate(
+                product(LEARNING_RATES, LSTM_BI_DIRECTIONS, LSTM_UNITS)
         ):
-            self._model = self._create_model()
-            history = self.train_model(
-                training_data=train,
-                val_data=val,
-                model_name=f'{self._sequence_model_name}_{i}'
+            param_config = {
+                'learning_rate': lr,
+                'is_bi_directional': is_bi_directional,
+                'lstm_unit': lstm_unit
+            }
+            # Update the learning rate
+            self._learning_rate = lr
+            # Conduct k-fold cross validation to get a sense of the model
+            num_of_epochs = []
+            roc_auc_scores = []
+            for i, (train, val, test) in enumerate(
+                    self.k_fold(
+                        features=training_val_test_set_inputs,
+                        labels=training_val_test_set_labels
+                    )
+            ):
+                self._model = self._create_model(
+                    is_bi_directional=is_bi_directional,
+                    lstm_unit=lstm_unit
+                )
+                history = self.train_model(
+                    training_data=train,
+                    val_data=val,
+                    model_name=f'{self._sequence_model_name}_param_{idx}_iter_{i}'
+                )
+                # This captures the number of epochs each fold trained
+                num_of_epochs.append(len(history.history['loss']) - 1)
+                fold_metrics = compute_binary_metrics(
+                    self._model,
+                    test,
+                    self.get_model_metrics_folder(),
+                    model_name=f'{self._sequence_model_name}_param_{idx}_iter_{i}',
+                    extra_info=param_config
+                )
+                roc_auc_scores.append(fold_metrics['roc_auc'])
+
+            # Add the number of epochs and average roc_auc to this combination
+            param_config.update({
+                'epoch': sorted(stats.mode(num_of_epochs).mode)[0],
+                'roc_auc': np.mean(roc_auc_scores)
+            })
+
+            all_param_configs.append(
+                param_config
             )
-            # This captures the number of epochs each fold trained
-            num_of_epochs.append(len(history.history['loss']) - 1)
-            compute_binary_metrics(
-                self._model,
-                test,
-                self.get_model_metrics_folder(),
-                model_name=f'{self._sequence_model_name}_{i}'
+
+        # Save all the parameter combinations to the model folder
+        all_param_configs_pd = pd.DataFrame(all_param_configs)
+        all_param_configs_pd.to_parquet(
+            os.path.join(
+                self.get_model_folder(),
+                f'{self._sequence_model_name}_parameter_combinations.parquet'
             )
+        )
 
         # Now that we know the most optimal configurations. Let's retrain the model with the full
         # set using the most frequent number of epochs in k-fold validation. In case of multiple
         # modes, we always take the smallest mode
-        self._epochs = sorted(
-            stats.mode(
-                num_of_epochs
-            ).mode
-        )[0]
+        optimal_hyperparam_combination = all_param_configs_pd.sort_values(
+            'roc_auc',
+            ascending=False
+        ).iloc[0]
+
+        self._epochs = optimal_hyperparam_combination.epoch
+        self._learning_rate = optimal_hyperparam_combination.learning_rate
 
         # Recreate the model
-        self._model = self._create_model()
+        self._model = self._create_model(
+            is_bi_directional=optimal_hyperparam_combination.is_bi_directional,
+            lstm_unit=optimal_hyperparam_combination.lstm_unit
+        )
 
         # Train using the full training set
         full_training_set = tf.data.Dataset.from_tensor_slices(
