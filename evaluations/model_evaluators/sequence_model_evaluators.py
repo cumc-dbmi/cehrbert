@@ -201,11 +201,12 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             lstm_unit=optimal_hyperparam_combination.lstm_unit
         )
 
-        # Train using the full training set
-        full_training_set = tf.data.Dataset.from_tensor_slices(
-            (training_val_test_set_inputs,
-             training_val_test_set_labels)
-        ).cache().batch(self._batch_size)
+        with tf.device('/CPU:0'):
+            # Train using the full training set
+            full_training_set = tf.data.Dataset.from_tensor_slices(
+                (training_val_test_set_inputs,
+                 training_val_test_set_labels)
+            ).cache().batch(self._batch_size)
 
         # Retrain the model and set the epoch size to the most optimal one derived from the
         # k-fold cross validation
@@ -222,10 +223,11 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         }
         held_out_set_labels = labels[held_out_set_idx]
 
-        hold_out_set = tf.data.Dataset.from_tensor_slices(
-            (held_out_set_inputs,
-             held_out_set_labels)
-        ).cache().batch(self._batch_size)
+        with tf.device('/CPU:0'):
+            hold_out_set = tf.data.Dataset.from_tensor_slices(
+                (held_out_set_inputs,
+                 held_out_set_labels)
+            ).cache().batch(self._batch_size)
 
         compute_binary_metrics(
             self._model,
@@ -278,12 +280,13 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             tf.print(f'{self}: The val size is {len(val)}')
             tf.print(f'{self}: The test size is {len(test)}')
 
-            training_set = tf.data.Dataset.from_tensor_slices(
-                (training_input, labels[train])).cache().batch(self._batch_size)
-            val_set = tf.data.Dataset.from_tensor_slices(
-                (val_input, labels[val])).cache().batch(self._batch_size)
-            test_set = tf.data.Dataset.from_tensor_slices(
-                (test_input, labels[test])).cache().batch(self._batch_size)
+            with tf.device('/CPU:0'):
+                training_set = tf.data.Dataset.from_tensor_slices(
+                    (training_input, labels[train])).cache().batch(self._batch_size)
+                val_set = tf.data.Dataset.from_tensor_slices(
+                    (val_input, labels[val])).cache().batch(self._batch_size)
+                test_set = tf.data.Dataset.from_tensor_slices(
+                    (test_input, labels[test])).cache().batch(self._batch_size)
 
             yield training_set, val_set, test_set
 
