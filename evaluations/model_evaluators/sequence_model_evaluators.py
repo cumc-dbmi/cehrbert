@@ -43,6 +43,16 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         self._sequence_model_name = sequence_model_name
         self._cross_validation_test = cross_validation_test
         self._num_of_repeats = num_of_repeats
+
+        # Set the GPU to memory growth to true to prevent the entire GPU memory from being
+        # allocated
+        try:
+            [tf.config.experimental.set_memory_growth(device, True)
+             for device in tf.config.list_physical_devices('GPU')]
+        except (ValueError, RuntimeError) as error:
+            # Invalid device or cannot modify virtual devices once initialized.
+            tf.print(error)
+
         super(SequenceModelEvaluator, self).__init__(*args, **kwargs)
 
     def train_model(
