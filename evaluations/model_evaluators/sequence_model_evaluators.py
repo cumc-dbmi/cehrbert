@@ -6,6 +6,7 @@ from sklearn.model_selection import StratifiedShuffleSplit, RepeatedStratifiedKF
     train_test_split
 from tensorflow.python.keras.utils.generic_utils import get_custom_objects
 
+from config.grid_search_config import GridSearchConfig
 from data_generators.learning_objective import post_pad_pre_truncate
 from evaluations.model_evaluators.model_evaluators import AbstractModelEvaluator, get_metrics
 from models.evaluation_models import create_bi_lstm_model
@@ -29,6 +30,7 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             sequence_model_name: bool = None,
             cross_validation_test: bool = False,
             num_of_repeats: int = 1,
+            grid_search_config: GridSearchConfig = None,
             *args, **kwargs
     ):
         self.get_logger().info(
@@ -37,12 +39,20 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             f'sequence_model_name: {sequence_model_name}\n'
             f'cross_validation_test: {cross_validation_test}\n'
             f'num_of_repeats: {num_of_repeats}\n'
+            f'grid_search_config: {grid_search_config}\n'
         )
         self._epochs = epochs
         self._batch_size = batch_size
         self._sequence_model_name = sequence_model_name
         self._cross_validation_test = cross_validation_test
         self._num_of_repeats = num_of_repeats
+
+        if grid_search_config:
+            self._grid_search_config = grid_search_config
+        else:
+            self._grid_search_config = GridSearchConfig()
+            self.get_logger().info(f'grid_search_config is None and initializing default '
+                                   f'GridSearchConfig')
 
         # Set the GPU to memory growth to true to prevent the entire GPU memory from being
         # allocated
@@ -207,7 +217,11 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         """
         all_param_configs = []
         for idx, (lr, is_bi_directional, lstm_unit) in enumerate(
-                product(LEARNING_RATES, LSTM_BI_DIRECTIONS, LSTM_UNITS)
+                product(
+                    self._grid_search_config.learning_rates,
+                    self._grid_search_config.lstm_directions,
+                    self._grid_search_config.lstm_units
+                )
         ):
             param_config = {
                 'learning_rate': lr,
@@ -273,7 +287,6 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
 
         :param features:
         :param labels:
-        :param n_repeats:
 
         """
         # This preserves the percentage of samples for each class (0 and 1 for binary

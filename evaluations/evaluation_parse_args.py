@@ -58,16 +58,6 @@ def create_evaluation_args():
                              action='store',
                              type=float,
                              default=1e-4)
-    main_parser.add_argument('--cross_validation_test',
-                             dest='cross_validation_test',
-                             action='store_true',
-                             required=False)
-    main_parser.add_argument('--num_of_repeats',
-                             dest='num_of_repeats',
-                             required=False,
-                             action='store',
-                             type=int,
-                             default=1)
 
     group = main_parser.add_argument_group('sequence model')
     group.add_argument('-me',
@@ -175,5 +165,19 @@ def create_evaluation_args():
                        type=int,
                        default=128,
                        required=False)
-
+    group.add_argument('--cross_validation_test',
+                       dest='cross_validation_test',
+                       action='store_true',
+                       required=False)
+    group.add_argument('--grid_search_config',
+                       dest='grid_search_config',
+                       action='store',
+                       help='The path storing the grid search configuration',
+                       required=False)
+    group.add_argument('--num_of_repeats',
+                       dest='num_of_repeats',
+                       required=False,
+                       action='store',
+                       type=int,
+                       default=1)
     return main_parser

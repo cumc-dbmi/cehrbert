@@ -1,4 +1,6 @@
+import configparser
 import config.parameters as p
+from config.grid_search_config import LEARNING_RATE, LSTM_DIRECTION, LSTM_UNIT
 from evaluations.evaluation_parameters import *
 from evaluations.evaluation_parse_args import create_evaluation_args
 from evaluations.model_evaluators.hierarchical_bert_evaluators import *
@@ -8,9 +10,33 @@ from evaluations.model_evaluators.frequency_model_evaluators import *
 from utils.model_utils import *
 
 
+def get_grid_search_config(grid_search_config) -> GridSearchConfig:
+    """
+    Read the grid search config file and load learning_rates, lstm_directions and lstm_units
+
+    :param grid_search_config:
+    :return:
+    """
+    config = configparser.ConfigParser()
+    config.read(grid_search_config)
+
+    learning_rates = [float(v) for v in dict(config[LEARNING_RATE].items()).values()]
+    lstm_directions = [bool(v) for v in dict(config[LSTM_DIRECTION].items()).values()]
+    lstm_units = [int(v) for v in dict(config[LSTM_UNIT].items()).values()]
+
+    return GridSearchConfig(
+        learning_rates=learning_rates,
+        lstm_directions=lstm_directions,
+        lstm_units=lstm_units
+    )
+
+
 def evaluate_sequence_models(args):
     # Load the training data
     dataset = pd.read_parquet(args.sequence_model_data_path)
+    grid_search_config = get_grid_search_config(
+        args.grid_search_config
+    )
     if LSTM in args.model_evaluators:
         validate_folder(args.time_attention_model_folder)
         time_attention_tokenizer_path = os.path.join(args.time_attention_model_folder,
@@ -31,7 +57,8 @@ def evaluate_sequence_models(args):
             sequence_model_name=args.sequence_model_name,
             learning_rate=args.learning_rate,
             cross_validation_test=args.cross_validation_test,
-            num_of_repeats=args.num_of_repeats
+            num_of_repeats=args.num_of_repeats,
+            grid_search_config=grid_search_config
         ).eval_model()
 
     if VANILLA_BERT_FEED_FORWARD in args.model_evaluators:
@@ -55,7 +82,8 @@ def evaluate_sequence_models(args):
             sequence_model_name=args.sequence_model_name,
             learning_rate=args.learning_rate,
             cross_validation_test=args.cross_validation_test,
-            num_of_repeats=args.num_of_repeats
+            num_of_repeats=args.num_of_repeats,
+            grid_search_config=grid_search_config
         ).eval_model()
 
     if SLIDING_BERT in args.model_evaluators:
@@ -80,7 +108,8 @@ def evaluate_sequence_models(args):
             sequence_model_name=args.sequence_model_name,
             learning_rate=args.learning_rate,
             cross_validation_test=args.cross_validation_test,
-            num_of_repeats=args.num_of_repeats
+            num_of_repeats=args.num_of_repeats,
+            grid_search_config=grid_search_config
         ).eval_model()
 
     if VANILLA_BERT_LSTM in args.model_evaluators:
@@ -104,7 +133,8 @@ def evaluate_sequence_models(args):
             sequence_model_name=args.sequence_model_name,
             learning_rate=args.learning_rate,
             cross_validation_test=args.cross_validation_test,
-            num_of_repeats=args.num_of_repeats
+            num_of_repeats=args.num_of_repeats,
+            grid_search_config=grid_search_config
         ).eval_model()
 
     if RANDOM_VANILLA_BERT_LSTM in args.model_evaluators:
@@ -136,7 +166,8 @@ def evaluate_sequence_models(args):
             time_embeddings_size=args.time_embeddings_size,
             learning_rate=args.learning_rate,
             cross_validation_test=args.cross_validation_test,
-            num_of_repeats=args.num_of_repeats
+            num_of_repeats=args.num_of_repeats,
+            grid_search_config=grid_search_config
         ).eval_model()
 
     if HIERARCHICAL_BERT_LSTM in args.model_evaluators:
@@ -160,7 +191,8 @@ def evaluate_sequence_models(args):
             sequence_model_name=args.sequence_model_name,
             learning_rate=args.learning_rate,
             cross_validation_test=args.cross_validation_test,
-            num_of_repeats=args.num_of_repeats
+            num_of_repeats=args.num_of_repeats,
+            grid_search_config=grid_search_config
         ).eval_model()
 
     if RANDOM_HIERARCHICAL_BERT_LSTM in args.model_evaluators:
@@ -190,7 +222,8 @@ def evaluate_sequence_models(args):
             sequence_model_name=args.sequence_model_name,
             learning_rate=args.learning_rate,
             cross_validation_test=args.cross_validation_test,
-            num_of_repeats = args.num_of_repeats
+            num_of_repeats=args.num_of_repeats,
+            grid_search_config=grid_search_config
         ).eval_model()
 
 
