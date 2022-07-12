@@ -177,13 +177,27 @@ def compute_binary_metrics(
     validate_folder(metrics_folder)
 
     probabilities, labels = run_model()
-    precisions, recalls, _ = metrics.precision_recall_curve(labels, np.asarray(probabilities))
+    precisions, recalls, pr_auc_thresholds = metrics.precision_recall_curve(
+        labels,
+        np.asarray(probabilities)
+    )
     predictions = (np.asarray(probabilities) > 0.5).astype(int)
     recall = metrics.recall_score(labels, predictions, average='binary')
     precision = metrics.precision_score(labels, predictions, average='binary')
     f1_score = metrics.f1_score(labels, predictions, average='binary')
     pr_auc = metrics.auc(recalls, precisions)
     roc_auc = metrics.roc_auc_score(labels, probabilities)
+
+    # Calculate the best threshold for pr auc
+    f_scores = (2 * precisions * recalls) / (precisions + recalls)
+    f_score_ix = np.argmax(f_scores)
+    pr_auc_best_threshold = pr_auc_thresholds[f_score_ix]
+
+    # Calculate the best threshold for roc auc
+    fpr, tpr, roc_thresholds = metrics.roc_curve(labels, probabilities)
+    j_measure = tpr - fpr
+    ix = np.argmax(j_measure)
+    roc_auc_best_threshold = roc_thresholds[ix]
 
     current_time = datetime.datetime.now().strftime("%m-%d-%Y-%H-%M-%S")
     data_metrics = {
@@ -193,7 +207,9 @@ def compute_binary_metrics(
         'precision': [precision],
         'f1-score': [f1_score],
         'pr_auc': [pr_auc],
-        'roc_auc': [roc_auc]
+        'pr_auc_best_threshold': pr_auc_best_threshold,
+        'roc_auc': [roc_auc],
+        'roc_auc_best_threshold': roc_auc_best_threshold
     }
 
     if extra_info:
