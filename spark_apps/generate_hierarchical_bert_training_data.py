@@ -1,4 +1,3 @@
-import argparse
 import datetime
 import os
 
@@ -6,7 +5,8 @@ from pyspark.sql import SparkSession
 
 import config.parameters
 from utils.spark_utils import *
-from const.common import CDM_TABLES, OBSERVATION_PERIOD, VISIT_OCCURRENCE, PERSON
+from const.common import OBSERVATION_PERIOD, VISIT_OCCURRENCE, PERSON
+from utils.spark_utils import get_mlm_skip_domains, validate_table_names
 
 
 def main(
@@ -127,30 +127,6 @@ def main(
             config.parameters.parquet_data_path
         )
     )
-
-
-def get_mlm_skip_domains(spark, input_folder, mlm_skip_table_list):
-    """
-    Translate the domain_table_name to the domain name
-
-    :param spark:
-    :param input_folder:
-    :param mlm_skip_table_list:
-    :return:
-    """
-    domain_tables = [
-        preprocess_domain_table(spark, input_folder, domain_table_name)
-        for domain_table_name in mlm_skip_table_list
-    ]
-
-    return list(map(get_domain_field, domain_tables))
-
-
-def validate_table_names(domain_names):
-    for domain_name in domain_names.split(' '):
-        if domain_name not in CDM_TABLES:
-            raise argparse.ArgumentTypeError(f'{domain_name} is an invalid CDM table name')
-    return domain_names
 
 
 if __name__ == '__main__':

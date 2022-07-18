@@ -54,17 +54,19 @@ class AbstractModel(ABC):
 class AbstractConceptEmbeddingTrainer(AbstractModel):
     min_num_of_concepts = 5
 
-    def __init__(self,
-                 training_data_parquet_path: str,
-                 model_path: str,
-                 batch_size: int,
-                 epochs: int,
-                 learning_rate: float,
-                 tf_board_log_path: str = None,
-                 shuffle_training_data: bool = True,
-                 cache_dataset: bool = False,
-                 use_dask: bool = False,
-                 *args, **kwargs):
+    def __init__(
+            self,
+            training_data_parquet_path: str,
+            model_path: str,
+            batch_size: int,
+            epochs: int,
+            learning_rate: float,
+            tf_board_log_path: str = None,
+            shuffle_training_data: bool = True,
+            cache_dataset: bool = False,
+            use_dask: bool = False,
+            *args, **kwargs
+    ):
 
         self._training_data_parquet_path = training_data_parquet_path
         self._model_path = model_path

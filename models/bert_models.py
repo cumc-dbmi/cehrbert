@@ -1,10 +1,12 @@
-# +
 import tensorflow as tf
 
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 
-from models.layers.custom_layers import (VisitEmbeddingLayer, Encoder, PositionalEncodingLayer,
-                                         TimeEmbeddingLayer)
+from models.layers.custom_layers import (
+    VisitEmbeddingLayer, Encoder,
+    PositionalEncodingLayer, TimeEmbeddingLayer,
+    ConceptValueTransformationLayer
+)
 from utils.model_utils import create_concept_mask
 
 
@@ -33,20 +35,48 @@ def transformer_bert_model(
     or a vanilla Transformer (2017) to do the job (the original paper uses
     vanilla Transformer).
     """
-    masked_concept_ids = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
-                                               name='masked_concept_ids')
+    masked_concept_ids = tf.keras.layers.Input(
+        shape=(max_seq_length,),
+        dtype='int32',
+        name='masked_concept_ids'
+    )
 
-    visit_segments = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
-                                           name='visit_segments')
+    visit_segments = tf.keras.layers.Input(
+        shape=(max_seq_length,),
+        dtype='int32',
+        name='visit_segments'
+    )
 
-    visit_concept_orders = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
-                                                 name='visit_concept_orders')
+    visit_concept_orders = tf.keras.layers.Input(
+        shape=(max_seq_length,),
+        dtype='int32',
+        name='visit_concept_orders'
+    )
 
-    mask = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='mask')
+    mask = tf.keras.layers.Input(
+        shape=(max_seq_length,),
+        dtype='int32',
+        name='mask'
+    )
 
-    default_inputs = [masked_concept_ids, visit_segments, visit_concept_orders, mask]
+    concept_value_masks = tf.keras.layers.Input(
+        shape=(max_seq_length,),
+        dtype='int32',
+        name='concept_value_masks'
+    )
+    concept_values = tf.keras.layers.Input(
+        shape=(max_seq_length,),
+        dtype='float32',
+        name='concept_values'
+    )
 
     concept_mask = create_concept_mask(mask, max_seq_length)
+
+    default_inputs = [
+        masked_concept_ids, visit_segments,
+        visit_concept_orders, mask,
+        concept_value_masks, concept_values
+    ]
 
     l2_regularizer = (tf.keras.regularizers.l2(l2_reg_penalty) if l2_reg_penalty else None)
 
@@ -54,12 +84,18 @@ def transformer_bert_model(
         vocab_size, embedding_size,
         input_length=max_seq_length,
         name='concept_embeddings',
-        embeddings_regularizer=l2_regularizer)
+        embeddings_regularizer=l2_regularizer
+    )
 
     visit_segment_layer = VisitEmbeddingLayer(
         visit_order_size=3,
         embedding_size=embedding_size,
         name='visit_segment'
+    )
+
+    concept_value_transformation_layer = ConceptValueTransformationLayer(
+        embedding_size=embedding_size,
+        name='concept_value_transformation_layer'
     )
 
     encoder = Encoder(
@@ -81,6 +117,14 @@ def transformer_bert_model(
 
     next_step_input, embedding_matrix = embedding_layer(
         masked_concept_ids
+    )
+
+    # Transform the concept embeddings by combining their concept embeddings with the
+    # corresponding val
+    next_step_input = concept_value_transformation_layer(
+        concept_embeddings=next_step_input,
+        concept_values=concept_values,
+        concept_value_masks=concept_value_masks
     )
 
     if use_behrt:

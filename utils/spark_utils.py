@@ -1,3 +1,4 @@
+import argparse
 from os import path
 import numpy as np
 import math
@@ -10,7 +11,7 @@ from pyspark.sql.functions import broadcast
 from pyspark.sql.pandas.functions import pandas_udf
 
 from const.common import PERSON, VISIT_OCCURRENCE, UNKNOWN_CONCEPT, MEASUREMENT, \
-    REQUIRED_MEASUREMENT
+    REQUIRED_MEASUREMENT, CDM_TABLES
 from spark_apps.sql_templates import measurement_unit_stats_query
 from utils.logging_utils import *
 from config.parameters import qualified_concept_list_path
@@ -91,14 +92,14 @@ def join_domain_tables(domain_tables):
         domain_table = domain_table.where(F.col(concept_id_field).cast('string') != '0') \
             .withColumn('date', F.to_date(F.col(date_field)))
 
-        domain_table = domain_table.select(domain_table['person_id'],
-                                           domain_table[concept_id_field].alias(
-                                               'standard_concept_id'),
-                                           domain_table['date'],
-                                           domain_table['visit_occurrence_id'],
-                                           F.lit(table_domain_field).alias('domain'),
-                                           F.lit(-1).alias('concept_value')) \
-            .distinct()
+        domain_table = domain_table.select(
+            domain_table['person_id'],
+            domain_table[concept_id_field].alias('standard_concept_id'),
+            domain_table['date'],
+            domain_table['visit_occurrence_id'],
+            F.lit(table_domain_field).alias('domain'),
+            F.lit(-1).alias('concept_value')
+        ).distinct()
 
         if patient_event is None:
             patient_event = domain_table
@@ -437,9 +438,13 @@ def create_sequence_data(patient_event,
     return patient_grouped_events.select(columns_for_output)
 
 
-def create_sequence_data_with_att(patient_event, date_filter=None,
-                                  include_visit_type=False,
-                                  exclude_visit_tokens=False):
+def create_sequence_data_with_att(
+        patient_event,
+        date_filter=None,
+        include_visit_type=False,
+        exclude_visit_tokens=False,
+        mlm_skip_domains=[MEASUREMENT],
+):
     """
     Create a sequence of the events associated with one patient in a chronological order
 
@@ -447,6 +452,7 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
     :param date_filter:
     :param include_visit_type:
     :param exclude_visit_tokens:
+    :param mlm_skip_domains:
     :return:
     """
     if date_filter:
@@ -463,11 +469,15 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
 
     visit_start_events = patient_event.withColumn('date', visit_start_date_udf) \
         .withColumn('standard_concept_id', F.lit('VS')) \
-        .withColumn('domain', F.lit('visit')).distinct()
+        .withColumn('domain', F.lit('visit')) \
+        .withColumn('concept_value', F.lit(-1)) \
+        .distinct()
 
     visit_end_events = patient_event.withColumn('date', visit_end_date_udf) \
         .withColumn('standard_concept_id', F.lit('VE')) \
-        .withColumn('domain', F.lit('visit')).distinct()
+        .withColumn('domain', F.lit('visit')) \
+        .withColumn('concept_value', F.lit(-1)) \
+        .distinct()
 
     # Calculate the priority, VS has the highest priority, regular concepts have 0 priority
     # and VE has the lowest priority
@@ -501,7 +511,9 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
         .withColumn('visit_start_date', visit_date_udf) \
         .withColumn('time_token', time_token_udf('time_delta')) \
         .withColumn('visit_rank_order', visit_rank_udf) \
-        .withColumn('visit_segment', visit_segment_udf)
+        .withColumn('visit_segment', visit_segment_udf) \
+        .withColumn('concept_value_mask', (F.col('domain') == MEASUREMENT).cast('int')) \
+        .withColumn('mlm_skip_value', (F.col('domain').isin(mlm_skip_domains)).cast('int'))
 
     time_token_insertions = patient_event.where('standard_concept_id = "VS"') \
         .withColumn('standard_concept_id', F.col('time_token')) \
@@ -517,16 +529,18 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
     unioned_distinct_tokens = patient_event.union(time_token_insertions).distinct()
 
     order_udf = F.row_number().over(
-        W.partitionBy('cohort_member_id', 'person_id').orderBy('visit_start_date',
-                                                               'visit_occurrence_id',
-                                                               'priority',
-                                                               'days_since_epoch',
-                                                               'standard_concept_id'))
-
+        W.partitionBy('cohort_member_id', 'person_id').orderBy(
+            'visit_start_date',
+            'visit_occurrence_id',
+            'priority',
+            'days_since_epoch',
+            'standard_concept_id')
+    )
     struct_columns = ['order', 'date_in_week', 'standard_concept_id', 'visit_segment', 'age',
-                      'visit_rank_order']
+                      'visit_rank_order', 'concept_value_mask', 'concept_value', 'mlm_skip_value']
     output_columns = ['cohort_member_id', 'person_id', 'concept_ids', 'visit_segments', 'orders',
-                      'dates', 'ages', 'visit_concept_orders', 'num_of_visits', 'num_of_concepts']
+                      'dates', 'ages', 'visit_concept_orders', 'num_of_visits', 'num_of_concepts',
+                      'concept_value_masks', 'concept_values', 'mlm_skip_values']
 
     if include_visit_type:
         struct_columns.append('visit_concept_id')
@@ -548,7 +562,10 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
         .withColumn('concept_ids', F.col('data_for_sorting.standard_concept_id')) \
         .withColumn('visit_segments', F.col('data_for_sorting.visit_segment')) \
         .withColumn('ages', F.col('data_for_sorting.age')) \
-        .withColumn('visit_concept_orders', F.col('data_for_sorting.visit_rank_order'))
+        .withColumn('visit_concept_orders', F.col('data_for_sorting.visit_rank_order')) \
+        .withColumn('concept_value_masks', F.col('data_for_sorting.concept_value_mask')) \
+        .withColumn('concept_values', F.col('data_for_sorting.concept_value')) \
+        .withColumn('mlm_skip_values', F.col('data_for_sorting.mlm_skip_value'))
 
     # If include_visit_type is enabled, we add additional information to the default output
     if include_visit_type:
@@ -758,7 +775,7 @@ def create_hierarchical_sequence_data(
         visit_occurrence,
         patient_events,
         date_filter=None,
-        mlm_skip_domains=[],
+        mlm_skip_domains=[MEASUREMENT],
         max_num_of_visits_per_person=2000
 ):
     """
@@ -1047,3 +1064,27 @@ def process_measurement(spark, measurement, required_measurement):
     ''')
 
     return scaled_numeric_lab
+
+
+def get_mlm_skip_domains(spark, input_folder, mlm_skip_table_list):
+    """
+    Translate the domain_table_name to the domain name
+
+    :param spark:
+    :param input_folder:
+    :param mlm_skip_table_list:
+    :return:
+    """
+    domain_tables = [
+        preprocess_domain_table(spark, input_folder, domain_table_name)
+        for domain_table_name in mlm_skip_table_list
+    ]
+
+    return list(map(get_domain_field, domain_tables))
+
+
+def validate_table_names(domain_names):
+    for domain_name in domain_names.split(' '):
+        if domain_name not in CDM_TABLES:
+            raise argparse.ArgumentTypeError(f'{domain_name} is an invalid CDM table name')
+    return domain_names

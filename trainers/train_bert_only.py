@@ -19,19 +19,21 @@ from tensorflow.keras import optimizers
 class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
     confidence_penalty = 0.1
 
-    def __init__(self,
-                 tokenizer_path: str,
-                 visit_tokenizer_path: str,
-                 embedding_size: int,
-                 context_window_size: int,
-                 depth: int,
-                 num_heads: int,
-                 include_visit_prediction: bool,
-                 include_prolonged_length_stay: bool,
-                 use_time_embedding: bool,
-                 use_behrt: bool,
-                 time_embeddings_size: int,
-                 *args, **kwargs):
+    def __init__(
+            self,
+            tokenizer_path: str,
+            visit_tokenizer_path: str,
+            embedding_size: int,
+            context_window_size: int,
+            depth: int,
+            num_heads: int,
+            include_visit_prediction: bool,
+            include_prolonged_length_stay: bool,
+            use_time_embedding: bool,
+            use_behrt: bool,
+            time_embeddings_size: int,
+            *args, **kwargs
+    ):
 
         self._tokenizer_path = tokenizer_path
         self._visit_tokenizer_path = visit_tokenizer_path
@@ -157,24 +159,26 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
 
 def main(args):
     config = ModelPathConfig(args.input_folder, args.output_folder)
-    VanillaBertTrainer(training_data_parquet_path=config.parquet_data_path,
-                       model_path=config.model_path,
-                       tokenizer_path=config.tokenizer_path,
-                       visit_tokenizer_path=config.visit_tokenizer_path,
-                       embedding_size=args.embedding_size,
-                       context_window_size=args.max_seq_length,
-                       depth=args.depth,
-                       num_heads=args.num_heads,
-                       batch_size=args.batch_size,
-                       epochs=args.epochs,
-                       learning_rate=args.learning_rate,
-                       include_visit_prediction=args.include_visit_prediction,
-                       include_prolonged_length_stay=args.include_prolonged_length_stay,
-                       use_time_embedding=args.use_time_embedding,
-                       time_embeddings_size=args.time_embeddings_size,
-                       use_behrt=args.use_behrt,
-                       use_dask=args.use_dask,
-                       tf_board_log_path=args.tf_board_log_path).train_model()
+    VanillaBertTrainer(
+        training_data_parquet_path=config.parquet_data_path,
+        model_path=config.model_path,
+        tokenizer_path=config.tokenizer_path,
+        visit_tokenizer_path=config.visit_tokenizer_path,
+        embedding_size=args.embedding_size,
+        context_window_size=args.max_seq_length,
+        depth=args.depth,
+        num_heads=args.num_heads,
+        batch_size=args.batch_size,
+        epochs=args.epochs,
+        learning_rate=args.learning_rate,
+        include_visit_prediction=args.include_visit_prediction,
+        include_prolonged_length_stay=args.include_prolonged_length_stay,
+        use_time_embedding=args.use_time_embedding,
+        time_embeddings_size=args.time_embeddings_size,
+        use_behrt=args.use_behrt,
+        use_dask=args.use_dask,
+        tf_board_log_path=args.tf_board_log_path
+    ).train_model()
 
 
 if __name__ == "__main__":

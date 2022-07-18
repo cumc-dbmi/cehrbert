@@ -1,25 +1,29 @@
-# +
 import tensorflow as tf
 
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 
-from models.layers.custom_layers import (VisitEmbeddingLayer, Encoder, DecoderLayer,
-                                         PositionalEncodingLayer, TimeEmbeddingLayer)
+from models.layers.custom_layers import (
+    VisitEmbeddingLayer, Encoder, DecoderLayer,
+    PositionalEncodingLayer, TimeEmbeddingLayer,
+    ConceptValueTransformationLayer
+)
 from utils.model_utils import create_concept_mask
 
 
-def transformer_bert_model_visit_prediction(max_seq_length: int,
-                                            concept_vocab_size: int,
-                                            visit_vocab_size: int,
-                                            embedding_size: int,
-                                            depth: int,
-                                            num_heads: int,
-                                            transformer_dropout: float = 0.1,
-                                            embedding_dropout: float = 0.6,
-                                            l2_reg_penalty: float = 1e-4,
-                                            use_time_embedding: bool = False,
-                                            use_behrt: bool = False,
-                                            time_embeddings_size: int = 16):
+def transformer_bert_model_visit_prediction(
+        max_seq_length: int,
+        concept_vocab_size: int,
+        visit_vocab_size: int,
+        embedding_size: int,
+        depth: int,
+        num_heads: int,
+        transformer_dropout: float = 0.1,
+        embedding_dropout: float = 0.6,
+        l2_reg_penalty: float = 1e-4,
+        use_time_embedding: bool = False,
+        use_behrt: bool = False,
+        time_embeddings_size: int = 16
+):
     """
     Builds a BERT-based model (Bidirectional Encoder Representations
     from Transformers) following paper "BERT: Pre-training of Deep
@@ -31,27 +35,60 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
     or a vanilla Transformer (2017) to do the job (the original paper uses
     vanilla Transformer).
     """
-    masked_concept_ids = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
-                                               name='masked_concept_ids')
+    masked_concept_ids = tf.keras.layers.Input(
+        shape=(max_seq_length,),
+        dtype='int32',
+        name='masked_concept_ids'
+    )
 
-    visit_segments = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
-                                           name='visit_segments')
+    visit_segments = tf.keras.layers.Input(
+        shape=(max_seq_length,),
+        dtype='int32',
+        name='visit_segments'
+    )
 
-    visit_concept_orders = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
-                                                 name='visit_concept_orders')
+    visit_concept_orders = tf.keras.layers.Input(
+        shape=(max_seq_length,),
+        dtype='int32',
+        name='visit_concept_orders'
+    )
 
-    mask = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='mask')
+    mask = tf.keras.layers.Input(
+        shape=(max_seq_length,),
+        dtype='int32',
+        name='mask'
+    )
+
+    masked_visit_concepts = tf.keras.layers.Input(
+        shape=(max_seq_length,),
+        dtype='int32',
+        name='masked_visit_concepts'
+    )
+
+    mask_visit = tf.keras.layers.Input(
+        shape=(max_seq_length,),
+        dtype='int32',
+        name='mask_visit'
+    )
+    concept_value_masks = tf.keras.layers.Input(
+        shape=(max_seq_length,),
+        dtype='int32',
+        name='concept_value_masks'
+    )
+    concept_values = tf.keras.layers.Input(
+        shape=(max_seq_length,),
+        dtype='float32',
+        name='concept_values'
+    )
 
     concept_mask = create_concept_mask(mask, max_seq_length)
 
-    masked_visit_concepts = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
-                                                  name='masked_visit_concepts')
-
-    mask_visit = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
-                                       name='mask_visit')
-
-    default_inputs = [masked_concept_ids, visit_segments, visit_concept_orders, mask,
-                      masked_visit_concepts, mask_visit]
+    default_inputs = [
+        masked_concept_ids, visit_segments,
+        visit_concept_orders, mask,
+        masked_visit_concepts, mask_visit,
+        concept_value_masks, concept_values
+    ]
 
     mask_visit_expanded = create_concept_mask(mask_visit, max_seq_length)
 
@@ -64,24 +101,40 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
         # Regularization is based on paper "A Comparative Study on
         # Regularization Strategies for Embedding-based Neural Networks"
         # https://arxiv.org/pdf/1508.03721.pdf
-        embeddings_regularizer=l2_regularizer)
+        embeddings_regularizer=l2_regularizer
+    )
 
     visit_embedding_layer = ReusableEmbedding(
         visit_vocab_size, embedding_size,
         input_length=max_seq_length,
         name='visit_embeddings',
-        embeddings_regularizer=l2_regularizer)
+        embeddings_regularizer=l2_regularizer
+    )
 
-    visit_segment_layer = VisitEmbeddingLayer(visit_order_size=3,
-                                              embedding_size=embedding_size,
-                                              name='visit_segment_layer')
-    encoder = Encoder(name='encoder',
-                      num_layers=depth,
-                      d_model=embedding_size,
-                      num_heads=num_heads,
-                      dropout_rate=transformer_dropout)
+    visit_segment_layer = VisitEmbeddingLayer(
+        visit_order_size=3,
+        embedding_size=embedding_size,
+        name='visit_segment_layer'
+    )
 
-    decoder_layer = DecoderLayer(d_model=embedding_size, num_heads=num_heads, dff=512)
+    concept_value_transformation_layer = ConceptValueTransformationLayer(
+        embedding_size=embedding_size,
+        name='concept_value_transformation_layer'
+    )
+
+    encoder = Encoder(
+        name='encoder',
+        num_layers=depth,
+        d_model=embedding_size,
+        num_heads=num_heads,
+        dropout_rate=transformer_dropout
+    )
+
+    decoder_layer = DecoderLayer(
+        d_model=embedding_size,
+        num_heads=num_heads,
+        dff=512
+    )
 
     output_layer_1 = TiedOutputEmbedding(
         projection_regularizer=l2_regularizer,
@@ -99,6 +152,14 @@ def transformer_bert_model_visit_prediction(max_seq_length: int,
 
     # embeddings for encoder input
     input_for_encoder, concept_embedding_matrix = concept_embedding_layer(masked_concept_ids)
+
+    # Transform the concept embeddings by combining their concept embeddings with the
+    # corresponding val
+    input_for_encoder = concept_value_transformation_layer(
+        concept_embeddings=input_for_encoder,
+        concept_values=concept_values,
+        concept_value_masks=concept_value_masks
+    )
 
     # embeddings for decoder input
     input_for_decoder, visit_embedding_matrix = visit_embedding_layer(masked_visit_concepts)
