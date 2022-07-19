@@ -361,6 +361,7 @@ class HierarchicalBertMultiTaskDataGenerator(HierarchicalBertDataGenerator):
             include_visit_prediction: bool,
             include_readmission: bool,
             include_prolonged_length_stay: bool,
+            include_att_prediction: bool,
             visit_tokenizer: ConceptTokenizer = None,
             *args,
             **kwargs
@@ -368,6 +369,7 @@ class HierarchicalBertMultiTaskDataGenerator(HierarchicalBertDataGenerator):
         self._include_visit_prediction = include_visit_prediction
         self._include_readmission = include_readmission
         self._include_prolonged_length_stay = include_prolonged_length_stay
+        self._include_att_prediction = include_att_prediction
         self._visit_tokenizer = visit_tokenizer
         super(
             HierarchicalBertMultiTaskDataGenerator,

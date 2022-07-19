@@ -19,19 +19,21 @@ from models.loss_schedulers import CosineLRSchedule
 class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
     confidence_penalty = 0.1
 
-    def __init__(self,
-                 tokenizer_path: str,
-                 visit_tokenizer_path: str,
-                 embedding_size: int,
-                 context_window_size: int,
-                 depth: int,
-                 num_heads: int,
-                 include_visit_prediction: bool,
-                 include_prolonged_length_stay: bool,
-                 use_time_embedding: bool,
-                 use_behrt: bool,
-                 time_embeddings_size: int,
-                 *args, **kwargs):
+    def __init__(
+            self,
+            tokenizer_path: str,
+            visit_tokenizer_path: str,
+            embedding_size: int,
+            context_window_size: int,
+            depth: int,
+            num_heads: int,
+            include_visit_prediction: bool,
+            include_prolonged_length_stay: bool,
+            use_time_embedding: bool,
+            use_behrt: bool,
+            time_embeddings_size: int,
+            *args, **kwargs
+    ):
 
         self._tokenizer_path = tokenizer_path
         self._visit_tokenizer_path = visit_tokenizer_path
@@ -63,26 +65,32 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
 
     def _load_dependencies(self):
 
-        self._tokenizer = tokenize_one_field(self._training_data,
-                                             'concept_ids',
-                                             'token_ids',
-                                             self._tokenizer_path)
+        self._tokenizer = tokenize_one_field(
+            self._training_data,
+            'concept_ids',
+            'token_ids',
+            self._tokenizer_path
+        )
 
         if self._include_visit_prediction:
-            self._visit_tokenizer = tokenize_one_field(self._training_data,
-                                                       'visit_concept_ids',
-                                                       'visit_token_ids',
-                                                       self._visit_tokenizer_path,
-                                                       oov_token='-1')
+            self._visit_tokenizer = tokenize_one_field(
+                self._training_data,
+                'visit_concept_ids',
+                'visit_token_ids',
+                self._visit_tokenizer_path,
+                oov_token='-1'
+            )
 
     def create_data_generator(self) -> BertDataGenerator:
 
-        parameters = {'training_data': self._training_data,
-                      'batch_size': self._batch_size,
-                      'max_seq_len': self._context_window_size,
-                      'min_num_of_concepts': self.min_num_of_concepts,
-                      'concept_tokenizer': self._tokenizer,
-                      'is_random_cursor': True}
+        parameters = {
+            'training_data': self._training_data,
+            'batch_size': self._batch_size,
+            'max_seq_len': self._context_window_size,
+            'min_num_of_concepts': self.min_num_of_concepts,
+            'concept_tokenizer': self._tokenizer,
+            'is_random_cursor': True
+        }
 
         data_generator_class = BertDataGenerator
 

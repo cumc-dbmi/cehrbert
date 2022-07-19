@@ -35,6 +35,7 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
             include_visit_prediction: bool,
             include_readmission: bool,
             include_prolonged_length_stay: bool,
+            include_att_prediction: bool = False,
             *args, **kwargs
     ):
 
@@ -52,6 +53,7 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
         self._include_visit_prediction = include_visit_prediction
         self._include_readmission = include_readmission
         self._include_prolonged_length_stay = include_prolonged_length_stay
+        self._include_att_prediction = include_att_prediction
 
         super(ProbabilisticPhenotypeTrainer, self).__init__(*args, **kwargs)
 
@@ -70,7 +72,8 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
             f'time_embeddings_size: {time_embeddings_size}\n'
             f'include_visit_prediction: {include_visit_prediction}\n'
             f'include_prolonged_length_stay: {include_prolonged_length_stay}\n'
-            f'include_readmission: {include_readmission}'
+            f'include_readmission: {include_readmission}\n'
+            f'include_att_prediction: {include_att_prediction}'
         )
 
     def _load_dependencies(self):
@@ -111,6 +114,7 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
                 'include_visit_prediction': self._include_visit_prediction,
                 'include_readmission': self._include_readmission,
                 'include_prolonged_length_stay': self._include_prolonged_length_stay,
+                'include_att_prediction': self._include_att_prediction,
                 'visit_tokenizer': getattr(self, '_visit_tokenizer', None)
             })
             data_generator_class = HierarchicalBertMultiTaskDataGenerator

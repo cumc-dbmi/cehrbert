@@ -105,7 +105,8 @@ def tokenize_multiple_fields(training_data: Union[pd_dataframe, dd_dataframe],
                 _tokenize_field_info.column_name].map_partitions(
                 lambda ds: pd.Series(
                     tokenizer.encode(map(lambda t: t[1].tolist(), ds.iteritems()),
-                                     is_generator=True), name='concept_ids'), meta='iterable')
+                                     is_generator=True),
+                    name=_tokenize_field_info.tokenized_column_name), meta='iterable')
         else:
             training_data[_tokenize_field_info.column_name] = training_data[
                 _tokenize_field_info.column_name].apply(

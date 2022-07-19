@@ -15,6 +15,7 @@ def create_probabilistic_phenotype_model(
         include_visit_type_prediction: bool = False,
         include_readmission: bool = False,
         include_prolonged_length_stay: bool = False,
+        include_att_prediction: bool = False,
         visit_vocab_size: int = None,
         num_of_phenotypes: int = 20,
         num_of_phenotype_neighbors: int = 3,
@@ -37,6 +38,7 @@ def create_probabilistic_phenotype_model(
     :param include_visit_type_prediction:
     :param include_readmission:
     :param include_prolonged_length_stay:
+    :param include_att_prediction:
     :param visit_vocab_size:
     :param num_of_phenotypes:
     :param num_of_phenotype_neighbors:
@@ -249,24 +251,6 @@ def create_probabilistic_phenotype_model(
         look_ahead_concept_mask
     )
 
-    # (batch_size, 1, num_of_visits * num_of_concepts, num_of_visits)
-    # look_ahead_concept_mask = tf.maximum(
-    #     tf.cast(
-    #         tf.reshape(
-    #             tf.tile(
-    #                 tf.expand_dims(
-    #                     1 - tf.eye(num_of_visits),
-    #                     axis=1
-    #                 ),
-    #                 [1, num_of_concepts, 1]
-    #             ),
-    #             (num_of_concepts * num_of_visits, num_of_visits)
-    #         ),
-    #         dtype=tf.int32
-    #     ),
-    #     look_ahead_concept_mask
-    # )
-
     # Second bert applied at the patient level to the visit embeddings
     visit_encoder = Encoder(
         name='visit_encoder',
@@ -412,6 +396,19 @@ def create_probabilistic_phenotype_model(
         )
 
         outputs.append(visit_prolonged_stay_output)
+
+    if include_att_prediction:
+        contextualized_att_embeddings = tf.reshape(
+            expanded_contextualized_visit_embeddings, (-1, num_of_visits, 3 * embedding_size)
+        )[:, :, embedding_size * 2:]
+
+        att_prediction_layer = tf.keras.layers.Softmax(
+            name='att_predictions'
+        )
+        att_predictions = att_prediction_layer(
+            concept_output_layer([contextualized_att_embeddings, embedding_matrix])
+        )
+        outputs.append(att_predictions)
 
     hierarchical_bert = tf.keras.Model(
         inputs=default_inputs,
