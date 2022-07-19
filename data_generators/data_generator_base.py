@@ -289,14 +289,16 @@ class BertVisitPredictionDataGenerator(BertDataGenerator):
 
 
 class HierarchicalBertDataGenerator(AbstractDataGeneratorBase):
-    def __init__(self,
-                 concept_tokenizer: ConceptTokenizer,
-                 max_num_of_visits: int,
-                 max_num_of_concepts: int,
-                 sliding_window: int = 5,
-                 min_num_of_concepts: int = 5,
-                 *args,
-                 **kwargs):
+    def __init__(
+            self,
+            concept_tokenizer: ConceptTokenizer,
+            max_num_of_visits: int,
+            max_num_of_concepts: int,
+            sliding_window: int = 5,
+            min_num_of_concepts: int = 5,
+            *args,
+            **kwargs
+    ):
 
         max_seq_len = max_num_of_visits * max_num_of_concepts
         super(HierarchicalBertDataGenerator,

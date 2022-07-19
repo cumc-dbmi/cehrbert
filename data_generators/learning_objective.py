@@ -569,10 +569,12 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
 
         row, start_index, end_index, _ = row_slicer
 
+        # Add fake visits if the num of visits is less than the max_num_of_visits
         concepts = self._pad_visits(
             row.concept_ids[start_index:end_index],
             self._concept_tokenizer.get_unused_token()
         )
+        # We skip all the MLM since these padded visits are fake
         mlm_skip_values = self._pad_visits(
             row.mlm_skip_values[start_index:end_index],
             1
@@ -656,6 +658,8 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
                 if random.random() < 0.15:
                     dice = random.random()
                     if dice < 0.8:
+                        # It's important that we use the original token instead of the token id here
+                        # Because the tokens have not been encoded yet at this point
                         masked_concepts[word_pos] = self._concept_tokenizer.get_mask_token()
                     elif dice < 0.9:
                         masked_concepts[word_pos] = self._concept_tokenizer.get_token_by_index(
@@ -867,6 +871,7 @@ class HierarchicalProlongedLengthStayLearningObjective(
         return (
             visit_prolonged_stays, is_inpatients
         )
+
 
 #
 # class HierarchicalArtificialTokenPredictionLearningObjective(
