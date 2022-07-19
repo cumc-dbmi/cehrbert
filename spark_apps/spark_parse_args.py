@@ -1,20 +1,6 @@
 import argparse
 import datetime
 
-parquet_data_path = 'patient_sequence'
-feather_data_path = 'patient_sequence.pickle'
-tokenizer_path = 'tokenizer.pickle'
-visit_tokenizer_path = 'visit_tokenizer.pickle'
-time_attention_model_path = 'time_aware_model.h5'
-bert_model_path = 'bert_model_{epoch:02d}_{loss:.2f}.h5'
-temporal_bert_model_path = 'temporal_bert_model_{epoch:02d}_{loss:.2f}.h5'
-bert_model_validation_path = 'bert_model.h5'
-temporal_bert_validation_model_path = 'temporal_bert_model.h5'
-
-mortality_data_path = 'mortality'
-heart_failure_data_path = 'heart_failure'
-hospitalization_data_path = 'hospitalization'
-
 
 def valid_date(s):
     try:
@@ -45,6 +31,12 @@ def create_spark_args():
                         action='store',
                         help='The path for your output_folder',
                         required=True)
+    parser.add_argument('--ehr_table_list',
+                        dest='ehr_table_list',
+                        nargs='+',
+                        action='store',
+                        help='The list of domain tables you want to include for feature extraction',
+                        required=False)
     parser.add_argument('-dl',
                         '--date_lower_bound',
                         dest='date_lower_bound',
@@ -153,6 +145,12 @@ def create_spark_args():
                         action='store_true',
                         help='Specify whether to generate the sequence of '
                              'EHR records using the new patient representation')
+    parser.add_argument('-ih',
+                        '--is_hierarchical_bert',
+                        dest='is_hierarchical_bert',
+                        action='store_true',
+                        help='Specify whether to generate the sequence of '
+                             'EHR records using the hierarchical patient representation')
     parser.add_argument('-cbs',
                         '--classic_bert_seq',
                         dest='classic_bert_seq',
@@ -176,4 +174,8 @@ def create_spark_args():
                         dest='is_observation_window_unbounded',
                         action='store_true',
                         help='is the observation window unbounded?')
+    parser.add_argument('--include_concept_list',
+                        dest='include_concept_list',
+                        action='store_true',
+                        help='Apply the filter to remove low-frequency concepts')
     return parser.parse_args()

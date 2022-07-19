@@ -37,6 +37,9 @@ class AbstractModel(ABC):
     def get_model_metrics_folder(self):
         return create_folder_if_not_exist(self.get_model_folder(), 'metrics')
 
+    def get_model_test_metrics_folder(self):
+        return create_folder_if_not_exist(self.get_model_folder(), 'test_metrics')
+
     def get_model_history_folder(self):
         return create_folder_if_not_exist(self.get_model_folder(), 'history')
 
@@ -51,17 +54,19 @@ class AbstractModel(ABC):
 class AbstractConceptEmbeddingTrainer(AbstractModel):
     min_num_of_concepts = 5
 
-    def __init__(self,
-                 training_data_parquet_path: str,
-                 model_path: str,
-                 batch_size: int,
-                 epochs: int,
-                 learning_rate: float,
-                 tf_board_log_path: str = None,
-                 shuffle_training_data: bool = True,
-                 cache_dataset: bool = False,
-                 use_dask: bool = False,
-                 *args, **kwargs):
+    def __init__(
+            self,
+            training_data_parquet_path: str,
+            model_path: str,
+            batch_size: int,
+            epochs: int,
+            learning_rate: float,
+            tf_board_log_path: str = None,
+            shuffle_training_data: bool = True,
+            cache_dataset: bool = False,
+            use_dask: bool = False,
+            *args, **kwargs
+    ):
 
         self._training_data_parquet_path = training_data_parquet_path
         self._model_path = model_path
@@ -122,9 +127,10 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         """
         data_generator = self.create_data_generator()
         steps_per_epoch = data_generator.get_steps_per_epoch()
-        dataset = tf.data.Dataset.from_generator(data_generator.create_batch_generator,
-                                                 output_types=(
-                                                     data_generator.get_tf_dataset_schema()))
+        dataset = tf.data.Dataset.from_generator(
+            data_generator.create_batch_generator,
+            output_types=(data_generator.get_tf_dataset_schema())
+        ).prefetch(tf.data.experimental.AUTOTUNE)
 
         if self._cache_dataset:
             dataset = dataset.take(data_generator.get_steps_per_epoch()).cache().repeat()
@@ -139,10 +145,12 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
 
     def _get_callbacks(self):
         tensor_board_callback = tf.keras.callbacks.TensorBoard(log_dir=self._tf_board_log_path)
-        model_checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath=self._model_path,
-                                                              save_best_only=True,
-                                                              monitor='loss',
-                                                              verbose=1)
+        model_checkpoint = tf.keras.callbacks.ModelCheckpoint(
+            filepath=self._model_path,
+            save_best_only=True,
+            monitor='loss',
+            verbose=1
+        )
         learning_rate_scheduler = tf.keras.callbacks.LearningRateScheduler(
             CosineLRSchedule(lr_high=self._learning_rate, lr_low=1e-8, initial_period=10),
             verbose=1)

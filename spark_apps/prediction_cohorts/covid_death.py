@@ -1,7 +1,7 @@
 from spark_apps.cohorts import covid_inpatient, death
 from spark_apps.cohorts.spark_app_base import create_prediction_cohort
 
-from spark_apps.parameters import create_spark_args
+from spark_apps.spark_parse_args import create_spark_args
 
 DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure', 'procedure_occurrence']
 

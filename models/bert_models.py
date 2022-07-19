@@ -1,11 +1,12 @@
-# +
 import tensorflow as tf
 
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 
-from models.custom_layers import (VisitEmbeddingLayer, TimeSelfAttention, Encoder,
-                                  TemporalEncoder, PositionalEncodingLayer,
-                                  TimeEmbeddingLayer)
+from models.layers.custom_layers import (
+    VisitEmbeddingLayer, Encoder,
+    PositionalEncodingLayer, TimeEmbeddingLayer,
+    ConceptValueTransformationLayer
+)
 from utils.model_utils import create_concept_mask
 
 
@@ -34,20 +35,48 @@ def transformer_bert_model(
     or a vanilla Transformer (2017) to do the job (the original paper uses
     vanilla Transformer).
     """
-    masked_concept_ids = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
-                                               name='masked_concept_ids')
+    masked_concept_ids = tf.keras.layers.Input(
+        shape=(max_seq_length,),
+        dtype='int32',
+        name='masked_concept_ids'
+    )
 
-    visit_segments = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
-                                           name='visit_segments')
+    visit_segments = tf.keras.layers.Input(
+        shape=(max_seq_length,),
+        dtype='int32',
+        name='visit_segments'
+    )
 
-    visit_concept_orders = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
-                                                 name='visit_concept_orders')
+    visit_concept_orders = tf.keras.layers.Input(
+        shape=(max_seq_length,),
+        dtype='int32',
+        name='visit_concept_orders'
+    )
 
-    mask = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='mask')
+    mask = tf.keras.layers.Input(
+        shape=(max_seq_length,),
+        dtype='int32',
+        name='mask'
+    )
 
-    default_inputs = [masked_concept_ids, visit_segments, visit_concept_orders, mask]
+    concept_value_masks = tf.keras.layers.Input(
+        shape=(max_seq_length,),
+        dtype='int32',
+        name='concept_value_masks'
+    )
+    concept_values = tf.keras.layers.Input(
+        shape=(max_seq_length,),
+        dtype='float32',
+        name='concept_values'
+    )
 
     concept_mask = create_concept_mask(mask, max_seq_length)
+
+    default_inputs = [
+        masked_concept_ids, visit_segments,
+        visit_concept_orders, mask,
+        concept_value_masks, concept_values
+    ]
 
     l2_regularizer = (tf.keras.regularizers.l2(l2_reg_penalty) if l2_reg_penalty else None)
 
@@ -55,12 +84,18 @@ def transformer_bert_model(
         vocab_size, embedding_size,
         input_length=max_seq_length,
         name='concept_embeddings',
-        embeddings_regularizer=l2_regularizer)
+        embeddings_regularizer=l2_regularizer
+    )
 
     visit_segment_layer = VisitEmbeddingLayer(
         visit_order_size=3,
         embedding_size=embedding_size,
         name='visit_segment'
+    )
+
+    concept_value_transformation_layer = ConceptValueTransformationLayer(
+        embedding_size=embedding_size,
+        name='concept_value_transformation_layer'
     )
 
     encoder = Encoder(
@@ -84,14 +119,23 @@ def transformer_bert_model(
         masked_concept_ids
     )
 
+    # Transform the concept embeddings by combining their concept embeddings with the
+    # corresponding val
+    next_step_input = concept_value_transformation_layer(
+        concept_embeddings=next_step_input,
+        concept_values=concept_values,
+        concept_value_masks=concept_value_masks
+    )
+
     if use_behrt:
         ages = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
                                      name='ages')
         default_inputs.extend([ages])
         age_embedding_layer = TimeEmbeddingLayer(embedding_size=embedding_size)
         next_step_input = next_step_input + age_embedding_layer(ages)
-        positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
-                                                            embedding_size=embedding_size)
+        positional_encoding_layer = PositionalEncodingLayer(
+            embedding_size=embedding_size
+        )
         next_step_input += positional_encoding_layer(visit_concept_orders)
 
     elif use_time_embedding:
@@ -113,9 +157,9 @@ def transformer_bert_model(
             embedding_size=time_embeddings_size,
             name='age_embedding_layer')
         positional_encoding_layer = PositionalEncodingLayer(
-            max_sequence_length=max_seq_length,
             embedding_size=time_embeddings_size,
-            name='positional_encoding_layer')
+            name='positional_encoding_layer'
+        )
 
         scale_back_concat_layer = tf.keras.layers.Dense(
             embedding_size,
@@ -138,8 +182,9 @@ def transformer_bert_model(
             )
         )
     else:
-        positional_encoding_layer = PositionalEncodingLayer(max_sequence_length=max_seq_length,
-                                                            embedding_size=embedding_size)
+        positional_encoding_layer = PositionalEncodingLayer(
+            embedding_size=embedding_size
+        )
         next_step_input += positional_encoding_layer(visit_concept_orders)
 
     # Building a Vanilla Transformer (described in
@@ -169,98 +214,5 @@ def transformer_bert_model(
     model = tf.keras.Model(
         inputs=default_inputs,
         outputs=outputs)
-
-    return model
-
-
-def transformer_temporal_bert_model(
-        max_seq_length: int,
-        time_window_size: int,
-        vocab_size: int,
-        embedding_size: int,
-        depth: int,
-        num_heads: int,
-        transformer_dropout: float = 0.1,
-        embedding_dropout: float = 0.6,
-        l2_reg_penalty: float = 1e-4,
-        time_attention_trainable=True):
-    """
-    Builds a BERT-based model (Bidirectional Encoder Representations
-    from Transformers) following paper "BERT: Pre-training of Deep
-    Bidirectional Transformers for Language Understanding"
-    (https://arxiv.org/abs/1810.04805)
-
-    Depending on the value passed with `use_universal_transformer` argument,
-    this function applies either an Adaptive Universal Transformer (2018)
-    or a vanilla Transformer (2017) to do the job (the original paper uses
-    vanilla Transformer).
-    """
-    masked_concept_ids = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
-                                               name='masked_concept_ids')
-
-    concept_ids = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='concept_ids')
-
-    time_stamps = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='time_stamps')
-
-    visit_segments = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
-                                           name='visit_segments')
-
-    mask = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='mask')
-
-    concept_mask = create_concept_mask(mask, max_seq_length)
-
-    l2_regularizer = (tf.keras.regularizers.l2(l2_reg_penalty) if l2_reg_penalty else None)
-
-    embedding_layer = ReusableEmbedding(
-        vocab_size, embedding_size,
-        input_length=max_seq_length,
-        name='bpe_embeddings',
-        # Regularization is based on paper "A Comparative Study on
-        # Regularization Strategies for Embedding-based Neural Networks"
-        # https://arxiv.org/pdf/1508.03721.pdf
-        embeddings_regularizer=l2_regularizer)
-
-    visit_embedding_layer = VisitEmbeddingLayer(visit_order_size=3,
-                                                embedding_size=embedding_size)
-
-    time_attention_layer = TimeSelfAttention(vocab_size=vocab_size,
-                                             target_seq_len=max_seq_length,
-                                             context_seq_len=max_seq_length,
-                                             time_window_size=time_window_size,
-                                             return_logits=True,
-                                             self_attention_return_logits=True,
-                                             trainable=time_attention_trainable)
-
-    temporal_encoder = TemporalEncoder(name='temporal_encoder',
-                                       num_layers=depth,
-                                       d_model=embedding_size,
-                                       num_heads=num_heads,
-                                       dropout_rate=transformer_dropout)
-
-    output_layer = TiedOutputEmbedding(
-        projection_regularizer=l2_regularizer,
-        projection_dropout=embedding_dropout,
-        name='concept_prediction_logits')
-
-    softmax_layer = tf.keras.layers.Softmax(name='concept_predictions')
-
-    next_step_input, embedding_matrix = embedding_layer(masked_concept_ids)
-
-    # Building a Vanilla Transformer (described in
-    # "Attention is all you need", 2017)
-    next_step_input = visit_embedding_layer([visit_segments, next_step_input])
-    # shape = (batch_size, seq_len, seq_len)
-    time_attention = time_attention_layer([concept_ids, time_stamps, mask])
-    # pad a dimension to accommodate the head split
-    time_attention = tf.expand_dims(time_attention, axis=1)
-
-    next_step_input, _, _ = temporal_encoder(next_step_input, concept_mask, time_attention)
-
-    concept_predictions = softmax_layer(
-        output_layer([next_step_input, embedding_matrix]))
-
-    model = tf.keras.Model(
-        inputs=[masked_concept_ids, concept_ids, time_stamps, visit_segments, mask],
-        outputs=[concept_predictions])
 
     return model

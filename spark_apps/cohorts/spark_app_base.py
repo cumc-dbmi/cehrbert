@@ -14,8 +14,8 @@ from spark_apps.cohorts.query_builder import QueryBuilder, ENTRY_COHORT, NEGATIV
 COHORT_TABLE_NAME = 'cohort'
 PERSON = 'person'
 OBSERVATION_PERIOD = 'observation_period'
-DEFAULT_DEPENDENCY = ['person', 'observation_period', 'concept', 'concept_ancestor',
-                      'concept_relationship']
+DEFAULT_DEPENDENCY = ['person', 'visit_occurrence', 'observation_period', 'concept',
+                      'concept_ancestor', 'concept_relationship']
 
 
 def cohort_validator(required_columns_attribute):
@@ -242,7 +242,9 @@ class NestedCohortBuilder:
                  exclude_visit_tokens: bool = False,
                  is_feature_concept_frequency: bool = False,
                  is_roll_up_concept: bool = False,
+                 include_concept_list: bool = True,
                  is_new_patient_representation: bool = False,
+                 is_hierarchical_bert: bool = False,
                  classic_bert_seq: bool = False,
                  is_first_time_outcome: bool = False,
                  is_questionable_outcome_existed: bool = False,
@@ -269,10 +271,12 @@ class NestedCohortBuilder:
         self._is_feature_concept_frequency = is_feature_concept_frequency
         self._is_roll_up_concept = is_roll_up_concept
         self._is_new_patient_representation = is_new_patient_representation
+        self._is_hierarchical_bert = is_hierarchical_bert
         self._is_first_time_outcome = is_first_time_outcome
         self._is_remove_index_prediction_starts = is_remove_index_prediction_starts
         self._is_questionable_outcome_existed = is_questionable_outcome_existed
         self._is_prediction_window_unbounded = is_prediction_window_unbounded
+        self._include_concept_list = include_concept_list
         self._output_data_folder = os.path.join(self._output_folder,
                                                 re.sub('[^a-z0-9]+', '_',
                                                        self._cohort_name.lower()))
@@ -293,10 +297,12 @@ class NestedCohortBuilder:
                                f'is_feature_concept_frequency: {is_feature_concept_frequency}\n'
                                f'is_roll_up_concept: {is_roll_up_concept}\n'
                                f'is_new_patient_representation: {is_new_patient_representation}\n'
+                               f'is_hierarchical_bert: {is_hierarchical_bert}\n'
                                f'is_first_time_outcome: {is_first_time_outcome}\n'
                                f'is_questionable_outcome_existed: {is_questionable_outcome_existed}\n'
                                f'is_remove_index_prediction_starts: {is_remove_index_prediction_starts}\n'
                                f'is_prediction_window_unbounded: {is_prediction_window_unbounded}\n'
+                               f'include_concept_list: {include_concept_list}\n'
                                f'is_observation_window_unbounded: {is_observation_window_unbounded}\n')
 
         self.spark = SparkSession.builder.appName(f'Generate {self._cohort_name}').getOrCreate()
@@ -392,14 +398,30 @@ class NestedCohortBuilder:
             .withColumn('cohort_member_id', cohort_member_id_udf)
 
         ehr_records_for_cohorts = self.extract_ehr_records_for_cohort(cohort)
+        # ehr_records_for_cohorts.show()
         cohort = cohort.join(ehr_records_for_cohorts, ['person_id', 'cohort_member_id']) \
             .where(F.col('num_of_visits') >= self._num_of_visits) \
             .where(F.col('num_of_concepts') >= self._num_of_concepts)
-        cohort.write.mode('overwrite').parquet(self._output_data_folder)
+
+        cohort.orderBy('person_id', 'cohort_member_id') \
+            .write.mode('overwrite').parquet(self._output_data_folder)
 
     def extract_ehr_records_for_cohort(self, cohort: DataFrame):
-        ehr_records = extract_ehr_records(self.spark, self._input_folder, self._ehr_table_list,
-                                          self._include_visit_type, self._is_roll_up_concept)
+        """
+        Create the patient sequence based on the observation window for the given cohort
+
+        :param cohort:
+        :return:
+        """
+        # Extract all ehr records for the patients
+        ehr_records = extract_ehr_records(
+            self.spark,
+            self._input_folder,
+            self._ehr_table_list,
+            self._include_visit_type,
+            self._is_roll_up_concept,
+            self._include_concept_list
+        )
 
         if self._is_observation_post_index:
             record_window_filter = ehr_records['date'].between(
@@ -418,6 +440,13 @@ class NestedCohortBuilder:
             .select([ehr_records[field_name] for field_name in ehr_records.schema.fieldNames()]
                     + ['cohort_member_id'])
 
+        if self._is_hierarchical_bert:
+            return create_hierarchical_sequence_data(
+                person=self._dependency_dict[PERSON],
+                visit_occurrence=self._dependency_dict[VISIT_OCCURRENCE],
+                patient_events=cohort_ehr_records
+            )
+
         if self._is_feature_concept_frequency:
             return create_concept_frequency_data(cohort_ehr_records, None)
 
@@ -426,19 +455,23 @@ class NestedCohortBuilder:
                                                  include_visit_type=self._include_visit_type,
                                                  exclude_visit_tokens=self._exclude_visit_tokens)
 
-        return create_sequence_data(cohort_ehr_records, None,
-                                    include_visit_type=self._include_visit_type,
-                                    classic_bert_seq=self._classic_bert_seq)
+        return create_sequence_data(
+            cohort_ehr_records,
+            date_filter=None,
+            include_visit_type=self._include_visit_type,
+            classic_bert_seq=self._classic_bert_seq)
 
     @classmethod
     def get_logger(cls):
         return logging.getLogger(cls.__name__)
 
 
-def create_prediction_cohort(spark_args,
-                             target_query_builder: QueryBuilder,
-                             outcome_query_builder: QueryBuilder,
-                             ehr_table_list):
+def create_prediction_cohort(
+        spark_args,
+        target_query_builder: QueryBuilder,
+        outcome_query_builder: QueryBuilder,
+        ehr_table_list
+):
     """
     TODO
     :param spark_args:
@@ -466,6 +499,7 @@ def create_prediction_cohort(spark_args,
     is_roll_up_concept = spark_args.is_roll_up_concept
     is_window_post_index = spark_args.is_window_post_index
     is_new_patient_representation = spark_args.is_new_patient_representation
+    is_hierarchical_bert = spark_args.is_hierarchical_bert
     classic_bert_seq = spark_args.classic_bert_seq
     is_first_time_outcome = spark_args.is_first_time_outcome
     is_prediction_window_unbounded = spark_args.is_prediction_window_unbounded
@@ -492,7 +526,8 @@ def create_prediction_cohort(spark_args,
         age_lower_bound=age_lower_bound,
         age_upper_bound=age_upper_bound,
         prior_observation_period=prior_observation_period,
-        post_observation_period=post_observation_period).build().load_cohort()
+        post_observation_period=post_observation_period
+    ).build().load_cohort()
 
     # Generate the outcome cohort
     outcome_cohort = BaseCohortBuilder(
@@ -504,29 +539,34 @@ def create_prediction_cohort(spark_args,
         age_lower_bound=age_lower_bound,
         age_upper_bound=age_upper_bound,
         prior_observation_period=0,
-        post_observation_period=0).build().load_cohort()
+        post_observation_period=0
+    ).build().load_cohort()
 
-    NestedCohortBuilder(cohort_name=cohort_name,
-                        input_folder=input_folder,
-                        output_folder=output_folder,
-                        target_cohort=target_cohort,
-                        outcome_cohort=outcome_cohort,
-                        ehr_table_list=ehr_table_list,
-                        observation_window=observation_window,
-                        hold_off_window=hold_off_window,
-                        prediction_start_days=prediction_start_days,
-                        prediction_window=prediction_window,
-                        num_of_visits=num_of_visits,
-                        num_of_concepts=num_of_concepts,
-                        is_window_post_index=is_window_post_index,
-                        include_visit_type=include_visit_type,
-                        exclude_visit_tokens=exclude_visit_tokens,
-                        is_feature_concept_frequency=is_feature_concept_frequency,
-                        is_roll_up_concept=is_roll_up_concept,
-                        is_new_patient_representation=is_new_patient_representation,
-                        classic_bert_seq=classic_bert_seq,
-                        is_first_time_outcome=is_first_time_outcome,
-                        is_questionable_outcome_existed=is_questionable_outcome_existed,
-                        is_prediction_window_unbounded=is_prediction_window_unbounded,
-                        is_remove_index_prediction_starts=is_remove_index_prediction_starts,
-                        is_observation_window_unbounded=is_observation_window_unbounded).build()
+    NestedCohortBuilder(
+        cohort_name=cohort_name,
+        input_folder=input_folder,
+        output_folder=output_folder,
+        target_cohort=target_cohort,
+        outcome_cohort=outcome_cohort,
+        ehr_table_list=ehr_table_list,
+        observation_window=observation_window,
+        hold_off_window=hold_off_window,
+        prediction_start_days=prediction_start_days,
+        prediction_window=prediction_window,
+        num_of_visits=num_of_visits,
+        num_of_concepts=num_of_concepts,
+        is_window_post_index=is_window_post_index,
+        include_visit_type=include_visit_type,
+        exclude_visit_tokens=exclude_visit_tokens,
+        is_feature_concept_frequency=is_feature_concept_frequency,
+        is_roll_up_concept=is_roll_up_concept,
+        include_concept_list=spark_args.include_concept_list,
+        is_new_patient_representation=is_new_patient_representation,
+        is_hierarchical_bert=is_hierarchical_bert,
+        classic_bert_seq=classic_bert_seq,
+        is_first_time_outcome=is_first_time_outcome,
+        is_questionable_outcome_existed=is_questionable_outcome_existed,
+        is_prediction_window_unbounded=is_prediction_window_unbounded,
+        is_remove_index_prediction_starts=is_remove_index_prediction_starts,
+        is_observation_window_unbounded=is_observation_window_unbounded
+    ).build()

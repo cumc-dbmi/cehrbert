@@ -3,8 +3,8 @@ import tensorflow as tf
 from tensorflow.keras.initializers import Constant
 from tensorflow.keras.models import Model
 
-from models.custom_layers import get_custom_objects
-from models.custom_layers import ConvolutionBertLayer
+from models.layers.custom_layers import get_custom_objects
+from models.layers.custom_layers import ConvolutionBertLayer
 from models.bert_models_visit_prediction import transformer_bert_model_visit_prediction
 
 
@@ -95,6 +95,10 @@ def create_sliding_bert_model(model_path, max_seq_length, context_window, stride
     time_stamps = tf.keras.layers.Input(shape=(max_seq_length,),
                                         dtype='int32',
                                         name='time_stamps')
+    visit_concept_orders = tf.keras.layers.Input(
+        shape=(max_seq_length,),
+        dtype='int32',
+        name='visit_concept_orders')
     ages = tf.keras.layers.Input(shape=(max_seq_length,),
                                  dtype='int32',
                                  name='ages')
@@ -107,6 +111,7 @@ def create_sliding_bert_model(model_path, max_seq_length, context_window, stride
 
     conv_bert_output = convolution_bert_layer([concept_ids,
                                                visit_segments,
+                                               visit_concept_orders,
                                                time_stamps,
                                                ages,
                                                mask])
@@ -123,18 +128,24 @@ def create_sliding_bert_model(model_path, max_seq_length, context_window, stride
 
     output = output_layer(dropout_dense_layer(dense_layer(dropout_conv_layer(next_input))))
 
-    model_inputs = [concept_ids, visit_segments, time_stamps, ages, mask]
+    model_inputs = [concept_ids, visit_segments, visit_concept_orders, time_stamps, ages, mask]
     ffd_bert_model = tf.keras.models.Model(inputs=model_inputs + [age_at_index_date],
                                            outputs=output)
 
     return ffd_bert_model
 
 
-def create_vanilla_bert_bi_lstm_model(max_seq_length, vanilla_bert_model_path):
+def create_vanilla_bert_bi_lstm_model(
+        max_seq_length,
+        vanilla_bert_model_path,
+        **kwargs
+):
     age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
 
-    vanilla_bert_model = tf.keras.models.load_model(vanilla_bert_model_path,
-                                                    custom_objects=dict(**get_custom_objects()))
+    vanilla_bert_model = tf.keras.models.load_model(
+        vanilla_bert_model_path,
+        custom_objects=dict(**get_custom_objects())
+    )
     bert_inputs = [i for i in vanilla_bert_model.inputs if
                    'visit' not in i.name or ('visit_segment' in i.name
                                              or 'visit_concept_order' in i.name)]
@@ -164,8 +175,11 @@ def create_vanilla_bert_bi_lstm_model(max_seq_length, vanilla_bert_model_path):
 
     output_layer = tf.keras.layers.Dense(1, activation='sigmoid')
 
+    # attach a property to the concept embeddings to indicate where are the masks, send the flag
+    # to the downstream layer
     next_input = masking_layer(
-        contextualized_embeddings)  # attach a property to the concept embeddings to indicate where are the masks, send the flag to the downstream layer
+        contextualized_embeddings
+    )
 
     next_input = dropout_lstm_layer(bi_lstm_layer(next_input))
 
@@ -247,6 +261,152 @@ def create_random_vanilla_bert_bi_lstm_model(max_seq_length,
     return lstm_with_vanilla_bert
 
 
+def create_hierarchical_bert_bi_lstm_model(
+        bert_model_path,
+        **kwargs
+):
+    model = tf.keras.models.load_model(bert_model_path, custom_objects=get_custom_objects())
+    return create_hierarchical_bert_bi_lstm_model_with_model(
+        model,
+        **kwargs
+    )
+
+
+def create_hierarchical_bert_bi_lstm_model_with_model(
+        hierarchical_bert_model,
+        dropout_rate=0.2,
+        lstm_unit=128,
+        activation='tanh',
+        is_bi_directional=True
+):
+    age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
+
+    contextualized_visit_embeddings, _ = hierarchical_bert_model.get_layer(
+        'hidden_visit_embeddings'
+    ).output
+    _, num_of_visits, num_of_concepts, embedding_size = hierarchical_bert_model.get_layer(
+        'temporal_transformation_layer'
+    ).output.shape
+
+    visit_mask = hierarchical_bert_model.get_layer('visit_mask').output
+
+    mask_embeddings = tf.cast(
+        tf.math.logical_not(
+            tf.cast(
+                visit_mask,
+                dtype=tf.bool
+            )
+        ),
+        dtype=tf.float32
+    )[:, :, tf.newaxis]
+
+    contextualized_embeddings = tf.math.multiply(
+        contextualized_visit_embeddings,
+        mask_embeddings
+    )
+
+    masking_layer = tf.keras.layers.Masking(
+        mask_value=0.,
+        input_shape=(num_of_visits, embedding_size)
+    )
+
+    bi_lstm_layer = tf.keras.layers.LSTM(lstm_unit)
+
+    if is_bi_directional:
+        bi_lstm_layer = tf.keras.layers.Bidirectional(bi_lstm_layer)
+
+    dropout_lstm_layer = tf.keras.layers.Dropout(dropout_rate)
+
+    dense_layer = tf.keras.layers.Dense(64, activation=activation)
+
+    dropout_dense_layer = tf.keras.layers.Dropout(dropout_rate)
+
+    output_layer = tf.keras.layers.Dense(1, activation='sigmoid', name='label')
+
+    next_input = masking_layer(contextualized_embeddings)
+
+    next_input = dropout_lstm_layer(bi_lstm_layer(next_input))
+
+    next_input = tf.keras.layers.concatenate([next_input, tf.reshape(age_of_visit_input, (-1, 1))])
+
+    next_input = dropout_dense_layer(dense_layer(next_input))
+
+    output = output_layer(next_input)
+
+    lstm_with_hierarchical_bert = tf.keras.models.Model(
+        inputs=hierarchical_bert_model.inputs + [age_of_visit_input],
+        outputs=output,
+        name='HIERARCHICAL_BERT_PLUS_BI_LSTM'
+    )
+
+    return lstm_with_hierarchical_bert
+
+
+def create_prob_phenotype_bi_lstm_model_with_model(bert_model_path):
+    """
+
+    :param bert_model_path:
+    :return:
+    """
+    model = tf.keras.models.load_model(bert_model_path, custom_objects=get_custom_objects())
+
+    age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
+
+    _, _, contextual_visit_embeddings, _ = model.get_layer(
+        'visit_phenotype_layer'
+    ).output
+    embedding_size = contextual_visit_embeddings.shape[-1]
+
+    visit_mask = [i for i in model.inputs if i.name == 'visit_mask'][0]
+    num_of_visits = visit_mask.shape[1]
+    # Expand dimension for masking MultiHeadAttention in Visit Encoder
+    visit_mask_with_att = (tf.reshape(
+        tf.stack([visit_mask, visit_mask], axis=2),
+        shape=(-1, num_of_visits * 2)
+    )[:, 1:])
+
+    mask_embeddings = tf.cast(
+        tf.math.logical_not(
+            tf.cast(
+                visit_mask_with_att,
+                dtype=tf.bool
+            )
+        ),
+        dtype=tf.float32
+    )[:, :, tf.newaxis]
+
+    contextual_visit_embeddings = tf.math.multiply(contextual_visit_embeddings, mask_embeddings)
+
+    masking_layer = tf.keras.layers.Masking(
+        mask_value=0.,
+        input_shape=(num_of_visits, embedding_size))
+
+    bi_lstm_layer = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128))
+
+    dropout_lstm_layer = tf.keras.layers.Dropout(0.2)
+
+    dense_layer = tf.keras.layers.Dense(64, activation='tanh')
+
+    dropout_dense_layer = tf.keras.layers.Dropout(0.2)
+
+    output_layer = tf.keras.layers.Dense(1, activation='sigmoid', name='label')
+
+    next_input = masking_layer(contextual_visit_embeddings)
+
+    next_input = dropout_lstm_layer(bi_lstm_layer(next_input))
+
+    next_input = tf.keras.layers.concatenate([next_input, tf.reshape(age_of_visit_input, (-1, 1))])
+
+    next_input = dropout_dense_layer(dense_layer(next_input))
+
+    output = output_layer(next_input)
+
+    lstm_with_cher_bert = tf.keras.models.Model(inputs=model.inputs + [age_of_visit_input],
+                                                outputs=output, name='PROB_PHENOTYPE_PLUS_BI_LSTM')
+
+    return lstm_with_cher_bert
+
+
 def create_temporal_bert_bi_lstm_model(max_seq_length, temporal_bert_model_path):
     temporal_bert_model = tf.keras.models.load_model(temporal_bert_model_path,
                                                      custom_objects=dict(**get_custom_objects()))
@@ -288,3 +448,110 @@ def create_temporal_bert_bi_lstm_model(max_seq_length, temporal_bert_model_path)
 
     return Model(inputs=bert_inputs + [age_of_visit_input], outputs=output,
                  name='TEMPORAL_BERT_PLUS_BI_LSTM')
+
+
+def create_probabilistic_bert_bi_lstm_model(max_seq_length, vanilla_bert_model_path):
+    age_of_visit_input = tf.keras.layers.Input(
+        name='age',
+        shape=(1,)
+    )
+
+    bert_model = tf.keras.models.load_model(
+        vanilla_bert_model_path,
+        custom_objects=dict(**get_custom_objects())
+    )
+    bert_inputs = bert_model.inputs
+
+    # Get phenotype embeddings and probability distribution
+    _, phenotype_probability_dist = bert_model.get_layer('hidden_phenotype_layer').output
+
+    num_hidden_state = bert_model.get_layer('hidden_phenotype_layer').hidden_unit
+
+    # (batch, max_sequence, embedding_size)
+    concept_embeddings, _ = bert_model.get_layer('concept_embeddings').output
+    _, _, embedding_size = concept_embeddings.get_shape().as_list()
+
+    # (batch * num_hidden_state, max_sequence, embedding_size)
+    contextualized_embeddings = bert_model.get_layer('tf.reshape').output
+
+    # mask_input = bert_inputs[-1]
+    mask_input = [i for i in bert_inputs if
+                  'mask' in i.name and 'concept' not in i.name][0]
+
+    # (batch * num_hidden_state, max_sequence, 1)
+    mask_embeddings = tf.reshape(
+        tf.tile(
+            (mask_input == 0)[:, tf.newaxis, :],
+            [1, num_hidden_state, 1]
+        ),
+        (-1, max_seq_length)
+    )[:, :, tf.newaxis]
+
+    # (batch * num_hidden_state, max_sequence, embedding_size)
+    contextualized_embeddings = tf.math.multiply(
+        contextualized_embeddings,
+        tf.cast(mask_embeddings, dtype=tf.float32)
+    )
+    # Masking layer for LSTM
+    masking_layer = tf.keras.layers.Masking(
+        mask_value=0.,
+        input_shape=(max_seq_length, embedding_size)
+    )
+
+    bi_lstm_layer = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128))
+
+    dropout_lstm_layer = tf.keras.layers.Dropout(0.2)
+
+    dense_layer = tf.keras.layers.Dense(64, activation='relu')
+
+    dropout_dense_layer = tf.keras.layers.Dropout(0.2)
+
+    # (batch * num_hidden_state, 1)
+    output_layer = tf.keras.layers.Dense(1, activation='sigmoid')
+
+    # attach a property to the concept embeddings to indicate where are the masks, send the flag
+    # to the downstream layer: (batch * num_hidden_state, max_sequence, embedding_size)
+    next_input = masking_layer(
+        contextualized_embeddings)
+
+    # (batch * num_hidden_state, 256)
+    next_input = dropout_lstm_layer(bi_lstm_layer(next_input))
+
+    # (batch * num_hidden_state, 1)
+    duplicate_age_of_visit_input = tf.reshape(
+        tf.tile(
+            age_of_visit_input[:, tf.newaxis, :],
+            [1, num_hidden_state, 1]
+        ),
+        (-1, 1)
+    )
+    # (batch * num_hidden_state, 256 + 1)
+    next_input = tf.keras.layers.concatenate(
+        [next_input, duplicate_age_of_visit_input]
+    )
+
+    # (batch * num_hidden_state, 64)
+    next_input = dropout_dense_layer(dense_layer(next_input))
+
+    # (batch * num_hidden_state, 1)
+    output = output_layer(next_input)
+
+    # (batch, num_hidden_state, 1)
+    reshaped_output = tf.reshape(
+        output,
+        (-1, num_hidden_state, 1)
+    )
+    # (batch, 1)
+    weighted_output = tf.squeeze(
+        tf.reduce_sum(
+            phenotype_probability_dist[:, :, tf.newaxis] * reshaped_output,
+            axis=1
+        )
+    )
+
+    lstm_with_prob_bert = Model(
+        inputs=bert_inputs + [age_of_visit_input],
+        outputs=weighted_output, name='Probabilistic_BERT_PLUS_BI_LSTM'
+    )
+
+    return lstm_with_prob_bert

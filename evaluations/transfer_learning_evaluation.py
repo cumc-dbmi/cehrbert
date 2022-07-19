@@ -1,4 +1,5 @@
-from evaluations.evaluation import create_evaluation_args, main
+from evaluations.evaluation import main
+from evaluations.evaluation_parse_args import create_evaluation_args
 
 TRAINING_PERCENTAGE = 'training_percentage'
 IS_TRANSFER_LEARNING = 'is_transfer_learning'

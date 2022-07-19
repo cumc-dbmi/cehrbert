@@ -2,19 +2,23 @@ import argparse
 
 
 def create_parse_args():
-    parser = argparse.ArgumentParser(description='Arguments for concept embedding model')
-    parser.add_argument('-i',
-                        '--input_folder',
-                        dest='input_folder',
-                        action='store',
-                        help='The path for your input_folder where the raw data is',
-                        required=True)
-    parser.add_argument('-o',
-                        '--output_folder',
-                        dest='output_folder',
-                        action='store',
-                        help='The output folder that stores the domain tables download destination',
-                        required=True)
+    parser = argparse.ArgumentParser(
+        description='Arguments for concept embedding model')
+    parser.add_argument(
+        '-i',
+        '--input_folder',
+        dest='input_folder',
+        action='store',
+        help='The path for your input_folder where the raw data is',
+        required=True)
+    parser.add_argument(
+        '-o',
+        '--output_folder',
+        dest='output_folder',
+        action='store',
+        help=
+        'The output folder that stores the domain tables download destination',
+        required=True)
     parser.add_argument('-m',
                         '--max_seq_length',
                         dest='max_seq_length',
@@ -30,8 +34,8 @@ def create_parse_args():
                         default=100,
                         required=False)
     parser.add_argument('-c',
-                        '--concept_embedding_size',
-                        dest='concept_embedding_size',
+                        '--embedding_size',
+                        dest='embedding_size',
                         action='store',
                         type=int,
                         default=128,
@@ -93,12 +97,8 @@ def create_parse_args_base_bert():
                         '--use_time_embedding',
                         dest='use_time_embedding',
                         action='store_true')
-    parser.add_argument('--use_behrt',
-                        dest='use_behrt',
-                        action='store_true')
-    parser.add_argument('--use_dask',
-                        dest='use_dask',
-                        action='store_true')
+    parser.add_argument('--use_behrt', dest='use_behrt', action='store_true')
+    parser.add_argument('--use_dask', dest='use_dask', action='store_true')
     parser.add_argument('--time_embeddings_size',
                         dest='time_embeddings_size',
                         action='store',
@@ -110,10 +110,60 @@ def create_parse_args_base_bert():
 
 def create_parse_args_temporal_bert():
     parser = create_parse_args_base_bert()
-    parser.add_argument('-ti',
-                        '--time_attention_folder',
-                        dest='time_attention_folder',
+    parser.add_argument(
+        '-ti',
+        '--time_attention_folder',
+        dest='time_attention_folder',
+        action='store',
+        help=
+        'The path for your time attention input_folder where the raw data is',
+        required=True)
+    return parser
+
+
+def create_parse_args_hierarchical_bert():
+    parser = create_parse_args_base_bert()
+    parser.add_argument('--max_num_visits',
+                        dest='max_num_visits',
                         action='store',
-                        help='The path for your time attention input_folder where the raw data is',
+                        type=int,
+                        help='Max no.of visits per patient',
                         required=True)
+    parser.add_argument('--max_num_concepts',
+                        dest='max_num_concepts',
+                        action='store',
+                        type=int,
+                        help='Max no.of concepts per visit per patient',
+                        required=True)
+    parser.add_argument('--include_readmission',
+                        dest='include_readmission',
+                        action='store_true')
+    return parser
+
+
+def create_parse_args_hierarchical_bert_phenotype():
+    parser = create_parse_args_hierarchical_bert()
+    parser.add_argument('--num_of_phenotypes',
+                        dest='num_of_phenotypes',
+                        action='store',
+                        type=int,
+                        help='Num of phenotypes',
+                        default=20,
+                        required=False)
+    parser.add_argument('--num_of_phenotype_neighbors',
+                        dest='num_of_phenotype_neighbors',
+                        action='store',
+                        type=int,
+                        help='Num of phenotype neighbors to consider when driving the phenotypes '
+                             'apart from each other',
+                        default=3,
+                        required=False)
+    parser.add_argument('--num_of_concept_neighbors',
+                        dest='num_of_concept_neighbors',
+                        action='store',
+                        type=int,
+                        help='Num of concept neighbors to consider when minimizing the '
+                             'phenotype-concept distances',
+                        default=10,
+                        required=False)
     return parser
