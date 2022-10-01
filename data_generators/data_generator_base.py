@@ -56,15 +56,17 @@ class AbstractDataGeneratorBase(ABC):
     default_min_num_of_concepts = 2
     default_required_column = 'concept_ids'
 
-    def __init__(self,
-                 training_data: DataFrame,
-                 batch_size: int,
-                 max_seq_len: int,
-                 min_num_of_concepts: int,
-                 is_random_cursor: bool = False,
-                 is_training: bool = True,
-                 *args,
-                 **kwargs):
+    def __init__(
+            self,
+            training_data: DataFrame,
+            batch_size: int,
+            max_seq_len: int,
+            min_num_of_concepts: int,
+            is_random_cursor: bool = False,
+            is_training: bool = True,
+            *args,
+            **kwargs
+    ):
 
         self._training_data = training_data
         self._batch_size = batch_size
@@ -73,14 +75,19 @@ class AbstractDataGeneratorBase(ABC):
         self._is_random_cursor = is_random_cursor
         self._is_training = is_training
 
-        self.get_logger().info(f'batch_size: {batch_size}\n'
-                               f'max_seq_len: {max_seq_len}\n'
-                               f'min_num_of_concepts: {min_num_of_concepts}\n'
-                               f'is_random_cursor: {is_random_cursor}\n'
-                               f'is_training: {is_training}\n')
+        self.get_logger().info(
+            f'batch_size: {batch_size}\n'
+            f'max_seq_len: {max_seq_len}\n'
+            f'min_num_of_concepts: {min_num_of_concepts}\n'
+            f'is_random_cursor: {is_random_cursor}\n'
+            f'is_training: {is_training}\n'
+        )
 
         self._learning_objectives = self._initialize_learning_objectives(
-            max_seq_len=max_seq_len, is_training=is_training, **kwargs)
+            max_seq_len=max_seq_len,
+            is_training=is_training,
+            **kwargs
+        )
         # validate the required columns in the training data
         self._validate_data_frame_columns()
         self._clean_dataframe()
@@ -294,6 +301,7 @@ class HierarchicalBertDataGenerator(AbstractDataGeneratorBase):
             concept_tokenizer: ConceptTokenizer,
             max_num_of_visits: int,
             max_num_of_concepts: int,
+            include_att_prediction: bool,
             sliding_window: int = 5,
             min_num_of_concepts: int = 5,
             *args,
@@ -301,21 +309,26 @@ class HierarchicalBertDataGenerator(AbstractDataGeneratorBase):
     ):
 
         max_seq_len = max_num_of_visits * max_num_of_concepts
-        super(HierarchicalBertDataGenerator,
-              self).__init__(concept_tokenizer=concept_tokenizer,
-                             max_num_of_visits=max_num_of_visits,
-                             max_num_of_concepts=max_num_of_concepts,
-                             max_seq_len=max_seq_len,
-                             min_num_of_concepts=min_num_of_concepts,
-                             *args,
-                             **kwargs)
+        super(HierarchicalBertDataGenerator, self).__init__(
+            concept_tokenizer=concept_tokenizer,
+            max_num_of_visits=max_num_of_visits,
+            max_num_of_concepts=max_num_of_concepts,
+            max_seq_len=max_seq_len,
+            min_num_of_concepts=min_num_of_concepts,
+            include_att_prediction=include_att_prediction,
+            *args,
+            **kwargs
+        )
         self._concept_tokenizer = concept_tokenizer
         self._max_num_of_visits = max_num_of_visits
         self._max_num_of_concepts = max_num_of_concepts
         self._sliding_window = sliding_window
 
     def _get_learning_objective_classes(self):
-        return [HierarchicalMaskedLanguageModelLearningObjective]
+        return [
+            HierarchicalMaskedLanguageModelLearningObjective,
+            HierarchicalArtificialTokenPredictionLearningObjective
+        ]
 
     def _calculate_step(self, num_of_visits):
         """
@@ -363,7 +376,6 @@ class HierarchicalBertMultiTaskDataGenerator(HierarchicalBertDataGenerator):
             include_visit_prediction: bool,
             include_readmission: bool,
             include_prolonged_length_stay: bool,
-            include_att_prediction: bool,
             visit_tokenizer: ConceptTokenizer = None,
             *args,
             **kwargs
@@ -371,7 +383,6 @@ class HierarchicalBertMultiTaskDataGenerator(HierarchicalBertDataGenerator):
         self._include_visit_prediction = include_visit_prediction
         self._include_readmission = include_readmission
         self._include_prolonged_length_stay = include_prolonged_length_stay
-        self._include_att_prediction = include_att_prediction
         self._visit_tokenizer = visit_tokenizer
         super(
             HierarchicalBertMultiTaskDataGenerator,
@@ -384,7 +395,10 @@ class HierarchicalBertMultiTaskDataGenerator(HierarchicalBertDataGenerator):
 
     def _get_learning_objective_classes(self):
 
-        learning_objectives = [HierarchicalMaskedLanguageModelLearningObjective]
+        learning_objectives = [
+            HierarchicalMaskedLanguageModelLearningObjective,
+            HierarchicalArtificialTokenPredictionLearningObjective
+        ]
 
         if self._include_visit_prediction:
             learning_objectives.append(HierarchicalVisitTypePredictionLearningObjective)

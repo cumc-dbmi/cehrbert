@@ -1,4 +1,4 @@
-from tensorflow.python.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.utils import pad_sequences
 
 from data_generators.learning_objective import post_pad_pre_truncate
 from evaluations.model_evaluators.model_evaluators import get_metrics
@@ -15,8 +15,10 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
             self,
             bert_model_path: str,
             tokenizer_path: str,
+            visit_tokenizer_path: str,
             max_num_of_visits: int,
             max_num_of_concepts: int,
+            include_att_tokens: bool,
             *args,
             **kwargs
     ):
@@ -24,11 +26,16 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
         self._max_num_of_concepts = max_num_of_concepts
         self._bert_model_path = bert_model_path
         self._tokenizer = pickle.load(open(tokenizer_path, 'rb'))
+        self._visit_tokenizer = pickle.load(open(visit_tokenizer_path, 'rb'))
+
+        self._include_att_tokens = include_att_tokens
 
         self.get_logger().info(f'max_num_of_visits: {max_num_of_visits}\n'
                                f'max_num_of_concepts: {max_num_of_concepts}\n'
                                f'vanilla_bert_model_path: {bert_model_path}\n'
-                               f'tokenizer_path: {tokenizer_path}\n')
+                               f'tokenizer_path: {tokenizer_path}\n'
+                               f'include_att_token: {include_att_tokens}\n'
+                               f'visit_tokenizer_path: {visit_tokenizer_path}\n')
 
         super(HierarchicalBertEvaluator, self).__init__(*args, **kwargs)
 
@@ -42,12 +49,14 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
             try:
                 model = create_hierarchical_bert_bi_lstm_model(
                     self._bert_model_path,
+                    include_att_tokens=self._include_att_tokens,
                     **kwargs
                 )
             except ValueError as e:
                 self.get_logger().exception(e)
                 model = create_hierarchical_bert_bi_lstm_model(
                     self._bert_model_path,
+                    include_att_tokens=self._include_att_tokens,
                     **kwargs
                 )
 
@@ -159,6 +168,16 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
             max_seq_len=self._max_num_of_visits
         )
 
+        visit_token_ids = self._visit_tokenizer.encode(
+            self._dataset.visit_concept_ids.apply(lambda t: t.tolist()).tolist()
+        )
+
+        padded_masked_visit_type = post_pad_pre_truncate(
+            visit_token_ids,
+            pad_value=self._visit_tokenizer.get_unused_token_id(),
+            max_seq_len=self._max_num_of_visits
+        )
+
         inputs = {
             'pat_seq': padded_token_ids,
             'pat_mask': pat_mask,
@@ -170,6 +189,7 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
             'visit_mask': padded_visit_mask,
             'concept_values': padded_concept_values,
             'concept_value_masks': padded_concept_value_masks,
+            'masked_visit_type': padded_masked_visit_type,
             'age': np.expand_dims(self._dataset.age, axis=-1)
         }
         labels = self._dataset.label.to_numpy()
@@ -179,14 +199,16 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
 
 class RandomHierarchicalBertEvaluator(HierarchicalBertEvaluator):
 
-    def __init__(self,
-                 num_of_exchanges,
-                 embedding_size,
-                 depth,
-                 num_heads,
-                 use_time_embedding,
-                 time_embeddings_size,
-                 *args, **kwargs):
+    def __init__(
+            self,
+            num_of_exchanges,
+            embedding_size,
+            depth,
+            num_heads,
+            use_time_embedding,
+            time_embeddings_size,
+            *args, **kwargs
+    ):
         self._num_of_exchanges = num_of_exchanges
         self._embedding_size = embedding_size
         self._depth = depth

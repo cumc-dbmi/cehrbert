@@ -14,19 +14,12 @@ def main(
         output_folder,
         domain_table_list,
         date_filter,
-        mlm_skip_table_list,
         max_num_of_visits_per_person,
         min_observation_period: int = 360,
-        include_concept_list: bool = True
+        include_concept_list: bool = True,
+        include_incomplete_visit: bool = True
 ):
     spark = SparkSession.builder.appName('Generate Hierarchical Bert Training Data').getOrCreate()
-
-    # Translate the cdm tables to domain names
-    mlm_skip_domains = get_mlm_skip_domains(
-        spark=spark,
-        input_folder=input_folder,
-        mlm_skip_table_list=mlm_skip_table_list
-    )
 
     logger = logging.getLogger(__name__)
     logger.info(
@@ -34,11 +27,10 @@ def main(
         f'output_folder: {output_folder}\n'
         f'domain_table_list: {domain_table_list}\n'
         f'date_filter: {date_filter}\n'
-        f'mlm_skip_table_list: {mlm_skip_table_list}\n'
-        f'mlm_skip_domains: {mlm_skip_domains}\n'
         f'max_num_of_visits_per_person: {max_num_of_visits_per_person}\n'
         f'min_observation_period: {min_observation_period}\n'
-        f'include_concept_list: {include_concept_list}'
+        f'include_concept_list: {include_concept_list}\n'
+        f'include_incomplete_visit: {include_incomplete_visit}'
     )
 
     domain_tables = []
@@ -117,8 +109,8 @@ def main(
     sequence_data = create_hierarchical_sequence_data(
         person, visit_occurrence, patient_events,
         date_filter=date_filter,
-        mlm_skip_domains=mlm_skip_domains,
-        max_num_of_visits_per_person=max_num_of_visits_per_person
+        max_num_of_visits_per_person=max_num_of_visits_per_person,
+        include_incomplete_visit=include_incomplete_visit
     )
 
     sequence_data.write.mode('overwrite').parquet(
@@ -132,58 +124,69 @@ def main(
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Arguments for generate training '
                                                  'data for Hierarchical Bert')
-    parser.add_argument('-i',
-                        '--input_folder',
-                        dest='input_folder',
-                        action='store',
-                        help='The path for your input_folder where the raw data is',
-                        required=True)
-    parser.add_argument('-o',
-                        '--output_folder',
-                        dest='output_folder',
-                        action='store',
-                        help='The path for your output_folder',
-                        required=True)
-    parser.add_argument('-tc',
-                        '--domain_table_list',
-                        dest='domain_table_list',
-                        nargs='+',
-                        action='store',
-                        help='The list of domain tables you want to download',
-                        type=validate_table_names,
-                        required=True)
-    parser.add_argument('--mlm_skip_table_list',
-                        dest='mlm_skip_table_list',
-                        nargs='+',
-                        action='store',
-                        help='The list of domains that will be skipped in MLM',
-                        required=False,
-                        type=validate_table_names,
-                        default=[])
-    parser.add_argument('-d',
-                        '--date_filter',
-                        dest='date_filter',
-                        type=lambda s: datetime.datetime.strptime(s, '%Y-%m-%d'),
-                        action='store',
-                        required=False,
-                        default='2018-01-01')
-    parser.add_argument('--max_num_of_visits',
-                        dest='max_num_of_visits',
-                        action='store',
-                        type=int,
-                        default=200,
-                        help='Max no.of visits per patient to be included',
-                        required=False)
-    parser.add_argument('--min_observation_period',
-                        dest='min_observation_period',
-                        action='store',
-                        type=int,
-                        default=1,
-                        help='Minimum observation period in days',
-                        required=False)
-    parser.add_argument('--include_concept_list',
-                        dest='include_concept_list',
-                        action='store_true')
+    parser.add_argument(
+        '-i',
+        '--input_folder',
+        dest='input_folder',
+        action='store',
+        help='The path for your input_folder where the raw data is',
+        required=True
+    )
+    parser.add_argument(
+        '-o',
+        '--output_folder',
+        dest='output_folder',
+        action='store',
+        help='The path for your output_folder',
+        required=True
+    )
+    parser.add_argument(
+        '-tc',
+        '--domain_table_list',
+        dest='domain_table_list',
+        nargs='+',
+        action='store',
+        help='The list of domain tables you want to download',
+        type=validate_table_names,
+        required=True
+    )
+    parser.add_argument(
+        '-d',
+        '--date_filter',
+        dest='date_filter',
+        type=lambda s: datetime.datetime.strptime(s, '%Y-%m-%d'),
+        action='store',
+        required=False,
+        default='2018-01-01'
+    )
+    parser.add_argument(
+        '--max_num_of_visits',
+        dest='max_num_of_visits',
+        action='store',
+        type=int,
+        default=200,
+        help='Max no.of visits per patient to be included',
+        required=False
+    )
+    parser.add_argument(
+        '--min_observation_period',
+        dest='min_observation_period',
+        action='store',
+        type=int,
+        default=1,
+        help='Minimum observation period in days',
+        required=False
+    )
+    parser.add_argument(
+        '--include_concept_list',
+        dest='include_concept_list',
+        action='store_true'
+    )
+    parser.add_argument(
+        '--include_incomplete_visit',
+        dest='include_incomplete_visit',
+        action='store_true'
+    )
 
     ARGS = parser.parse_args()
 
@@ -192,8 +195,8 @@ if __name__ == '__main__':
         output_folder=ARGS.output_folder,
         domain_table_list=ARGS.domain_table_list,
         date_filter=ARGS.date_filter,
-        mlm_skip_table_list=ARGS.mlm_skip_table_list,
         max_num_of_visits_per_person=ARGS.max_num_of_visits,
         min_observation_period=ARGS.min_observation_period,
-        include_concept_list=ARGS.include_concept_list
+        include_concept_list=ARGS.include_concept_list,
+        include_incomplete_visit=ARGS.include_incomplete_visit
     )

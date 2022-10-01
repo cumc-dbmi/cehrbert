@@ -1,5 +1,5 @@
 .idea/
-venv/
+venv*
 
 *ipynb_checkpoints/
 *h5

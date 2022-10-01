@@ -1,14 +1,15 @@
+from const.common import UNKNOWN_CONCEPT
 from typing import Optional, Sequence, Union
 from dask.dataframe import Series as dd_series
 from pandas import Series as df_series
-from tensorflow.python.keras.preprocessing.text import Tokenizer
-
-BERT_SPECIAL_TOKENS = ['[MASK]', '[UNUSED]', '[CLS]']
+from tensorflow.keras.preprocessing.text import Tokenizer
 
 
 class ConceptTokenizer:
     unused_token = '[UNUSED]'
     mask_token = '[MASK]'
+    att_mask_token = '[ATT_MASK]'
+    cls_token = '[CLS]'
 
     def __init__(self, special_tokens: Optional[Sequence[str]] = None, oov_token='0'):
         self.special_tokens = special_tokens
@@ -23,7 +24,11 @@ class ConceptTokenizer:
             self.tokenizer.fit_on_texts(
                 concept_sequences.apply(lambda s: s.tolist(), meta='iterable'))
 
-        self.tokenizer.fit_on_texts([self.mask_token, self.unused_token])
+        self.tokenizer.fit_on_texts([self.mask_token])
+        self.tokenizer.fit_on_texts([self.att_mask_token])
+        self.tokenizer.fit_on_texts([self.unused_token])
+        self.tokenizer.fit_on_texts([self.cls_token])
+        self.tokenizer.fit_on_texts([UNKNOWN_CONCEPT])
 
         if self.special_tokens is not None:
             self.tokenizer.fit_on_texts(self.special_tokens)
@@ -63,20 +68,29 @@ class ConceptTokenizer:
         # + 1 because oov_token takes the index 0
         return len(self.tokenizer.index_word) + 1
 
-    def get_unused_token(self):
-        return self.unused_token
-
     def get_unused_token_id(self):
         unused_token_id = self.encode([self.unused_token])
         while isinstance(unused_token_id, list):
             unused_token_id = unused_token_id[0]
         return unused_token_id
 
-    def get_mask_token(self):
-        return self.mask_token
+    def get_unused_token(self):
+        return self.unused_token
 
     def get_mask_token_id(self):
         mask_token_id = self.encode([self.mask_token])
         while isinstance(mask_token_id, list):
             mask_token_id = mask_token_id[0]
         return mask_token_id
+
+    def get_mask_token(self):
+        return self.mask_token
+
+    def get_att_mask_token_id(self):
+        att_mask_token_id = self.encode([self.att_mask_token])
+        while isinstance(att_mask_token_id, list):
+            att_mask_token_id = att_mask_token_id[0]
+        return att_mask_token_id
+
+    def get_att_mask_token(self):
+        return self.att_mask_token

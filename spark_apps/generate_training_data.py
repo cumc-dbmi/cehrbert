@@ -22,17 +22,9 @@ def main(
         exclude_visit_tokens,
         is_classic_bert,
         include_prolonged_stay,
-        include_concept_list: bool,
-        mlm_skip_table_list: List[str]
+        include_concept_list: bool
 ):
     spark = SparkSession.builder.appName('Generate CEHR-BERT Training Data').getOrCreate()
-
-    # Translate the cdm tables to domain names
-    mlm_skip_domains = get_mlm_skip_domains(
-        spark=spark,
-        input_folder=input_folder,
-        mlm_skip_table_list=mlm_skip_table_list
-    )
 
     logger = logging.getLogger(__name__)
     logger.info(
@@ -41,8 +33,6 @@ def main(
         f'domain_table_list: {domain_table_list}\n'
         f'date_filter: {date_filter}\n'
         f'include_visit_type: {include_visit_type}\n'
-        f'mlm_skip_table_list: {mlm_skip_table_list}\n'
-        f'mlm_skip_domains: {mlm_skip_domains}\n'
         f'is_new_patient_representation: {is_new_patient_representation}\n'
         f'exclude_visit_tokens: {exclude_visit_tokens}\n'
         f'is_classic_bert: {is_classic_bert}\n'
@@ -113,7 +103,6 @@ def main(
             date_filter=date_filter,
             include_visit_type=include_visit_type,
             exclude_visit_tokens=exclude_visit_tokens,
-            mlm_skip_domains=mlm_skip_domains
         )
     else:
         sequence_data = create_sequence_data(
@@ -166,16 +155,6 @@ if __name__ == '__main__':
         help='The list of domain tables you want to download',
         type=validate_table_names,
         required=True
-    )
-    parser.add_argument(
-        '--mlm_skip_table_list',
-        dest='mlm_skip_table_list',
-        nargs='+',
-        action='store',
-        help='The list of domains that will be skipped in MLM',
-        required=False,
-        type=validate_table_names,
-        default=[]
     )
     parser.add_argument(
         '-d',
@@ -232,6 +211,5 @@ if __name__ == '__main__':
     main(
         ARGS.input_folder, ARGS.output_folder, ARGS.domain_table_list, ARGS.date_filter,
         ARGS.include_visit_type, ARGS.is_new_patient_representation, ARGS.exclude_visit_tokens,
-        ARGS.is_classic_bert_sequence, ARGS.include_prolonged_stay, ARGS.include_concept_list,
-        ARGS.mlm_skip_table_list
+        ARGS.is_classic_bert_sequence, ARGS.include_prolonged_stay, ARGS.include_concept_list
     )

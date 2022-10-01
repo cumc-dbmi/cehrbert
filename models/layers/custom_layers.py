@@ -260,6 +260,68 @@ class DecoderLayer(tf.keras.layers.Layer):
         return out3, attn_weights_block1, attn_weights_block2
 
 
+class SimpleDecoderLayer(tf.keras.layers.Layer):
+    def __init__(
+            self,
+            d_model,
+            num_heads,
+            dff=512,
+            rate=0.1,
+            *args,
+            **kwargs
+    ):
+        super(SimpleDecoderLayer, self).__init__(
+            *args,
+            **kwargs
+        )
+
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.dff = dff
+        self.rate = rate
+        self.multi_head_attention_layer = MultiHeadAttention(
+            d_model,
+            num_heads
+        )
+        self.ffn = point_wise_feed_forward_network(d_model, dff)
+        self.mha_layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.ffn_layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.mha_dropout_layer = tf.keras.layers.Dropout(rate)
+        self.ffn_dropout_layer = tf.keras.layers.Dropout(rate)
+
+    def get_config(self):
+        config = super().get_config()
+        config['d_model'] = self.d_model
+        config['num_heads'] = self.num_heads
+        config['dff'] = self.dff
+        config['rate'] = self.rate
+        return config
+
+    def call(
+            self,
+            decoder_input,
+            enc_output,
+            encoder_mask,
+            **kwargs
+    ):
+        # enc_output.shape == (batch_size, input_seq_len, d_model)
+
+        attn, attn_weights_block = self.multi_head_attention_layer(
+            enc_output,
+            enc_output,
+            decoder_input,
+            encoder_mask
+        )  # (batch_size, target_seq_len, d_model)
+        attn = self.mha_dropout_layer(attn, **kwargs)
+        out2 = self.mha_layernorm(attn + decoder_input)  # (batch_size, target_seq_len, d_model)
+
+        ffn_output = self.ffn(out2)  # (batch_size, target_seq_len, d_model)
+        ffn_output = self.ffn_dropout_layer(ffn_output, **kwargs)
+        out3 = self.ffn_layernorm(ffn_output + out2)  # (batch_size, target_seq_len, d_model)
+
+        return out3, attn_weights_block
+
+
 class PositionalEncodingLayer(tf.keras.layers.Layer):
     def __init__(self, embedding_size, *args, **kwargs):
         super(PositionalEncodingLayer, self).__init__(*args, **kwargs)
@@ -841,7 +903,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             transformer_dropout: float,
             phenotype_entropy_weight: float = 2e-05,
             phenotype_euclidean_weight: float = 2e-05,
-            phenotype_concept_distance_weight: float = 6e-05,
+            phenotype_concept_distance_weight: float = 1e-04,
             *args, **kwargs
     ):
         super(VisitPhenotypeLayer, self).__init__(*args, **kwargs)
@@ -861,6 +923,12 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             initializer=tf.keras.initializers.GlorotNormal(),
             trainable=True,
             name='phenotype_embeddings_matrix'
+        )
+
+        self.gate_layer = tf.keras.layers.Dense(
+            1,
+            activation='sigmoid',
+            name='gate_layer'
         )
 
         self.layer_norm_layer = tf.keras.layers.LayerNormalization(
@@ -965,14 +1033,31 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
 
         # Calculate the contextualized visit embeddings using the pre-defined phenotype embeddings
         # (batch_size, num_of_visits, embedding_size)
-        contextualized_visit_embeddings = self.dropout_layer(
+        contextualized_phenotype_embeddings = self.dropout_layer(
             visit_phenotype_probs @ self.phenotype_embeddings,
             **kwargs
         )
 
+        # Clip the gate value so that visit_embeddings is more important than the phenotype
+        # embeddings
+        # (batch_size, num_of_visits, 1)
+        gate_value = self.gate_layer(
+            tf.squeeze(
+                visit_embeddings[:, :, tf.newaxis, :]
+                @ contextualized_phenotype_embeddings[:, :, :, tf.newaxis],
+                axis=-1
+            )
+        )
+
+        gate_value = tf.clip_by_value(
+            gate_value,
+            clip_value_min=0.4,
+            clip_value_max=0.8
+        )
+
         # Sum the original visit embeddings and the phenotype contextualized visit embeddings
         contextualized_visit_embeddings = self.layer_norm_layer(
-            visit_embeddings + contextualized_visit_embeddings,
+            gate_value * visit_embeddings + (1 - gate_value) * contextualized_phenotype_embeddings,
             **kwargs
         ) * converted_visit_mask
 
@@ -1025,6 +1110,7 @@ get_custom_objects().update({
     'Encoder': Encoder,
     'EncoderLayer': EncoderLayer,
     'DecoderLayer': DecoderLayer,
+    'SimpleDecoderLayer': SimpleDecoderLayer,
     'TimeAttention': TimeAttention,
     'TimeSelfAttention': TimeSelfAttention,
     'PairwiseTimeAttention': TimeSelfAttention,

@@ -12,6 +12,7 @@ def transformer_hierarchical_bert_model(
         embedding_dropout: float = 0.6,
         l2_reg_penalty: float = 1e-4,
         time_embeddings_size: int = 16,
+        include_att_prediction: bool = False,
         include_visit_type_prediction: bool = False,
         include_readmission: bool = False,
         include_prolonged_length_stay: bool = False,
@@ -30,6 +31,7 @@ def transformer_hierarchical_bert_model(
     :param embedding_dropout:
     :param l2_reg_penalty:
     :param time_embeddings_size:
+    :param include_att_prediction:
     :param include_visit_type_prediction:
     :param include_readmission:
     :param include_prolonged_length_stay:
@@ -91,12 +93,21 @@ def transformer_hierarchical_bert_model(
     visit_rank_order = tf.keras.layers.Input(
         shape=(num_of_visits,),
         dtype='int32',
-        name='visit_rank_order')
+        name='visit_rank_order'
+    )
+
+    visit_visit_type = tf.keras.layers.Input(
+        shape=(num_of_visits,),
+        dtype='int32',
+        name='masked_visit_type'
+    )
 
     # Create a list of inputs so the model could reference these later
-    default_inputs = [pat_seq, pat_seq_age, pat_seq_time, pat_mask,
-                      concept_values, concept_value_masks, visit_segment, visit_mask,
-                      visit_time_delta_att, visit_rank_order]
+    default_inputs = [
+        pat_seq, pat_seq_age, pat_seq_time, pat_mask,
+        concept_values, concept_value_masks, visit_segment, visit_mask,
+        visit_time_delta_att, visit_rank_order, visit_visit_type
+    ]
 
     # Expand dimensions for masking MultiHeadAttention in Concept Encoder
     pat_concept_mask = tf.reshape(
@@ -110,6 +121,13 @@ def transformer_hierarchical_bert_model(
         concept_vocab_size,
         embedding_size,
         name='concept_embedding_layer',
+        embeddings_regularizer=l2_regularizer
+    )
+
+    visit_type_embedding_layer = ReusableEmbedding(
+        concept_vocab_size,
+        embedding_size,
+        name='visit_type_embedding_layer',
         embeddings_regularizer=l2_regularizer
     )
 
@@ -136,7 +154,7 @@ def transformer_hierarchical_bert_model(
         visit_time_delta_att
     )
 
-    # Repurpose token id 0 as the visit start embedding
+    # Re-purpose token id 0 as the visit start embedding
     visit_start_embeddings, _ = concept_embedding_layer(
         tf.zeros_like(
             visit_mask,
@@ -159,7 +177,6 @@ def transformer_hierarchical_bert_model(
     )
 
     # (batch, num_of_visits, embedding_size)
-    # Test a simple average as a way to summerize the visit after excluding the CLS embedding
     # The first bert applied at the visit level
     concept_encoder = Encoder(
         name='concept_encoder',
@@ -190,6 +207,24 @@ def transformer_hierarchical_bert_model(
     # (batch_size, num_of_visits, embedding_size)
     visit_embeddings = concept_embeddings[:, :, 0]
 
+    visit_type_embedding_dense_layer = tf.keras.layers.Dense(
+        embedding_size,
+        name='visit_type_embedding_dense_layer'
+    )
+
+    # (batch_size, num_of_visits, embedding_size)
+    visit_type_embeddings, visit_type_embedding_matrix = visit_type_embedding_layer(
+        visit_visit_type
+    )
+
+    # Combine visit_type_embeddings with visit_embeddings
+    visit_embeddings = visit_type_embedding_dense_layer(
+        tf.concat([
+            visit_embeddings,
+            visit_type_embeddings
+        ], axis=-1)
+    )
+
     # (batch_size, num_of_visits, embedding_size)
     expanded_att_embeddings = tf.concat([att_embeddings, att_embeddings[:, 0:1, :]], axis=1)
 
@@ -216,7 +251,7 @@ def transformer_hierarchical_bert_model(
         1 - tf.linalg.band_part(tf.ones((num_of_visits, num_of_visits)), -1, 0),
         dtype=tf.int32
     )
-    look_ahead_visit_mask = tf.reshape(
+    look_ahead_visit_mask_with_att = tf.reshape(
         tf.tile(
             look_ahead_mask_base[:, tf.newaxis, :, tf.newaxis],
             [1, 3, 1, 3]
@@ -227,17 +262,22 @@ def transformer_hierarchical_bert_model(
     look_ahead_concept_mask = tf.reshape(
         tf.tile(
             look_ahead_mask_base[:, tf.newaxis, :, tf.newaxis],
-            [1, num_of_concepts, 1, 3]
+            [1, num_of_concepts, 1, 1]
         ),
         (num_of_concepts * num_of_visits, -1)
-    )[:, :-1]
+    )
 
     # (batch_size, 1, num_of_visits_with_att, num_of_visits_with_att)
-    look_ahead_visit_mask = tf.maximum(visit_mask_with_att, look_ahead_visit_mask)
-    # print(look_ahead_visit_mask)
+    look_ahead_visit_mask_with_att = tf.maximum(
+        visit_mask_with_att,
+        look_ahead_visit_mask_with_att
+    )
 
-    # (batch_size, 1, num_of_visits * num_of_concepts, num_of_visits_with_att)
-    look_ahead_concept_mask = tf.maximum(visit_mask_with_att, look_ahead_concept_mask)
+    # (batch_size, 1, num_of_visits * num_of_concepts, num_of_visits)
+    look_ahead_concept_mask = tf.maximum(
+        visit_mask[:, tf.newaxis, tf.newaxis, :],
+        look_ahead_concept_mask
+    )
 
     # Second bert applied at the patient level to the visit embeddings
     visit_encoder = Encoder(
@@ -251,7 +291,7 @@ def transformer_hierarchical_bert_model(
     # Feed augmented visit embeddings into encoders to get contextualized visit embeddings
     contextualized_visit_embeddings, _ = visit_encoder(
         contextualized_visit_embeddings,
-        look_ahead_visit_mask
+        look_ahead_visit_mask_with_att
     )
 
     # Pad contextualized_visit_embeddings on axis 1 with one extra visit so we can extract the
@@ -276,61 +316,82 @@ def transformer_hierarchical_bert_model(
     )
 
     # Let local concept embeddings access the global representatives of each visit
-    multi_head_attention_layer = MultiHeadAttention(
+    global_concept_embeddings_layer = SimpleDecoderLayer(
         d_model=embedding_size,
-        num_heads=num_heads
+        num_heads=num_heads,
+        rate=transformer_dropout,
+        dff=512,
+        name='global_concept_embeddings_layer'
     )
 
-    mha_layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
-    mha_dropout = tf.keras.layers.Dropout(transformer_dropout)
-
-    global_concept_embeddings, _ = multi_head_attention_layer(
-        contextualized_visit_embeddings,
-        contextualized_visit_embeddings,
+    global_concept_embeddings, _ = global_concept_embeddings_layer(
         concept_embeddings,
+        visit_embeddings_without_att,
         look_ahead_concept_mask
-    )
-
-    global_attn_norm = mha_layernorm(
-        mha_dropout(global_concept_embeddings) + concept_embeddings
-    )
-
-    ffn = point_wise_feed_forward_network(embedding_size, 512)
-    ffn_layernorm = tf.keras.layers.LayerNormalization(
-        epsilon=1e-6,
-        name='global_concept_embeddings_normalization'
-    )
-    ffn_dropout = tf.keras.layers.Dropout(
-        transformer_dropout
-    )
-
-    ffn_dropout_output = ffn_dropout(ffn(global_attn_norm))
-
-    global_attn = ffn_layernorm(
-        ffn_dropout_output + global_attn_norm
     )
 
     concept_output_layer = TiedOutputEmbedding(
         projection_regularizer=l2_regularizer,
         projection_dropout=embedding_dropout,
-        name='concept_prediction_logits')
+        name='concept_prediction_logits'
+    )
 
     concept_softmax_layer = tf.keras.layers.Softmax(
         name='concept_predictions'
     )
 
     concept_predictions = concept_softmax_layer(
-        concept_output_layer([global_attn, embedding_matrix])
+        concept_output_layer([global_concept_embeddings, embedding_matrix])
     )
 
     outputs = [concept_predictions]
 
+    if include_att_prediction:
+        # Extract the ATT embeddings
+        contextualized_att_embeddings = tf.reshape(
+            expanded_contextualized_visit_embeddings, (-1, num_of_visits, 3 * embedding_size)
+        )[:, :-1, embedding_size * 2:]
+
+        # Create the att to concept mask ATT tokens only attend to the concepts in the
+        # neighboring visits
+        att_concept_mask = create_att_concept_mask(
+            num_of_concepts,
+            num_of_visits,
+            visit_mask
+        )
+
+        # Use the simple decoder layer to decode att embeddings using the neighboring concept
+        # embeddings
+        global_att_embeddings_layer = SimpleDecoderLayer(
+            d_model=embedding_size,
+            num_heads=num_heads,
+            rate=transformer_dropout,
+            dff=512,
+            name='global_att_embeddings_layer'
+        )
+
+        contextualized_att_embeddings, _ = global_att_embeddings_layer(
+            contextualized_att_embeddings,
+            concept_embeddings,
+            att_concept_mask
+        )
+
+        att_prediction_layer = tf.keras.layers.Softmax(
+            name='att_predictions',
+        )
+
+        att_predictions = att_prediction_layer(
+            concept_output_layer([contextualized_att_embeddings, embedding_matrix])
+        )
+        outputs.append(att_predictions)
+
     if include_visit_type_prediction:
         # Slice out the the visit embeddings (CLS tokens)
-        visit_prediction_dense = tf.keras.layers.Dense(
-            visit_vocab_size,
-            activation='tanh',
-            name='visit_prediction_dense'
+
+        visit_type_prediction_output_layer = TiedOutputEmbedding(
+            projection_regularizer=l2_regularizer,
+            projection_dropout=embedding_dropout,
+            name='visit_type_prediction_logits'
         )
 
         visit_softmax_layer = tf.keras.layers.Softmax(
@@ -338,7 +399,9 @@ def transformer_hierarchical_bert_model(
         )
 
         visit_predictions = visit_softmax_layer(
-            visit_prediction_dense(visit_embeddings_without_att)
+            visit_type_prediction_output_layer(
+                [visit_embeddings_without_att, visit_type_embedding_matrix]
+            )
         )
 
         outputs.append(visit_predictions)
@@ -371,6 +434,42 @@ def transformer_hierarchical_bert_model(
 
     hierarchical_bert = tf.keras.Model(
         inputs=default_inputs,
-        outputs=outputs)
+        outputs=outputs
+    )
 
     return hierarchical_bert
+
+
+def create_att_concept_mask(
+        num_of_concepts,
+        num_of_visits,
+        visit_mask
+):
+    """
+
+    :param num_of_concepts:
+    :param num_of_visits:
+    :param visit_mask:
+    :return:
+    """
+    att_concept_mask = tf.eye(
+        num_of_visits - 1,
+        num_of_visits,
+        dtype=tf.int32
+    )
+    att_concept_mask = 1 - att_concept_mask - tf.roll(
+        att_concept_mask,
+        axis=-1,
+        shift=1
+    )[tf.newaxis, :, :]
+    att_concept_mask = tf.maximum(
+        att_concept_mask,
+        visit_mask[:, 1:, tf.newaxis]
+    )
+    att_concept_mask = tf.reshape(
+        tf.tile(
+            att_concept_mask[:, :, :, tf.newaxis],
+            [1, 1, 1, num_of_concepts]
+        ), (-1, 1, num_of_visits - 1, num_of_concepts * num_of_visits)
+    )
+    return att_concept_mask

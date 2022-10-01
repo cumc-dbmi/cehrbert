@@ -72,9 +72,9 @@ six==1.15.0
 sklearn==0.0
 sortedcontainers==2.3.0
 tblib==1.7.0
-tensorflow==2.7.0
+tensorflow==2.9.1
 tensorflow-datasets==4.5.2
-tensorflow-estimator==2.7.0
+tensorflow-estimator==2.9.1
 tensorflow-metadata==1.7.0
 termcolor==1.1.0
 threadpoolctl==2.1.0
@@ -91,4 +91,4 @@ xgboost==1.2.1
 zict==2.0.0
 zipp==3.3.0
 fastparquet==0.8.1
-pyarrow==7.0.0
+pyarrow==9.0.0

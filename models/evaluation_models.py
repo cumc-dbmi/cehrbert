@@ -277,18 +277,80 @@ def create_hierarchical_bert_bi_lstm_model_with_model(
         dropout_rate=0.2,
         lstm_unit=128,
         activation='tanh',
-        is_bi_directional=True
+        is_bi_directional=True,
+        include_att_tokens=False
 ):
     age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
 
-    contextualized_visit_embeddings, _ = hierarchical_bert_model.get_layer(
-        'hidden_visit_embeddings'
-    ).output
     _, num_of_visits, num_of_concepts, embedding_size = hierarchical_bert_model.get_layer(
         'temporal_transformation_layer'
     ).output.shape
 
+    is_phenotype_enabled = (
+            'hidden_visit_embeddings' in [layer.name for layer in hierarchical_bert_model.layers]
+    )
+
+    if is_phenotype_enabled:
+        contextualized_visit_embeddings, _ = hierarchical_bert_model.get_layer(
+            'hidden_visit_embeddings'
+        ).output
+
+        if include_att_tokens:
+            visit_embeddings, _ = hierarchical_bert_model.get_layer(
+                'visit_encoder'
+            ).output
+
+            # Pad contextualized_visit_embeddings on axis 1 with one extra visit so we can extract the
+            # visit embeddings using the reshape trick
+            expanded_visit_embeddings = tf.concat(
+                [visit_embeddings,
+                 visit_embeddings[:, 0:1, :]],
+                axis=1
+            )
+
+            # Extract the visit embeddings elements
+            visit_start_embeddings = tf.reshape(
+                expanded_visit_embeddings, (-1, num_of_visits, 3 * embedding_size)
+            )[:, :, 0:embedding_size]
+
+            expanded_att_embeddings = tf.reshape(
+                expanded_visit_embeddings, (-1, num_of_visits, 3 * embedding_size)
+            )[:, :, embedding_size * 2:]
+
+            contextualized_visit_embeddings = tf.reshape(
+                tf.concat(
+                    [visit_start_embeddings,
+                     contextualized_visit_embeddings,
+                     expanded_att_embeddings],
+                    axis=-1
+                ),
+                (-1, 3 * num_of_visits, embedding_size)
+            )[:, :-1, :]
+
+    else:
+        contextualized_visit_embeddings, _ = hierarchical_bert_model.get_layer(
+            'visit_encoder'
+        ).output
+        if not include_att_tokens:
+            # Pad contextualized_visit_embeddings on axis 1 with one extra visit so we can extract the
+            # visit embeddings using the reshape trick
+            expanded_contextualized_visit_embeddings = tf.concat(
+                [contextualized_visit_embeddings,
+                 contextualized_visit_embeddings[:, 0:1, :]],
+                axis=1
+            )
+            # Extract the visit embeddings elements
+            contextualized_visit_embeddings = tf.reshape(
+                expanded_contextualized_visit_embeddings, (-1, num_of_visits, 3 * embedding_size)
+            )[:, :, embedding_size: embedding_size * 2]
+
     visit_mask = hierarchical_bert_model.get_layer('visit_mask').output
+
+    if include_att_tokens:
+        visit_mask = tf.reshape(
+            tf.tile(visit_mask[:, :, tf.newaxis], [1, 1, 3]),
+            (-1, num_of_visits * 3)
+        )[:, 1:]
 
     mask_embeddings = tf.cast(
         tf.math.logical_not(

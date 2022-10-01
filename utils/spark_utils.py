@@ -11,7 +11,7 @@ from pyspark.sql.functions import broadcast
 from pyspark.sql.pandas.functions import pandas_udf
 
 from const.common import PERSON, VISIT_OCCURRENCE, UNKNOWN_CONCEPT, MEASUREMENT, \
-    REQUIRED_MEASUREMENT, CDM_TABLES
+    CATEGORICAL_MEASUREMENT, REQUIRED_MEASUREMENT, CDM_TABLES
 from spark_apps.sql_templates import measurement_unit_stats_query
 from utils.logging_utils import *
 from config.parameters import qualified_concept_list_path
@@ -442,8 +442,7 @@ def create_sequence_data_with_att(
         patient_event,
         date_filter=None,
         include_visit_type=False,
-        exclude_visit_tokens=False,
-        mlm_skip_domains=[MEASUREMENT],
+        exclude_visit_tokens=False
 ):
     """
     Create a sequence of the events associated with one patient in a chronological order
@@ -452,7 +451,6 @@ def create_sequence_data_with_att(
     :param date_filter:
     :param include_visit_type:
     :param exclude_visit_tokens:
-    :param mlm_skip_domains:
     :return:
     """
     if date_filter:
@@ -513,7 +511,8 @@ def create_sequence_data_with_att(
         .withColumn('visit_rank_order', visit_rank_udf) \
         .withColumn('visit_segment', visit_segment_udf) \
         .withColumn('concept_value_mask', (F.col('domain') == MEASUREMENT).cast('int')) \
-        .withColumn('mlm_skip_value', (F.col('domain').isin(mlm_skip_domains)).cast('int'))
+        .withColumn('mlm_skip_value',
+                    (F.col('domain').isin([MEASUREMENT, CATEGORICAL_MEASUREMENT])).cast('int'))
 
     time_token_insertions = patient_event.where('standard_concept_id = "VS"') \
         .withColumn('standard_concept_id', F.col('time_token')) \
@@ -775,8 +774,8 @@ def create_hierarchical_sequence_data(
         visit_occurrence,
         patient_events,
         date_filter=None,
-        mlm_skip_domains=[MEASUREMENT],
-        max_num_of_visits_per_person=2000
+        max_num_of_visits_per_person=2000,
+        include_incomplete_visit=True
 ):
     """
     This creates a hierarchical data frame for the hierarchical bert model
@@ -786,6 +785,7 @@ def create_hierarchical_sequence_data(
     :param date_filter:
     :param mlm_skip_domains:
     :param max_num_of_visits_per_person:
+    :param include_incomplete_visit:
     :return:
     """
 
@@ -793,7 +793,11 @@ def create_hierarchical_sequence_data(
         patient_events = patient_events.where(F.col('date').cast('date') >= date_filter)
 
     # Construct visit information with the person demographic
-    visit_occurrence_person = create_visit_person_join(person, visit_occurrence)
+    visit_occurrence_person = create_visit_person_join(
+        person,
+        visit_occurrence,
+        include_incomplete_visit
+    )
 
     # Retrieve all visit column references
     visit_column_refs = get_table_column_refs(visit_occurrence_person)
@@ -831,7 +835,8 @@ def create_hierarchical_sequence_data(
         .withColumn('age', F.ceil(
         F.months_between(F.col('date'), F.col("birth_datetime")) / F.lit(12))) \
         .withColumn('concept_value_mask', (F.col('domain') == MEASUREMENT).cast('int')) \
-        .withColumn('mlm_skip', (F.col('domain').isin(mlm_skip_domains)).cast('int')) \
+        .withColumn('mlm_skip',
+                    (F.col('domain').isin([MEASUREMENT, CATEGORICAL_MEASUREMENT])).cast('int')) \
         .withColumn('condition_mask', (F.col('domain') == 'condition').cast('int'))
 
     # Create the udf for calculating the weeks since the epoch time 1970-01-01
@@ -946,12 +951,17 @@ def create_hierarchical_sequence_data(
     return patient_sequence
 
 
-def create_visit_person_join(person, visit_occurrence):
+def create_visit_person_join(
+        person,
+        visit_occurrence,
+        include_incomplete_visit=True
+):
     """
     Create a new spark data frame based on person and visit_occurrence
 
     :param person:
     :param visit_occurrence:
+    :param include_incomplete_visit:
     :return:
     """
 
@@ -977,6 +987,16 @@ def create_visit_person_join(person, visit_occurrence):
          & (F.col('prev_visit_concept_id').isin([9201, 262]))).cast('integer'), F.lit(0)
     )
 
+    # Create prolonged inpatient stay
+    # For the incomplete visit, we set prolonged_length_stay_logic to 0
+    prolonged_length_stay_logic = F.coalesce(
+        (F.datediff('visit_end_date', 'visit_start_date') >= 7).cast('integer'), F.lit(0)
+    )
+
+    visit_filter = 'visit_start_date IS NOT NULL'
+    if not include_incomplete_visit:
+        visit_filter = f'{visit_filter} AND visit_end_date IS NOT NULL'
+
     # Select the subset of columns and create derived columns using the UDF or spark sql
     # functions. In addition, we allow visits where visit_end_date IS NOT NULL, indicating the
     # visit is still on-going
@@ -986,7 +1006,7 @@ def create_visit_person_join(person, visit_occurrence):
         'visit_concept_id',
         'visit_start_date',
         'visit_end_date'
-    ).where('visit_start_date IS NOT NULL') \
+    ).where(visit_filter) \
         .withColumn('visit_rank_order', visit_rank_udf) \
         .withColumn('visit_segment', visit_segment_udf) \
         .withColumn('prev_visit_occurrence_id', F.lag('visit_occurrence_id').over(visit_windowing)) \
@@ -1000,10 +1020,8 @@ def create_visit_person_join(person, visit_occurrence):
         .withColumn('is_inpatient', is_inpatient_logic) \
         .withColumn('is_readmission', readmission_logic)
 
-    # Create prolonged inpatient stay
     visit_occurrence = visit_occurrence \
-        .withColumn('prolonged_stay',
-                    (F.datediff('visit_end_date', 'visit_start_date') >= 7).cast('integer')) \
+        .withColumn('prolonged_stay', prolonged_length_stay_logic) \
         .select('visit_occurrence_id',
                 'visit_concept_id',
                 'person_id',
@@ -1063,7 +1081,31 @@ def process_measurement(spark, measurement, required_measurement):
         GROUP BY m.person_id, m.visit_occurrence_id, m.measurement_concept_id, m.measurement_date
     ''')
 
-    return scaled_numeric_lab
+    # For categorical measurements in required_measurement, we concatenate measurement_concept_id
+    # with value_as_concept_id to construct a new standard_concept_id
+    categorical_lab = spark.sql('''
+        SELECT
+            m.person_id,
+            CASE
+                WHEN value_as_concept_id IS NOT NULL AND value_as_concept_id <> 0
+                THEN CONCAT(CAST(measurement_concept_id AS STRING),  '-', CAST(value_as_concept_id AS STRING))
+                ELSE CAST(measurement_concept_id AS STRING)
+            END AS standard_concept_id,
+            CAST(m.measurement_date AS DATE) AS date,
+            m.visit_occurrence_id,
+            'categorical_measurement' AS domain,
+            -1.0 AS concept_value
+        FROM measurement AS m
+        WHERE EXISTS (
+            SELECT
+                1
+            FROM required_measurement AS r 
+            WHERE r.measurement_concept_id = m.measurement_concept_id
+            AND r.is_numeric = false
+        )
+    ''')
+
+    return scaled_numeric_lab.unionAll(categorical_lab)
 
 
 def get_mlm_skip_domains(spark, input_folder, mlm_skip_table_list):

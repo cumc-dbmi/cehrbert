@@ -58,7 +58,8 @@ def evaluate_sequence_models(args):
             learning_rate=args.learning_rate,
             cross_validation_test=args.cross_validation_test,
             num_of_repeats=args.num_of_repeats,
-            grid_search_config=grid_search_config
+            grid_search_config=grid_search_config,
+            is_chronological_test=args.is_chronological_test
         ).eval_model()
 
     if VANILLA_BERT_FEED_FORWARD in args.model_evaluators:
@@ -134,7 +135,8 @@ def evaluate_sequence_models(args):
             learning_rate=args.learning_rate,
             cross_validation_test=args.cross_validation_test,
             num_of_repeats=args.num_of_repeats,
-            grid_search_config=grid_search_config
+            grid_search_config=grid_search_config,
+            is_chronological_test=args.is_chronological_test
         ).eval_model()
 
     if RANDOM_VANILLA_BERT_LSTM in args.model_evaluators:
@@ -167,7 +169,8 @@ def evaluate_sequence_models(args):
             learning_rate=args.learning_rate,
             cross_validation_test=args.cross_validation_test,
             num_of_repeats=args.num_of_repeats,
-            grid_search_config=grid_search_config
+            grid_search_config=grid_search_config,
+            is_chronological_test=args.is_chronological_test
         ).eval_model()
 
     if HIERARCHICAL_BERT_LSTM in args.model_evaluators:
@@ -176,6 +179,10 @@ def evaluate_sequence_models(args):
                                        p.bert_model_validation_path)
         bert_tokenizer_path = os.path.join(args.vanilla_bert_model_folder,
                                            p.tokenizer_path)
+        bert_visit_tokenizer_path = os.path.join(
+            args.vanilla_bert_model_folder,
+            p.visit_tokenizer_path
+        )
         HierarchicalBertEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
@@ -188,11 +195,14 @@ def evaluate_sequence_models(args):
             epochs=args.epochs,
             bert_model_path=bert_model_path,
             tokenizer_path=bert_tokenizer_path,
+            visit_tokenizer_path=bert_visit_tokenizer_path,
             sequence_model_name=args.sequence_model_name,
             learning_rate=args.learning_rate,
             cross_validation_test=args.cross_validation_test,
             num_of_repeats=args.num_of_repeats,
-            grid_search_config=grid_search_config
+            grid_search_config=grid_search_config,
+            include_att_tokens=args.include_att_tokens,
+            is_chronological_test=args.is_chronological_test
         ).eval_model()
 
     if RANDOM_HIERARCHICAL_BERT_LSTM in args.model_evaluators:
@@ -201,6 +211,10 @@ def evaluate_sequence_models(args):
                                        p.bert_model_validation_path)
         bert_tokenizer_path = os.path.join(args.vanilla_bert_model_folder,
                                            p.tokenizer_path)
+        bert_visit_tokenizer_path = os.path.join(
+            args.vanilla_bert_model_folder,
+            p.visit_tokenizer_path
+        )
         RandomHierarchicalBertEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
@@ -219,11 +233,14 @@ def evaluate_sequence_models(args):
             epochs=args.epochs,
             bert_model_path=bert_model_path,
             tokenizer_path=bert_tokenizer_path,
+            visit_tokenizer_path=bert_visit_tokenizer_path,
             sequence_model_name=args.sequence_model_name,
             learning_rate=args.learning_rate,
             cross_validation_test=args.cross_validation_test,
             num_of_repeats=args.num_of_repeats,
-            grid_search_config=grid_search_config
+            grid_search_config=grid_search_config,
+            include_att_tokens=args.include_att_tokens,
+            is_chronological_test=args.is_chronological_test
         ).eval_model()
 
 

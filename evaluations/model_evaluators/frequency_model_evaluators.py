@@ -8,7 +8,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GridSearchCV, StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import normalize, StandardScaler
-from tensorflow.python.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.text import Tokenizer
 from xgboost import XGBClassifier
 
 from evaluations.model_evaluators.model_evaluators import AbstractModelEvaluator

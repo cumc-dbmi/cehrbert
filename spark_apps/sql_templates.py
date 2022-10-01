@@ -12,9 +12,10 @@ WITH measurement_percentile AS
     FROM measurement AS m
     WHERE EXISTS (
         SELECT
-            *
+            1
         FROM required_measurement AS r
         WHERE r.measurement_concept_id = m.measurement_concept_id
+            AND r.is_numeric = true
     )
     GROUP BY m.measurement_concept_id, m.unit_concept_id
 )

@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 
+import math
 from scipy import stats
 from itertools import product
 from sklearn.model_selection import StratifiedShuffleSplit, RepeatedStratifiedKFold, \
@@ -125,17 +126,26 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         features, labels = self.extract_model_inputs()
 
         # Hold out 20% of the data for testing
-        stratified_splitter = StratifiedShuffleSplit(
-            n_splits=1,
-            test_size=0.2,
-            random_state=1
-        )
-        training_val_test_set_idx, held_out_set_idx = next(
-            stratified_splitter.split(
-                X=labels,
-                y=labels
+        if self._is_chronological_test:
+            training_stop = math.ceil(self._dataset.index.stop * 0.8)
+            training_val_test_set_idx = np.asarray(
+                range(training_stop)
             )
-        )
+            held_out_set_idx = np.asarray(
+                range(training_stop, len(self._dataset))
+            )
+        else:
+            stratified_splitter = StratifiedShuffleSplit(
+                n_splits=1,
+                test_size=0.2,
+                random_state=1
+            )
+            training_val_test_set_idx, held_out_set_idx = next(
+                stratified_splitter.split(
+                    X=labels,
+                    y=labels
+                )
+            )
 
         # Use the remaining 80% of the training data for optimizing
         training_val_test_set_inputs = {

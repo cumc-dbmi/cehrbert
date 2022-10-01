@@ -180,4 +180,12 @@ def create_evaluation_args():
                        action='store',
                        type=int,
                        default=1)
+    group.add_argument('--include_att_tokens',
+                       dest='include_att_tokens',
+                       action='store_true',
+                       required=False)
+    group.add_argument('--is_chronological_test',
+                       dest='is_chronological_test',
+                       action='store_true',
+                       required=False)
     return main_parser

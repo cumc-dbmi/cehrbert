@@ -29,6 +29,7 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
             max_num_concepts: int,
             num_heads: int,
             time_embeddings_size: int,
+            include_att_prediction: bool,
             include_visit_prediction: bool,
             include_readmission: bool,
             include_prolonged_length_stay: bool,
@@ -43,6 +44,7 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
         self._max_num_concepts = max_num_concepts
         self._num_heads = num_heads
         self._time_embeddings_size = time_embeddings_size
+        self._include_att_prediction = include_att_prediction
         self._include_visit_prediction = include_visit_prediction
         self._include_readmission = include_readmission
         self._include_prolonged_length_stay = include_prolonged_length_stay
@@ -59,6 +61,7 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
             f'max_num_concepts: {max_num_concepts}\n'
             f'num_heads: {num_heads}\n'
             f'time_embeddings_size: {time_embeddings_size}\n'
+            f'include_att_prediction: {include_att_prediction}\n'
             f'include_visit_prediction: {include_visit_prediction}\n'
             f'include_prolonged_length_stay: {include_prolonged_length_stay}\n'
             f'include_readmission: {include_readmission}'
@@ -91,7 +94,8 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
             'concept_tokenizer': self._tokenizer,
             'batch_size': self._batch_size,
             'max_num_of_visits': self._max_num_visits,
-            'max_num_of_concepts': self._max_num_concepts
+            'max_num_of_concepts': self._max_num_concepts,
+            'include_att_prediction': self._include_att_prediction
         }
 
         data_generator_class = HierarchicalBertDataGenerator
@@ -120,11 +124,13 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
                 model = tf.keras.models.load_model(
                     existing_model_path, custom_objects=get_custom_objects())
             else:
-                optimizer = optimizers.Adam(lr=self._learning_rate,
-                                            beta_1=0.9,
-                                            beta_2=0.999,
-                                            epsilon=1e-5,
-                                            clipnorm=1.0)
+                optimizer = optimizers.Adam(
+                    lr=self._learning_rate,
+                    beta_1=0.9,
+                    beta_2=0.999,
+                    epsilon=1e-5,
+                    clipnorm=1.0
+                )
                 visit_vocab_size = (
                     self._visit_tokenizer.get_vocab_size() if
                     self._include_visit_prediction else None
@@ -139,6 +145,7 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
                     depth=self._depth,
                     num_heads=self._num_heads,
                     time_embeddings_size=self._time_embeddings_size,
+                    include_att_prediction=self._include_att_prediction,
                     include_visit_type_prediction=self._include_visit_prediction,
                     include_readmission=self._include_readmission,
                     include_prolonged_length_stay=self._include_prolonged_length_stay
@@ -148,6 +155,11 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
                     'concept_predictions':
                         MaskedPenalizedSparseCategoricalCrossentropy(self.confidence_penalty)
                 }
+
+                if self._include_att_prediction:
+                    losses['att_predictions'] = (
+                        MaskedPenalizedSparseCategoricalCrossentropy(self.confidence_penalty)
+                    )
 
                 if self._include_visit_prediction:
                     losses['visit_predictions'] = (
@@ -193,6 +205,7 @@ def main(args):
         batch_size=args.batch_size,
         epochs=args.epochs,
         learning_rate=args.learning_rate,
+        include_att_prediction=args.include_att_prediction,
         include_visit_prediction=args.include_visit_prediction,
         include_prolonged_length_stay=args.include_prolonged_length_stay,
         include_readmission=args.include_readmission,
