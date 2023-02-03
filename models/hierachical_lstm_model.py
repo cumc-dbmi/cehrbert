@@ -1,14 +1,11 @@
 from models.layers.custom_layers import *
 
 
-def transformer_hierarchical_bert_model(
+def hierarchical_lstm_model(
         num_of_visits,
         num_of_concepts,
         concept_vocab_size,
         embedding_size,
-        depth: int,
-        num_heads: int,
-        transformer_dropout: float = 0.1,
         embedding_dropout: float = 0.6,
         l2_reg_penalty: float = 1e-4,
         time_embeddings_size: int = 16,
@@ -25,9 +22,6 @@ def transformer_hierarchical_bert_model(
     :param num_of_concepts:
     :param concept_vocab_size:
     :param embedding_size:
-    :param depth:
-    :param num_heads:
-    :param transformer_dropout:
     :param embedding_dropout:
     :param l2_reg_penalty:
     :param time_embeddings_size:
@@ -73,35 +67,26 @@ def transformer_hierarchical_bert_model(
         dtype='int32',
         name='concept_value_masks'
     )
-
+    visit_segment = tf.keras.layers.Input(
+        shape=(num_of_visits,),
+        dtype='int32',
+        name='visit_segment'
+    )
     visit_mask = tf.keras.layers.Input(
         shape=(num_of_visits,),
         dtype='int32',
         name='visit_mask')
-
     visit_time_delta_att = tf.keras.layers.Input(
         shape=(num_of_visits - 1,),
         dtype='int32',
         name='visit_time_delta_att'
     )
 
-    visit_rank_order = tf.keras.layers.Input(
-        shape=(num_of_visits,),
-        dtype='int32',
-        name='visit_rank_order'
-    )
-
-    visit_visit_type = tf.keras.layers.Input(
-        shape=(num_of_visits,),
-        dtype='int32',
-        name='masked_visit_type'
-    )
-
     # Create a list of inputs so the model could reference these later
     default_inputs = [
         pat_seq, pat_seq_age, pat_seq_time, pat_mask,
-        concept_values, concept_value_masks, visit_mask,
-        visit_time_delta_att, visit_rank_order, visit_visit_type
+        concept_values, concept_value_masks, visit_segment, visit_mask,
+        visit_time_delta_att
     ]
 
     # Expand dimensions for masking MultiHeadAttention in Concept Encoder

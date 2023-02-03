@@ -40,6 +40,9 @@ class AbstractModel(ABC):
     def get_model_test_metrics_folder(self):
         return create_folder_if_not_exist(self.get_model_folder(), 'test_metrics')
 
+    def get_model_test_prediction_folder(self):
+        return create_folder_if_not_exist(self.get_model_folder(), 'test_prediction')
+
     def get_model_history_folder(self):
         return create_folder_if_not_exist(self.get_model_folder(), 'history')
 
@@ -136,10 +139,12 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             dataset = dataset.take(data_generator.get_steps_per_epoch()).cache().repeat()
             dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
-        history = self._model.fit(dataset,
-                                  steps_per_epoch=steps_per_epoch,
-                                  epochs=self._epochs,
-                                  callbacks=self._get_callbacks())
+        history = self._model.fit(
+            dataset,
+            steps_per_epoch=steps_per_epoch,
+            epochs=self._epochs,
+            callbacks=self._get_callbacks()
+        )
 
         save_training_history(history, self.get_model_history_folder())
 

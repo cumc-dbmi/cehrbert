@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 import math
 from scipy import stats
 from itertools import product
-from sklearn.model_selection import StratifiedShuffleSplit, RepeatedStratifiedKFold, \
+from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold, \
     train_test_split
 from tensorflow.python.keras.utils.generic_utils import get_custom_objects
 
@@ -30,8 +30,8 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             batch_size,
             sequence_model_name: bool = None,
             cross_validation_test: bool = False,
-            num_of_repeats: int = 1,
             grid_search_config: GridSearchConfig = None,
+            freeze_pretrained_model=False,
             *args, **kwargs
     ):
         self.get_logger().info(
@@ -39,14 +39,14 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             f'batch_size: {batch_size}\n'
             f'sequence_model_name: {sequence_model_name}\n'
             f'cross_validation_test: {cross_validation_test}\n'
-            f'num_of_repeats: {num_of_repeats}\n'
             f'grid_search_config: {grid_search_config}\n'
+            f'freeze_pretrained_model: {freeze_pretrained_model}\n'
         )
         self._epochs = epochs
         self._batch_size = batch_size
         self._sequence_model_name = sequence_model_name
         self._cross_validation_test = cross_validation_test
-        self._num_of_repeats = num_of_repeats
+        self._freeze_pretrained_model = freeze_pretrained_model
 
         if grid_search_config:
             self._grid_search_config = grid_search_config
@@ -68,8 +68,8 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
 
     def train_model(
             self,
-            training_data: Dataset,
-            val_data: Dataset,
+            training_data: tf.data.Dataset,
+            val_data: tf.data.Dataset,
             model_name,
             **kwargs
     ):
@@ -118,6 +118,7 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
 
     def eval_model_cross_validation_test(self):
         """
+
         The data is split into train_val and test partitions. It carries out a k-fold cross
         validation on the train_val partition first, then
 
@@ -125,9 +126,9 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         """
         features, labels = self.extract_model_inputs()
 
-        # Hold out 20% of the data for testing
+        # Hold out 15% of the data for testing
         if self._is_chronological_test:
-            training_stop = math.ceil(self._dataset.index.stop * 0.8)
+            training_stop = math.ceil(self._dataset.index.stop * 0.85)
             training_val_test_set_idx = np.asarray(
                 range(training_stop)
             )
@@ -137,8 +138,8 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         else:
             stratified_splitter = StratifiedShuffleSplit(
                 n_splits=1,
-                test_size=0.2,
-                random_state=1
+                test_size=0.15,
+                random_state=10
             )
             training_val_test_set_idx, held_out_set_idx = next(
                 stratified_splitter.split(
@@ -147,14 +148,14 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
                 )
             )
 
-        # Use the remaining 80% of the training data for optimizing
+        # Use the remaining 85% of the training data for optimizing
         training_val_test_set_inputs = {
             k: v[training_val_test_set_idx]
             for k, v in features.items()
         }
         training_val_test_set_labels = labels[training_val_test_set_idx]
 
-        # Conduct a grid search to find the best combination of hyper parameters
+        # Conduct a grid search to find the best combination of hyperparameters
         all_param_configs_pd = self.grid_search_cross_validation(
             features=training_val_test_set_inputs,
             labels=training_val_test_set_labels
@@ -209,6 +210,7 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             self._model,
             hold_out_set,
             self.get_model_test_metrics_folder(),
+            evaluation_model_folder=self.get_model_test_prediction_folder(),
             model_name=f'{self._sequence_model_name}_final'
         )
 
@@ -233,6 +235,12 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
                     self._grid_search_config.lstm_units
                 )
         ):
+            # Print out the model hyperparameters
+            tf.print(f'learning_rate: {lr}')
+            tf.print(f'is_bi_directional: {is_bi_directional}')
+            tf.print(f'lstm_unit: {lstm_unit}')
+
+            # Remember this configuration in a dict
             param_config = {
                 'learning_rate': lr,
                 'is_bi_directional': is_bi_directional,
@@ -243,35 +251,56 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             # Conduct k-fold cross validation to get a sense of the model
             num_of_epochs = []
             roc_auc_scores = []
-            for i, (train, val, test) in enumerate(
-                    self.k_fold(
-                        features=features,
-                        labels=labels
+
+            # Run the k-fold 10 times until we discover a single mode
+            max_iter = 10
+            while max_iter > 0:
+                for i, (train, val, test) in enumerate(
+                        self.k_fold(
+                            features=features,
+                            labels=labels
+                        )
+                ):
+                    self._model = self._create_model(
+                        is_bi_directional=is_bi_directional,
+                        lstm_unit=lstm_unit
                     )
-            ):
-                self._model = self._create_model(
-                    is_bi_directional=is_bi_directional,
-                    lstm_unit=lstm_unit
+                    history = self.train_model(
+                        training_data=train,
+                        val_data=val,
+                        model_name=f'{self._sequence_model_name}_param_{idx}_iter_{i}'
+                    )
+                    # This captures the number of epochs each fold trained
+                    num_of_epochs.append(len(history.history['loss']) - 1)
+                    fold_metrics = compute_binary_metrics(
+                        self._model,
+                        test,
+                        self.get_model_metrics_folder(),
+                        model_name=f'{self._sequence_model_name}_param_{idx}_iter_{i}',
+                        extra_info=param_config,
+                        calculate_ci=False
+                    )
+                    roc_auc_scores.append(fold_metrics['roc_auc'])
+
+                max_iter = max_iter - 1
+
+                # If we find a single mode, we exit the loop
+                if len(multimode(num_of_epochs)) == 1:
+                    self.get_logger().info(
+                        f'Found the best epoch for lr={lr},'
+                        f' is_bi_directional={is_bi_directional}, lstm_unit={lstm_unit}'
+                    )
+                    break
+
+            if max_iter == 0:
+                raise RuntimeError(
+                    f'Failed to find the best epoch for lr={lr},'
+                    f' is_bi_directional={is_bi_directional}, lstm_unit={lstm_unit}'
                 )
-                history = self.train_model(
-                    training_data=train,
-                    val_data=val,
-                    model_name=f'{self._sequence_model_name}_param_{idx}_iter_{i}'
-                )
-                # This captures the number of epochs each fold trained
-                num_of_epochs.append(len(history.history['loss']) - 1)
-                fold_metrics = compute_binary_metrics(
-                    self._model,
-                    test,
-                    self.get_model_metrics_folder(),
-                    model_name=f'{self._sequence_model_name}_param_{idx}_iter_{i}',
-                    extra_info=param_config
-                )
-                roc_auc_scores.append(fold_metrics['roc_auc'])
 
             # Add the number of epochs and average roc_auc to this combination
             param_config.update({
-                'epoch': sorted(stats.mode(num_of_epochs).mode)[0],
+                'epoch': stats.mode(num_of_epochs).mode[0],
                 'roc_auc': np.mean(roc_auc_scores)
             })
 
@@ -301,23 +330,33 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         """
         # This preserves the percentage of samples for each class (0 and 1 for binary
         # classification)
-        stratified_k_fold = RepeatedStratifiedKFold(
-            n_splits=self._num_of_folds,
-            n_repeats=self._num_of_repeats,
-            random_state=1
-        )
+        if self._k_fold_test:
+            stratified_splitter = StratifiedKFold(
+                n_splits=self._num_of_folds,
+                random_state=10
+            )
+        else:
+            stratified_splitter = StratifiedShuffleSplit(
+                n_splits=self._num_of_folds,
+                test_size=0.15,
+                random_state=10
+            )
 
-        for train, val_test in stratified_k_fold.split(
+        for train, val_test in stratified_splitter.split(
                 X=labels,
                 y=labels
         ):
-            # further split val_test using a 1:1 ratio between val and test
-            val, test = train_test_split(
-                val_test,
-                test_size=0.6,
-                random_state=1,
-                stratify=labels[val_test]
-            )
+            if self._k_fold_test:
+                # further split val_test using a 1:1 ratio between val and test
+                val, test = train_test_split(
+                    val_test,
+                    test_size=0.5,
+                    random_state=10,
+                    stratify=labels[val_test]
+                )
+            else:
+                test = val_test
+                val = val_test
 
             if self._is_transfer_learning:
                 size = int(len(train) * self._training_percentage)
@@ -372,55 +411,76 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
 
 class BiLstmModelEvaluator(SequenceModelEvaluator):
 
-    def __init__(self,
-                 max_seq_length: int,
-                 time_aware_model_path: str,
-                 tokenizer_path: str,
-                 *args, **kwargs):
+    def __init__(
+            self,
+            max_seq_length: int,
+            time_aware_model_path: str,
+            tokenizer_path: str,
+            embedding_size: int,
+            *args,
+            **kwargs
+    ):
         self._max_seq_length = max_seq_length
+        self._embedding_size = embedding_size
         self._time_aware_model_path = time_aware_model_path
         self._tokenizer = pickle.load(open(tokenizer_path, 'rb'))
 
-        self.get_logger().info(f'max_seq_length: {max_seq_length}\n'
-                               f'time_aware_model_path: {time_aware_model_path}\n'
-                               f'tokenizer_path: {tokenizer_path}\n')
+        self.get_logger().info(
+            f'max_seq_length: {max_seq_length}\n'
+            f'embedding_size: {embedding_size}\n'
+            f'time_aware_model_path: {time_aware_model_path}\n'
+            f'tokenizer_path: {tokenizer_path}\n'
+        )
 
         super(BiLstmModelEvaluator, self).__init__(*args, **kwargs)
 
-    def _create_model(self):
+    def _create_model(
+            self,
+            **kwargs
+    ):
         def get_concept_embeddings():
-            another_strategy = tf.distribute.OneDeviceStrategy("/cpu:0")
-            with another_strategy.scope():
-                time_aware_model = tf.keras.models.load_model(self._time_aware_model_path,
-                                                              custom_objects=dict(
-                                                                  **get_custom_objects()))
-                embedding_layer = time_aware_model.get_layer('embedding_layer')
-            return embedding_layer.get_weights()[0]
+            try:
+                another_strategy = tf.distribute.OneDeviceStrategy("/cpu:0")
+                with another_strategy.scope():
+                    time_aware_model = tf.keras.models.load_model(
+                        self._time_aware_model_path,
+                        custom_objects=dict(**get_custom_objects())
+                    )
+                    embedding_layer = time_aware_model.get_layer('embedding_layer')
+
+                return embedding_layer.get_weights()[0]
+            except (IOError, ImportError) as e:
+                self.get_logger().info(
+                    f'Cannot load the time attention model, return None. Error: {e}'
+                )
+                return None
 
         embeddings = get_concept_embeddings()
         strategy = tf.distribute.MirroredStrategy()
         self.get_logger().info('Number of devices: {}'.format(strategy.num_replicas_in_sync))
         with strategy.scope():
-            _, embedding_size = np.shape(embeddings)
-            model = create_bi_lstm_model(self._max_seq_length,
-                                         self._tokenizer.get_vocab_size(),
-                                         embedding_size,
-                                         embeddings)
-            model.compile(loss='binary_crossentropy',
-                          optimizer=tf.keras.optimizers.Adam(1e-4),
-                          metrics=get_metrics())
+            model = create_bi_lstm_model(
+                self._max_seq_length,
+                self._tokenizer.get_vocab_size(),
+                self._embedding_size,
+                embeddings,
+                **kwargs
+            )
+            model.compile(
+                loss='binary_crossentropy',
+                optimizer=tf.keras.optimizers.Adam(1e-4),
+                metrics=get_metrics()
+            )
             return model
 
     def extract_model_inputs(self):
         token_ids = self._tokenizer.encode(
             self._dataset.concept_ids.apply(lambda concept_ids: concept_ids.tolist()))
-        ages = np.asarray(((self._dataset['age'] - self._dataset['age'].mean()) / self._dataset[
-            'age'].std()).astype(float).apply(lambda c: [c]).tolist())
-        labels = self._dataset.label
+        labels = self._dataset.label.to_numpy()
         padded_token_ides = post_pad_pre_truncate(token_ids, self._tokenizer.get_unused_token_id(),
                                                   self._max_seq_length)
         inputs = {
-            'age': ages,
+            'age': np.expand_dims(self._dataset.age, axis=-1),
             'concept_ids': padded_token_ides
         }
         return inputs, labels

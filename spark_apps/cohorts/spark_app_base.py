@@ -224,33 +224,36 @@ class BaseCohortBuilder(ABC):
 
 
 class NestedCohortBuilder:
-    def __init__(self,
-                 cohort_name: str,
-                 input_folder: str,
-                 output_folder: str,
-                 target_cohort: DataFrame,
-                 outcome_cohort: DataFrame,
-                 ehr_table_list: List[str],
-                 observation_window: int,
-                 hold_off_window: int,
-                 prediction_start_days: int,
-                 prediction_window: int,
-                 num_of_visits: int,
-                 num_of_concepts: int,
-                 is_window_post_index: bool = False,
-                 include_visit_type: bool = True,
-                 exclude_visit_tokens: bool = False,
-                 is_feature_concept_frequency: bool = False,
-                 is_roll_up_concept: bool = False,
-                 include_concept_list: bool = True,
-                 is_new_patient_representation: bool = False,
-                 is_hierarchical_bert: bool = False,
-                 classic_bert_seq: bool = False,
-                 is_first_time_outcome: bool = False,
-                 is_questionable_outcome_existed: bool = False,
-                 is_remove_index_prediction_starts: bool = False,
-                 is_prediction_window_unbounded: bool = False,
-                 is_observation_window_unbounded: bool = False):
+    def __init__(
+            self,
+            cohort_name: str,
+            input_folder: str,
+            output_folder: str,
+            target_cohort: DataFrame,
+            outcome_cohort: DataFrame,
+            ehr_table_list: List[str],
+            observation_window: int,
+            hold_off_window: int,
+            prediction_start_days: int,
+            prediction_window: int,
+            num_of_visits: int,
+            num_of_concepts: int,
+            is_window_post_index: bool = False,
+            include_visit_type: bool = True,
+            allow_measurement_only: bool = False,
+            exclude_visit_tokens: bool = False,
+            is_feature_concept_frequency: bool = False,
+            is_roll_up_concept: bool = False,
+            include_concept_list: bool = True,
+            is_new_patient_representation: bool = False,
+            is_hierarchical_bert: bool = False,
+            classic_bert_seq: bool = False,
+            is_first_time_outcome: bool = False,
+            is_questionable_outcome_existed: bool = False,
+            is_remove_index_prediction_starts: bool = False,
+            is_prediction_window_unbounded: bool = False,
+            is_observation_window_unbounded: bool = False
+    ):
         self._cohort_name = cohort_name
         self._input_folder = input_folder
         self._output_folder = output_folder
@@ -277,6 +280,7 @@ class NestedCohortBuilder:
         self._is_questionable_outcome_existed = is_questionable_outcome_existed
         self._is_prediction_window_unbounded = is_prediction_window_unbounded
         self._include_concept_list = include_concept_list
+        self._allow_measurement_only = allow_measurement_only
         self._output_data_folder = os.path.join(self._output_folder,
                                                 re.sub('[^a-z0-9]+', '_',
                                                        self._cohort_name.lower()))
@@ -294,6 +298,7 @@ class NestedCohortBuilder:
                                f'is_window_post_index: {is_window_post_index}\n'
                                f'include_visit_type: {include_visit_type}\n'
                                f'exclude_visit_tokens: {exclude_visit_tokens}\n'
+                               f'allow_measurement_only: {allow_measurement_only}\n'
                                f'is_feature_concept_frequency: {is_feature_concept_frequency}\n'
                                f'is_roll_up_concept: {is_roll_up_concept}\n'
                                f'is_new_patient_representation: {is_new_patient_representation}\n'
@@ -444,7 +449,8 @@ class NestedCohortBuilder:
             return create_hierarchical_sequence_data(
                 person=self._dependency_dict[PERSON],
                 visit_occurrence=self._dependency_dict[VISIT_OCCURRENCE],
-                patient_events=cohort_ehr_records
+                patient_events=cohort_ehr_records,
+                allow_measurement_only=self._allow_measurement_only
             )
 
         if self._is_feature_concept_frequency:
@@ -558,6 +564,7 @@ def create_prediction_cohort(
         is_window_post_index=is_window_post_index,
         include_visit_type=include_visit_type,
         exclude_visit_tokens=exclude_visit_tokens,
+        allow_measurement_only=spark_args.allow_measurement_only,
         is_feature_concept_frequency=is_feature_concept_frequency,
         is_roll_up_concept=is_roll_up_concept,
         include_concept_list=spark_args.include_concept_list,

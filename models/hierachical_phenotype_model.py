@@ -14,13 +14,16 @@ def create_probabilistic_phenotype_model(
         l2_reg_penalty: float = 1e-4,
         time_embeddings_size: int = 16,
         include_att_prediction: bool = False,
-        include_visit_type_prediction: bool = False,
+        include_visit_prediction: bool = False,
         include_readmission: bool = False,
         include_prolonged_length_stay: bool = False,
         visit_vocab_size: int = None,
         num_of_phenotypes: int = 20,
         num_of_phenotype_neighbors: int = 3,
-        num_of_concept_neighbors: int = 10
+        num_of_concept_neighbors: int = 10,
+        phenotype_entropy_weight: float = 2e-05,
+        phenotype_euclidean_weight: float = 2e-05,
+        phenotype_concept_distance_weight: float = 1e-04,
 ):
     """
     Create a hierarchical bert model
@@ -37,17 +40,20 @@ def create_probabilistic_phenotype_model(
     :param l2_reg_penalty:
     :param time_embeddings_size:
     :param include_att_prediction:
-    :param include_visit_type_prediction:
+    :param include_visit_prediction:
     :param include_readmission:
     :param include_prolonged_length_stay:
     :param visit_vocab_size:
     :param num_of_phenotypes:
     :param num_of_phenotype_neighbors:
     :param num_of_concept_neighbors:
+    :param phenotype_concept_distance_weight:
+    :param phenotype_euclidean_weight:
+    :param phenotype_entropy_weight:
     :return:
     """
     # If the second tiered learning objectives are enabled, visit_vocab_size needs to be provided
-    if include_visit_type_prediction and not visit_vocab_size:
+    if include_visit_prediction and not visit_vocab_size:
         raise RuntimeError(f'visit_vocab_size can not be null '
                            f'when the second learning objectives are enabled')
 
@@ -81,12 +87,6 @@ def create_probabilistic_phenotype_model(
         dtype='int32',
         name='concept_value_masks'
     )
-    visit_segment = tf.keras.layers.Input(
-        shape=(num_of_visits,),
-        dtype='int32',
-        name='visit_segment'
-    )
-
     visit_mask = tf.keras.layers.Input(
         shape=(num_of_visits,),
         dtype='int32',
@@ -97,13 +97,11 @@ def create_probabilistic_phenotype_model(
         dtype='int32',
         name='visit_time_delta_att'
     )
-
     visit_rank_order = tf.keras.layers.Input(
         shape=(num_of_visits,),
         dtype='int32',
         name='visit_rank_order'
     )
-
     visit_visit_type = tf.keras.layers.Input(
         shape=(num_of_visits,),
         dtype='int32',
@@ -112,7 +110,7 @@ def create_probabilistic_phenotype_model(
 
     # Create a list of inputs so the model could reference these later
     default_inputs = [pat_seq, pat_seq_age, pat_seq_time, pat_mask,
-                      concept_values, concept_value_masks, visit_segment, visit_mask,
+                      concept_values, concept_value_masks, visit_mask,
                       visit_time_delta_att, visit_rank_order, visit_visit_type]
 
     # Expand dimensions for masking MultiHeadAttention in Concept Encoder
@@ -321,11 +319,14 @@ def create_probabilistic_phenotype_model(
         num_of_concept_neighbors=num_of_concept_neighbors,
         embedding_size=embedding_size,
         transformer_dropout=transformer_dropout,
+        phenotype_entropy_weight=phenotype_entropy_weight,
+        phenotype_euclidean_weight=phenotype_euclidean_weight,
+        phenotype_concept_distance_weight=phenotype_concept_distance_weight,
         name='hidden_visit_embeddings'
     )
 
     # (batch_size, num_of_visits, vocab_size)
-    visit_embeddings_without_att, _ = visit_phenotype_layer(
+    visit_embeddings_without_att, _, = visit_phenotype_layer(
         [visit_embeddings_without_att, visit_mask, embedding_matrix]
     )
 
@@ -406,8 +407,8 @@ def create_probabilistic_phenotype_model(
         )
         outputs.append(att_predictions)
 
-    if include_visit_type_prediction:
-        # Slice out the the visit embeddings (CLS tokens)
+    if include_visit_prediction:
+        # Slice out the visit embeddings (CLS tokens)
 
         visit_type_prediction_output_layer = TiedOutputEmbedding(
             projection_regularizer=l2_regularizer,

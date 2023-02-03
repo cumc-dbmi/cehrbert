@@ -12,7 +12,7 @@ if __name__ == '__main__':
 
     create_prediction_cohort(
         spark_args,
-        last.query_builder(),
+        last.query_builder(spark_args),
         death.query_builder(),
         ehr_table_list
     )

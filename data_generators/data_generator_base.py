@@ -8,7 +8,6 @@ from pandas import DataFrame
 from itertools import chain
 
 from data_generators.learning_objective import *
-from data_generators.probabilistic_learning_objective import *
 from data_generators.tokenizer import ConceptTokenizer
 
 
@@ -63,7 +62,7 @@ class AbstractDataGeneratorBase(ABC):
             max_seq_len: int,
             min_num_of_concepts: int,
             is_random_cursor: bool = False,
-            is_training: bool = True,
+            is_pretraining: bool = True,
             *args,
             **kwargs
     ):
@@ -73,19 +72,19 @@ class AbstractDataGeneratorBase(ABC):
         self._max_seq_len = max_seq_len
         self._min_num_of_concepts = min_num_of_concepts
         self._is_random_cursor = is_random_cursor
-        self._is_training = is_training
+        self._is_pretraining = is_pretraining
 
         self.get_logger().info(
             f'batch_size: {batch_size}\n'
             f'max_seq_len: {max_seq_len}\n'
             f'min_num_of_concepts: {min_num_of_concepts}\n'
             f'is_random_cursor: {is_random_cursor}\n'
-            f'is_training: {is_training}\n'
+            f'is_pretraining: {is_pretraining}\n'
         )
 
         self._learning_objectives = self._initialize_learning_objectives(
             max_seq_len=max_seq_len,
-            is_training=is_training,
+            is_pretraining=is_pretraining,
             **kwargs
         )
         # validate the required columns in the training data
@@ -139,6 +138,7 @@ class AbstractDataGeneratorBase(ABC):
                     f'The required column {required_column} does not exist in the training data'
                 )
 
+    @abstractmethod
     def _clean_dataframe(self):
         """
         Clean the input data (_training_data) e.g. remove rows whose sequence length is less than
@@ -148,47 +148,35 @@ class AbstractDataGeneratorBase(ABC):
 
         :return:
         """
-        self._training_data = self._training_data[
-            self._training_data[self.default_required_column].apply(
-                lambda token_ids: len(token_ids)) >=
-            max(self.default_min_num_of_concepts, self._min_num_of_concepts)]
+        pass
 
     def create_batch_generator(self):
         """
         Create the batch generator for tf.dataset.from_generator to use
         :return:
         """
-
-        def filter_lambda(row_slicer):
-            """
-            Filter out the row_slicer whose concept_ids are less than min_num_of_concepts
-            :param row_slicer:
-            :return:
-            """
-            return len(getattr(
-                row_slicer.row,
-                self.default_required_column)) >= self._min_num_of_concepts
-
-        iterator = self._create_iterator()
-
         while True:
+            # Get a new iterator
+            iterator = self._create_iterator()
+            # Slice out a batch of data for every step
+            for _ in range(self.get_steps_per_epoch()):
+                rows = list(islice(iterator, self._batch_size))
+                input_dicts = []
+                output_dicts = []
+                for learning_objective in self._learning_objectives:
+                    input_dict, output_dict = learning_objective.process_batch(list(rows))
+                    input_dicts.append(input_dict)
+                    output_dicts.append(output_dict)
+                yield dict(ChainMap(*input_dicts)), dict(ChainMap(*output_dicts))
 
-            rows = list(
-                filter(filter_lambda, islice(iterator, self._batch_size)))
+            # Break out of the infinite loop in the non pretraining mode
+            if not self._is_pretraining:
+                break
 
-            input_dicts = []
-            output_dicts = []
-
-            for learning_objective in self._learning_objectives:
-                input_dict, output_dict = learning_objective.process_batch(
-                    rows)
-                input_dicts.append(input_dict)
-                output_dicts.append(output_dict)
-
-            yield dict(ChainMap(*input_dicts)), dict(ChainMap(*output_dicts))
-
-    def set_learning_objectives(self,
-                                learning_objectives: List[LearningObjective]):
+    def set_learning_objectives(
+            self,
+            learning_objectives: List[LearningObjective]
+    ):
         """
         Overwrite the default learning objectives
 
@@ -202,12 +190,19 @@ class AbstractDataGeneratorBase(ABC):
         pass
 
     @abstractmethod
-    def estimate_data_size(self):
+    def get_data_size(self):
         pass
 
     def get_steps_per_epoch(self):
-        return self.estimate_data_size() // self._batch_size \
-               + self.estimate_data_size() % self._batch_size
+        """
+        Calculate the number of steps required for one epoch to complete.
+        Floor division + 1 if there is any modulo value
+        :return:
+        """
+        return (
+                self.get_data_size() // self._batch_size
+                + bool(self.get_data_size() % self._batch_size)
+        )
 
     def _get_required_columns(self) -> Set[str]:
         """
@@ -245,40 +240,52 @@ class AbstractDataGeneratorBase(ABC):
 
 
 class BertDataGenerator(AbstractDataGeneratorBase):
-    def __init__(self, concept_tokenizer: ConceptTokenizer, *args, **kwargs):
+
+    def __init__(
+            self,
+            concept_tokenizer: ConceptTokenizer,
+            *args,
+            **kwargs):
         super(BertDataGenerator,
-              self).__init__(concept_tokenizer=concept_tokenizer,
-                             *args,
-                             **kwargs)
+              self).__init__(
+            concept_tokenizer=concept_tokenizer,
+            *args,
+            **kwargs
+        )
         self._concept_tokenizer = concept_tokenizer
+
+    def _clean_dataframe(self):
+        self._training_data = self._training_data[
+            self._training_data[self.default_required_column].apply(
+                lambda token_ids: len(token_ids)) >=
+            max(self.default_min_num_of_concepts, self._min_num_of_concepts)]
 
     def _get_learning_objective_classes(self):
         return [MaskedLanguageModelLearningObjective]
 
     def _create_iterator(self):
         """
-        Create an iterator that will iterate forever
+        Create an iterator that will iterate through all training data
         :return:
         """
-        while True:
-            for row in self._training_data.itertuples():
-                seq_length = len(row.token_ids)
-                if self._is_training:
-                    cursor = random.randint(0, seq_length -
-                                            1) if self._is_random_cursor & (
-                            seq_length > self._max_seq_len
-                    ) else seq_length // 2
+        for row in self._training_data.itertuples():
+            seq_length = len(row.token_ids)
+            if self._is_pretraining:
+                cursor = random.randint(0, seq_length -
+                                        1) if self._is_random_cursor & (
+                        seq_length > self._max_seq_len
+                ) else seq_length // 2
 
-                    half_window_size = int(self._max_seq_len / 2)
-                    start_index = max(0, cursor - half_window_size)
-                    end_index = min(cursor + half_window_size, seq_length)
+                half_window_size = int(self._max_seq_len / 2)
+                start_index = max(0, cursor - half_window_size)
+                end_index = min(cursor + half_window_size, seq_length)
 
-                    if start_index < end_index:
-                        yield RowSlicer(row, start_index, end_index)
-                else:
-                    yield RowSlicer(row, 0, seq_length)
+                if start_index < end_index:
+                    yield RowSlicer(row, start_index, end_index)
+            else:
+                yield RowSlicer(row, 0, seq_length)
 
-    def estimate_data_size(self):
+    def get_data_size(self):
         return len(self._training_data)
 
 
@@ -299,96 +306,95 @@ class HierarchicalBertDataGenerator(AbstractDataGeneratorBase):
     def __init__(
             self,
             concept_tokenizer: ConceptTokenizer,
+            visit_tokenizer: ConceptTokenizer,
             max_num_of_visits: int,
             max_num_of_concepts: int,
             include_att_prediction: bool,
-            sliding_window: int = 5,
+            include_visit_prediction: bool,
             min_num_of_concepts: int = 5,
+            min_num_of_visits: int = 2,
             *args,
             **kwargs
     ):
 
-        max_seq_len = max_num_of_visits * max_num_of_concepts
+        # The num of visits
+        self._min_num_of_visits = min_num_of_visits
+        self._max_num_of_visits = max_num_of_visits
+        self._max_num_of_concepts = max_num_of_concepts
+
         super(HierarchicalBertDataGenerator, self).__init__(
             concept_tokenizer=concept_tokenizer,
+            visit_tokenizer=visit_tokenizer,
             max_num_of_visits=max_num_of_visits,
             max_num_of_concepts=max_num_of_concepts,
-            max_seq_len=max_seq_len,
+            max_seq_len=max_num_of_visits * max_num_of_concepts,
             min_num_of_concepts=min_num_of_concepts,
             include_att_prediction=include_att_prediction,
+            include_visit_prediction=include_visit_prediction,
             *args,
             **kwargs
         )
-        self._concept_tokenizer = concept_tokenizer
-        self._max_num_of_visits = max_num_of_visits
-        self._max_num_of_concepts = max_num_of_concepts
-        self._sliding_window = sliding_window
+
+    def _clean_dataframe(self):
+        """
+        Remove the patients that don't have enough concepts to qualify
+        :return:
+        """
+        min_num_of_concepts = max(self.default_min_num_of_concepts, self._min_num_of_concepts)
+        criteria = (
+                (self._training_data['num_of_concepts'] >= min_num_of_concepts)
+                & (self._training_data['num_of_visits'] >= self._min_num_of_visits)
+        )
+        self._training_data = self._training_data[criteria]
 
     def _get_learning_objective_classes(self):
         return [
             HierarchicalMaskedLanguageModelLearningObjective,
-            HierarchicalArtificialTokenPredictionLearningObjective
+            HierarchicalArtificialTokenPredictionLearningObjective,
+            HierarchicalVisitTypePredictionLearningObjective
         ]
-
-    def _calculate_step(self, num_of_visits):
-        """
-        Calculate the number of steps. We first calculate the ratio of num_of_visits to
-        max_num_of_visits, then apply a log base 2 transformation to the ratio to calculate the
-        number of examples this patient medical history will yield.
-
-        E.g. round(log2(80/20)) = 2; round(log2(200/20)) = 3
-
-        :param num_of_visits:
-
-        :return: the num of examples this patient contributes
-        """
-        return max(
-            1,
-            math.floor(math.log2(num_of_visits / self._max_num_of_visits))
-        )
 
     def _create_iterator(self):
         """
-        Create an iterator that will iterate forever
+        Create an iterator that will iterate through all training example
         :return:
         """
-        while True:
-            for row in self._training_data.itertuples():
-                # Skip the patient that doesn't have the min number of concepts
-                if row.num_of_concepts >= self._min_num_of_concepts:
-                    if self._max_num_of_visits >= row.num_of_visits:
-                        start_index = 0
-                        end_index = row.num_of_visits
-                    else:
-                        start_index = random.randint(0, row.num_of_visits - self._max_num_of_visits)
-                        end_index = start_index + self._max_num_of_visits
+        for row in self._training_data.itertuples():
 
-                    if start_index < end_index:
-                        yield RowSlicer(row, start_index, end_index)
+            if self._is_pretraining:
+                if self._max_num_of_visits >= row.num_of_visits:
+                    start_index = 0
+                    end_index = row.num_of_visits
+                else:
+                    start_index = random.randint(0, row.num_of_visits - self._max_num_of_visits)
+                    end_index = start_index + self._max_num_of_visits
 
-    def estimate_data_size(self):
+                assert start_index < end_index
+                yield RowSlicer(row, start_index, end_index)
+
+            else:
+                # Return the entire patient history
+                yield RowSlicer(row, 0, row.num_of_visits)
+
+    def get_data_size(self):
         return len(self._training_data)
 
 
 class HierarchicalBertMultiTaskDataGenerator(HierarchicalBertDataGenerator):
     def __init__(
             self,
-            include_visit_prediction: bool,
             include_readmission: bool,
             include_prolonged_length_stay: bool,
-            visit_tokenizer: ConceptTokenizer = None,
             *args,
             **kwargs
     ):
-        self._include_visit_prediction = include_visit_prediction
         self._include_readmission = include_readmission
         self._include_prolonged_length_stay = include_prolonged_length_stay
-        self._visit_tokenizer = visit_tokenizer
+
         super(
             HierarchicalBertMultiTaskDataGenerator,
             self
         ).__init__(
-            visit_tokenizer=self._visit_tokenizer,
             *args,
             **kwargs
         )
@@ -397,11 +403,9 @@ class HierarchicalBertMultiTaskDataGenerator(HierarchicalBertDataGenerator):
 
         learning_objectives = [
             HierarchicalMaskedLanguageModelLearningObjective,
-            HierarchicalArtificialTokenPredictionLearningObjective
+            HierarchicalArtificialTokenPredictionLearningObjective,
+            HierarchicalVisitTypePredictionLearningObjective
         ]
-
-        if self._include_visit_prediction:
-            learning_objectives.append(HierarchicalVisitTypePredictionLearningObjective)
 
         if self._include_readmission:
             learning_objectives.append(HierarchicalReadmissionLearningObjective)
@@ -440,7 +444,7 @@ class TemporalBertDataGenerator(BertDataGenerator):
         while True:
             for row in self._training_data.itertuples():
                 seq_length = len(row.token_ids)
-                if self._is_training:
+                if self._is_pretraining:
                     cursor = random.randint(0, seq_length -
                                             1) if self._is_random_cursor & (
                             seq_length > self._max_seq_len
@@ -496,7 +500,7 @@ class TimeAttentionDataGenerator(AbstractDataGeneratorBase):
                     if start_index < end_index:
                         yield RowSlicer(row, start_index, end_index, i)
 
-    def estimate_data_size(self):
+    def get_data_size(self):
         return len(self._training_data.token_ids.explode())
 
 

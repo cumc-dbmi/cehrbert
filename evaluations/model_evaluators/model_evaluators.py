@@ -27,6 +27,7 @@ class AbstractModelEvaluator(AbstractModel):
                  training_percentage: float = 1.0,
                  learning_rate: float = 1e-4,
                  is_chronological_test: bool = False,
+                 k_fold_test: bool = False,
                  *args, **kwargs):
         self._dataset = copy.copy(dataset)
         self._evaluation_folder = evaluation_folder
@@ -35,6 +36,7 @@ class AbstractModelEvaluator(AbstractModel):
         self._is_transfer_learning = is_transfer_learning
         self._learning_rate = learning_rate
         self._is_chronological_test = is_chronological_test
+        self._k_fold_test = k_fold_test
 
         if is_transfer_learning:
             extension = 'transfer_learning_{:.2f}'.format(self._training_percentage).replace('.',
@@ -46,8 +48,9 @@ class AbstractModelEvaluator(AbstractModel):
             f'num_of_folds: {self._num_of_folds}\n'
             f'is_transfer_learning {self._is_transfer_learning}\n'
             f'training_percentage: {self._training_percentage}\n'
-            f'learning_rate: {self._learning_rate}'
+            f'learning_rate: {self._learning_rate}\n'
             f'is_chronological_test: {is_chronological_test}\n'
+            f'k_fold_test: {k_fold_test}\n'
         )
 
         if self._is_chronological_test:

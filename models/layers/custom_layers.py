@@ -1,15 +1,10 @@
 import numpy as np
 import tensorflow as tf
-import tensorflow_probability as tfp
 from tensorflow.keras.utils import get_custom_objects
 
 from keras_transformer.bert import MaskedPenalizedSparseCategoricalCrossentropy
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 from utils.model_utils import create_concept_mask
-
-tfd = tfp.distributions
-tfpl = tfp.layers
-tfb = tfp.bijectors
 
 
 def get_angles(pos, i, d_model):
@@ -323,14 +318,16 @@ class SimpleDecoderLayer(tf.keras.layers.Layer):
 
 
 class PositionalEncodingLayer(tf.keras.layers.Layer):
-    def __init__(self, embedding_size, *args, **kwargs):
+    def __init__(self, embedding_size, max_sequence_length=512, *args, **kwargs):
         super(PositionalEncodingLayer, self).__init__(*args, **kwargs)
         self.embedding_size = embedding_size
+        self.max_sequence_length = max_sequence_length
         # TODO: change this to dynamic in the future
         self.pos_encoding = tf.squeeze(positional_encoding(10000, self.embedding_size))
 
     def get_config(self):
         config = super().get_config()
+        config['max_sequence_length'] = self.max_sequence_length
         config['embedding_size'] = self.embedding_size
         return config
 
@@ -901,6 +898,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             num_of_concept_neighbors: int,
             embedding_size: int,
             transformer_dropout: float,
+            dff: int = 2148,
             phenotype_entropy_weight: float = 2e-05,
             phenotype_euclidean_weight: float = 2e-05,
             phenotype_concept_distance_weight: float = 1e-04,
@@ -910,6 +908,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         self.num_of_phenotypes = num_of_phenotypes
         self.embedding_size = embedding_size
         self.transformer_dropout = transformer_dropout
+        self.dff = dff
         self.num_of_concept_neighbors = num_of_concept_neighbors
         self.num_of_phenotype_neighbors = num_of_phenotype_neighbors
         self.phenotype_entropy_weight = phenotype_entropy_weight
@@ -920,30 +919,27 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         # (num_of_phenotypes, embedding_size)
         self.phenotype_embeddings = self.add_weight(
             shape=(num_of_phenotypes, embedding_size),
-            initializer=tf.keras.initializers.GlorotNormal(),
+            initializer=tf.keras.initializers.GlorotNormal(seed=0),
             trainable=True,
             name='phenotype_embeddings_matrix'
         )
 
-        self.gate_layer = tf.keras.layers.Dense(
-            1,
-            activation='sigmoid',
-            name='gate_layer'
+        self.ffn = point_wise_feed_forward_network(
+            embedding_size,
+            dff
         )
+        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
 
-        self.layer_norm_layer = tf.keras.layers.LayerNormalization(
-            epsilon=1e-6
-        )
-
-        self.dropout_layer = tf.keras.layers.Dropout(
-            transformer_dropout
-        )
+        self.dropout1 = tf.keras.layers.Dropout(transformer_dropout)
+        self.dropout2 = tf.keras.layers.Dropout(transformer_dropout)
 
     def get_config(self):
         config = super().get_config()
         config['num_of_phenotypes'] = self.num_of_phenotypes
         config['embedding_size'] = self.embedding_size
         config['transformer_dropout'] = self.transformer_dropout
+        config['dff'] = self.dff
         config['num_of_concept_neighbors'] = self.num_of_concept_neighbors
         config['num_of_phenotype_neighbors'] = self.num_of_phenotype_neighbors
         config['phenotype_entropy_weight'] = self.phenotype_entropy_weight
@@ -984,11 +980,6 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             ).values
         )
 
-        # Encourage the model to move the phenotype embeddings closer to concept embeddings
-        self.add_loss(
-            phenotype_concept_dist * self.phenotype_concept_distance_weight
-        )
-
         self.add_metric(
             phenotype_concept_dist,
             name='phenotype_concept_dist'
@@ -1006,24 +997,20 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         )
 
         # Add the entropy as a loss to encourage the model to focus on a subset of phenotypes
-        self.add_loss(
-            tf.reduce_mean(phenotype_prob_entropy) * self.phenotype_entropy_weight,
-        )
+        # self.add_loss(
+        #     tf.reduce_mean(phenotype_prob_entropy) * self.phenotype_entropy_weight,
+        # )
 
         # Get phenotype pairwise distance metrics
         phe_inv_loss, phe_dist_metric, phe_dist_var = self.get_inverse_phenotype_dist_loss_metric()
-
-        self.add_loss(
-            phe_inv_loss * self.phenotype_euclidean_weight
-        )
+        #
+        # self.add_loss(
+        #     phe_inv_loss * self.phenotype_euclidean_weight
+        # )
 
         self.add_metric(
             phe_dist_metric,
             name='phenotype_euclidean_distance'
-        )
-
-        self.add_loss(
-            phe_dist_var * self.phenotype_euclidean_weight
         )
 
         self.add_metric(
@@ -1033,35 +1020,20 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
 
         # Calculate the contextualized visit embeddings using the pre-defined phenotype embeddings
         # (batch_size, num_of_visits, embedding_size)
-        contextualized_phenotype_embeddings = self.dropout_layer(
+        contextualized_phenotype_embeddings = self.dropout1(
             visit_phenotype_probs @ self.phenotype_embeddings,
-            **kwargs
+            training=kwargs.get('training')
         )
 
-        # Clip the gate value so that visit_embeddings is more important than the phenotype
-        # embeddings
-        # (batch_size, num_of_visits, 1)
-        gate_value = self.gate_layer(
-            tf.squeeze(
-                visit_embeddings[:, :, tf.newaxis, :]
-                @ contextualized_phenotype_embeddings[:, :, :, tf.newaxis],
-                axis=-1
-            )
+        out1 = self.layernorm1(
+            visit_embeddings + contextualized_phenotype_embeddings
         )
 
-        gate_value = tf.clip_by_value(
-            gate_value,
-            clip_value_min=0.4,
-            clip_value_max=0.8
-        )
+        ffn_output = self.ffn(out1)  # (batch_size, input_seq_len, d_model)
+        ffn_output = self.dropout2(ffn_output, training=kwargs.get('training'))
+        out2 = self.layernorm2(out1 + ffn_output)  # (batch_size, input_seq_len, d_model)
 
-        # Sum the original visit embeddings and the phenotype contextualized visit embeddings
-        contextualized_visit_embeddings = self.layer_norm_layer(
-            gate_value * visit_embeddings + (1 - gate_value) * contextualized_phenotype_embeddings,
-            **kwargs
-        ) * converted_visit_mask
-
-        return contextualized_visit_embeddings, visit_phenotype_probs
+        return out2, visit_phenotype_probs
 
     def get_inverse_phenotype_dist_loss_metric(self):
         r = tf.reduce_sum(self.phenotype_embeddings * self.phenotype_embeddings, 1)

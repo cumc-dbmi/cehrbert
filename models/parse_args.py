@@ -1,4 +1,5 @@
 import argparse
+from data_generators.graph_sample_method import SimilarityType
 
 
 def create_parse_args():
@@ -87,6 +88,14 @@ def create_parse_args():
 def create_parse_args_base_bert():
     parser = create_parse_args()
     parser.add_argument(
+        '--min_num_of_concepts',
+        dest='min_num_of_concepts',
+        action='store',
+        type=int,
+        default=5,
+        required=False
+    )
+    parser.add_argument(
         '-d',
         '--depth',
         dest='depth',
@@ -174,6 +183,14 @@ def create_parse_args_hierarchical_bert():
         required=True
     )
     parser.add_argument(
+        '--min_num_of_visits',
+        dest='min_num_of_visits',
+        action='store',
+        type=int,
+        default=1,
+        required=False
+    )
+    parser.add_argument(
         '--include_att_prediction',
         dest='include_att_prediction',
         action='store_true'
@@ -182,6 +199,16 @@ def create_parse_args_hierarchical_bert():
         '--include_readmission',
         dest='include_readmission',
         action='store_true'
+    )
+    parser.add_argument(
+        '--concept_similarity_type',
+        dest='concept_similarity_type',
+        action='store',
+        choices=[
+            member.value for member in SimilarityType
+        ],
+        help='The concept similarity measures to use for masking',
+        required=True
     )
     return parser
 
@@ -214,6 +241,33 @@ def create_parse_args_hierarchical_bert_phenotype():
         type=int,
         help='Num of concept neighbors to consider when minimizing the phenotype-concept distances',
         default=10,
+        required=False
+    )
+    parser.add_argument(
+        '--phenotype_euclidean_weight',
+        dest='phenotype_euclidean_weight',
+        action='store',
+        type=float,
+        help='Weight to control the phenotype euclidean distance loss',
+        default=2e-05,
+        required=False
+    )
+    parser.add_argument(
+        '--phenotype_entropy_weight',
+        dest='phenotype_entropy_weight',
+        action='store',
+        type=float,
+        help='Weight to control the phenotype entropy weight loss',
+        default=2e-05,
+        required=False
+    )
+    parser.add_argument(
+        '--phenotype_concept_distance_weight',
+        dest='phenotype_concept_distance_weight',
+        action='store',
+        type=float,
+        help='Weight to control the phenotype concept distance loss',
+        default=1e-04,
         required=False
     )
     return parser

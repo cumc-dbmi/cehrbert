@@ -13,7 +13,7 @@ if __name__ == '__main__':
 
     create_prediction_cohort(
         spark_args,
-        t2dm.query_builder(),
+        t2dm.query_builder(spark_args),
         hf.query_builder(),
         ehr_table_list
     )

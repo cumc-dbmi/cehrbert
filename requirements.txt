@@ -1,4 +1,4 @@
-absl-py==0.10.0
+absl-py==1.2.0
 appnope==0.1.2
 astor==0.8.1
 astunparse==1.6.3
@@ -52,7 +52,7 @@ psutil==5.8.0
 ptyprocess==0.7.0
 py==1.9.0
 py4j==0.10.9
-pyarrow==1.0.1
+pyarrow==9.0.0
 pyasn1==0.4.8
 pyasn1-modules==0.2.8
 Pygments==2.10.0
@@ -74,7 +74,7 @@ sortedcontainers==2.3.0
 tblib==1.7.0
 tensorflow==2.9.1
 tensorflow-datasets==4.5.2
-tensorflow-estimator==2.9.1
+tensorflow-estimator==2.9.0
 tensorflow-metadata==1.7.0
 termcolor==1.1.0
 threadpoolctl==2.1.0
@@ -92,3 +92,6 @@ zict==2.0.0
 zipp==3.3.0
 fastparquet==0.8.1
 pyarrow==9.0.0
+numpy~=1.21.6
+setuptools~=41.2.0
+networkx~=2.6.3

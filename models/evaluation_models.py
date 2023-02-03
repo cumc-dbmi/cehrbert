@@ -8,29 +8,48 @@ from models.layers.custom_layers import ConvolutionBertLayer
 from models.bert_models_visit_prediction import transformer_bert_model_visit_prediction
 
 
-def create_bi_lstm_model(max_seq_length, vocab_size, embedding_size, concept_embeddings):
+def create_bi_lstm_model(
+        max_seq_length,
+        vocab_size,
+        embedding_size,
+        concept_embeddings,
+        dropout_rate=0.2,
+        lstm_unit=128,
+        activation='relu',
+        is_bi_directional=True
+):
     age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
+
+    age_batch_norm_layer = tf.keras.layers.BatchNormalization(name='age_batch_norm_layer')
+
+    normalized_index_age = age_batch_norm_layer(age_of_visit_input)
 
     concept_ids = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='concept_ids')
 
     if concept_embeddings is not None:
-        embedding_layer = tf.keras.layers.Embedding(vocab_size,
-                                                    embedding_size,
-                                                    embeddings_initializer=Constant(
-                                                        concept_embeddings),
-                                                    mask_zero=True)
+        embedding_layer = tf.keras.layers.Embedding(
+            vocab_size,
+            embedding_size,
+            embeddings_initializer=Constant(concept_embeddings),
+            mask_zero=True
+        )
     else:
-        embedding_layer = tf.keras.layers.Embedding(vocab_size,
-                                                    embedding_size,
-                                                    mask_zero=True)
+        embedding_layer = tf.keras.layers.Embedding(
+            vocab_size,
+            embedding_size,
+            mask_zero=True
+        )
 
-    bi_lstm_layer = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128))
+    bi_lstm_layer = tf.keras.layers.LSTM(lstm_unit)
 
-    dropout_lstm_layer = tf.keras.layers.Dropout(0.2)
+    if is_bi_directional:
+        bi_lstm_layer = tf.keras.layers.Bidirectional(bi_lstm_layer)
 
-    dense_layer = tf.keras.layers.Dense(64, activation='relu')
+    dropout_lstm_layer = tf.keras.layers.Dropout(dropout_rate)
 
-    dropout_dense_layer = tf.keras.layers.Dropout(0.2)
+    dense_layer = tf.keras.layers.Dense(64, activation=activation)
+
+    dropout_dense_layer = tf.keras.layers.Dropout(dropout_rate)
 
     output_layer = tf.keras.layers.Dense(1, activation='sigmoid')
 
@@ -38,7 +57,7 @@ def create_bi_lstm_model(max_seq_length, vocab_size, embedding_size, concept_emb
 
     next_input = dropout_lstm_layer(bi_lstm_layer(next_input))
 
-    next_input = tf.keras.layers.concatenate([next_input, age_of_visit_input])
+    next_input = tf.keras.layers.concatenate([next_input, normalized_index_age])
 
     next_input = dropout_dense_layer(dense_layer(next_input))
 
@@ -88,6 +107,10 @@ def create_vanilla_feed_forward_model(vanilla_bert_model_path):
 def create_sliding_bert_model(model_path, max_seq_length, context_window, stride):
     age_at_index_date = tf.keras.layers.Input(name='age', shape=(1,))
 
+    age_batch_norm_layer = tf.keras.layers.BatchNormalization(name='age_batch_norm_layer')
+
+    normalized_index_age = age_batch_norm_layer(age_at_index_date)
+
     concept_ids = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
                                         name='concept_ids')
     visit_segments = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
@@ -116,7 +139,7 @@ def create_sliding_bert_model(model_path, max_seq_length, context_window, stride
                                                ages,
                                                mask])
 
-    next_input = tf.keras.layers.concatenate([conv_bert_output, age_at_index_date])
+    next_input = tf.keras.layers.concatenate([conv_bert_output, normalized_index_age])
 
     dropout_conv_layer = tf.keras.layers.Dropout(0.2)
 
@@ -138,9 +161,16 @@ def create_sliding_bert_model(model_path, max_seq_length, context_window, stride
 def create_vanilla_bert_bi_lstm_model(
         max_seq_length,
         vanilla_bert_model_path,
-        **kwargs
+        dropout_rate=0.2,
+        lstm_unit=128,
+        activation='relu',
+        is_bi_directional=True
 ):
     age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
+
+    age_batch_norm_layer = tf.keras.layers.BatchNormalization(name='age_batch_norm_layer')
+
+    normalized_index_age = age_batch_norm_layer(age_of_visit_input)
 
     vanilla_bert_model = tf.keras.models.load_model(
         vanilla_bert_model_path,
@@ -156,22 +186,29 @@ def create_vanilla_bert_bi_lstm_model(
     # mask_input = bert_inputs[-1]
     mask_input = [i for i in bert_inputs if
                   'mask' in i.name and 'concept' not in i.name][0]
-    mask_embeddings = tf.tile(tf.expand_dims(mask_input == 0, -1, name='expand_mask'),
-                              [1, 1, embedding_size], name='tile_mask')
-    contextualized_embeddings = tf.math.multiply(contextualized_embeddings,
-                                                 tf.cast(mask_embeddings, dtype=tf.float32,
-                                                         name='cast_mask'))
+    mask_embeddings = tf.tile(
+        tf.expand_dims(mask_input == 0, -1, name='expand_mask'),
+        [1, 1, embedding_size], name='tile_mask'
+    )
+
+    contextualized_embeddings = tf.math.multiply(
+        contextualized_embeddings,
+        tf.cast(mask_embeddings, dtype=tf.float32, name='cast_mask')
+    )
 
     masking_layer = tf.keras.layers.Masking(mask_value=0.,
                                             input_shape=(max_seq_length, embedding_size))
 
-    bi_lstm_layer = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128))
+    bi_lstm_layer = tf.keras.layers.LSTM(lstm_unit)
 
-    dropout_lstm_layer = tf.keras.layers.Dropout(0.2)
+    if is_bi_directional:
+        bi_lstm_layer = tf.keras.layers.Bidirectional(bi_lstm_layer)
 
-    dense_layer = tf.keras.layers.Dense(64, activation='relu')
+    dropout_lstm_layer = tf.keras.layers.Dropout(dropout_rate)
 
-    dropout_dense_layer = tf.keras.layers.Dropout(0.2)
+    dense_layer = tf.keras.layers.Dense(64, activation=activation)
+
+    dropout_dense_layer = tf.keras.layers.Dropout(dropout_rate)
 
     output_layer = tf.keras.layers.Dense(1, activation='sigmoid')
 
@@ -183,7 +220,7 @@ def create_vanilla_bert_bi_lstm_model(
 
     next_input = dropout_lstm_layer(bi_lstm_layer(next_input))
 
-    next_input = tf.keras.layers.concatenate([next_input, age_of_visit_input])
+    next_input = tf.keras.layers.concatenate([next_input, normalized_index_age])
 
     next_input = dropout_dense_layer(dense_layer(next_input))
 
@@ -195,15 +232,21 @@ def create_vanilla_bert_bi_lstm_model(
     return lstm_with_vanilla_bert
 
 
-def create_random_vanilla_bert_bi_lstm_model(max_seq_length,
-                                             embedding_size,
-                                             depth,
-                                             tokenizer,
-                                             visit_tokenizer,
-                                             num_heads,
-                                             use_time_embedding,
-                                             time_embeddings_size):
+def create_random_vanilla_bert_bi_lstm_model(
+        max_seq_length,
+        embedding_size,
+        depth,
+        tokenizer,
+        visit_tokenizer,
+        num_heads,
+        use_time_embedding,
+        time_embeddings_size
+):
     age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
+
+    age_batch_norm_layer = tf.keras.layers.BatchNormalization(name='age_batch_norm_layer')
+
+    normalized_index_age = age_batch_norm_layer(age_of_visit_input)
 
     vanilla_bert_model = transformer_bert_model_visit_prediction(
         max_seq_length=max_seq_length,
@@ -249,7 +292,7 @@ def create_random_vanilla_bert_bi_lstm_model(max_seq_length,
 
     next_input = dropout_lstm_layer(bi_lstm_layer(next_input))
 
-    next_input = tf.keras.layers.concatenate([next_input, age_of_visit_input])
+    next_input = tf.keras.layers.concatenate([next_input, normalized_index_age])
 
     next_input = dropout_dense_layer(dense_layer(next_input))
 
@@ -276,11 +319,16 @@ def create_hierarchical_bert_bi_lstm_model_with_model(
         hierarchical_bert_model,
         dropout_rate=0.2,
         lstm_unit=128,
-        activation='tanh',
+        activation='relu',
         is_bi_directional=True,
-        include_att_tokens=False
+        include_att_tokens=False,
+        freeze_pretrained_model=False
 ):
-    age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
+    index_age_input = tf.keras.layers.Input(name='age', shape=(1,))
+
+    age_batch_norm_layer = tf.keras.layers.BatchNormalization(name='age_batch_norm_layer')
+
+    normalized_index_age = age_batch_norm_layer(index_age_input)
 
     _, num_of_visits, num_of_concepts, embedding_size = hierarchical_bert_model.get_layer(
         'temporal_transformation_layer'
@@ -290,43 +338,14 @@ def create_hierarchical_bert_bi_lstm_model_with_model(
             'hidden_visit_embeddings' in [layer.name for layer in hierarchical_bert_model.layers]
     )
 
+    # Freeze the weight of the pretrained model if enabled
+    if freeze_pretrained_model:
+        hierarchical_bert_model.trainable = False
+
     if is_phenotype_enabled:
         contextualized_visit_embeddings, _ = hierarchical_bert_model.get_layer(
             'hidden_visit_embeddings'
         ).output
-
-        if include_att_tokens:
-            visit_embeddings, _ = hierarchical_bert_model.get_layer(
-                'visit_encoder'
-            ).output
-
-            # Pad contextualized_visit_embeddings on axis 1 with one extra visit so we can extract the
-            # visit embeddings using the reshape trick
-            expanded_visit_embeddings = tf.concat(
-                [visit_embeddings,
-                 visit_embeddings[:, 0:1, :]],
-                axis=1
-            )
-
-            # Extract the visit embeddings elements
-            visit_start_embeddings = tf.reshape(
-                expanded_visit_embeddings, (-1, num_of_visits, 3 * embedding_size)
-            )[:, :, 0:embedding_size]
-
-            expanded_att_embeddings = tf.reshape(
-                expanded_visit_embeddings, (-1, num_of_visits, 3 * embedding_size)
-            )[:, :, embedding_size * 2:]
-
-            contextualized_visit_embeddings = tf.reshape(
-                tf.concat(
-                    [visit_start_embeddings,
-                     contextualized_visit_embeddings,
-                     expanded_att_embeddings],
-                    axis=-1
-                ),
-                (-1, 3 * num_of_visits, embedding_size)
-            )[:, :-1, :]
-
     else:
         contextualized_visit_embeddings, _ = hierarchical_bert_model.get_layer(
             'visit_encoder'
@@ -389,19 +408,89 @@ def create_hierarchical_bert_bi_lstm_model_with_model(
 
     next_input = dropout_lstm_layer(bi_lstm_layer(next_input))
 
-    next_input = tf.keras.layers.concatenate([next_input, tf.reshape(age_of_visit_input, (-1, 1))])
+    next_input = tf.keras.layers.concatenate(
+        [next_input, tf.reshape(normalized_index_age, (-1, 1))]
+    )
 
     next_input = dropout_dense_layer(dense_layer(next_input))
 
     output = output_layer(next_input)
 
     lstm_with_hierarchical_bert = tf.keras.models.Model(
-        inputs=hierarchical_bert_model.inputs + [age_of_visit_input],
+        inputs=hierarchical_bert_model.inputs + [index_age_input],
         outputs=output,
         name='HIERARCHICAL_BERT_PLUS_BI_LSTM'
     )
 
     return lstm_with_hierarchical_bert
+
+
+def create_hierarchical_bert_model_with_pooling(
+        bert_model_path,
+        dropout_rate=0.2,
+        activation='tanh',
+        freeze_pretrained_model=False,
+        **kwargs
+):
+    hierarchical_bert_model = tf.keras.models.load_model(
+        bert_model_path,
+        custom_objects=get_custom_objects()
+    )
+
+    age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
+
+    _, num_of_visits, num_of_concepts, embedding_size = hierarchical_bert_model.get_layer(
+        'temporal_transformation_layer'
+    ).output.shape
+
+    is_phenotype_enabled = (
+            'hidden_visit_embeddings' in [layer.name for layer in hierarchical_bert_model.layers]
+    )
+
+    # Freeze the weight of the pretrained model if enabled
+    if freeze_pretrained_model:
+        hierarchical_bert_model.trainable = False
+
+    if is_phenotype_enabled:
+        contextualized_visit_embeddings, _ = hierarchical_bert_model.get_layer(
+            'hidden_visit_embeddings'
+        ).output
+    else:
+        contextualized_visit_embeddings, _ = hierarchical_bert_model.get_layer(
+            'visit_encoder'
+        ).output
+
+    visit_masks = hierarchical_bert_model.get_layer('visit_mask').output
+    # Get the first embedding from the visit embedding sequence
+    # [batch_size, embedding_size]
+    visit_embedding_pooling = tf.gather_nd(
+        contextualized_visit_embeddings,
+        indices=tf.argmax(visit_masks, axis=1)[:, tf.newaxis],
+        batch_dims=1
+    )
+
+    dense_layer_1 = tf.keras.layers.Dense(128, activation=activation)
+    dropout_dense_layer_1 = tf.keras.layers.Dropout(dropout_rate)
+    dense_layer_2 = tf.keras.layers.Dense(64, activation=activation)
+    dropout_dense_layer_2 = tf.keras.layers.Dropout(dropout_rate)
+    output_layer = tf.keras.layers.Dense(1, activation='sigmoid', name='label')
+
+    next_input = tf.keras.layers.concatenate(
+        [visit_embedding_pooling, tf.reshape(age_of_visit_input, (-1, 1))]
+    )
+
+    next_input = dropout_dense_layer_1(dense_layer_1(next_input))
+    next_input = dropout_dense_layer_2(dense_layer_2(next_input))
+
+    output = output_layer(next_input)
+
+    hierarchical_bert_with_pooling = tf.keras.models.Model(
+        inputs=hierarchical_bert_model.inputs + [age_of_visit_input],
+        outputs=output,
+        name='HIERARCHICAL_BERT_POOLING'
+    )
+
+    return hierarchical_bert_with_pooling
 
 
 def create_prob_phenotype_bi_lstm_model_with_model(bert_model_path):

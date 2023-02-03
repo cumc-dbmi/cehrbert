@@ -1,7 +1,5 @@
-import os
-import argparse
 import datetime
-from typing import List
+import os
 
 from pyspark.sql import SparkSession
 

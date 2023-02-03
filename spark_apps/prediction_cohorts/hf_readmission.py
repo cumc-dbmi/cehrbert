@@ -23,6 +23,7 @@ WHERE v.visit_concept_id IN (9201, 262) --inpatient, er-inpatient
     AND v.discharge_to_concept_id NOT IN (4216643, 44814650, 8717, 8970, 8971) -- TBD
     --AND v.discharge_to_concept_id IN (8536, 8863, 4161979) -- Home, Skilled Nursing Facility, and Patient discharged alive
     AND v.visit_start_date <= co.condition_start_date
+    AND v.visit_end_date >= '{date_lower_bound}'
 """
 
 HOSPITALIZATION_QUERY = """
@@ -41,25 +42,33 @@ DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure', 'procedure_occurre
 
 
 def main(spark_args):
-    hf_inpatient_query = QuerySpec(table_name=HF_HOSPITALIZATION_COHORT,
-                                   query_template=HEART_FAILURE_HOSPITALIZATION_QUERY,
-                                   parameters={})
-    hf_inpatient = QueryBuilder(cohort_name=HF_HOSPITALIZATION_COHORT,
-                                dependency_list=DEPENDENCY_LIST,
-                                query=hf_inpatient_query)
+    hf_inpatient_target_query = QuerySpec(
+        table_name=HF_HOSPITALIZATION_COHORT,
+        query_template=HEART_FAILURE_HOSPITALIZATION_QUERY,
+        parameters={'date_lower_bound': spark_args.date_lower_bound}
+    )
+    hf_inpatient_target_querybuilder = QueryBuilder(
+        cohort_name=HF_HOSPITALIZATION_COHORT,
+        dependency_list=DEPENDENCY_LIST,
+        query=hf_inpatient_target_query
+    )
 
-    hospitalization_query = QuerySpec(table_name=HOSPITALIZATION_COHORT,
-                                      query_template=HOSPITALIZATION_QUERY,
-                                      parameters={})
-    hospitalization = QueryBuilder(cohort_name=HOSPITALIZATION_COHORT,
-                                   dependency_list=DEPENDENCY_LIST,
-                                   query=hospitalization_query)
+    hospitalization_query = QuerySpec(
+        table_name=HOSPITALIZATION_COHORT,
+        query_template=HOSPITALIZATION_QUERY,
+        parameters={}
+    )
+    hospitalization = QueryBuilder(
+        cohort_name=HOSPITALIZATION_COHORT,
+        dependency_list=DEPENDENCY_LIST,
+        query=hospitalization_query
+    )
 
     ehr_table_list = spark_args.ehr_table_list if spark_args.ehr_table_list else DOMAIN_TABLE_LIST
 
     create_prediction_cohort(
         spark_args,
-        hf_inpatient,
+        hf_inpatient_target_querybuilder,
         hospitalization,
         ehr_table_list
     )

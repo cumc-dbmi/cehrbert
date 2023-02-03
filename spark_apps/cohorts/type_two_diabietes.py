@@ -42,7 +42,7 @@ JOIN person_ids_to_include_drug AS d
     ON c.person_id = d.person_id
 LEFT JOIN person_ids_to_exclude_observation AS eo
     ON c.person_id = eo.person_id AND c.index_date > eo.observation_date
-WHERE eo.person_id IS NULL
+WHERE eo.person_id IS NULL AND c.index_date >= '{date_lower_bound}'
 """
 
 DIABETES_INCLUSION = [443238, 201820, 442793, 4016045]
@@ -67,29 +67,36 @@ OBSERVATION_EXCLUSION_TABLE = 'observation_exclusion_concepts'
 DEFAULT_COHORT_NAME = 'type_two_diabetes'
 
 
-def query_builder():
-    query = QuerySpec(table_name=DEFAULT_COHORT_NAME,
-                      query_template=COHORT_QUERY_TEMPLATE,
-                      parameters={'diabetes_exclusion_concepts': DIABETES_EXCLUSION_TABLE,
-                                  'diabetes_inclusion_concepts': DIABETES_INCLUSION_TABLE,
-                                  'drug_inclusion_concepts': DRUG_INCLUSION_TABLE,
-                                  'observation_exclusion_concepts': OBSERVATION_EXCLUSION_TABLE})
+def query_builder(spark_args):
+    query = QuerySpec(
+        table_name=DEFAULT_COHORT_NAME,
+        query_template=COHORT_QUERY_TEMPLATE,
+        parameters={
+            'diabetes_exclusion_concepts': DIABETES_EXCLUSION_TABLE,
+            'diabetes_inclusion_concepts': DIABETES_INCLUSION_TABLE,
+            'drug_inclusion_concepts': DRUG_INCLUSION_TABLE,
+            'observation_exclusion_concepts': OBSERVATION_EXCLUSION_TABLE,
+            'date_lower_bound': spark_args.date_lower_bound
+        }
+    )
 
-    ancestor_table_specs = [AncestorTableSpec(table_name=DIABETES_INCLUSION_TABLE,
-                                              ancestor_concept_ids=DIABETES_INCLUSION,
-                                              is_standard=True),
-                            AncestorTableSpec(table_name=DIABETES_EXCLUSION_TABLE,
-                                              ancestor_concept_ids=DIABETES_EXCLUSION,
-                                              is_standard=True),
-                            AncestorTableSpec(table_name=OBSERVATION_EXCLUSION_TABLE,
-                                              ancestor_concept_ids=OBSERVATION_EXCLUSION,
-                                              is_standard=True),
-                            AncestorTableSpec(table_name=DRUG_INCLUSION_TABLE,
-                                              ancestor_concept_ids=DRUG_INCLUSION,
-                                              is_standard=True)
+    ancestor_table_specs = [
+        AncestorTableSpec(table_name=DIABETES_INCLUSION_TABLE,
+                          ancestor_concept_ids=DIABETES_INCLUSION,
+                          is_standard=True),
+        AncestorTableSpec(table_name=DIABETES_EXCLUSION_TABLE,
+                          ancestor_concept_ids=DIABETES_EXCLUSION,
+                          is_standard=True),
+        AncestorTableSpec(table_name=OBSERVATION_EXCLUSION_TABLE,
+                          ancestor_concept_ids=OBSERVATION_EXCLUSION,
+                          is_standard=True),
+        AncestorTableSpec(table_name=DRUG_INCLUSION_TABLE,
+                          ancestor_concept_ids=DRUG_INCLUSION,
+                          is_standard=True)
 
-                            ]
-    return QueryBuilder(cohort_name=DEFAULT_COHORT_NAME,
-                        dependency_list=DEPENDENCY_LIST,
-                        query=query,
-                        ancestor_table_specs=ancestor_table_specs)
+    ]
+    return QueryBuilder(
+        cohort_name=DEFAULT_COHORT_NAME,
+        dependency_list=DEPENDENCY_LIST,
+        query=query,
+        ancestor_table_specs=ancestor_table_specs)

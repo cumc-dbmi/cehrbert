@@ -11,5 +11,6 @@ class ModelPathConfig(SimpleNamespace):
             feather_data_path=os.path.join(input_folder, feather_data_path),
             tokenizer_path=os.path.join(output_folder, tokenizer_path),
             visit_tokenizer_path=os.path.join(output_folder, visit_tokenizer_path),
-            model_path=os.path.join(output_folder, bert_model_path)
+            model_path=os.path.join(output_folder, bert_model_path),
+            concept_similarity_path=os.path.join(input_folder, concept_similarity_path)
         )

@@ -178,4 +178,8 @@ def create_spark_args():
                         dest='include_concept_list',
                         action='store_true',
                         help='Apply the filter to remove low-frequency concepts')
+    parser.add_argument('--allow_measurement_only',
+                        dest='allow_measurement_only',
+                        action='store_true',
+                        help='Indicate whether we allow patients with measurements only')
     return parser.parse_args()

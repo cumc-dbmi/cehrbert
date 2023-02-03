@@ -5,7 +5,7 @@ from evaluations.model_evaluators.model_evaluators import get_metrics
 from evaluations.model_evaluators.sequence_model_evaluators import SequenceModelEvaluator
 from models.evaluation_models import create_hierarchical_bert_bi_lstm_model, \
     create_hierarchical_bert_bi_lstm_model_with_model, \
-    create_prob_phenotype_bi_lstm_model_with_model
+    create_prob_phenotype_bi_lstm_model_with_model, create_hierarchical_bert_model_with_pooling
 from models.hierachical_bert_model_v2 import transformer_hierarchical_bert_model
 from utils.model_utils import *
 
@@ -18,7 +18,7 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
             visit_tokenizer_path: str,
             max_num_of_visits: int,
             max_num_of_concepts: int,
-            include_att_tokens: bool,
+            include_att_tokens: bool = False,
             *args,
             **kwargs
     ):
@@ -30,12 +30,14 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
 
         self._include_att_tokens = include_att_tokens
 
-        self.get_logger().info(f'max_num_of_visits: {max_num_of_visits}\n'
-                               f'max_num_of_concepts: {max_num_of_concepts}\n'
-                               f'vanilla_bert_model_path: {bert_model_path}\n'
-                               f'tokenizer_path: {tokenizer_path}\n'
-                               f'include_att_token: {include_att_tokens}\n'
-                               f'visit_tokenizer_path: {visit_tokenizer_path}\n')
+        self.get_logger().info(
+            f'max_num_of_visits: {max_num_of_visits}\n'
+            f'max_num_of_concepts: {max_num_of_concepts}\n'
+            f'vanilla_bert_model_path: {bert_model_path}\n'
+            f'tokenizer_path: {tokenizer_path}\n'
+            f'include_att_token: {include_att_tokens}\n'
+            f'visit_tokenizer_path: {visit_tokenizer_path}\n'
+        )
 
         super(HierarchicalBertEvaluator, self).__init__(*args, **kwargs)
 
@@ -50,6 +52,7 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
                 model = create_hierarchical_bert_bi_lstm_model(
                     self._bert_model_path,
                     include_att_tokens=self._include_att_tokens,
+                    freeze_pretrained_model=self._freeze_pretrained_model,
                     **kwargs
                 )
             except ValueError as e:
@@ -57,6 +60,7 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
                 model = create_hierarchical_bert_bi_lstm_model(
                     self._bert_model_path,
                     include_att_tokens=self._include_att_tokens,
+                    freeze_pretrained_model=self._freeze_pretrained_model,
                     **kwargs
                 )
 
@@ -197,6 +201,41 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
         return inputs, labels
 
 
+class HierarchicalBertPoolingEvaluator(HierarchicalBertEvaluator):
+    def __init__(
+            self,
+            *args,
+            **kwargs
+    ):
+        super(HierarchicalBertPoolingEvaluator, self).__init__(*args, **kwargs)
+
+    def _create_model(
+            self,
+            **kwargs
+    ):
+        strategy = tf.distribute.MirroredStrategy()
+        self.get_logger().info('Number of devices: {}'.format(strategy.num_replicas_in_sync))
+        with strategy.scope():
+            try:
+                model = create_hierarchical_bert_model_with_pooling(
+                    self._bert_model_path,
+                    freeze_pretrained_model=self._freeze_pretrained_model,
+                    **kwargs
+                )
+            except ValueError as e:
+                self.get_logger().exception(e)
+                model = create_hierarchical_bert_model_with_pooling(
+                    self._bert_model_path,
+                    freeze_pretrained_model=self._freeze_pretrained_model,
+                    **kwargs
+                )
+
+            model.compile(loss='binary_crossentropy',
+                          optimizer=tf.keras.optimizers.Adam(1e-4),
+                          metrics=get_metrics())
+            return model
+
+
 class RandomHierarchicalBertEvaluator(HierarchicalBertEvaluator):
 
     def __init__(
@@ -247,31 +286,6 @@ class RandomHierarchicalBertEvaluator(HierarchicalBertEvaluator):
                 self.get_logger().exception(e)
                 model = create_hierarchical_bert_bi_lstm_model_with_model(
                     cherbert_model
-                )
-            model.compile(loss='binary_crossentropy',
-                          optimizer=tf.keras.optimizers.Adam(1e-4),
-                          metrics=get_metrics())
-            return model
-
-
-class ProbabilisticPhenotypeModelEvaluator(HierarchicalBertEvaluator):
-
-    def __init__(self,
-                 *args, **kwargs):
-        super(ProbabilisticPhenotypeModelEvaluator, self).__init__(*args, **kwargs)
-
-    def _create_model(self):
-        strategy = tf.distribute.MirroredStrategy()
-        self.get_logger().info('Number of devices: {}'.format(strategy.num_replicas_in_sync))
-        with strategy.scope():
-            try:
-                model = create_prob_phenotype_bi_lstm_model_with_model(
-                    self._bert_model_path
-                )
-            except ValueError as e:
-                self.get_logger().exception(e)
-                model = create_prob_phenotype_bi_lstm_model_with_model(
-                    self._bert_model_path
                 )
             model.compile(loss='binary_crossentropy',
                           optimizer=tf.keras.optimizers.Adam(1e-4),

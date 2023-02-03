@@ -5,7 +5,7 @@ import numpy as np
 
 from scipy.sparse import csr_matrix, hstack
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import GridSearchCV, StratifiedKFold, train_test_split
+from sklearn.model_selection import GridSearchCV, StratifiedKFold, StratifiedShuffleSplit
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import normalize, StandardScaler
 from tensorflow.keras.preprocessing.text import Tokenizer
@@ -35,25 +35,45 @@ class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
                 self._model = self._model.fit(x, y)
             else:
                 self._model.fit(x, y)
-            compute_binary_metrics(self._model, test, self.get_model_metrics_folder())
+
+            compute_binary_metrics(
+                self._model,
+                test,
+                self.get_model_metrics_folder()
+            )
 
     def get_model_name(self):
         return type(self._model).__name__
 
+    def eval_model_cross_validation_test(self):
+        pass
+
     def k_fold(self, features, labels):
 
         (inputs, age) = features
-        k_fold = StratifiedKFold(n_splits=self._num_of_folds, shuffle=True, random_state=1)
 
-        for train, val_test in k_fold.split(labels):
+        if self._k_fold_test:
+            stratified_splitter = StratifiedKFold(
+                n_splits=self._num_of_folds,
+                random_state=10
+            )
+        else:
+            stratified_splitter = StratifiedShuffleSplit(
+                n_splits=1,
+                test_size=0.15,
+                random_state=10
+            )
+
+        for train, val_test in stratified_splitter.split(
+                X=labels,
+                y=labels
+        ):
             # further split val_test using a 2:3 ratio between val and test
-            val, test = train_test_split(val_test, test_size=0.6, random_state=1)
-            train = np.concatenate([train, val])
             if self._is_transfer_learning:
                 size = int(len(train) * self._training_percentage)
                 train = np.random.choice(train, size, replace=False)
             train_data = (csr_matrix(hstack([inputs[train], age[train]])), labels[train])
-            test_data = (csr_matrix(hstack([inputs[test], age[test]])), labels[test])
+            test_data = (csr_matrix(hstack([inputs[val_test], age[val_test]])), labels[val_test])
             yield train_data, test_data
 
     def extract_model_inputs(self):

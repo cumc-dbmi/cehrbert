@@ -23,10 +23,14 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
             self,
             tokenizer_path: str,
             visit_tokenizer_path: str,
+            concept_similarity_path: str,
+            concept_similarity_type: str,
             embedding_size: int,
             depth: int,
             max_num_visits: int,
             max_num_concepts: int,
+            min_num_of_concepts: int,
+            min_num_of_visits: int,
             num_heads: int,
             time_embeddings_size: int,
             include_att_prediction: bool,
@@ -38,10 +42,14 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
 
         self._tokenizer_path = tokenizer_path
         self._visit_tokenizer_path = visit_tokenizer_path
+        self._concept_similarity_path = concept_similarity_path
+        self._concept_similarity_type = concept_similarity_type
         self._embedding_size = embedding_size
         self._depth = depth
         self._max_num_visits = max_num_visits
         self._max_num_concepts = max_num_concepts
+        self._min_num_of_concepts = min_num_of_concepts
+        self._min_num_of_visits = min_num_of_visits
         self._num_heads = num_heads
         self._time_embeddings_size = time_embeddings_size
         self._include_att_prediction = include_att_prediction
@@ -55,10 +63,14 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
             f'{self} will be trained with the following parameters:\n'
             f'tokenizer_path: {tokenizer_path}\n'
             f'visit_tokenizer_path: {visit_tokenizer_path}\n'
+            f'concept_similarity_table: {concept_similarity_path}\n'
+            f'concept_similarity_type: {concept_similarity_type}\n'
             f'embedding_size: {embedding_size}\n'
             f'depth: {depth}\n'
             f'max_num_visits: {max_num_visits}\n'
             f'max_num_concepts: {max_num_concepts}\n'
+            f'min_num_of_visits: {min_num_of_visits}\n'
+            f'min_num_of_concepts: {min_num_of_concepts}\n'
             f'num_heads: {num_heads}\n'
             f'time_embeddings_size: {time_embeddings_size}\n'
             f'include_att_prediction: {include_att_prediction}\n'
@@ -79,23 +91,28 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
             self._tokenizer_path,
             encode=False)
 
-        if self._include_visit_prediction:
-            self._visit_tokenizer = tokenize_one_field(
-                self._training_data,
-                'visit_concept_ids',
-                'visit_token_ids',
-                self._visit_tokenizer_path
-            )
+        self._visit_tokenizer = tokenize_one_field(
+            self._training_data,
+            'visit_concept_ids',
+            'visit_token_ids',
+            self._visit_tokenizer_path
+        )
 
     def create_data_generator(self) -> HierarchicalBertDataGenerator:
 
         parameters = {
             'training_data': self._training_data,
             'concept_tokenizer': self._tokenizer,
+            'visit_tokenizer': self._visit_tokenizer,
             'batch_size': self._batch_size,
             'max_num_of_visits': self._max_num_visits,
             'max_num_of_concepts': self._max_num_concepts,
-            'include_att_prediction': self._include_att_prediction
+            'include_att_prediction': self._include_att_prediction,
+            'include_visit_prediction': self._include_visit_prediction,
+            'concept_similarity_path': self._concept_similarity_path,
+            'concept_similarity_type': self._concept_similarity_type,
+            'min_num_of_concepts': self._min_num_of_concepts,
+            'min_num_of_visits': self._min_num_of_visits
         }
 
         data_generator_class = HierarchicalBertDataGenerator
@@ -103,10 +120,8 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
         if self.has_secondary_learning_objectives():
             # parameters['visit_tokenizer'] = self._visit_tokenizer
             parameters.update({
-                'include_visit_prediction': self._include_visit_prediction,
                 'include_readmission': self._include_readmission,
-                'include_prolonged_length_stay': self._include_prolonged_length_stay,
-                'visit_tokenizer': getattr(self, '_visit_tokenizer', None)
+                'include_prolonged_length_stay': self._include_prolonged_length_stay
             })
             data_generator_class = HierarchicalBertMultiTaskDataGenerator
 
@@ -197,10 +212,14 @@ def main(args):
         model_path=config.model_path,
         tokenizer_path=config.tokenizer_path,
         visit_tokenizer_path=config.visit_tokenizer_path,
+        concept_similarity_path=config.concept_similarity_path,
+        concept_similarity_type=args.concept_similarity_type,
         embedding_size=args.embedding_size,
         depth=args.depth,
         max_num_visits=args.max_num_visits,
         max_num_concepts=args.max_num_concepts,
+        min_num_of_visits=args.min_num_of_visits,
+        min_num_of_concepts=args.min_num_of_concepts,
         num_heads=args.num_heads,
         batch_size=args.batch_size,
         epochs=args.epochs,

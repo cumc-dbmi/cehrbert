@@ -18,17 +18,21 @@ FROM
         AND v.visit_end_date IS NOT NULL
         AND v.discharge_to_concept_id = 8536 --discharge to home
 ) AS v
-    WHERE v.rn = 1
+    WHERE v.rn = 1 AND v.index_date >= '{date_lower_bound}'
 """
 
 DEPENDENCY_LIST = ['person', 'visit_occurrence']
 DEFAULT_COHORT_NAME = 'last_visit_discharge_home'
 
 
-def query_builder():
-    query = QuerySpec(table_name=DEFAULT_COHORT_NAME,
-                      query_template=COHORT_QUERY,
-                      parameters={})
-    return QueryBuilder(cohort_name=DEFAULT_COHORT_NAME,
-                        dependency_list=DEPENDENCY_LIST,
-                        query=query)
+def query_builder(spark_args):
+    query = QuerySpec(
+        table_name=DEFAULT_COHORT_NAME,
+        query_template=COHORT_QUERY,
+        parameters={'date_lower_bound': spark_args.date_lower_bound}
+    )
+    return QueryBuilder(
+        cohort_name=DEFAULT_COHORT_NAME,
+        dependency_list=DEPENDENCY_LIST,
+        query=query
+    )

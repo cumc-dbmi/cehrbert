@@ -659,6 +659,7 @@ def extract_ehr_records(spark, input_folder, domain_table_list, include_visit_ty
             patient_ehr_records = scaled_measurement
 
     patient_ehr_records = patient_ehr_records.where('visit_occurrence_id IS NOT NULL').distinct()
+
     person = preprocess_domain_table(spark, input_folder, PERSON)
     patient_ehr_records = patient_ehr_records.join(person, 'person_id') \
         .withColumn('age',
@@ -774,8 +775,9 @@ def create_hierarchical_sequence_data(
         visit_occurrence,
         patient_events,
         date_filter=None,
-        max_num_of_visits_per_person=2000,
-        include_incomplete_visit=True
+        max_num_of_visits_per_person=None,
+        include_incomplete_visit=True,
+        allow_measurement_only=False
 ):
     """
     This creates a hierarchical data frame for the hierarchical bert model
@@ -783,14 +785,16 @@ def create_hierarchical_sequence_data(
     :param visit_occurrence:
     :param patient_events:
     :param date_filter:
-    :param mlm_skip_domains:
     :param max_num_of_visits_per_person:
     :param include_incomplete_visit:
+    :param allow_measurement_only:
     :return:
     """
 
     if date_filter:
-        patient_events = patient_events.where(F.col('date').cast('date') >= date_filter)
+        visit_occurrence = visit_occurrence.where(
+            F.col('visit_start_date').cast('date') >= date_filter
+        )
 
     # Construct visit information with the person demographic
     visit_occurrence_person = create_visit_person_join(
@@ -838,6 +842,15 @@ def create_hierarchical_sequence_data(
         .withColumn('mlm_skip',
                     (F.col('domain').isin([MEASUREMENT, CATEGORICAL_MEASUREMENT])).cast('int')) \
         .withColumn('condition_mask', (F.col('domain') == 'condition').cast('int'))
+
+    if not allow_measurement_only:
+        # We only allow persons that have a non measurement record in the dataset
+        qualified_person_df = patient_events \
+            .where(~F.col('domain').isin([MEASUREMENT, CATEGORICAL_MEASUREMENT])) \
+            .where(F.col('standard_concept_id') != UNKNOWN_CONCEPT) \
+            .select('person_id').distinct()
+
+        patient_events = patient_events.join(qualified_person_df, 'person_id')
 
     # Create the udf for calculating the weeks since the epoch time 1970-01-01
     weeks_since_epoch_udf = (
@@ -923,8 +936,11 @@ def create_hierarchical_sequence_data(
              F.sum(F.lit(1) - F.col('visit_mask')).alias('num_of_visits'),
              F.sum('num_of_concepts').alias('num_of_concepts'))
 
+    if max_num_of_visits_per_person:
+        patient_sequence = patient_sequence \
+            .where(F.col('num_of_visits') <= max_num_of_visits_per_person)
+
     patient_sequence = patient_sequence \
-        .where(F.col('num_of_visits') <= max_num_of_visits_per_person) \
         .withColumn('visit_rank_orders', F.col('patient_list.visit_rank_order')) \
         .withColumn('concept_orders', F.col('patient_list.visit_concept_orders')) \
         .withColumn('concept_ids', F.col('patient_list.visit_concept_ids')) \

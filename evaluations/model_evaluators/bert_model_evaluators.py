@@ -63,9 +63,9 @@ class BertLstmModelEvaluator(SequenceModelEvaluator):
         time_stamps = self._dataset.dates
         ages = self._dataset.ages
         visit_concept_orders = self._dataset.visit_concept_orders
-        index_age = np.asarray(
-            ((self._dataset['age'] - self._dataset['age'].mean()) / self._dataset[
-                'age'].std()).astype(float).apply(lambda c: [c]).tolist())
+        # index_age = np.asarray(
+        #     ((self._dataset['age'] - self._dataset['age'].mean()) / self._dataset[
+        #         'age'].std()).astype(float).apply(lambda c: [c]).tolist())
         labels = self._dataset.label.to_numpy()
         padded_token_ides = post_pad_pre_truncate(token_ids, self._tokenizer.get_unused_token_id(),
                                                   self._max_seq_length)
@@ -78,15 +78,31 @@ class BertLstmModelEvaluator(SequenceModelEvaluator):
                                                             self._max_seq_length,
                                                             self._max_seq_length)
 
+        # Retrieve the values associated with the concepts, this is mostly for measurements
+        padded_concept_values = post_pad_pre_truncate(
+            self._dataset.concept_values,
+            -1.0,
+            self._max_seq_length,
+            d_type='float32'
+        )
+
+        padded_concept_value_masks = post_pad_pre_truncate(
+            self._dataset.concept_value_masks,
+            0,
+            self._max_seq_length
+        )
+
         inputs = {
-            'age': index_age,
+            'age': np.expand_dims(self._dataset.age, axis=-1),
             'concept_ids': padded_token_ides,
             'masked_concept_ids': padded_token_ides,
             'mask': mask,
             'visit_segments': padded_visit_segments,
             'time_stamps': padded_time_stamps,
             'ages': padded_ages,
-            'visit_concept_orders': padded_visit_concept_orders
+            'visit_concept_orders': padded_visit_concept_orders,
+            'concept_values': padded_concept_values,
+            'concept_value_masks': padded_concept_value_masks,
         }
         return inputs, labels
 

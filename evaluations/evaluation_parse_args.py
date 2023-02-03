@@ -169,23 +169,25 @@ def create_evaluation_args():
                        dest='cross_validation_test',
                        action='store_true',
                        required=False)
+    group.add_argument('--k_fold_test',
+                       dest='k_fold_test',
+                       action='store_true',
+                       required=False)
     group.add_argument('--grid_search_config',
                        dest='grid_search_config',
                        action='store',
                        help='The path storing the grid search configuration',
-                       required=False)
-    group.add_argument('--num_of_repeats',
-                       dest='num_of_repeats',
-                       required=False,
-                       action='store',
-                       type=int,
-                       default=1)
+                       required='cross_validation_test' in argv)
     group.add_argument('--include_att_tokens',
                        dest='include_att_tokens',
                        action='store_true',
                        required=False)
     group.add_argument('--is_chronological_test',
                        dest='is_chronological_test',
+                       action='store_true',
+                       required=False)
+    group.add_argument('--freeze_pretrained_model',
+                       dest='freeze_pretrained_model',
                        action='store_true',
                        required=False)
     return main_parser

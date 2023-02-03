@@ -23,6 +23,8 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
             self,
             tokenizer_path: str,
             visit_tokenizer_path: str,
+            concept_similarity_path: str,
+            concept_similarity_type: str,
             embedding_size: int,
             depth: int,
             num_of_phenotypes: int,
@@ -30,21 +32,30 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
             num_of_concept_neighbors: int,
             max_num_visits: int,
             max_num_concepts: int,
+            min_num_of_concepts: int,
+            min_num_of_visits: int,
             num_heads: int,
             time_embeddings_size: int,
             include_att_prediction: bool,
             include_visit_prediction: bool,
             include_readmission: bool,
             include_prolonged_length_stay: bool,
+            phenotype_entropy_weight: float = 2e-05,
+            phenotype_euclidean_weight: float = 2e-05,
+            phenotype_concept_distance_weight: float = 1e-04,
             *args, **kwargs
     ):
 
         self._tokenizer_path = tokenizer_path
         self._visit_tokenizer_path = visit_tokenizer_path
+        self._concept_similarity_path = concept_similarity_path
+        self._concept_similarity_type = concept_similarity_type
         self._embedding_size = embedding_size
         self._depth = depth
         self._max_num_visits = max_num_visits
         self._max_num_concepts = max_num_concepts
+        self._min_num_of_concepts = min_num_of_concepts
+        self._min_num_of_visits = min_num_of_visits
         self._num_of_phenotypes = num_of_phenotypes
         self._num_of_phenotype_neighbors = num_of_phenotype_neighbors
         self._num_of_concept_neighbors = num_of_concept_neighbors
@@ -54,6 +65,9 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
         self._include_visit_prediction = include_visit_prediction
         self._include_readmission = include_readmission
         self._include_prolonged_length_stay = include_prolonged_length_stay
+        self._phenotype_entropy_weight = phenotype_entropy_weight
+        self._phenotype_euclidean_weight = phenotype_euclidean_weight
+        self._phenotype_concept_distance_weight = phenotype_concept_distance_weight
 
         super(ProbabilisticPhenotypeTrainer, self).__init__(*args, **kwargs)
 
@@ -61,10 +75,14 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
             f'{self} will be trained with the following parameters:\n'
             f'tokenizer_path: {tokenizer_path}\n'
             f'visit_tokenizer_path: {visit_tokenizer_path}\n'
+            f'concept_similarity_table: {concept_similarity_path}\n'
+            f'concept_similarity_type: {concept_similarity_type}\n'
             f'embedding_size: {embedding_size}\n'
             f'depth: {depth}\n'
             f'max_num_visits: {max_num_visits}\n'
             f'max_num_concepts: {max_num_concepts}\n'
+            f'min_num_of_visits: {min_num_of_visits}\n'
+            f'min_num_of_concepts: {min_num_of_concepts}\n'
             f'num_of_phenotypes: {num_of_phenotypes}\n'
             f'num_of_phenotype_neighbors: {num_of_phenotype_neighbors}\n'
             f'num_of_concept_neighbors: {num_of_concept_neighbors}\n'
@@ -74,6 +92,9 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
             f'include_visit_prediction: {include_visit_prediction}\n'
             f'include_prolonged_length_stay: {include_prolonged_length_stay}\n'
             f'include_readmission: {include_readmission}\n'
+            f'phenotype_entropy_weight: {phenotype_entropy_weight}\n'
+            f'phenotype_euclidean_weight: {phenotype_euclidean_weight}\n'
+            f'phenotype_concept_distance_weight: {phenotype_concept_distance_weight}\n'
         )
 
     def _load_dependencies(self):
@@ -88,23 +109,28 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
             self._tokenizer_path,
             encode=False)
 
-        if self._include_visit_prediction:
-            self._visit_tokenizer = tokenize_one_field(
-                self._training_data,
-                'visit_concept_ids',
-                'visit_token_ids',
-                self._visit_tokenizer_path
-            )
+        self._visit_tokenizer = tokenize_one_field(
+            self._training_data,
+            'visit_concept_ids',
+            'visit_token_ids',
+            self._visit_tokenizer_path
+        )
 
     def create_data_generator(self) -> HierarchicalBertDataGenerator:
 
         parameters = {
             'training_data': self._training_data,
             'concept_tokenizer': self._tokenizer,
+            'visit_tokenizer': self._visit_tokenizer,
             'batch_size': self._batch_size,
             'max_num_of_visits': self._max_num_visits,
             'max_num_of_concepts': self._max_num_concepts,
-            'include_att_prediction': self._include_att_prediction
+            'include_att_prediction': self._include_att_prediction,
+            'include_visit_prediction': self._include_visit_prediction,
+            'concept_similarity_path': self._concept_similarity_path,
+            'concept_similarity_type': self._concept_similarity_type,
+            'min_num_of_concepts': self._min_num_of_concepts,
+            'min_num_of_visits': self._min_num_of_visits
         }
 
         data_generator_class = HierarchicalBertDataGenerator
@@ -112,10 +138,8 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
         if self.has_secondary_learning_objectives():
             # parameters['visit_tokenizer'] = self._visit_tokenizer
             parameters.update({
-                'include_visit_prediction': self._include_visit_prediction,
                 'include_readmission': self._include_readmission,
-                'include_prolonged_length_stay': self._include_prolonged_length_stay,
-                'visit_tokenizer': getattr(self, '_visit_tokenizer', None)
+                'include_prolonged_length_stay': self._include_prolonged_length_stay
             })
             data_generator_class = HierarchicalBertMultiTaskDataGenerator
 
@@ -141,11 +165,6 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
                     clipnorm=1.0
                 )
 
-                visit_vocab_size = (
-                    self._visit_tokenizer.get_vocab_size() if
-                    self._include_visit_prediction else None
-                )
-
                 model = create_probabilistic_phenotype_model(
                     num_of_visits=self._max_num_visits,
                     num_of_concepts=self._max_num_concepts,
@@ -153,15 +172,18 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
                     num_of_phenotype_neighbors=self._num_of_phenotype_neighbors,
                     num_of_concept_neighbors=self._num_of_concept_neighbors,
                     concept_vocab_size=self._tokenizer.get_vocab_size(),
-                    visit_vocab_size=visit_vocab_size,
+                    visit_vocab_size=self._visit_tokenizer.get_vocab_size(),
                     embedding_size=self._embedding_size,
                     depth=self._depth,
                     num_heads=self._num_heads,
                     time_embeddings_size=self._time_embeddings_size,
                     include_att_prediction=self._include_att_prediction,
-                    include_visit_type_prediction=self._include_visit_prediction,
+                    include_visit_prediction=self._include_visit_prediction,
                     include_readmission=self._include_readmission,
-                    include_prolonged_length_stay=self._include_prolonged_length_stay
+                    include_prolonged_length_stay=self._include_prolonged_length_stay,
+                    phenotype_entropy_weight=self._phenotype_entropy_weight,
+                    phenotype_euclidean_weight=self._phenotype_euclidean_weight,
+                    phenotype_concept_distance_weight=self._phenotype_concept_distance_weight
                 )
 
                 losses = {
@@ -211,13 +233,20 @@ def main(args):
         model_path=config.model_path,
         tokenizer_path=config.tokenizer_path,
         visit_tokenizer_path=config.visit_tokenizer_path,
+        concept_similarity_path=config.concept_similarity_path,
+        concept_similarity_type=args.concept_similarity_type,
         embedding_size=args.embedding_size,
         depth=args.depth,
         max_num_visits=args.max_num_visits,
         max_num_concepts=args.max_num_concepts,
+        min_num_of_visits=args.min_num_of_visits,
+        min_num_of_concepts=args.min_num_of_concepts,
         num_of_phenotypes=args.num_of_phenotypes,
         num_of_phenotype_neighbors=args.num_of_phenotype_neighbors,
         num_of_concept_neighbors=args.num_of_concept_neighbors,
+        phenotype_entropy_weight=args.phenotype_entropy_weight,
+        phenotype_euclidean_weight=args.phenotype_euclidean_weight,
+        phenotype_concept_distance_weight=args.phenotype_concept_distance_weight,
         num_heads=args.num_heads,
         batch_size=args.batch_size,
         epochs=args.epochs,
