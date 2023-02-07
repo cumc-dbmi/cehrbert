@@ -289,6 +289,26 @@ class BertDataGenerator(AbstractDataGeneratorBase):
         return len(self._training_data)
 
 
+class GptDataGenerator(BertDataGenerator):
+    def _clean_dataframe(self):
+        self._training_data = self._training_data[self._training_data['num_of_visits'] >= 5]
+        self._training_data = self._training_data[self._training_data['num_of_visits'] <= 20]
+        self._training_data = self._training_data[
+            self._training_data['num_of_concepts'] <= self._max_seq_len]
+
+    def _get_learning_objective_classes(self):
+        return [SequenceGenerationLearningObjective]
+
+    def _create_iterator(self):
+        """
+        Create an iterator that will iterate through all training data
+        :return:
+        """
+        for row in self._training_data.itertuples():
+            seq_length = len(row.token_ids)
+            yield RowSlicer(row, 0, seq_length)
+
+
 class BertVisitPredictionDataGenerator(BertDataGenerator):
     def __init__(self, visit_tokenizer: ConceptTokenizer, *args, **kwargs):
         super(BertDataGenerator,

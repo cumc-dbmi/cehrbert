@@ -262,6 +262,87 @@ class VisitPredictionLearningObjective(LearningObjective):
         return masked_visit_concepts, output_mask
 
 
+class SequenceGenerationLearningObjective(LearningObjective):
+    required_columns = [
+        'token_ids'
+    ]
+
+    def __init__(
+            self,
+            concept_tokenizer: ConceptTokenizer,
+            max_seq_len: int
+    ):
+        self._max_seq_len = max_seq_len
+        self._concept_tokenizer = concept_tokenizer
+
+    def get_tf_dataset_schema(self):
+        input_dict_schema = {
+            'concept_ids': int32,
+            'mask': int32
+        }
+        output_dict_schema = {'concept_predictions': int32}
+        return input_dict_schema, output_dict_schema
+
+    @validate_columns_decorator
+    def process_batch(self, rows: List[RowSlicer]):
+        (
+            concepts, shifted_concepts
+        ) = zip(*list(map(self._make_record, rows)))
+
+        unused_token_id = self._concept_tokenizer.get_unused_token_id()
+
+        # The main inputs for bert
+        concepts = post_pad_pre_truncate(
+            concepts,
+            unused_token_id,
+            self._max_seq_len
+        )
+
+        # The main inputs for bert
+        shifted_concepts = post_pad_pre_truncate(
+            shifted_concepts,
+            unused_token_id,
+            self._max_seq_len
+        )
+
+        mask = (concepts == unused_token_id).astype(int)
+
+        input_dict = {
+            'concept_ids': concepts,
+            'mask': mask
+        }
+
+        output_dict = {
+            'concept_predictions': np.stack([shifted_concepts, mask], axis=-1)
+        }
+
+        return input_dict, output_dict
+
+    def _make_record(self, row_slicer: RowSlicer):
+        """
+        A method for making a bert record for the bert data generator to yield
+        :param row_slicer: a tuple containing a pandas row,
+        left_index and right_index for slicing the sequences such as concepts
+
+        :return:
+        """
+
+        row, left_index, right_index, _ = row_slicer
+
+        sorting_columns = getattr(row, 'orders') if hasattr(row, 'orders') else row.dates
+
+        iterator = zip(
+            map(int, sorting_columns), row.token_ids
+        )
+        sorted_list = sorted(iterator, key=lambda tup2: (tup2[0], tup2[1]))
+
+        _, concept_list = zip(*list(islice(sorted_list, left_index, right_index - 1)))
+
+        shifted_concept_list = concept_list[1:]
+
+        return concept_list, shifted_concept_list
+
+
 class MaskedLanguageModelLearningObjective(LearningObjective):
     required_columns = [
         'token_ids', 'dates', 'visit_segments',
