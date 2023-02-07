@@ -20,7 +20,8 @@ def main(
         exclude_visit_tokens,
         is_classic_bert,
         include_prolonged_stay,
-        include_concept_list: bool
+        include_concept_list: bool,
+        gpt_patient_sequence: bool
 ):
     spark = SparkSession.builder.appName('Generate CEHR-BERT Training Data').getOrCreate()
 
@@ -46,9 +47,15 @@ def main(
     visit_occurrence = visit_occurrence.select('visit_occurrence_id', 'visit_concept_id',
                                                'person_id')
     person = preprocess_domain_table(spark, input_folder, PERSON)
-    person = person.select('person_id', F.coalesce('birth_datetime',
-                                                   F.concat('year_of_birth', F.lit('-01-01')).cast(
-                                                       'timestamp')).alias('birth_datetime'))
+    person = person.select(
+        'person_id',
+        F.coalesce('birth_datetime',
+                   F.concat('year_of_birth', F.lit('-01-01')).cast(
+                       'timestamp')).alias('birth_datetime'),
+        'race_concept_id',
+        'gender_concept_id'
+    )
+
     visit_occurrence_person = visit_occurrence.join(person, 'person_id')
 
     patient_events = join_domain_tables(domain_tables)
@@ -101,6 +108,7 @@ def main(
             date_filter=date_filter,
             include_visit_type=include_visit_type,
             exclude_visit_tokens=exclude_visit_tokens,
+            patient_demographic=person if gpt_patient_sequence else None
         )
     else:
         sequence_data = create_sequence_data(
@@ -204,10 +212,16 @@ if __name__ == '__main__':
         dest='include_concept_list',
         action='store_true'
     )
+    parser.add_argument(
+        '--gpt_patient_sequence',
+        dest='gpt_patient_sequence',
+        action='store_true'
+    )
     ARGS = parser.parse_args()
 
     main(
         ARGS.input_folder, ARGS.output_folder, ARGS.domain_table_list, ARGS.date_filter,
         ARGS.include_visit_type, ARGS.is_new_patient_representation, ARGS.exclude_visit_tokens,
-        ARGS.is_classic_bert_sequence, ARGS.include_prolonged_stay, ARGS.include_concept_list
+        ARGS.is_classic_bert_sequence, ARGS.include_prolonged_stay, ARGS.include_concept_list,
+        ARGS.gpt_patient_sequence
     )

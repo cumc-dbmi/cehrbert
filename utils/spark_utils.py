@@ -442,7 +442,8 @@ def create_sequence_data_with_att(
         patient_event,
         date_filter=None,
         include_visit_type=False,
-        exclude_visit_tokens=False
+        exclude_visit_tokens=False,
+        patient_demographic=None
 ):
     """
     Create a sequence of the events associated with one patient in a chronological order
@@ -451,6 +452,7 @@ def create_sequence_data_with_att(
     :param date_filter:
     :param include_visit_type:
     :param exclude_visit_tokens:
+    :param patient_demographic:
     :return:
     """
     if date_filter:
@@ -521,6 +523,53 @@ def create_sequence_data_with_att(
         .withColumn('date_in_week', F.lit(0)) \
         .withColumn('age', F.lit(-1)) \
         .where('prev_days_since_epoch IS NOT NULL')
+
+    if patient_demographic:
+        # Get the first visit_start_date
+        # Udf for identifying the earliest date associated with a visit_occurrence_id
+        sequence_start_year_token = patient_event.where('standard_concept_id = "VS"') \
+            .where('visit_rank_order=1') \
+            .withColumn('standard_concept_id', F.year('date').cast(T.StringType())) \
+            .withColumn('priority', F.lit(-10)) \
+            .withColumn('visit_segment', F.lit(0)) \
+            .withColumn('date_in_week', F.lit(0)) \
+            .withColumn('age', F.lit(-1))
+
+        age_at_first_visit_udf = F.ceil(
+            F.months_between(F.col('date'), F.col('birth_datetime')) / F.lit(12)
+        )
+        sequence_age_token = patient_event \
+            .where('standard_concept_id = "VS"') \
+            .where('visit_rank_order=1') \
+            .withColumn('standard_concept_id', age_at_first_visit_udf.cast(T.StringType())) \
+            .withColumn('priority', F.lit(-9))
+
+        sequence_gender_token = patient_demographic.select(
+            F.col('person_id'),
+            F.col('gender_concept_id')
+        ).join(
+            sequence_start_year_token,
+            'person_id'
+        ).withColumn(
+            'standard_concept_id',
+            F.col('gender_concept_id').cast(T.StringType())
+        ).withColumn('priority', F.lit(-8)).drop('gender_concept_id')
+
+        sequence_race_token = patient_demographic.select(
+            F.col('person_id'),
+            F.col('race_concept_id')
+        ).join(
+            sequence_start_year_token,
+            'person_id'
+        ).withColumn(
+            'standard_concept_id',
+            F.col('race_concept_id').cast(T.StringType())
+        ).withColumn('priority', F.lit(-7)).drop('race_concept_id')
+
+        patient_event = patient_event.union(sequence_start_year_token)
+        patient_event = patient_event.union(sequence_age_token)
+        patient_event = patient_event.union(sequence_gender_token)
+        patient_event = patient_event.union(sequence_race_token)
 
     if include_visit_type:
         time_token_insertions = time_token_insertions.withColumn('visit_concept_id', F.lit(0))
