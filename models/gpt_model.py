@@ -182,8 +182,9 @@ def generate_patient_history(
             x = np.array([x])
             y = model.predict(x)
 
+            max_num_iter = 10
             # If the generated token is the same as the previous one, skip it
-            while True:
+            while max_num_iter > 0:
                 sample_token = sample_predicted_probabibility(
                     y[0][sample_index],
                     top_k
@@ -195,6 +196,8 @@ def generate_patient_history(
                         artificial_time_tokens
                 ):
                     break
+
+                max_num_iter -= 1
 
         # Prohibit the tokens from being generated
         if prohibited_tokens and sample_token in prohibited_tokens:
