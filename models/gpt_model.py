@@ -1,5 +1,7 @@
+import copy
+
 import numpy as np
-from pandas import DataFrame
+import random
 import tensorflow as tf
 
 from models.layers.custom_layers import (
@@ -86,7 +88,7 @@ def generate_visit_boundary_tokens():
     return ['VS', 'VE']
 
 
-def token_exists(
+def finding_patterns(
         sample_token,
         tokens_generated,
         visit_boundary_tokens,
@@ -94,45 +96,47 @@ def token_exists(
 ):
     visit_start_token, visit_end_token, = visit_boundary_tokens
     cursor = len(tokens_generated) - 1
-    while True:
-        # If there are no tokens generated, return true
-        if len(tokens_generated) == 0:
-            return True
+    while cursor >= 0:
         prev_token = tokens_generated[cursor]
 
         # The pattern restriction is enforced
-        # ATT -> VS
-        if sample_token == visit_start_token:
-            if prev_token in artificial_time_tokens:
-                return True
-            return False
-
-        # The pattern restriction is enforced
-        # concepts -> VE
-        if sample_token == visit_end_token:
-            if prev_token not in artificial_time_tokens and prev_token not in visit_boundary_tokens:
-                return True
-            return False
-
-        # This indicates this is a time artificial token
+        # VE -> ATT
         if sample_token in artificial_time_tokens:
-            # This pattern VE -> ATT is enforced
             if prev_token == visit_end_token:
                 return True
             return False
 
-        # sample_token has to be a valid concept at this point
-        # This indicates backtracking has reached the previous visit boundary
-        if prev_token == visit_end_token:
-            return True
+        # Multiple occurrences of the same concept within the same visit restriction is prohibited
+        # Not allowed C1->C1
+        if sample_token not in visit_boundary_tokens and sample_token not in artificial_time_tokens:
+            if sample_token == prev_token:
+                return False
 
-        # The sample_token can't be the same as the prev_token within the same visit
-        if prev_token == sample_token:
+        # The pattern restriction is enforced
+        # ATT -> VS
+        if prev_token in artificial_time_tokens:
+            if sample_token == visit_end_token:
+                return True
             return False
 
-        cursor = cursor - 1
+        # The pattern restriction is allowed
+        # Concept -> VS
+        if visit_start_token == prev_token and visit_start_token != sample_token:
+            return True
 
-    return False
+        # The pattern restriction is prohibited
+        # VS -> VS
+        if visit_start_token == prev_token and visit_start_token == sample_token:
+            return False
+
+        # The pattern restriction is prohibited
+        # VE -> VE
+        if visit_end_token == prev_token and visit_end_token == sample_token:
+            return False
+
+        cursor -= 1
+
+    return True
 
 
 def generate_patient_history(
@@ -140,7 +144,8 @@ def generate_patient_history(
         start_tokens,
         concept_tokenizer,
         max_seq,
-        top_k
+        top_k,
+        prohibited_tokens=None
 ):
     visit_boundary_tokens = np.squeeze(
         concept_tokenizer.encode(generate_visit_boundary_tokens())
@@ -152,31 +157,48 @@ def generate_patient_history(
 
     tokens_generated = []
     while len(tokens_generated) <= max_seq:
-        pad_len = max_seq - len(start_tokens)
-        sample_index = len(start_tokens) - 1
-        if pad_len < 0:
-            x = start_tokens[:max_seq]
-            sample_index = max_seq - 1
-        elif pad_len > 0:
-            x = start_tokens + [0] * pad_len
+        sample_token = None
+        # The pattern restriction is enforced ATT -> VS.
+        # We manually set the next token to be VS if the previous one is an ATT
+        if len(tokens_generated) > 0:
+            prev_token = tokens_generated[-1]
+            if prev_token in artificial_time_tokens:
+                sample_token = visit_boundary_tokens[0]
         else:
-            x = start_tokens
-        x = np.array([x])
-        y = model.predict(x)
+            sample_token = visit_boundary_tokens[0]
 
-        # If the generated token is the same as the previous one, skip it
-        while True:
-            sample_token = sample_predicted_probabibility(
-                y[0][sample_index],
-                top_k
-            )
-            if token_exists(
-                    sample_token,
-                    tokens_generated,
-                    visit_boundary_tokens,
-                    artificial_time_tokens
-            ):
-                break
+        # We randomly sample a token from the predicted distribution
+        if not sample_token:
+            pad_len = max_seq - len(start_tokens)
+            sample_index = len(start_tokens) - 1
+            if pad_len < 0:
+                x = start_tokens[:max_seq]
+                sample_index = max_seq - 1
+            elif pad_len > 0:
+                x = start_tokens + [0] * pad_len
+            else:
+                x = start_tokens
+
+            x = np.array([x])
+            y = model.predict(x)
+
+            # If the generated token is the same as the previous one, skip it
+            while True:
+                sample_token = sample_predicted_probabibility(
+                    y[0][sample_index],
+                    top_k
+                )
+                if finding_patterns(
+                        sample_token,
+                        tokens_generated,
+                        visit_boundary_tokens,
+                        artificial_time_tokens
+                ):
+                    break
+
+        # Prohibit the tokens from being generated
+        if prohibited_tokens and sample_token in prohibited_tokens:
+            continue
 
         if sample_token == concept_tokenizer.get_end_token_id():
             break
@@ -193,7 +215,7 @@ class PatientHistoryGenerator(tf.keras.callbacks.Callback):
             max_seq,
             concept_tokenizer: ConceptTokenizer,
             concept_map: dict,
-            top_k=10,
+            top_k=100,
             print_every=1
     ):
         self.max_seq = max_seq
@@ -202,6 +224,29 @@ class PatientHistoryGenerator(tf.keras.callbacks.Callback):
         self.print_every = print_every
         self.k = top_k
 
+        self.genders = np.squeeze(concept_tokenizer.encode([
+            '8532',  # FEMALE,
+            '8507'  # MALE
+        ])).tolist()
+
+        self.races = np.squeeze(concept_tokenizer.encode([
+            '0',  # No matching concept
+            '8527',  # white
+            '8552',  # Unknown
+            '8516',  # Black or African American,
+            '44814653',  # Unknown
+            '8522',  # Other Race
+            '8515',  # Asian
+        ])).tolist()
+
+        self.starting_ages = np.squeeze(concept_tokenizer.encode(
+            list(map(str, range(30, 50))) + list(map(lambda a: f'age:{a}', range(30, 50)))
+        )).tolist()
+
+        self.starting_years = np.squeeze(concept_tokenizer.encode(
+            list(map(str, range(2000, 2020))) + list(map(lambda a: f'year:{a}', range(2000, 2020)))
+        )).tolist()
+
     def detokenize(self, number):
         concept_id = self.concept_tokenizer.decode([[number]])[0]
         if concept_id in self.concept_map:
@@ -209,19 +254,33 @@ class PatientHistoryGenerator(tf.keras.callbacks.Callback):
         return concept_id
 
     def on_batch_end(self, batch, logs=None):
-        if batch != 0 and batch % self.print_every != 0:
+        if batch == 0 and batch % self.print_every != 0:
             return
         print(f'Generating text for {batch}\n')
+        start_tokens = [
+            self.concept_tokenizer.get_start_token_id(),
+            random.sample(self.starting_years, 1)[0],
+            random.sample(self.starting_ages, 1)[0],
+            random.sample(self.genders, 1)[0],
+            random.sample(self.races, 1)[0]
+        ]
+
+        prohibited_tokens = [
+            t for t in self.genders + self.races + self.starting_ages + self.starting_years
+            if t != self.concept_tokenizer.tokenizer.word_index['0']
+        ]
+
         tokens_generated = generate_patient_history(
             model=self.model,
-            start_tokens=[self.concept_tokenizer.get_start_token_id()],
+            start_tokens=copy.deepcopy(start_tokens),
             concept_tokenizer=self.concept_tokenizer,
             max_seq=self.max_seq,
-            top_k=self.k
+            top_k=self.k,
+            prohibited_tokens=prohibited_tokens
         )
 
         txt = '\n'.join(
-            [self.detokenize(_) for _ in tokens_generated]
+            [self.detokenize(_) for _ in start_tokens + tokens_generated]
         )
 
         print(f"generated text:\n{txt}\n")
