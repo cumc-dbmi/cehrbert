@@ -26,6 +26,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             context_window_size: int,
             depth: int,
             num_heads: int,
+            print_every: int,
             *args, **kwargs
     ):
         self._tokenizer_path = tokenizer_path
@@ -34,6 +35,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         self._context_window_size = context_window_size
         self._depth = depth
         self._num_heads = num_heads
+        self._print_every = print_every
 
         super(GptModelTrainer, self).__init__(*args, **kwargs)
 
@@ -45,6 +47,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             f'context_window_size: {context_window_size}\n'
             f'depth: {depth}\n'
             f'num_heads: {num_heads}\n'
+            f'print_every: {print_every}\n'
         )
 
     def _load_dependencies(self):
@@ -116,7 +119,8 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             PatientHistoryGenerator(
                 max_seq=self._context_window_size,
                 concept_tokenizer=self._tokenizer,
-                concept_map=self._concept_map
+                concept_map=self._concept_map,
+                print_every=self._print_every
             )
         )
         return call_backs
@@ -137,7 +141,8 @@ def main(args):
         epochs=args.epochs,
         learning_rate=args.learning_rate,
         use_dask=args.use_dask,
-        tf_board_log_path=args.tf_board_log_path
+        tf_board_log_path=args.tf_board_log_path,
+        print_every=args.print_every
     ).train_model()
 
 

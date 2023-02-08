@@ -92,12 +92,16 @@ def generate_patient_history(
         x = np.array([x])
         y = model.predict(x)
 
-        sample_token = sample_predicted_probabibility(
-            y[0][sample_index],
-            top_k
-        )
+        # If the generated token is the same as the previous one, skip it
+        while True:
+            sample_token = sample_predicted_probabibility(
+                y[0][sample_index],
+                top_k
+            )
+            if len(tokens_generated) == 0 or tokens_generated[-1] != sample_token:
+                break
 
-        if sample_token == concept_tokenizer.get_end_token_id():
+        if sample_token == concept_tokenizer.end_token:
             break
 
         tokens_generated.append(sample_token)
@@ -127,11 +131,10 @@ class PatientHistoryGenerator(tf.keras.callbacks.Callback):
             return self.concept_map[concept_id]
         return concept_id
 
-    def on_epoch_end(self, epoch, logs=None):
-
-        if (epoch + 1) % self.print_every != 0:
+    def on_batch_end(self, batch, logs=None):
+        if batch % self.print_every != 0:
             return
-
+        print(f'Generating text for {batch}\n')
         tokens_generated = generate_patient_history(
             model=self.model,
             start_tokens=[self.concept_tokenizer.get_start_token_id()],

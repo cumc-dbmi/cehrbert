@@ -191,6 +191,14 @@ def create_parse_args_gpt():
         dest='use_dask',
         action='store_true'
     )
+    parser.add_argument(
+        '--print_every',
+        dest='print_every',
+        action='store',
+        type=int,
+        default=500,
+        required=False
+    )
     return parser
 
 
