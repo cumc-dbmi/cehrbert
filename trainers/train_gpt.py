@@ -2,11 +2,10 @@ import os
 
 import tensorflow as tf
 from models.model_parameters import ModelPathConfig
-from models.parse_args import create_parse_args_base_bert
+from models.parse_args import create_parse_args_gpt
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
 from utils.model_utils import tokenize_one_field
-from models.gpt_model import create_model
-from models.bert_models import transformer_bert_model
+from models.gpt_model import create_model, PatientHistoryGenerator
 from models.layers.custom_layers import get_custom_objects
 from data_generators.data_generator_base import *
 
@@ -22,14 +21,15 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
     def __init__(
             self,
             tokenizer_path: str,
+            concept_path: str,
             embedding_size: int,
             context_window_size: int,
             depth: int,
             num_heads: int,
             *args, **kwargs
     ):
-
         self._tokenizer_path = tokenizer_path
+        self._concept_path = concept_path
         self._embedding_size = embedding_size
         self._context_window_size = context_window_size
         self._depth = depth
@@ -40,6 +40,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         self.get_logger().info(
             f'{self} will be trained with the following parameters:\n'
             f'tokenizer_path: {tokenizer_path}\n'
+            f'concept_path: {concept_path}\n'
             f'embedding_size: {embedding_size}\n'
             f'context_window_size: {context_window_size}\n'
             f'depth: {depth}\n'
@@ -53,6 +54,12 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             'token_ids',
             self._tokenizer_path
         )
+        self._concept_map = dict()
+        concept_ids = self._tokenizer.tokenizer.word_index.keys()
+        concept = pd.read_parquet(self._concept_path)
+        for t in concept.itertuples():
+            if str(t.concept_id) in concept_ids:
+                self._concept_map[str(t.concept_id)] = t.concept_name
 
     def create_data_generator(self) -> GptDataGenerator:
 
@@ -93,12 +100,26 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
                         self.confidence_penalty)
                 }
 
-                model.compile(optimizer, loss=losses,
-                              metrics={'concept_predictions': masked_perplexity})
+                model.compile(
+                    optimizer,
+                    loss=losses,
+                    metrics={'concept_predictions': masked_perplexity}
+                )
         return model
 
     def eval_model(self):
         pass
+
+    def _get_callbacks(self):
+        call_backs = super()._get_callbacks()
+        call_backs.append(
+            PatientHistoryGenerator(
+                max_seq=self._context_window_size,
+                concept_tokenizer=self._tokenizer,
+                concept_map=self._concept_map
+            )
+        )
+        return call_backs
 
 
 def main(args):
@@ -107,6 +128,7 @@ def main(args):
         training_data_parquet_path=config.parquet_data_path,
         model_path=config.model_path,
         tokenizer_path=config.tokenizer_path,
+        concept_path=args.concept_path,
         embedding_size=args.embedding_size,
         context_window_size=args.max_seq_length,
         depth=args.depth,
@@ -120,4 +142,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-    main(create_parse_args_base_bert().parse_args())
+    main(create_parse_args_gpt().parse_args())

@@ -151,6 +151,49 @@ def create_parse_args_base_bert():
     return parser
 
 
+def create_parse_args_gpt():
+    parser = create_parse_args()
+    parser.add_argument(
+        '--min_num_of_concepts',
+        dest='min_num_of_concepts',
+        action='store',
+        type=int,
+        default=5,
+        required=False
+    )
+    parser.add_argument(
+        '-d',
+        '--depth',
+        dest='depth',
+        action='store',
+        type=int,
+        default=5,
+        required=False
+    )
+    parser.add_argument(
+        '-nh',
+        '--num_heads',
+        dest='num_heads',
+        action='store',
+        type=int,
+        default=8,
+        required=False
+    )
+    parser.add_argument(
+        '--concept_path',
+        dest='concept_path',
+        action='store',
+        help='The path for the concept',
+        required=True
+    )
+    parser.add_argument(
+        '--use_dask',
+        dest='use_dask',
+        action='store_true'
+    )
+    return parser
+
+
 def create_parse_args_temporal_bert():
     parser = create_parse_args_base_bert()
     parser.add_argument(
