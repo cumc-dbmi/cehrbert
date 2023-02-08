@@ -10,6 +10,8 @@ class ConceptTokenizer:
     mask_token = '[MASK]'
     att_mask_token = '[ATT_MASK]'
     cls_token = '[CLS]'
+    start_token = '[START]'
+    end_token = '[END]'
 
     def __init__(self, special_tokens: Optional[Sequence[str]] = None, oov_token='0'):
         self.special_tokens = special_tokens
@@ -28,6 +30,8 @@ class ConceptTokenizer:
         self.tokenizer.fit_on_texts([self.att_mask_token])
         self.tokenizer.fit_on_texts([self.unused_token])
         self.tokenizer.fit_on_texts([self.cls_token])
+        self.tokenizer.fit_on_texts([self.start_token])
+        self.tokenizer.fit_on_texts([self.end_token])
         self.tokenizer.fit_on_texts([UNKNOWN_CONCEPT])
 
         if self.special_tokens is not None:
@@ -67,6 +71,24 @@ class ConceptTokenizer:
     def get_vocab_size(self):
         # + 1 because oov_token takes the index 0
         return len(self.tokenizer.index_word) + 1
+
+    def get_start_token_id(self):
+        start_token_id = self.encode([self.start_token])
+        while isinstance(start_token_id, list):
+            start_token_id = start_token_id[0]
+        return start_token_id
+
+    def get_end_token_id(self):
+        end_token_id = self.encode([self.end_token])
+        while isinstance(end_token_id, list):
+            end_token_id = end_token_id[0]
+        return end_token_id
+
+    def get_unused_token_id(self):
+        unused_token_id = self.encode([self.unused_token])
+        while isinstance(unused_token_id, list):
+            unused_token_id = unused_token_id[0]
+        return unused_token_id
 
     def get_unused_token_id(self):
         unused_token_id = self.encode([self.unused_token])

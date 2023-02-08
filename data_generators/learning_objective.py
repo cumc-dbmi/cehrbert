@@ -2,7 +2,7 @@ import random
 from abc import ABC, abstractmethod
 from itertools import islice
 from typing import List
-
+import copy
 import numpy as np
 import pandas as pd
 from tensorflow.keras.utils import pad_sequences
@@ -334,9 +334,11 @@ class SequenceGenerationLearningObjective(LearningObjective):
         )
         sorted_list = sorted(iterator, key=lambda tup2: (tup2[0], tup2[1]))
 
-        _, concept_list = zip(*list(islice(sorted_list, left_index, right_index - 1)))
+        _, concept_list = zip(*list(islice(sorted_list, left_index, right_index)))
 
-        shifted_concept_list = concept_list[1:]
+        concept_list = [self._concept_tokenizer.get_start_token_id()] + list(concept_list)
+        shifted_concept_list = copy.deepcopy(list(concept_list)) + [
+            self._concept_tokenizer.get_end_token_id()]
 
         return concept_list, shifted_concept_list
 
