@@ -277,8 +277,7 @@ class SequenceGenerationLearningObjective(LearningObjective):
 
     def get_tf_dataset_schema(self):
         input_dict_schema = {
-            'concept_ids': int32,
-            'mask': int32
+            'concept_ids': int32
         }
         output_dict_schema = {'concept_predictions': int32}
         return input_dict_schema, output_dict_schema
@@ -308,8 +307,7 @@ class SequenceGenerationLearningObjective(LearningObjective):
         mask = (concepts == unused_token_id).astype(int)
 
         input_dict = {
-            'concept_ids': concepts,
-            'mask': mask
+            'concept_ids': concepts
         }
 
         output_dict = {

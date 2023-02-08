@@ -317,7 +317,8 @@ class GptDecoderLayer(tf.keras.layers.Layer):
     def call(self, x, decoder_mask, **kwargs):
         # enc_output.shape == (batch_size, input_seq_len, d_model)
 
-        attn1, attn_weights_block1 = self.mha1(x, x, x, decoder_mask)  # (batch_size, target_seq_len, d_model)
+        attn1, attn_weights_block1 = self.mha1(x, x, x,
+                                               decoder_mask)  # (batch_size, target_seq_len, d_model)
         attn1 = self.dropout1(attn1)
         out1 = self.layernorm1(attn1 + x)
 
@@ -416,10 +417,25 @@ class PositionalEncodingLayer(tf.keras.layers.Layer):
 
 
 class TokenAndPositionEmbedding(tf.keras.layers.Layer):
-    def __init__(self, maxlen, vocab_size, embed_dim):
+    def __init__(
+            self,
+            maxlen,
+            vocab_size,
+            embed_dim
+    ):
         super().__init__()
         self.token_emb = tf.keras.layers.Embedding(input_dim=vocab_size, output_dim=embed_dim)
         self.pos_emb = tf.keras.layers.Embedding(input_dim=maxlen, output_dim=embed_dim)
+        self._maxlen = maxlen
+        self._vocab_size = vocab_size
+        self._embed_dim = embed_dim
+
+    def get_config(self):
+        config = super().get_config()
+        config['maxlen'] = self._maxlen
+        config['vocab_size'] = self._vocab_size
+        config['embed_dim'] = self._embed_dim
+        return config
 
     def call(self, x):
         maxlen = tf.shape(x)[-1]
@@ -1171,6 +1187,7 @@ get_custom_objects().update({
     'EncoderLayer': EncoderLayer,
     'DecoderLayer': DecoderLayer,
     'GptDecoderLayer': GptDecoderLayer,
+    'TokenAndPositionEmbedding': TokenAndPositionEmbedding,
     'SimpleDecoderLayer': SimpleDecoderLayer,
     'TimeAttention': TimeAttention,
     'TimeSelfAttention': TimeSelfAttention,
