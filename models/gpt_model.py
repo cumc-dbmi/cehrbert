@@ -16,12 +16,12 @@ feed_forward_dim = 256  # Hidden layer size in feed forward network inside trans
 def create_model():
     concept_inputs = tf.keras.layers.Input(shape=(maxlen,), dtype=tf.int32)
     decoder_mask_inputs = tf.keras.layers.Input(shape=(maxlen,), dtype=tf.int32)
-
+    decoder_mask_inputs_expanded = decoder_mask_inputs[:, tf.newaxis, tf.newaxis, :]
     embedding_layer = TokenAndPositionEmbedding(maxlen, vocab_size, embed_dim)
     x = embedding_layer(concept_inputs)
 
     transformer_block = GptDecoder(6, embed_dim, num_heads)
-    x = transformer_block(x, decoder_mask_inputs)
+    x, _ = transformer_block(x, decoder_mask_inputs_expanded)
     outputs = tf.keras.layers.Dense(vocab_size)(x)
     model = tf.keras.Model(inputs=[concept_inputs, decoder_mask_inputs], outputs=[outputs])
     return model
