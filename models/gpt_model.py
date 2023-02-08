@@ -71,6 +71,70 @@ def sample_predicted_probabibility(
     return np.random.choice(indices, p=preds)
 
 
+def generate_artificial_time_tokens():
+    """
+    Generate all the time tokens used in training
+    :return:
+    """
+    week_tokens = [f'W{i}' for i in range(4)]
+    month_tokens = [f'M{i}' for i in range(12)]
+    long_term_tokens = ['LT']
+    return week_tokens + month_tokens + long_term_tokens
+
+
+def generate_visit_boundary_tokens():
+    return ['VS', 'VE']
+
+
+def token_exists(
+        sample_token,
+        tokens_generated,
+        visit_boundary_tokens,
+        artificial_time_tokens
+):
+    visit_start_token, visit_end_token, = visit_boundary_tokens
+    cursor = len(tokens_generated) - 1
+    while True:
+        # If there are no tokens generated, return true
+        if len(tokens_generated) == 0:
+            return True
+        prev_token = tokens_generated[cursor]
+
+        # The pattern restriction is enforced
+        # ATT -> VS
+        if sample_token == visit_start_token:
+            if prev_token in artificial_time_tokens:
+                return True
+            return False
+
+        # The pattern restriction is enforced
+        # concepts -> VE
+        if sample_token == visit_end_token:
+            if prev_token not in artificial_time_tokens and prev_token not in visit_boundary_tokens:
+                return True
+            return False
+
+        # This indicates this is a time artificial token
+        if sample_token in artificial_time_tokens:
+            # This pattern VE -> ATT is enforced
+            if prev_token == visit_end_token:
+                return True
+            return False
+
+        # sample_token has to be a valid concept at this point
+        # This indicates backtracking has reached the previous visit boundary
+        if prev_token == visit_end_token:
+            return True
+
+        # The sample_token can't be the same as the prev_token within the same visit
+        if prev_token == sample_token:
+            return False
+
+        cursor = cursor - 1
+
+    return False
+
+
 def generate_patient_history(
         model,
         start_tokens,
@@ -78,6 +142,14 @@ def generate_patient_history(
         max_seq,
         top_k
 ):
+    visit_boundary_tokens = np.squeeze(
+        concept_tokenizer.encode(generate_visit_boundary_tokens())
+    ).tolist()
+
+    artificial_time_tokens = np.squeeze(
+        concept_tokenizer.encode(generate_artificial_time_tokens())
+    ).tolist()
+
     tokens_generated = []
     while len(tokens_generated) <= max_seq:
         pad_len = max_seq - len(start_tokens)
@@ -98,7 +170,12 @@ def generate_patient_history(
                 y[0][sample_index],
                 top_k
             )
-            if len(tokens_generated) == 0 or tokens_generated[-1] != sample_token:
+            if token_exists(
+                    sample_token,
+                    tokens_generated,
+                    visit_boundary_tokens,
+                    artificial_time_tokens
+            ):
                 break
 
         if sample_token == concept_tokenizer.end_token:
