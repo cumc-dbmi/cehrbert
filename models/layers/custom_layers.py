@@ -205,6 +205,38 @@ class Encoder(tf.keras.layers.Layer):
         return x, tf.stack(attention_weights, axis=0)  # (batch_size, input_seq_len, d_model)
 
 
+class GptDecoder(tf.keras.layers.Layer):
+    def __init__(self, num_layers, d_model, num_heads, dff=2148, dropout_rate=0.1, *args,
+                 **kwargs):
+        super(GptDecoder, self).__init__(*args, **kwargs)
+
+        self.d_model = d_model
+        self.num_layers = num_layers
+        self.num_heads = num_heads
+        self.dff = dff
+        self.dropout_rate = dropout_rate
+        self.decoder_layers = [
+            GptDecoderLayer(d_model, num_heads, dff, dropout_rate, name='transformer' + str(i))
+            for i in range(num_layers)]
+        self.dropout = tf.keras.layers.Dropout(dropout_rate)
+
+    def get_config(self):
+        config = super().get_config()
+        config['num_layers'] = self.num_layers
+        config['d_model'] = self.d_model
+        config['num_heads'] = self.num_heads
+        config['dff'] = self.dff
+        config['dropout_rate'] = self.dropout_rate
+        return config
+
+    def call(self, x, mask, **kwargs):
+        attention_weights = []
+        for i in range(self.num_layers):
+            x, attn_weights = self.decoder_layers[i](x, mask, **kwargs)
+            attention_weights.append(attn_weights)
+        return x, tf.stack(attention_weights, axis=0)  # (batch_size, input_seq_len, d_model)
+
+
 class DecoderLayer(tf.keras.layers.Layer):
     def __init__(self, d_model, num_heads, dff, rate=0.1, *args, **kwargs):
         super(DecoderLayer, self).__init__(*args, **kwargs)
@@ -253,6 +285,47 @@ class DecoderLayer(tf.keras.layers.Layer):
         out3 = self.layernorm3(ffn_output + out2)  # (batch_size, target_seq_len, d_model)
 
         return out3, attn_weights_block1, attn_weights_block2
+
+
+class GptDecoderLayer(tf.keras.layers.Layer):
+    def __init__(self, d_model, num_heads, dff, rate=0.1, *args, **kwargs):
+        super(GptDecoderLayer, self).__init__(*args, **kwargs)
+
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.dff = dff
+        self.rate = rate
+
+        self.mha1 = MultiHeadAttention(d_model, num_heads)
+
+        self.ffn = point_wise_feed_forward_network(d_model, dff)
+
+        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm3 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+
+        self.dropout1 = tf.keras.layers.Dropout(rate)
+        self.dropout3 = tf.keras.layers.Dropout(rate)
+
+    def get_config(self):
+        config = super().get_config()
+        config['d_model'] = self.d_model
+        config['num_heads'] = self.num_heads
+        config['dff'] = self.dff
+        config['rate'] = self.rate
+        return config
+
+    def call(self, x, decoder_mask, **kwargs):
+        # enc_output.shape == (batch_size, input_seq_len, d_model)
+
+        attn1, attn_weights_block1 = self.mha1(x, x, x, decoder_mask)  # (batch_size, target_seq_len, d_model)
+        attn1 = self.dropout1(attn1)
+        out1 = self.layernorm1(attn1 + x)
+
+        ffn_output = self.ffn(out1)  # (batch_size, target_seq_len, d_model)
+        ffn_output = self.dropout3(ffn_output, **kwargs)
+        out3 = self.layernorm3(ffn_output + out1)  # (batch_size, target_seq_len, d_model)
+
+        return out3, attn_weights_block1
 
 
 class SimpleDecoderLayer(tf.keras.layers.Layer):
@@ -340,6 +413,20 @@ class PositionalEncodingLayer(tf.keras.layers.Layer):
         # Get the same positional encodings for the concepts with the same visit_order
         positional_embeddings = tf.gather(self.pos_encoding, visit_concept_orders, axis=0)
         return positional_embeddings
+
+
+class TokenAndPositionEmbedding(tf.keras.layers.Layer):
+    def __init__(self, maxlen, vocab_size, embed_dim):
+        super().__init__()
+        self.token_emb = tf.keras.layers.Embedding(input_dim=vocab_size, output_dim=embed_dim)
+        self.pos_emb = tf.keras.layers.Embedding(input_dim=maxlen, output_dim=embed_dim)
+
+    def call(self, x):
+        maxlen = tf.shape(x)[-1]
+        positions = tf.range(start=0, limit=maxlen, delta=1)
+        positions = self.pos_emb(positions)
+        x = self.token_emb(x)
+        return x + positions
 
 
 class TimeEmbeddingLayer(tf.keras.layers.Layer):
@@ -1080,8 +1167,10 @@ def distance_matrix(matrix_1, matrix_2):
 get_custom_objects().update({
     'MultiHeadAttention': MultiHeadAttention,
     'Encoder': Encoder,
+    'GptDecoder': GptDecoder,
     'EncoderLayer': EncoderLayer,
     'DecoderLayer': DecoderLayer,
+    'GptDecoderLayer': GptDecoderLayer,
     'SimpleDecoderLayer': SimpleDecoderLayer,
     'TimeAttention': TimeAttention,
     'TimeSelfAttention': TimeSelfAttention,
