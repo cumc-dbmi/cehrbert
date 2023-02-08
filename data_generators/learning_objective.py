@@ -304,7 +304,7 @@ class SequenceGenerationLearningObjective(LearningObjective):
             self._max_seq_len
         )
 
-        mask = (concepts == unused_token_id).astype(int)
+        mask = (concepts != unused_token_id).astype(int)
 
         input_dict = {
             'concept_ids': concepts
