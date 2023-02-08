@@ -421,9 +421,11 @@ class TokenAndPositionEmbedding(tf.keras.layers.Layer):
             self,
             maxlen,
             vocab_size,
-            embed_dim
+            embed_dim,
+            *args,
+            **kwargs
     ):
-        super().__init__()
+        super().__init__(*args, **kwargs)
         self.token_emb = tf.keras.layers.Embedding(input_dim=vocab_size, output_dim=embed_dim)
         self.pos_emb = tf.keras.layers.Embedding(input_dim=maxlen, output_dim=embed_dim)
         self._maxlen = maxlen

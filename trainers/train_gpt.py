@@ -66,7 +66,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         parameters = {
             'training_data': self._training_data,
             'batch_size': self._batch_size,
-            'max_seq_len': self._context_window_size - 2,
+            'max_seq_len': self._context_window_size,
             'min_num_of_concepts': self.min_num_of_concepts,
             'concept_tokenizer': self._tokenizer
         }
