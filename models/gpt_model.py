@@ -178,7 +178,7 @@ def generate_patient_history(
             ):
                 break
 
-        if sample_token == concept_tokenizer.end_token:
+        if sample_token == concept_tokenizer.get_end_token_id():
             break
 
         tokens_generated.append(sample_token)
