@@ -132,7 +132,7 @@ class PatientHistoryGenerator(tf.keras.callbacks.Callback):
         return concept_id
 
     def on_batch_end(self, batch, logs=None):
-        if batch % self.print_every != 0:
+        if batch != 0 and batch % self.print_every != 0:
             return
         print(f'Generating text for {batch}\n')
         tokens_generated = generate_patient_history(
