@@ -136,6 +136,8 @@ def finding_patterns(
 
         cursor -= 1
 
+        break
+
     return True
 
 
@@ -218,7 +220,7 @@ class PatientHistoryGenerator(tf.keras.callbacks.Callback):
             max_seq,
             concept_tokenizer: ConceptTokenizer,
             concept_map: dict,
-            top_k=100,
+            top_k=10,
             print_every=1
     ):
         self.max_seq = max_seq
