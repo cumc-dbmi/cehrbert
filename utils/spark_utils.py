@@ -529,7 +529,8 @@ def create_sequence_data_with_att(
         # Udf for identifying the earliest date associated with a visit_occurrence_id
         sequence_start_year_token = patient_event.where('standard_concept_id = "VS"') \
             .where('visit_rank_order=1') \
-            .withColumn('standard_concept_id', F.year('date').cast(T.StringType())) \
+            .withColumn('standard_concept_id',
+                        F.concat(F.lit('year:'), F.year('date').cast(T.StringType()))) \
             .withColumn('priority', F.lit(-10)) \
             .withColumn('visit_segment', F.lit(0)) \
             .withColumn('date_in_week', F.lit(0)) \
@@ -541,7 +542,8 @@ def create_sequence_data_with_att(
         sequence_age_token = patient_event \
             .where('standard_concept_id = "VS"') \
             .where('visit_rank_order=1') \
-            .withColumn('standard_concept_id', age_at_first_visit_udf.cast(T.StringType())) \
+            .withColumn('standard_concept_id',
+                        F.concat(F.lit('age:'), age_at_first_visit_udf.cast(T.StringType()))) \
             .withColumn('priority', F.lit(-9))
 
         sequence_gender_token = patient_demographic.select(
