@@ -290,9 +290,27 @@ class BertDataGenerator(AbstractDataGeneratorBase):
 
 
 class GptDataGenerator(BertDataGenerator):
+    def __init__(
+            self,
+            min_num_of_visits: int,
+            max_num_of_visits: int,
+            *args,
+            **kwargs):
+
+        self._min_num_of_visits = min_num_of_visits
+        self._max_num_of_visits = max_num_of_visits
+
+        super(BertDataGenerator,
+              self).__init__(
+            *args,
+            **kwargs
+        )
+
     def _clean_dataframe(self):
-        self._training_data = self._training_data[self._training_data['num_of_visits'] >= 5]
-        self._training_data = self._training_data[self._training_data['num_of_visits'] <= 20]
+        self._training_data = self._training_data[
+            self._training_data['num_of_visits'] >= self._min_num_of_visits]
+        self._training_data = self._training_data[
+            self._training_data['num_of_visits'] <= self._max_num_of_visits]
         self._training_data = self._training_data[
             self._training_data['num_of_concepts'] <= self._max_seq_len]
 

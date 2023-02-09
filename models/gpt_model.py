@@ -133,10 +133,7 @@ def finding_patterns(
         # VE -> VE
         if visit_end_token == prev_token and visit_end_token == sample_token:
             return False
-
         cursor -= 1
-
-        break
 
     return True
 
@@ -193,12 +190,11 @@ def generate_patient_history(
                 )
                 if len(tokens_generated) == 0 or tokens_generated[-1] != sample_token:
                     break
+                max_num_iter = max_num_iter - 1
 
-                max_num_iter -= 1
-
-        # Prohibit the tokens from being generated
-        # if prohibited_tokens and sample_token in prohibited_tokens:
-        #     continue
+        # # Prohibit the tokens from being generated
+        if prohibited_tokens and sample_token in prohibited_tokens:
+            continue
 
         if sample_token == concept_tokenizer.get_end_token_id():
             break
@@ -254,15 +250,15 @@ class PatientHistoryGenerator(tf.keras.callbacks.Callback):
         return concept_id
 
     def on_batch_end(self, batch, logs=None):
-        if batch == 0 and batch % self.print_every != 0:
+        if batch == 0 or batch % self.print_every != 0:
             return
         print(f'Generating text for {batch}\n')
         start_tokens = [
             self.concept_tokenizer.get_start_token_id(),
-            # random.sample(self.starting_years, 1)[0],
-            # random.sample(self.starting_ages, 1)[0],
-            # random.sample(self.genders, 1)[0],
-            # random.sample(self.races, 1)[0]
+            random.sample(self.starting_years, 1)[0],
+            random.sample(self.starting_ages, 1)[0],
+            random.sample(self.genders, 1)[0],
+            random.sample(self.races, 1)[0]
         ]
 
         prohibited_tokens = [

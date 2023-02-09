@@ -192,6 +192,22 @@ def create_parse_args_gpt():
         action='store_true'
     )
     parser.add_argument(
+        '--min_num_of_visits',
+        dest='min_num_of_visits',
+        action='store',
+        type=int,
+        default=2,
+        required=False
+    )
+    parser.add_argument(
+        '--max_num_of_visits',
+        dest='max_num_of_visits',
+        action='store',
+        type=int,
+        default=20,
+        required=False
+    )
+    parser.add_argument(
         '--print_every',
         dest='print_every',
         action='store',
