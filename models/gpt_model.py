@@ -166,8 +166,8 @@ def generate_patient_history(
             prev_token = tokens_generated[-1]
             if prev_token in artificial_time_tokens:
                 sample_token = visit_boundary_tokens[0]
-        # else:
-        #     sample_token = visit_boundary_tokens[0]
+        else:
+            sample_token = visit_boundary_tokens[0]
 
         # We randomly sample a token from the predicted distribution
         if not sample_token:
@@ -197,8 +197,8 @@ def generate_patient_history(
                 max_num_iter -= 1
 
         # Prohibit the tokens from being generated
-        if prohibited_tokens and sample_token in prohibited_tokens:
-            continue
+        # if prohibited_tokens and sample_token in prohibited_tokens:
+        #     continue
 
         if sample_token == concept_tokenizer.get_end_token_id():
             break
@@ -259,10 +259,10 @@ class PatientHistoryGenerator(tf.keras.callbacks.Callback):
         print(f'Generating text for {batch}\n')
         start_tokens = [
             self.concept_tokenizer.get_start_token_id(),
-            random.sample(self.starting_years, 1)[0],
-            random.sample(self.starting_ages, 1)[0],
-            random.sample(self.genders, 1)[0],
-            random.sample(self.races, 1)[0]
+            # random.sample(self.starting_years, 1)[0],
+            # random.sample(self.starting_ages, 1)[0],
+            # random.sample(self.genders, 1)[0],
+            # random.sample(self.races, 1)[0]
         ]
 
         prohibited_tokens = [
