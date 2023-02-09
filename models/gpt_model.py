@@ -166,8 +166,8 @@ def generate_patient_history(
             prev_token = tokens_generated[-1]
             if prev_token in artificial_time_tokens:
                 sample_token = visit_boundary_tokens[0]
-        else:
-            sample_token = visit_boundary_tokens[0]
+        # else:
+        #     sample_token = visit_boundary_tokens[0]
 
         # We randomly sample a token from the predicted distribution
         if not sample_token:
@@ -191,12 +191,7 @@ def generate_patient_history(
                     y[0][sample_index],
                     top_k
                 )
-                if finding_patterns(
-                        sample_token,
-                        tokens_generated,
-                        visit_boundary_tokens,
-                        artificial_time_tokens
-                ):
+                if len(tokens_generated) == 0 or tokens_generated[-1] != sample_token:
                     break
 
                 max_num_iter -= 1
