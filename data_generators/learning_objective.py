@@ -337,7 +337,7 @@ class SequenceGenerationLearningObjective(LearningObjective):
         _, concept_list = zip(*list(islice(sorted_list, left_index, right_index)))
 
         concept_list = [self._concept_tokenizer.get_start_token_id()] + list(concept_list)
-        shifted_concept_list = copy.deepcopy(list(concept_list)) + [
+        shifted_concept_list = copy.deepcopy(list(concept_list)[1:]) + [
             self._concept_tokenizer.get_end_token_id()]
 
         return concept_list, shifted_concept_list
