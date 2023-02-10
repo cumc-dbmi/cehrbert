@@ -29,23 +29,23 @@ spark-submit spark_apps/generate_training_data.py -i ~/Documents/omop_test/ -o ~
 ### 3. Pre-train CEHR-BERT
 If you don't have your own OMOP instance, we have provided a sample of patient sequence data generated using Synthea at `sample/patient_sequence` in the repo. CEHR-BERT expects the data folder to be named as `patient_sequence`
 ```console
-PYTHONPATH=./: python3 trainers/train_bert_only.py -i ~/sample_data/ -o ~/Documents/omop_test/cehr-bert -iv -m 512 -e 1 -b 32 -d 5 
+PYTHONPATH=./: python3 trainers/train_bert_only.py -i sample_data/ -o ~/Documents/omop_test/cehr-bert -iv -m 512 -e 1 -b 32 -d 5 
 ```
 ### 4. Generate hf readmission prediction task
+If you don't have your own OMOP instance, we have provided a sample of patient sequence data generated using Synthea at `sample/hf_readmissioon` in the repo
 ```console
 PYTHONPATH=./:$PYTHONPATH spark-submit spark_apps/prediction_cohorts/hf_readmission.py -c hf_readmission -i ~/Documents/omop_test/ -o ~/Documents/omop_test/cehr-bert -dl 1985-01-01 -du 2020-12-31 -l 18 -u 100 -ow 360 -ps 0 -pw 30 --is_new_patient_representation
 ```
 
 ### 5. Fine-tune CEHR-BERT for hf readmission
-If you don't have your own OMOP instance, we have provided a sample of patient sequence data generated using Synthea at `sample/hf_readmissioon` in the repo
 ```console
 # Copy the pretrained bert model
 mv sample_data/hf_readmission ~/Documents/omop_test/cehr-bert/hf_readmission;
 
 # Create the evaluation folder
-cd ~/Documents/omop_test/evaluation_train_val_split/hf_readmission/;
+mkdir -p ~/Documents/omop_test/evaluation_train_val_split/hf_readmission/;
 
 # In our experiment, we use the model snapshot generated from the second epoch
 cp ~/Documents/omop_test/cehr-bert/bert_model_02_* ~/Documents/omop_test/cehr-bert/bert_model.h5;
-PYTHONPATH=./: python3 evaluations/evaluation.py -a sequence_model -sd ~/Documents/omop_test/cehr-bert/hf_readmission -ef ~/Documents/omop_test/evaluation_train_val_split/hf_readmission/ -m 512 -b 32 -p 10 -vb ~/Documents/omop_test/cehr-bert -me vanilla_bert_lstm --sequence_model_name CEHR_BERT_512 --num_of_folds 4 --learning_rate 1e-4;
+PYTHONPATH=./: python3 evaluations/evaluation.py -a sequence_model -sd sample_data/hf_readmission -ef ~/Documents/omop_test/evaluation_train_val_split/hf_readmission/ -m 512 -b 32 -p 10 -vb ~/Documents/omop_test/cehr-bert -me vanilla_bert_lstm --sequence_model_name CEHR_BERT_512 --num_of_folds 4;
 ```
