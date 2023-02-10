@@ -4,7 +4,7 @@ from itertools import islice
 from typing import List
 
 import numpy as np
-from tensorflow.python.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.dtypes import int32
 
 from data_generators.data_classes import RowSlicer
