@@ -54,3 +54,6 @@ mkdir -p ~/Documents/omop_test/evaluation_train_val_split/hf_readmission/;
 cp ~/Documents/omop_test/cehr-bert/bert_model_02_* ~/Documents/omop_test/cehr-bert/bert_model.h5;
 PYTHONPATH=./: python3 evaluations/evaluation.py -a sequence_model -sd sample_data/hf_readmission -ef ~/Documents/omop_test/evaluation_train_val_split/hf_readmission/ -m 512 -b 32 -p 10 -vb ~/Documents/omop_test/cehr-bert -me vanilla_bert_lstm --sequence_model_name CEHR_BERT_512 --num_of_folds 4;
 ```
+
+## Contact us
+If you have any questions, feel free to contact us at cp3016@cumc.columbia.edu
