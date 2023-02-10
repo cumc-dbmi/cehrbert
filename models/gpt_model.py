@@ -188,7 +188,12 @@ def generate_patient_history(
                     y[0][sample_index],
                     top_k
                 )
-                if len(tokens_generated) == 0 or tokens_generated[-1] != sample_token:
+                if finding_patterns(
+                        sample_token,
+                        tokens_generated,
+                        visit_boundary_tokens,
+                        artificial_time_tokens
+                ):
                     break
                 max_num_iter = max_num_iter - 1
 
