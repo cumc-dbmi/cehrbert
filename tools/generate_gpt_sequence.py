@@ -37,8 +37,8 @@ def main(args):
             model,
             [tokenizer.get_start_token_id()],
             tokenizer,
-            100,
-            10
+            args.context_window,
+            args.top_k
         )
 
         txt = '\n'.join(
@@ -60,6 +60,25 @@ if __name__ == "__main__":
         action='store',
         help='The path for your model_folder',
         required=True
+    )
+
+    parser.add_argument(
+        '--context_window',
+        dest='context_window',
+        action='store',
+        type=int,
+        help='The context window of the gpt model',
+        required=True
+    )
+
+    parser.add_argument(
+        '--top_k',
+        dest='top_k',
+        action='store',
+        default=10,
+        type=int,
+        help='The number of top concepts to sample',
+        required=False
     )
 
     parser.add_argument(
