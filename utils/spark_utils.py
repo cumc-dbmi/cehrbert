@@ -469,7 +469,7 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
         .withColumn('domain', F.lit('visit')) \
         .withColumn('rank', first_concept_rank_udf) \
         .where('rank = 1') \
-        .drop('concept_rank').distinct()
+        .drop('rank').distinct()
 
     visit_end_events = patient_event.withColumn('date', visit_end_date_udf) \
         .withColumn('standard_concept_id', F.lit('VE')) \
