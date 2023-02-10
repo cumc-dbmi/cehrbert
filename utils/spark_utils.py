@@ -453,13 +453,30 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
         W.partitionBy('cohort_member_id', 'person_id', 'visit_occurrence_id').orderBy(
             F.col('date').desc()))
 
+    # Udf for identifying the first concept
+    first_concept_rank_udf = F.row_number().over(
+        W.partitionBy('cohort_member_id', 'person_id', 'visit_occurrence_id').orderBy('date')
+    )
+
+    # Udf for identifying the last concept
+    last_concept_rank_udf = F.row_number().over(
+        W.partitionBy('cohort_member_id', 'person_id', 'visit_occurrence_id').orderBy(
+            F.desc('date'))
+    )
+
     visit_start_events = patient_event.withColumn('date', visit_start_date_udf) \
         .withColumn('standard_concept_id', F.lit('VS')) \
-        .withColumn('domain', F.lit('visit')).distinct()
+        .withColumn('domain', F.lit('visit')) \
+        .withColumn('rank', first_concept_rank_udf) \
+        .where('rank = 1') \
+        .drop('concept_rank').distinct()
 
     visit_end_events = patient_event.withColumn('date', visit_end_date_udf) \
         .withColumn('standard_concept_id', F.lit('VE')) \
-        .withColumn('domain', F.lit('visit')).distinct()
+        .withColumn('domain', F.lit('visit')) \
+        .withColumn('rank', last_concept_rank_udf) \
+        .where('rank = 1') \
+        .drop('rank').distinct()
 
     # Calculate the priority, VS has the highest priority, regular concepts have 0 priority
     # and VE has the lowest priority
