@@ -32,7 +32,6 @@ def main(args):
             concept_map[str(t.concept_id)] = t.concept_name
 
     while True:
-
         tokens_generated = generate_patient_history(
             model,
             [tokenizer.get_start_token_id()],
