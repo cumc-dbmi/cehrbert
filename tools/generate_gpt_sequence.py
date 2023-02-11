@@ -1,5 +1,6 @@
 import os
 import argparse
+import random
 import pandas as pd
 import pickle
 import tensorflow as tf
@@ -18,7 +19,9 @@ def detokenize(
     return concept_id
 
 
-def main(args):
+def main(
+        args
+):
     tokenizer_path = os.path.join(args.model_folder, 'tokenizer.pickle')
     model_path = os.path.join(args.model_folder, 'bert_model.h5')
     model = tf.keras.models.load_model(model_path, custom_objects=get_custom_objects())
@@ -31,17 +34,29 @@ def main(args):
         if str(t.concept_id) in concept_ids:
             concept_map[str(t.concept_id)] = t.concept_name
 
+    demographic_info = None
+    if args.demographic_data_path:
+        demographic_info = pd.read_parquet(
+            args.demographic_data_path
+        ).concept_ids.apply(lambda concept_list: concept_list[0:4])
+        demographic_info = tokenizer.encode(map(list, demographic_info))
+
     while True:
+        start_tokens = [tokenizer.get_start_token_id()]
+        if demographic_info is not None:
+            # Randomly sample a patient from the population
+            start_tokens.extend(random.sample(demographic_info, 1)[0])
+
         tokens_generated = generate_patient_history(
             model,
-            [tokenizer.get_start_token_id()],
+            start_tokens,
             tokenizer,
             args.context_window,
             args.top_k
         )
 
         txt = '\n'.join(
-            [detokenize(_, tokenizer, concept_map) for _ in tokens_generated]
+            [detokenize(_, tokenizer, concept_map) for _ in start_tokens + tokens_generated]
         )
         print(txt)
 
@@ -60,7 +75,6 @@ if __name__ == "__main__":
         help='The path for your model_folder',
         required=True
     )
-
     parser.add_argument(
         '--context_window',
         dest='context_window',
@@ -69,7 +83,6 @@ if __name__ == "__main__":
         help='The context window of the gpt model',
         required=True
     )
-
     parser.add_argument(
         '--top_k',
         dest='top_k',
@@ -79,7 +92,6 @@ if __name__ == "__main__":
         help='The number of top concepts to sample',
         required=False
     )
-
     parser.add_argument(
         '--concept_path',
         dest='concept_path',
@@ -87,7 +99,12 @@ if __name__ == "__main__":
         help='The path for your concept_path',
         required=True
     )
+    parser.add_argument(
+        '--demographic_data_path',
+        dest='demographic_data_path',
+        action='store',
+        help='The path for your concept_path',
+        required=False
+    )
 
-    args = parser.parse_args()
-
-    main(args)
+    main(parser.parse_args())
