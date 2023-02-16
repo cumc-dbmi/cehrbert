@@ -5,13 +5,13 @@ from typing import List
 
 import numpy as np
 import pandas as pd
-from tensorflow.keras.utils import pad_sequences
 from tensorflow.dtypes import int32, float32
+from tensorflow.keras.utils import pad_sequences
 
-from utils.model_utils import convert_to_list_of_lists
 from data_generators.data_classes import RowSlicer
-from data_generators.tokenizer import ConceptTokenizer
 from data_generators.graph_sample_method import GraphSampler
+from data_generators.tokenizer import ConceptTokenizer
+from utils.model_utils import convert_to_list_of_lists
 
 
 def validate_columns_decorator(function):
@@ -850,10 +850,12 @@ class HierarchicalReadmissionLearningObjective(
     def __init__(
             self,
             max_num_of_visits: int,
-            is_pretraining: bool
+            is_pretraining: bool,
+            random_mask_prob: float
     ):
         self._max_num_of_visits = max_num_of_visits
         self._is_pretraining = is_pretraining
+        self._random_mask_prob = random_mask_prob
 
     def get_tf_dataset_schema(self):
         output_dict_schema = {
@@ -882,8 +884,11 @@ class HierarchicalReadmissionLearningObjective(
             maxlen=self._max_num_of_visits
         )
 
+        random_mask = np.random.rand(*padded_is_inpatients.shape) >= self._random_mask_prob
+        mask = padded_is_inpatients & random_mask
+
         output_dict = {
-            'is_readmission': np.stack([padded_is_readmissions, padded_is_inpatients], axis=-1)
+            'is_readmission': np.stack([padded_is_readmissions, mask], axis=-1)
         }
 
         return {}, output_dict
@@ -916,10 +921,12 @@ class HierarchicalProlongedLengthStayLearningObjective(
     def __init__(
             self,
             max_num_of_visits: int,
-            is_pretraining: bool
+            is_pretraining: bool,
+            random_mask_prob: float
     ):
         self._max_num_of_visits = max_num_of_visits
         self._is_pretraining = is_pretraining
+        self._random_mask_prob = random_mask_prob
 
     def get_tf_dataset_schema(self):
         output_dict_schema = {
@@ -948,10 +955,13 @@ class HierarchicalProlongedLengthStayLearningObjective(
             maxlen=self._max_num_of_visits
         )
 
+        random_mask = np.random.rand(*padded_is_inpatients.shape) >= self._random_mask_prob
+        mask = padded_is_inpatients & random_mask
+
         output_dict = {
             'visit_prolonged_stay':
                 np.stack(
-                    [padded_visit_prolonged_stays, padded_is_inpatients],
+                    [padded_visit_prolonged_stays, mask],
                     axis=-1
                 )
         }
