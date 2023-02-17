@@ -133,6 +133,10 @@ def create_sliding_bert_model(model_path, max_seq_length, context_window, stride
 def create_vanilla_bert_bi_lstm_model(max_seq_length, vanilla_bert_model_path):
     age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
 
+    age_batch_norm_layer = tf.keras.layers.BatchNormalization(name='age_batch_norm_layer')
+
+    normalized_index_age = age_batch_norm_layer(age_of_visit_input)
+
     vanilla_bert_model = tf.keras.models.load_model(vanilla_bert_model_path,
                                                     custom_objects=dict(**get_custom_objects()))
     bert_inputs = [i for i in vanilla_bert_model.inputs if
@@ -169,7 +173,7 @@ def create_vanilla_bert_bi_lstm_model(max_seq_length, vanilla_bert_model_path):
 
     next_input = dropout_lstm_layer(bi_lstm_layer(next_input))
 
-    next_input = tf.keras.layers.concatenate([next_input, age_of_visit_input])
+    next_input = tf.keras.layers.concatenate([next_input, normalized_index_age])
 
     next_input = dropout_dense_layer(dense_layer(next_input))
 
@@ -190,6 +194,10 @@ def create_random_vanilla_bert_bi_lstm_model(max_seq_length,
                                              use_time_embedding,
                                              time_embeddings_size):
     age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
+
+    age_batch_norm_layer = tf.keras.layers.BatchNormalization(name='age_batch_norm_layer')
+
+    normalized_index_age = age_batch_norm_layer(age_of_visit_input)
 
     vanilla_bert_model = transformer_bert_model_visit_prediction(
         max_seq_length=max_seq_length,
@@ -235,7 +243,7 @@ def create_random_vanilla_bert_bi_lstm_model(max_seq_length,
 
     next_input = dropout_lstm_layer(bi_lstm_layer(next_input))
 
-    next_input = tf.keras.layers.concatenate([next_input, age_of_visit_input])
+    next_input = tf.keras.layers.concatenate([next_input, normalized_index_age])
 
     next_input = dropout_dense_layer(dense_layer(next_input))
 
@@ -256,6 +264,10 @@ def create_temporal_bert_bi_lstm_model(max_seq_length, temporal_bert_model_path)
     contextualized_embeddings, _, _ = temporal_bert_model.get_layer('temporal_encoder').output
 
     age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
+
+    age_batch_norm_layer = tf.keras.layers.BatchNormalization(name='age_batch_norm_layer')
+
+    normalized_index_age = age_batch_norm_layer(age_of_visit_input)
 
     mask_input = bert_inputs[-1]
     mask_embeddings = tf.cast(
@@ -280,7 +292,7 @@ def create_temporal_bert_bi_lstm_model(max_seq_length, temporal_bert_model_path)
 
     next_input = dropout_lstm_layer(bi_lstm_layer(next_input))
 
-    next_input = tf.keras.layers.concatenate([next_input, age_of_visit_input])
+    next_input = tf.keras.layers.concatenate([next_input, normalized_index_age])
 
     next_input = dropout_dense_layer(dense_layer(next_input))
 

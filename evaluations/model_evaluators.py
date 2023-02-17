@@ -215,7 +215,7 @@ class BiLstmModelEvaluator(SequenceModelEvaluator):
         padded_token_ides = post_pad_pre_truncate(token_ids, self._tokenizer.get_unused_token_id(),
                                                   self._max_seq_length)
         inputs = {
-            'age': ages,
+            'age': np.expand_dims(self._dataset.age, axis=-1),
             'concept_ids': padded_token_ides
         }
         return inputs, labels
@@ -281,7 +281,7 @@ class BertLstmModelEvaluator(SequenceModelEvaluator):
                                                             self._max_seq_length)
 
         inputs = {
-            'age': index_age,
+            'age': np.expand_dims(self._dataset.age, axis=-1),
             'concept_ids': padded_token_ides,
             'masked_concept_ids': padded_token_ides,
             'mask': mask,
