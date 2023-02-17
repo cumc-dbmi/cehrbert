@@ -68,7 +68,7 @@ PYTHONPATH=./: python3 evaluations/evaluation.py -a sequence_model -sd sample_da
 ```
 
 ## Contact us
-If you have any questions, feel free to contact us at cp3016@cumc.columbia.edu
+If you have any questions, feel free to contact us at cp3016@cumc.columbia.edu and xj2193@cumc.columbia.edu
 
 ## Citation
 Please acknowledge the following work in papers
