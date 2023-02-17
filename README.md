@@ -2,6 +2,8 @@
 CEHR-BERT is a large language model developed for the structured EHR data, the work has been published at https://proceedings.mlr.press/v158/pang21a.html. CEHR-BERT currently only supports the structured EHR data in the OMOP format, which is a common data model used to support observational studies and managed  by the Observational Health Data Science and Informatics (OHDSI) open-science community. 
 There are three major components in CEHR-BERT, data generation, model pre-training, and model evaluation with fine-tuning, those components work in conjunction to provide an end-to-end model evaluation framework.
 
+!["cehr-bert architecture diagram"](images/cehr_bert_architecture.png)
+
 ## Pretrained model release
 We will release the model that we pre-trained soon
 
@@ -57,3 +59,12 @@ PYTHONPATH=./: python3 evaluations/evaluation.py -a sequence_model -sd sample_da
 
 ## Contact us
 If you have any questions, feel free to contact us at cp3016@cumc.columbia.edu
+
+## Citation
+Please acknowledge the following work in papers
+
+Chao Pang, Xinzhuo Jiang, Krishna S. Kalluri, Matthew Spotnitz, RuiJun Chen, Adler
+Perotte, and Karthik Natarajan. "Cehr-bert: Incorporating temporal information from
+structured ehr data to improve prediction tasks." In Proceedings of Machine Learning for
+Health, volume 158 of Proceedings of Machine Learning Research, pages 239–260. PMLR,
+04 Dec 2021.
