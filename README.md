@@ -1,6 +1,16 @@
-## CEHR-BERT Architecture
+## CEHR-BERT
 CEHR-BERT is a large language model developed for the structured EHR data, the work has been published at https://proceedings.mlr.press/v158/pang21a.html. CEHR-BERT currently only supports the structured EHR data in the OMOP format, which is a common data model used to support observational studies and managed  by the Observational Health Data Science and Informatics (OHDSI) open-science community. 
 There are three major components in CEHR-BERT, data generation, model pre-training, and model evaluation with fine-tuning, those components work in conjunction to provide an end-to-end model evaluation framework.
+
+### Patient Representation
+For each patient, all medical codes were aggregated and constructed into a sequence chronologically.
+In order to incorporate temporal information, we inserted an artificial time token (ATT) between two neighboring visits based on their time interval. 
+The following logic was used for creating ATTs based on the following time intervals between visits, if less than 28 days, ATTs take on the form of $W_n$ where n represents the week number ranging from 0-3 (e.g. $W_1$); 2) if between 28 days and 365 days, ATTs are in the form of **$M_n$** where n represents the month number ranging from 1-11 e.g $M_{11}$; 3) beyond 365 days then a **LT** (Long Term) token is inserted. In addition, we added two more special tokens — **VS** and **VE** to represent the start and the end of a visit to explicitly define the visit segment, where all the concepts associated with the visit are subsumed by **VS** and **VE**. 
+
+!["patient_representation"](images/tokenization_att_generation.png)
+
+### Model Architecture 
+Overview of our BERT architecture on structured EHR data. To distinguish visit boundaries, visit segment embeddings are added to concept embeddings. Next, both visit embeddings and concept embeddings go through a temporal transformation, where concept, age and time embeddings are concatenated together. The concatenated embeddings are then fed into a fully connected layer. This temporal concept embedding becomes the input to BERT. We used the BERT learning objective Masked Language Model as the primary learning objective and introduced an EHR specific secondary learning objective visit type prediction.
 
 !["cehr-bert architecture diagram"](images/cehr_bert_architecture.png)
 
