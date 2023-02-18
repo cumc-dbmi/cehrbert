@@ -1,6 +1,6 @@
 ## CEHR-BERT
 CEHR-BERT is a large language model developed for the structured EHR data, the work has been published at https://proceedings.mlr.press/v158/pang21a.html. CEHR-BERT currently only supports the structured EHR data in the OMOP format, which is a common data model used to support observational studies and managed  by the Observational Health Data Science and Informatics (OHDSI) open-science community. 
-There are three major components in CEHR-BERT, data generation, model pre-training, and model evaluation with fine-tuning, those components work in conjunction to provide an end-to-end model evaluation framework.
+There are three major components in CEHR-BERT, data generation, model pre-training, and model evaluation with fine-tuning, those components work in conjunction to provide an end-to-end model evaluation framework. The CEHR-BERT framework is designed to be extensible, users could write their own [pretraining models](trainers/README.md), [evaluation procedures](evaluations/README.md), and [downstream prediction tasks](evaluations/README.md) by extending the abstract classes, see click on the links for more details. 
 
 ### Patient Representation
 For each patient, all medical codes were aggregated and constructed into a sequence chronologically.
