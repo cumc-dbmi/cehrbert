@@ -11,6 +11,10 @@ from models.bert_models_visit_prediction import transformer_bert_model_visit_pre
 def create_bi_lstm_model(max_seq_length, vocab_size, embedding_size, concept_embeddings):
     age_of_visit_input = tf.keras.layers.Input(name='age', shape=(1,))
 
+    age_batch_norm_layer = tf.keras.layers.BatchNormalization(name='age_batch_norm_layer')
+
+    normalized_index_age = age_batch_norm_layer(age_of_visit_input)
+
     concept_ids = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='concept_ids')
 
     if concept_embeddings is not None:
@@ -38,7 +42,7 @@ def create_bi_lstm_model(max_seq_length, vocab_size, embedding_size, concept_emb
 
     next_input = dropout_lstm_layer(bi_lstm_layer(next_input))
 
-    next_input = tf.keras.layers.concatenate([next_input, age_of_visit_input])
+    next_input = tf.keras.layers.concatenate([next_input, normalized_index_age])
 
     next_input = dropout_dense_layer(dense_layer(next_input))
 
@@ -88,6 +92,10 @@ def create_vanilla_feed_forward_model(vanilla_bert_model_path):
 def create_sliding_bert_model(model_path, max_seq_length, context_window, stride):
     age_at_index_date = tf.keras.layers.Input(name='age', shape=(1,))
 
+    age_batch_norm_layer = tf.keras.layers.BatchNormalization(name='age_batch_norm_layer')
+
+    normalized_index_age = age_batch_norm_layer(age_at_index_date)
+
     concept_ids = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
                                         name='concept_ids')
     visit_segments = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32',
@@ -111,7 +119,7 @@ def create_sliding_bert_model(model_path, max_seq_length, context_window, stride
                                                ages,
                                                mask])
 
-    next_input = tf.keras.layers.concatenate([conv_bert_output, age_at_index_date])
+    next_input = tf.keras.layers.concatenate([conv_bert_output, normalized_index_age])
 
     dropout_conv_layer = tf.keras.layers.Dropout(0.2)
 
@@ -124,7 +132,7 @@ def create_sliding_bert_model(model_path, max_seq_length, context_window, stride
     output = output_layer(dropout_dense_layer(dense_layer(dropout_conv_layer(next_input))))
 
     model_inputs = [concept_ids, visit_segments, time_stamps, ages, mask]
-    ffd_bert_model = tf.keras.models.Model(inputs=model_inputs + [age_at_index_date],
+    ffd_bert_model = tf.keras.models.Model(inputs=model_inputs + [normalized_index_age],
                                            outputs=output)
 
     return ffd_bert_model
