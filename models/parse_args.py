@@ -213,9 +213,10 @@ def create_parse_args_hierarchical_bert():
         dest='random_mask_prob',
         type=check_prob,
         required='include_readmission' in argv or 'include_prolonged_length_stay' in argv,
-        default=0.0,
-        help='The probability the secondary learning objective uses. The value 0.0 '
-             'indicates no masking is allowed in pre-training for secondary learning objectives'
+        default=0.2,
+        help='The probability the secondary learning objective uses. The value 0.2 '
+             'indicates there is a 20% chance of masking in pre-training '
+             'for secondary learning objectives'
     )
     parser.add_argument(
         '--concept_similarity_type',
@@ -225,7 +226,8 @@ def create_parse_args_hierarchical_bert():
             member.value for member in SimilarityType
         ],
         help='The concept similarity measures to use for masking',
-        required=True
+        default=SimilarityType.NONE.value,
+        required=False
     )
     return parser
 
