@@ -1,6 +1,6 @@
 ## CEHR-BERT
 CEHR-BERT is a large language model developed for the structured EHR data, the work has been published at https://proceedings.mlr.press/v158/pang21a.html. CEHR-BERT currently only supports the structured EHR data in the OMOP format, which is a common data model used to support observational studies and managed  by the Observational Health Data Science and Informatics (OHDSI) open-science community. 
-There are three major components in CEHR-BERT, data generation, model pre-training, and model evaluation with fine-tuning, those components work in conjunction to provide an end-to-end model evaluation framework.
+There are three major components in CEHR-BERT, data generation, model pre-training, and model evaluation with fine-tuning, those components work in conjunction to provide an end-to-end model evaluation framework. The CEHR-BERT framework is designed to be extensible, users could write their own [pretraining models](trainers/README.md), [evaluation procedures](evaluations/README.md), and [downstream prediction tasks](evaluations/README.md) by extending the abstract classes, see click on the links for more details. For a quick start, navigate to the [Get Started](#getting-started) section. 
 
 ### Patient Representation
 For each patient, all medical codes were aggregated and constructed into a sequence chronologically.
@@ -23,18 +23,26 @@ We will release the model that we pre-trained soon
 ### Pre-requisite
 The project is built in python 3.7, and project dependency needs to be installed 
 
-`pip3 install -r requirements.txt`
-
+```console
+pip3 install -r requirements.txt
+```
 Create the following folders for the tutorial below
 ```console
 mkdir -p ~/Documents/omop_test/cehr-bert;
 ```
 
 ### 1. Download OMOP tables as parquet files
-We have created a spark app to download OMOP tables from Sql Server as parquet files. You need adjust the properties in `db_properties.ini` to match with your database setup.
+We created a spark app to download OMOP tables from SQL Server as parquet files. You need adjust the properties in `db_properties.ini` to match with your database setup. 
 ```console
 PYTHONPATH=./: spark-submit tools/download_omop_tables.py -c db_properties.ini -tc person visit_occurrence condition_occurrence procedure_occurrence drug_exposure measurement observation_period concept concept_relationship concept_ancestor -o ~/Documents/omop_test/
 ```
+
+We have prepared a synthea dataset with 1M patients for you to test, you could download it at [omop_synthea.tar.gz](https://drive.google.com/file/d/1k7-cZACaDNw8A1JRI37mfMAhEErxKaQJ/view?usp=share_link)
+
+```console
+tar -xvf omop_synthea.tar ~/Document/omop_test/
+```
+
 ### 2. Generate training data for CEHR-BERT
 We order the patient events in chronological order and put all data points in a sequence. We insert artificial tokens VS (visit start) and VE (visit end) to the start and the end of the visit. In addition, we insert artificial time tokens (ATT) between visits to indicate the time interval between visits. This approach allows us to apply BERT to structured EHR as-is.
 The sequence can be seen conceptually as [VS] [V1] [VE] [ATT] [VS] [V2] [VE], where [V1] and [V2] represent a list of concepts associated with those visits.
