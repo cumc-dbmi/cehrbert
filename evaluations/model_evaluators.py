@@ -209,13 +209,11 @@ class BiLstmModelEvaluator(SequenceModelEvaluator):
     def extract_model_inputs(self):
         token_ids = self._tokenizer.encode(
             self._dataset.concept_ids.apply(lambda concept_ids: concept_ids.tolist()))
-        ages = np.asarray(((self._dataset['age'] - self._dataset['age'].mean()) / self._dataset[
-            'age'].std()).astype(float).apply(lambda c: [c]).tolist())
         labels = self._dataset.label
         padded_token_ides = post_pad_pre_truncate(token_ids, self._tokenizer.get_unused_token_id(),
                                                   self._max_seq_length)
         inputs = {
-            'age': ages,
+            'age': np.expand_dims(self._dataset.age, axis=-1),
             'concept_ids': padded_token_ides
         }
         return inputs, labels
@@ -265,9 +263,6 @@ class BertLstmModelEvaluator(SequenceModelEvaluator):
         time_stamps = self._dataset.dates
         ages = self._dataset.ages
         visit_concept_orders = self._dataset.visit_concept_orders
-        index_age = np.asarray(
-            ((self._dataset['age'] - self._dataset['age'].mean()) / self._dataset[
-                'age'].std()).astype(float).apply(lambda c: [c]).tolist())
         labels = self._dataset.label
         padded_token_ides = post_pad_pre_truncate(token_ids, self._tokenizer.get_unused_token_id(),
                                                   self._max_seq_length)
@@ -281,7 +276,7 @@ class BertLstmModelEvaluator(SequenceModelEvaluator):
                                                             self._max_seq_length)
 
         inputs = {
-            'age': index_age,
+            'age': np.expand_dims(self._dataset.age, axis=-1),
             'concept_ids': padded_token_ides,
             'masked_concept_ids': padded_token_ides,
             'mask': mask,
