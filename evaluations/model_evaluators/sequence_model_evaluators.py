@@ -175,12 +175,6 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         self._epochs = optimal_hyperparam_combination.epoch
         self._learning_rate = optimal_hyperparam_combination.learning_rate
 
-        # Recreate the model
-        self._model = self._create_model(
-            is_bi_directional=optimal_hyperparam_combination.is_bi_directional,
-            lstm_unit=optimal_hyperparam_combination.lstm_unit
-        )
-
         with tf.device('/CPU:0'):
             # Train using the full training set
             full_training_set = tf.data.Dataset.from_tensor_slices(
@@ -189,6 +183,12 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             ).cache().batch(self._batch_size)
 
         for _ in range(self._num_of_folds):
+            # Recreate the model
+            self._model = self._create_model(
+                is_bi_directional=optimal_hyperparam_combination.is_bi_directional,
+                lstm_unit=optimal_hyperparam_combination.lstm_unit
+            )
+
             # Retrain the model and set the epoch size to the most optimal one derived from the
             # k-fold cross validation
             self.train_model(
