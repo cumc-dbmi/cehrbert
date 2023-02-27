@@ -213,7 +213,7 @@ def create_parse_args_hierarchical_bert():
         dest='random_mask_prob',
         type=check_prob,
         required='include_readmission' in argv or 'include_prolonged_length_stay' in argv,
-        default=0.2,
+        default=1.0,
         help='The probability the secondary learning objective uses. The value 0.2 '
              'indicates there is a 20% chance of masking in pre-training '
              'for secondary learning objectives'

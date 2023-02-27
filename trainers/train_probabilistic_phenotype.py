@@ -134,8 +134,7 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
             'concept_similarity_path': self._concept_similarity_path,
             'concept_similarity_type': self._concept_similarity_type,
             'min_num_of_concepts': self._min_num_of_concepts,
-            'min_num_of_visits': self._min_num_of_visits,
-            'random_mask_prob': self._random_mask_prob
+            'min_num_of_visits': self._min_num_of_visits
         }
 
         data_generator_class = HierarchicalBertDataGenerator
@@ -144,7 +143,8 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
             # parameters['visit_tokenizer'] = self._visit_tokenizer
             parameters.update({
                 'include_readmission': self._include_readmission,
-                'include_prolonged_length_stay': self._include_prolonged_length_stay
+                'include_prolonged_length_stay': self._include_prolonged_length_stay,
+                'random_mask_prob': self._random_mask_prob
             })
             data_generator_class = HierarchicalBertMultiTaskDataGenerator
 

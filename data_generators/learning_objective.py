@@ -741,14 +741,12 @@ class HierarchicalVisitTypePredictionLearningObjective(
             visit_tokenizer: ConceptTokenizer,
             max_num_of_visits: int,
             is_pretraining: bool,
-            include_visit_prediction: bool,
-            random_mask_prob: float
+            include_visit_prediction: bool
     ):
         self._visit_tokenizer = visit_tokenizer
         self._max_num_of_visits = max_num_of_visits
         self._is_pretraining = is_pretraining
         self._include_visit_prediction = include_visit_prediction
-        self._random_mask_prob = random_mask_prob
 
     def get_tf_dataset_schema(self):
         input_dict_schema = {
@@ -838,7 +836,7 @@ class HierarchicalVisitTypePredictionLearningObjective(
         output_mask = np.zeros((self._max_num_of_visits,), dtype=int)
         if self._include_visit_prediction:
             for word_pos in range(0, len(visit_concepts)):
-                if random.random() < self._random_mask_prob:
+                if random.random() < 0.5:
                     output_mask[word_pos] = 1
                     masked_visit_concepts[word_pos] = self._visit_tokenizer.get_mask_token_id()
         return masked_visit_concepts, output_mask
