@@ -36,7 +36,8 @@ def main(
         f'exclude_visit_tokens: {exclude_visit_tokens}\n'
         f'is_classic_bert: {is_classic_bert}\n'
         f'include_prolonged_stay: {include_prolonged_stay}\n'
-        f'include_concept_list: {include_concept_list}'
+        f'include_concept_list: {include_concept_list}\n'
+        f'apply_age_filter: {apply_age_filter}'
     )
 
     domain_tables = []
