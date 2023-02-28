@@ -1,4 +1,6 @@
 import argparse
+from sys import argv
+
 from data_generators.graph_sample_method import SimilarityType
 
 
@@ -232,6 +234,12 @@ def create_parse_args_temporal_bert():
 
 
 def create_parse_args_hierarchical_bert():
+    def check_prob(value):
+        ivalue = float(value)
+        if ivalue < 0 or ivalue > 1:
+            raise argparse.ArgumentTypeError("%s is an invalid positive int value" % value)
+        return ivalue
+
     parser = create_parse_args_base_bert()
     parser.add_argument(
         '--max_num_visits',
@@ -268,6 +276,16 @@ def create_parse_args_hierarchical_bert():
         action='store_true'
     )
     parser.add_argument(
+        '--random_mask_prob',
+        dest='random_mask_prob',
+        type=check_prob,
+        required='include_readmission' in argv or 'include_prolonged_length_stay' in argv,
+        default=1.0,
+        help='The probability the secondary learning objective uses. The value 0.2 '
+             'indicates there is a 20% chance of masking in pre-training '
+             'for secondary learning objectives'
+    )
+    parser.add_argument(
         '--concept_similarity_type',
         dest='concept_similarity_type',
         action='store',
@@ -275,7 +293,8 @@ def create_parse_args_hierarchical_bert():
             member.value for member in SimilarityType
         ],
         help='The concept similarity measures to use for masking',
-        required=True
+        default=SimilarityType.NONE.value,
+        required=False
     )
     return parser
 
