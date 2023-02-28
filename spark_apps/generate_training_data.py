@@ -20,7 +20,8 @@ def main(
         exclude_visit_tokens,
         is_classic_bert,
         include_prolonged_stay,
-        include_concept_list: bool
+        include_concept_list: bool,
+        apply_age_filter: bool
 ):
     spark = SparkSession.builder.appName('Generate CEHR-BERT Training Data').getOrCreate()
 
@@ -43,12 +44,19 @@ def main(
         domain_tables.append(preprocess_domain_table(spark, input_folder, domain_table_name))
 
     visit_occurrence = preprocess_domain_table(spark, input_folder, VISIT_OCCURRENCE)
-    visit_occurrence = visit_occurrence.select('visit_occurrence_id', 'visit_concept_id',
-                                               'person_id')
+    visit_occurrence = visit_occurrence.select(
+        'visit_occurrence_id',
+        'visit_concept_id',
+        'person_id'
+    )
     person = preprocess_domain_table(spark, input_folder, PERSON)
-    person = person.select('person_id', F.coalesce('birth_datetime',
-                                                   F.concat('year_of_birth', F.lit('-01-01')).cast(
-                                                       'timestamp')).alias('birth_datetime'))
+    person = person.select(
+        'person_id',
+        F.coalesce(
+            F.col('birth_datetime'),
+            F.concat('year_of_birth', F.lit('-01-01')).cast('timestamp')
+        ).alias('birth_datetime')
+    )
     visit_occurrence_person = visit_occurrence.join(person, 'person_id')
 
     patient_events = join_domain_tables(domain_tables)
@@ -94,6 +102,13 @@ def main(
         .withColumn('cohort_member_id', F.col('person_id')) \
         .withColumn('age',
                     F.ceil(F.months_between(F.col('date'), F.col("birth_datetime")) / F.lit(12)))
+
+    # Apply the age security measure
+    # We only keep the patient records, whose corresponding age is less than 90
+    if apply_age_filter:
+        patient_events = patient_events.where(
+            F.col('age') < 90
+        )
 
     if is_new_patient_representation:
         sequence_data = create_sequence_data_with_att(
@@ -204,10 +219,16 @@ if __name__ == '__main__':
         dest='include_concept_list',
         action='store_true'
     )
+    parser.add_argument(
+        '--apply_age_filter',
+        dest='apply_age_filter',
+        action='store_true'
+    )
     ARGS = parser.parse_args()
 
     main(
         ARGS.input_folder, ARGS.output_folder, ARGS.domain_table_list, ARGS.date_filter,
         ARGS.include_visit_type, ARGS.is_new_patient_representation, ARGS.exclude_visit_tokens,
-        ARGS.is_classic_bert_sequence, ARGS.include_prolonged_stay, ARGS.include_concept_list
+        ARGS.is_classic_bert_sequence, ARGS.include_prolonged_stay, ARGS.include_concept_list,
+        ARGS.apply_age_filter
     )
