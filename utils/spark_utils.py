@@ -438,6 +438,9 @@ def create_sequence_data(patient_event,
     return patient_grouped_events.select(columns_for_output)
 
 
+from spark_apps.create_sequence.create_cehrbert_sequence import *
+
+
 def create_sequence_data_with_att(
         patient_event,
         date_filter=None,
@@ -458,140 +461,14 @@ def create_sequence_data_with_att(
     if date_filter:
         patient_event = patient_event.where(F.col('date').cast('date') >= date_filter)
 
-    # Udf for identifying the earliest date associated with a visit_occurrence_id
-    visit_start_date_udf = F.first('date').over(
-        W.partitionBy('cohort_member_id', 'person_id', 'visit_occurrence_id').orderBy('date'))
+    decorators = [
+        PatientEventBaseDecorator(),
+        PatientEventAttDecorator(include_visit_type, exclude_visit_tokens),
+        DemographicPromptDecorator(patient_demographic)
+    ]
 
-    # Udf for identifying the latest date associated with a visit_occurrence_id
-    visit_end_date_udf = F.first('date').over(
-        W.partitionBy('cohort_member_id', 'person_id', 'visit_occurrence_id').orderBy(
-            F.col('date').desc()))
-
-    # Udf for identifying the first concept
-    first_concept_rank_udf = F.row_number().over(
-        W.partitionBy('cohort_member_id', 'person_id', 'visit_occurrence_id').orderBy('date')
-    )
-
-    # Udf for identifying the last concept
-    last_concept_rank_udf = F.row_number().over(
-        W.partitionBy('cohort_member_id', 'person_id', 'visit_occurrence_id').orderBy(
-            F.desc('date'))
-    )
-
-    visit_start_events = patient_event.withColumn('date', visit_start_date_udf) \
-        .withColumn('standard_concept_id', F.lit('VS')) \
-        .withColumn('domain', F.lit('visit')) \
-        .withColumn('concept_value', F.lit(-1)) \
-        .withColumn('rank', first_concept_rank_udf) \
-        .where('rank = 1') \
-        .drop('rank').distinct()
-
-    visit_end_events = patient_event.withColumn('date', visit_end_date_udf) \
-        .withColumn('standard_concept_id', F.lit('VE')) \
-        .withColumn('domain', F.lit('visit')) \
-        .withColumn('concept_value', F.lit(-1)) \
-        .withColumn('rank', last_concept_rank_udf) \
-        .where('rank = 1') \
-        .drop('rank').distinct()
-
-    # Calculate the priority, VS has the highest priority, regular concepts have 0 priority
-    # and VE has the lowest priority
-    priority_udf = F.when(F.col('standard_concept_id') == 'VS', -1).when(
-        F.col('standard_concept_id') == 'VE', 1).otherwise(0)
-    # Convert Date to days since epoch
-    days_since_epoch_udf = (F.unix_timestamp('date') / F.lit(24 * 60 * 60)).cast('int')
-    weeks_since_epoch_udf = (F.unix_timestamp('date') / F.lit(24 * 60 * 60 * 7)).cast('int')
-    # Get the prev days_since_epoch
-    prev_days_since_epoch_udf = F.lag('days_since_epoch').over(
-        W.partitionBy('cohort_member_id', 'person_id').orderBy('date', 'priority',
-                                                               'visit_occurrence_id'))
-    # Compute the time difference between the current record and the previous record
-    time_delta_udf = F.when(F.col('prev_days_since_epoch').isNull(), 0).otherwise(
-        F.col('days_since_epoch') - F.col('prev_days_since_epoch'))
-    visit_date_udf = F.first('days_since_epoch').over(
-        W.partitionBy('cohort_member_id', 'person_id', 'visit_occurrence_id').orderBy(
-            'days_since_epoch'))
-    # Udf for calculating the time token
-    time_token_udf = F.udf(time_token_func, T.StringType())
-    visit_rank_udf = F.dense_rank().over(
-        W.partitionBy('cohort_member_id', 'person_id').orderBy('visit_start_date'))
-    visit_segment_udf = F.col('visit_rank_order') % F.lit(2) + 1
-
-    patient_event = patient_event.union(visit_start_events).union(visit_end_events) \
-        .withColumn('priority', priority_udf) \
-        .withColumn('days_since_epoch', days_since_epoch_udf) \
-        .withColumn('prev_days_since_epoch', prev_days_since_epoch_udf) \
-        .withColumn('date_in_week', weeks_since_epoch_udf) \
-        .withColumn('time_delta', time_delta_udf) \
-        .withColumn('visit_start_date', visit_date_udf) \
-        .withColumn('time_token', time_token_udf('time_delta')) \
-        .withColumn('visit_rank_order', visit_rank_udf) \
-        .withColumn('visit_segment', visit_segment_udf) \
-        .withColumn('concept_value_mask', (F.col('domain') == MEASUREMENT).cast('int')) \
-        .withColumn('mlm_skip_value',
-                    (F.col('domain').isin([MEASUREMENT, CATEGORICAL_MEASUREMENT])).cast('int'))
-
-    time_token_insertions = patient_event.where('standard_concept_id = "VS"') \
-        .withColumn('standard_concept_id', F.col('time_token')) \
-        .withColumn('priority', F.lit(-2)) \
-        .withColumn('visit_segment', F.lit(0)) \
-        .withColumn('date_in_week', F.lit(0)) \
-        .withColumn('age', F.lit(-1)) \
-        .where('prev_days_since_epoch IS NOT NULL')
-
-    if patient_demographic:
-        # Get the first visit_start_date
-        # Udf for identifying the earliest date associated with a visit_occurrence_id
-        sequence_start_year_token = patient_event.where('standard_concept_id = "VS"') \
-            .where('visit_rank_order=1') \
-            .withColumn('standard_concept_id',
-                        F.concat(F.lit('year:'), F.year('date').cast(T.StringType()))) \
-            .withColumn('priority', F.lit(-10)) \
-            .withColumn('visit_segment', F.lit(0)) \
-            .withColumn('date_in_week', F.lit(0)) \
-            .withColumn('age', F.lit(-1))
-
-        age_at_first_visit_udf = F.ceil(
-            F.months_between(F.col('date'), F.col('birth_datetime')) / F.lit(12)
-        )
-        sequence_age_token = patient_event \
-            .where('standard_concept_id = "VS"') \
-            .where('visit_rank_order=1') \
-            .withColumn('standard_concept_id',
-                        F.concat(F.lit('age:'), age_at_first_visit_udf.cast(T.StringType()))) \
-            .withColumn('priority', F.lit(-9))
-
-        sequence_gender_token = patient_demographic.select(
-            F.col('person_id'),
-            F.col('gender_concept_id')
-        ).join(
-            sequence_start_year_token,
-            'person_id'
-        ).withColumn(
-            'standard_concept_id',
-            F.col('gender_concept_id').cast(T.StringType())
-        ).withColumn('priority', F.lit(-8)).drop('gender_concept_id')
-
-        sequence_race_token = patient_demographic.select(
-            F.col('person_id'),
-            F.col('race_concept_id')
-        ).join(
-            sequence_start_year_token,
-            'person_id'
-        ).withColumn(
-            'standard_concept_id',
-            F.col('race_concept_id').cast(T.StringType())
-        ).withColumn('priority', F.lit(-7)).drop('race_concept_id')
-
-        patient_event = patient_event.union(sequence_start_year_token)
-        patient_event = patient_event.union(sequence_age_token)
-        patient_event = patient_event.union(sequence_gender_token)
-        patient_event = patient_event.union(sequence_race_token)
-
-    if include_visit_type:
-        time_token_insertions = time_token_insertions.withColumn('visit_concept_id', F.lit(0))
-
-    unioned_distinct_tokens = patient_event.union(time_token_insertions).distinct()
+    for decorator in decorators:
+        patient_event = decorator.decorate(patient_event)
 
     order_udf = F.row_number().over(
         W.partitionBy('cohort_member_id', 'person_id').orderBy(
@@ -601,28 +478,28 @@ def create_sequence_data_with_att(
             'days_since_epoch',
             'standard_concept_id')
     )
-    struct_columns = ['order', 'date_in_week', 'standard_concept_id', 'visit_segment', 'age',
-                      'visit_rank_order', 'concept_value_mask', 'concept_value', 'mlm_skip_value']
-    output_columns = ['cohort_member_id', 'person_id', 'concept_ids', 'visit_segments', 'orders',
-                      'dates', 'ages', 'visit_concept_orders', 'num_of_visits', 'num_of_concepts',
-                      'concept_value_masks', 'concept_values', 'mlm_skip_values']
 
-    if include_visit_type:
-        struct_columns.append('visit_concept_id')
+    # Those columns are derived from the previous decorators
+    struct_columns = [
+        'order', 'date_in_week', 'standard_concept_id', 'visit_segment', 'age',
+        'visit_rank_order', 'concept_value_mask', 'concept_value', 'mlm_skip_value',
+        'visit_concept_id'
+    ]
+    output_columns = [
+        'cohort_member_id', 'person_id', 'concept_ids', 'visit_segments', 'orders',
+        'dates', 'ages', 'visit_concept_orders', 'num_of_visits', 'num_of_concepts',
+        'concept_value_masks', 'concept_values', 'mlm_skip_values',
+        'visit_concept_ids'
+    ]
 
-    if exclude_visit_tokens:
-        unioned_distinct_tokens = unioned_distinct_tokens.filter(
-            ~F.col('standard_concept_id').isin(['VS', 'VE']))
-
-    patient_grouped_events = unioned_distinct_tokens \
+    patient_grouped_events = patient_event \
         .withColumn('order', order_udf) \
         .withColumn('data_for_sorting', F.struct(struct_columns)) \
         .groupBy('cohort_member_id', 'person_id') \
         .agg(F.sort_array(F.collect_set('data_for_sorting')).alias('data_for_sorting'),
              F.max('visit_rank_order').alias('num_of_visits'),
              F.count('standard_concept_id').alias('num_of_concepts')) \
-        .withColumn('orders',
-                    F.col('data_for_sorting.order').cast(T.ArrayType(T.IntegerType()))) \
+        .withColumn('orders', F.col('data_for_sorting.order').cast(T.ArrayType(T.IntegerType()))) \
         .withColumn('dates', F.col('data_for_sorting.date_in_week')) \
         .withColumn('concept_ids', F.col('data_for_sorting.standard_concept_id')) \
         .withColumn('visit_segments', F.col('data_for_sorting.visit_segment')) \
@@ -630,13 +507,8 @@ def create_sequence_data_with_att(
         .withColumn('visit_concept_orders', F.col('data_for_sorting.visit_rank_order')) \
         .withColumn('concept_value_masks', F.col('data_for_sorting.concept_value_mask')) \
         .withColumn('concept_values', F.col('data_for_sorting.concept_value')) \
-        .withColumn('mlm_skip_values', F.col('data_for_sorting.mlm_skip_value'))
-
-    # If include_visit_type is enabled, we add additional information to the default output
-    if include_visit_type:
-        patient_grouped_events = patient_grouped_events \
-            .withColumn('visit_concept_ids', F.col('data_for_sorting.visit_concept_id'))
-        output_columns.append('visit_concept_ids')
+        .withColumn('mlm_skip_values', F.col('data_for_sorting.mlm_skip_value')) \
+        .withColumn('visit_concept_ids', F.col('data_for_sorting.visit_concept_id'))
 
     return patient_grouped_events.select(output_columns)
 
