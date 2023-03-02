@@ -16,6 +16,10 @@ from spark_apps.sql_templates import measurement_unit_stats_query
 from utils.logging_utils import *
 from config.parameters import qualified_concept_list_path
 
+from spark_apps.create_sequence.create_cehrbert_sequence import (
+    DemographicPromptDecorator, PatientEventAttDecorator, PatientEventBaseDecorator
+)
+
 DOMAIN_KEY_FIELDS = {
     'condition_occurrence_id': ('condition_concept_id', 'condition_start_date', 'condition'),
     'procedure_occurrence_id': ('procedure_concept_id', 'procedure_date', 'procedure'),
@@ -436,9 +440,6 @@ def create_sequence_data(patient_event,
         columns_for_output.append('visit_concept_ids')
 
     return patient_grouped_events.select(columns_for_output)
-
-
-from spark_apps.create_sequence.create_cehrbert_sequence import *
 
 
 def create_sequence_data_with_att(
