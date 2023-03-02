@@ -11,7 +11,7 @@ from pyspark.sql.pandas.functions import pandas_udf
 from config.parameters import qualified_concept_list_path
 from const.common import PERSON, VISIT_OCCURRENCE, UNKNOWN_CONCEPT, MEASUREMENT, \
     CATEGORICAL_MEASUREMENT, REQUIRED_MEASUREMENT, CDM_TABLES
-from spark_apps.decorators.patient_event_decorator import (
+from spark_apps.create_sequence.patient_event_decorator import (
     DemographicPromptDecorator, PatientEventAttDecorator, PatientEventBaseDecorator, time_token_func
 )
 from spark_apps.sql_templates import measurement_unit_stats_query
@@ -465,7 +465,7 @@ def create_sequence_data_with_att(
             'standard_concept_id')
     )
 
-    # Those columns are derived from the previous decorators
+    # Those columns are derived from the previous create_sequence
     struct_columns = [
         'order', 'date_in_week', 'standard_concept_id', 'visit_segment', 'age',
         'visit_rank_order', 'concept_value_mask', 'concept_value', 'mlm_skip_value',
