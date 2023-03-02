@@ -171,13 +171,13 @@ class DemographicPromptDecorator(
             W.partitionBy('cohort_member_id', 'person_id').orderBy('date')
         )
 
-        patient_event = patient_event \
+        patient_first_token = patient_event \
             .withColumn('token_order', first_token_udf) \
             .where('token_order = 1') \
             .drop('token_order')
 
         # Udf for identifying the earliest date associated with a visit_occurrence_id
-        sequence_start_year_token = patient_event \
+        sequence_start_year_token = patient_first_token \
             .withColumn('standard_concept_id',
                         F.concat(F.lit('year:'), F.year('date').cast(T.StringType()))) \
             .withColumn('priority', F.lit(-10)) \
@@ -188,7 +188,7 @@ class DemographicPromptDecorator(
         age_at_first_visit_udf = F.ceil(
             F.months_between(F.col('date'), F.col('birth_datetime')) / F.lit(12)
         )
-        sequence_age_token = patient_event \
+        sequence_age_token = patient_first_token \
             .withColumn('standard_concept_id',
                         F.concat(F.lit('age:'), age_at_first_visit_udf.cast(T.StringType()))) \
             .withColumn('priority', F.lit(-9))
