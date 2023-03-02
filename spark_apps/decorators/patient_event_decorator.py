@@ -1,7 +1,10 @@
-from pyspark.sql import functions as F, Window as W, types as T
-from pyspark.sql import DataFrame
+import math
 from abc import ABC, abstractmethod
-from utils.spark_utils import time_token_func
+
+import numpy as np
+from pyspark.sql import DataFrame
+from pyspark.sql import functions as F, Window as W, types as T
+
 from const.common import MEASUREMENT, CATEGORICAL_MEASUREMENT
 
 
@@ -218,3 +221,15 @@ class DemographicPromptDecorator(
         patient_event = patient_event.union(sequence_race_token)
 
         return patient_event
+
+
+def time_token_func(time_delta):
+    if np.isnan(time_delta):
+        return None
+    if time_delta < 0:
+        return 'W-1'
+    if time_delta < 28:
+        return f'W{str(math.floor(time_delta / 7))}'
+    if time_delta < 360:
+        return f'M{str(math.floor(time_delta / 30))}'
+    return 'LT'

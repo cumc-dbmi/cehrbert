@@ -1,7 +1,5 @@
 import argparse
 from os import path
-import numpy as np
-import math
 
 import pandas as pd
 import pyspark.sql.functions as F
@@ -10,15 +8,14 @@ from pyspark.sql import Window as W
 from pyspark.sql.functions import broadcast
 from pyspark.sql.pandas.functions import pandas_udf
 
+from config.parameters import qualified_concept_list_path
 from const.common import PERSON, VISIT_OCCURRENCE, UNKNOWN_CONCEPT, MEASUREMENT, \
     CATEGORICAL_MEASUREMENT, REQUIRED_MEASUREMENT, CDM_TABLES
+from spark_apps.decorators.patient_event_decorator import (
+    DemographicPromptDecorator, PatientEventAttDecorator, PatientEventBaseDecorator, time_token_func
+)
 from spark_apps.sql_templates import measurement_unit_stats_query
 from utils.logging_utils import *
-from config.parameters import qualified_concept_list_path
-
-from spark_apps.create_sequence.patient_event_decorator import (
-    DemographicPromptDecorator, PatientEventAttDecorator, PatientEventBaseDecorator
-)
 
 DOMAIN_KEY_FIELDS = {
     'condition_occurrence_id': ('condition_concept_id', 'condition_start_date', 'condition'),
@@ -28,18 +25,6 @@ DOMAIN_KEY_FIELDS = {
 }
 
 LOGGER = logging.getLogger(__name__)
-
-
-def time_token_func(time_delta):
-    if np.isnan(time_delta):
-        return None
-    if time_delta < 0:
-        return 'W-1'
-    if time_delta < 28:
-        return f'W{str(math.floor(time_delta / 7))}'
-    if time_delta < 360:
-        return f'M{str(math.floor(time_delta / 30))}'
-    return 'LT'
 
 
 def get_key_fields(domain_table):
