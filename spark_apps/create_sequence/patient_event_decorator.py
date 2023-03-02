@@ -90,7 +90,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
             .withColumn('domain', F.lit('visit')) \
             .withColumn('concept_value', F.lit(-1)) \
             .withColumn('rank', first_concept_rank_udf) \
-            .withColumn('priority', F.lit('-2')) \
+            .withColumn('priority', F.lit(-2)) \
             .where('rank = 1') \
             .drop('rank').distinct()
 
@@ -99,7 +99,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
             .withColumn('domain', F.lit('visit')) \
             .withColumn('concept_value', F.lit(-1)) \
             .withColumn('rank', last_concept_rank_udf) \
-            .withColumn('priority', F.lit('1')) \
+            .withColumn('priority', F.lit(1)) \
             .where('rank = 1') \
             .drop('rank').distinct()
 
@@ -139,7 +139,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
         if self._include_visit_type:
             # insert visit type after the VS token
             visit_type_tokens = patient_event.where('standard_concept_id = "VS"') \
-                .withColumn('standard_concept_id', F.col('visit_concept_id')) \
+                .withColumn('standard_concept_id', F.col('visit_concept_id').cast(T.StringType())) \
                 .withColumn('priority', F.lit(-1))
             patient_event = patient_event.union(visit_type_tokens)
 
@@ -168,7 +168,9 @@ class DemographicPromptDecorator(
 
         # Get the first token of the patient history
         first_token_udf = F.row_number().over(
-            W.partitionBy('cohort_member_id', 'person_id').orderBy('date')
+            W.partitionBy('cohort_member_id', 'person_id').orderBy(
+                'visit_start_date', 'priority'
+            )
         )
 
         patient_first_token = patient_event \
@@ -188,7 +190,7 @@ class DemographicPromptDecorator(
         age_at_first_visit_udf = F.ceil(
             F.months_between(F.col('date'), F.col('birth_datetime')) / F.lit(12)
         )
-        sequence_age_token = patient_first_token \
+        sequence_age_token = sequence_start_year_token \
             .withColumn('standard_concept_id',
                         F.concat(F.lit('age:'), age_at_first_visit_udf.cast(T.StringType()))) \
             .withColumn('priority', F.lit(-9))

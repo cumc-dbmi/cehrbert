@@ -11,7 +11,7 @@ from pyspark.sql.pandas.functions import pandas_udf
 from config.parameters import qualified_concept_list_path
 from const.common import PERSON, VISIT_OCCURRENCE, UNKNOWN_CONCEPT, MEASUREMENT, \
     CATEGORICAL_MEASUREMENT, REQUIRED_MEASUREMENT, CDM_TABLES
-from spark_apps.patient_event_decorator import (
+from spark_apps.create_sequence.patient_event_decorator import (
     DemographicPromptDecorator, PatientEventAttDecorator, PatientEventBaseDecorator, time_token_func
 )
 from spark_apps.sql_templates import measurement_unit_stats_query
