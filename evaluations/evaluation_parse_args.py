@@ -190,4 +190,8 @@ def create_evaluation_args():
                        dest='freeze_pretrained_model',
                        action='store_true',
                        required=False)
+    group.add_argument('--multiple_test_run',
+                       dest='multiple_test_run',
+                       action='store_true',
+                       required=False)
     return main_parser

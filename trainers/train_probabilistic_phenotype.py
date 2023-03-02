@@ -1,19 +1,18 @@
 import os
 
 import tensorflow as tf
+from tensorflow.keras import optimizers
+
+from data_generators.data_classes import TokenizeFieldInfo
+from data_generators.data_generator_base import *
+from keras_transformer.bert import (
+    masked_perplexity, MaskedPenalizedSparseCategoricalCrossentropy, SequenceCrossentropy)
+from models.hierachical_phenotype_model import create_probabilistic_phenotype_model
+from models.layers.custom_layers import get_custom_objects
 from models.model_parameters import ModelPathConfig
 from models.parse_args import create_parse_args_hierarchical_bert_phenotype
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
 from utils.model_utils import tokenize_multiple_fields, tokenize_one_field
-from models.hierachical_phenotype_model import create_probabilistic_phenotype_model
-from models.layers.custom_layers import get_custom_objects
-from data_generators.data_generator_base import *
-from data_generators.data_classes import TokenizeFieldInfo
-
-from keras_transformer.bert import (
-    masked_perplexity, MaskedPenalizedSparseCategoricalCrossentropy, SequenceCrossentropy)
-
-from tensorflow.keras import optimizers
 
 
 class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
@@ -43,6 +42,7 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
             phenotype_entropy_weight: float = 2e-05,
             phenotype_euclidean_weight: float = 2e-05,
             phenotype_concept_distance_weight: float = 1e-04,
+            random_mask_prob: float = 0.0,
             *args, **kwargs
     ):
 
@@ -65,6 +65,7 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
         self._include_visit_prediction = include_visit_prediction
         self._include_readmission = include_readmission
         self._include_prolonged_length_stay = include_prolonged_length_stay
+        self._random_mask_prob = random_mask_prob
         self._phenotype_entropy_weight = phenotype_entropy_weight
         self._phenotype_euclidean_weight = phenotype_euclidean_weight
         self._phenotype_concept_distance_weight = phenotype_concept_distance_weight
@@ -95,14 +96,17 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
             f'phenotype_entropy_weight: {phenotype_entropy_weight}\n'
             f'phenotype_euclidean_weight: {phenotype_euclidean_weight}\n'
             f'phenotype_concept_distance_weight: {phenotype_concept_distance_weight}\n'
+            f'random_mask_prob: {random_mask_prob}\n'
         )
 
     def _load_dependencies(self):
 
         self._training_data['patient_concept_ids'] = self._training_data.concept_ids \
             .apply(lambda visit_concepts: np.hstack(visit_concepts))
-        tokenize_fields_info = [TokenizeFieldInfo(column_name='patient_concept_ids'),
-                                TokenizeFieldInfo(column_name='time_interval_atts')]
+        tokenize_fields_info = [
+            TokenizeFieldInfo(column_name='patient_concept_ids'),
+            TokenizeFieldInfo(column_name='time_interval_atts')
+        ]
         self._tokenizer = tokenize_multiple_fields(
             self._training_data,
             tokenize_fields_info,
@@ -139,7 +143,8 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
             # parameters['visit_tokenizer'] = self._visit_tokenizer
             parameters.update({
                 'include_readmission': self._include_readmission,
-                'include_prolonged_length_stay': self._include_prolonged_length_stay
+                'include_prolonged_length_stay': self._include_prolonged_length_stay,
+                'random_mask_prob': self._random_mask_prob
             })
             data_generator_class = HierarchicalBertMultiTaskDataGenerator
 
@@ -254,6 +259,7 @@ def main(args):
         include_att_prediction=args.include_att_prediction,
         include_visit_prediction=args.include_visit_prediction,
         include_prolonged_length_stay=args.include_prolonged_length_stay,
+        random_mask_prob=args.random_mask_prob,
         include_readmission=args.include_readmission,
         time_embeddings_size=args.time_embeddings_size,
         use_dask=args.use_dask,
