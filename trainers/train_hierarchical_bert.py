@@ -1,19 +1,18 @@
 import os
 
 import tensorflow as tf
+from tensorflow.keras import optimizers
+
+from data_generators.data_classes import TokenizeFieldInfo
+from data_generators.data_generator_base import *
+from keras_transformer.bert import (
+    masked_perplexity, MaskedPenalizedSparseCategoricalCrossentropy, SequenceCrossentropy)
+from models.hierachical_bert_model_v2 import transformer_hierarchical_bert_model
+from models.layers.custom_layers import get_custom_objects
 from models.model_parameters import ModelPathConfig
 from models.parse_args import create_parse_args_hierarchical_bert
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
 from utils.model_utils import tokenize_one_field, tokenize_multiple_fields
-from models.hierachical_bert_model_v2 import transformer_hierarchical_bert_model
-from models.layers.custom_layers import get_custom_objects
-from data_generators.data_generator_base import *
-from data_generators.data_classes import TokenizeFieldInfo
-
-from keras_transformer.bert import (
-    masked_perplexity, MaskedPenalizedSparseCategoricalCrossentropy, SequenceCrossentropy)
-
-from tensorflow.keras import optimizers
 
 
 class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
@@ -37,6 +36,7 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
             include_visit_prediction: bool,
             include_readmission: bool,
             include_prolonged_length_stay: bool,
+            random_mask_prob: float = 0.0,
             *args, **kwargs
     ):
 
@@ -56,6 +56,7 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
         self._include_visit_prediction = include_visit_prediction
         self._include_readmission = include_readmission
         self._include_prolonged_length_stay = include_prolonged_length_stay
+        self._random_mask_prob = random_mask_prob
 
         super(HierarchicalBertTrainer, self).__init__(*args, **kwargs)
 
@@ -76,15 +77,18 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
             f'include_att_prediction: {include_att_prediction}\n'
             f'include_visit_prediction: {include_visit_prediction}\n'
             f'include_prolonged_length_stay: {include_prolonged_length_stay}\n'
-            f'include_readmission: {include_readmission}'
+            f'include_readmission: {include_readmission}\n'
+            f'random_mask_prob: {random_mask_prob}\n'
         )
 
     def _load_dependencies(self):
 
         self._training_data['patient_concept_ids'] = self._training_data.concept_ids \
             .apply(lambda visit_concepts: np.hstack(visit_concepts))
-        tokenize_fields_info = [TokenizeFieldInfo(column_name='patient_concept_ids'),
-                                TokenizeFieldInfo(column_name='time_interval_atts')]
+        tokenize_fields_info = [
+            TokenizeFieldInfo(column_name='patient_concept_ids'),
+            TokenizeFieldInfo(column_name='time_interval_atts')
+        ]
         self._tokenizer = tokenize_multiple_fields(
             self._training_data,
             tokenize_fields_info,
@@ -121,7 +125,8 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
             # parameters['visit_tokenizer'] = self._visit_tokenizer
             parameters.update({
                 'include_readmission': self._include_readmission,
-                'include_prolonged_length_stay': self._include_prolonged_length_stay
+                'include_prolonged_length_stay': self._include_prolonged_length_stay,
+                'random_mask_prob': self._random_mask_prob
             })
             data_generator_class = HierarchicalBertMultiTaskDataGenerator
 
@@ -228,6 +233,7 @@ def main(args):
         include_visit_prediction=args.include_visit_prediction,
         include_prolonged_length_stay=args.include_prolonged_length_stay,
         include_readmission=args.include_readmission,
+        random_mask_prob=args.random_mask_prob,
         time_embeddings_size=args.time_embeddings_size,
         use_dask=args.use_dask,
         tf_board_log_path=args.tf_board_log_path
