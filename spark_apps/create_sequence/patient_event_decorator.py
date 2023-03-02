@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 from utils.spark_utils import time_token_func
 
 
-
 class PatientEventDecorator(ABC):
     def __init__(
             self,

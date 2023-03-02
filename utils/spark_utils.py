@@ -16,7 +16,7 @@ from spark_apps.sql_templates import measurement_unit_stats_query
 from utils.logging_utils import *
 from config.parameters import qualified_concept_list_path
 
-from spark_apps.create_sequence.create_cehrbert_sequence import (
+from spark_apps.create_sequence.patient_event_decorator import (
     DemographicPromptDecorator, PatientEventAttDecorator, PatientEventBaseDecorator
 )
 
