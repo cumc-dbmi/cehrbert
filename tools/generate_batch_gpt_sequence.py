@@ -76,8 +76,10 @@ def main(
 ):
     tokenizer_path = os.path.join(args.model_folder, 'tokenizer.pickle')
     model_path = os.path.join(args.model_folder, 'bert_model.h5')
-    model = tf.keras.models.load_model(model_path, custom_objects=get_custom_objects())
     tokenizer = pickle.load(open(tokenizer_path, 'rb'))
+    strategy = tf.distribute.MirroredStrategy()
+    with strategy.scope():
+        model = tf.keras.models.load_model(model_path, custom_objects=get_custom_objects())
 
     demographic_info = pd.read_parquet(
         args.demographic_data_path
