@@ -42,6 +42,10 @@ def main(
         ).concept_ids.apply(lambda concept_list: concept_list[0:4])
         demographic_info = tokenizer.encode(map(list, demographic_info))
     person_id: int = 0
+    visit_occurrence_id: int = 1
+    condition_occurrence_id: int = 1
+    procedure_occurrence_id: int = 1
+    drug_exposure_id: int = 1
     while True:
         person_id += 1
         start_tokens = [tokenizer.get_start_token_id()]
@@ -55,7 +59,15 @@ def main(
             args.context_window,
             args.top_k
         )
-        gpt_to_omop_converter(concept, person_id, tokenizer, start_tokens, tokens_generated)
+        [visit_occurrence_id, condition_occurrence_id, procedure_occurrence_id, drug_exposure_id] = gpt_to_omop_converter(concept,
+                                                                                                     person_id,
+                                                                                                     tokenizer,
+                                                                                                     start_tokens,
+                                                                                                     tokens_generated,
+                                                                                                     visit_occurrence_id,
+                                                                                                     condition_occurrence_id,
+                                                                                                     procedure_occurrence_id,
+                                                                                                     drug_exposure_id)
 
         txt = '\n'.join(
             [detokenize(_, tokenizer, concept_map) for _ in start_tokens[:5] + tokens_generated]
