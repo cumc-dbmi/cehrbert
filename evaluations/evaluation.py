@@ -77,7 +77,8 @@ def evaluate_sequence_models(args):
             cross_validation_test=args.cross_validation_test,
             grid_search_config=grid_search_config,
             is_chronological_test=args.is_chronological_test,
-            k_fold_test=args.k_fold_test
+            k_fold_test=args.k_fold_test,
+            multiple_test_run=args.multiple_test_run
         ).eval_model()
 
     if VANILLA_BERT_FEED_FORWARD in args.model_evaluators:
@@ -102,7 +103,8 @@ def evaluate_sequence_models(args):
             learning_rate=args.learning_rate,
             cross_validation_test=args.cross_validation_test,
             grid_search_config=grid_search_config,
-            k_fold_test=args.k_fold_test
+            k_fold_test=args.k_fold_test,
+            multiple_test_run=args.multiple_test_run
         ).eval_model()
 
     if SLIDING_BERT in args.model_evaluators:
@@ -128,7 +130,8 @@ def evaluate_sequence_models(args):
             learning_rate=args.learning_rate,
             cross_validation_test=args.cross_validation_test,
             grid_search_config=grid_search_config,
-            k_fold_test=args.k_fold_test
+            k_fold_test=args.k_fold_test,
+            multiple_test_run=args.multiple_test_run
         ).eval_model()
 
     if VANILLA_BERT_LSTM in args.model_evaluators:
@@ -155,7 +158,8 @@ def evaluate_sequence_models(args):
             grid_search_config=grid_search_config,
             is_chronological_test=args.is_chronological_test,
             freeze_pretrained_model=args.freeze_pretrained_model,
-            k_fold_test=args.k_fold_test
+            k_fold_test=args.k_fold_test,
+            multiple_test_run=args.multiple_test_run
         ).eval_model()
 
     if RANDOM_VANILLA_BERT_LSTM in args.model_evaluators:
@@ -190,7 +194,8 @@ def evaluate_sequence_models(args):
             grid_search_config=grid_search_config,
             is_chronological_test=args.is_chronological_test,
             freeze_pretrained_model=args.freeze_pretrained_model,
-            k_fold_test=args.k_fold_test
+            k_fold_test=args.k_fold_test,
+            multiple_test_run=args.multiple_test_run
         ).eval_model()
 
     if HIERARCHICAL_BERT_LSTM in args.model_evaluators:
@@ -223,7 +228,8 @@ def evaluate_sequence_models(args):
             include_att_tokens=args.include_att_tokens,
             is_chronological_test=args.is_chronological_test,
             freeze_pretrained_model=args.freeze_pretrained_model,
-            k_fold_test=args.k_fold_test
+            k_fold_test=args.k_fold_test,
+            multiple_test_run=args.multiple_test_run
         ).eval_model()
 
     if HIERARCHICAL_BERT_POOLING in args.model_evaluators:
@@ -256,7 +262,8 @@ def evaluate_sequence_models(args):
             include_att_tokens=args.include_att_tokens,
             is_chronological_test=args.is_chronological_test,
             freeze_pretrained_model=args.freeze_pretrained_model,
-            k_fold_test=args.k_fold_test
+            k_fold_test=args.k_fold_test,
+            multiple_test_run=args.multiple_test_run
         ).eval_model()
 
     if RANDOM_HIERARCHICAL_BERT_LSTM in args.model_evaluators:
@@ -294,7 +301,8 @@ def evaluate_sequence_models(args):
             grid_search_config=grid_search_config,
             include_att_tokens=args.include_att_tokens,
             is_chronological_test=args.is_chronological_test,
-            k_fold_test=args.k_fold_test
+            k_fold_test=args.k_fold_test,
+            multiple_test_run=args.multiple_test_run
         ).eval_model()
 
 

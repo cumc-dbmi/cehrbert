@@ -32,6 +32,7 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             cross_validation_test: bool = False,
             grid_search_config: GridSearchConfig = None,
             freeze_pretrained_model=False,
+            multiple_test_run=False,
             *args, **kwargs
     ):
         self.get_logger().info(
@@ -41,12 +42,14 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             f'cross_validation_test: {cross_validation_test}\n'
             f'grid_search_config: {grid_search_config}\n'
             f'freeze_pretrained_model: {freeze_pretrained_model}\n'
+            f'multiple_test_run: {multiple_test_run}\n'
         )
         self._epochs = epochs
         self._batch_size = batch_size
         self._sequence_model_name = sequence_model_name
         self._cross_validation_test = cross_validation_test
         self._freeze_pretrained_model = freeze_pretrained_model
+        self._multiple_test_run = multiple_test_run
 
         if grid_search_config:
             self._grid_search_config = grid_search_config
@@ -172,12 +175,6 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         self._epochs = optimal_hyperparam_combination.epoch
         self._learning_rate = optimal_hyperparam_combination.learning_rate
 
-        # Recreate the model
-        self._model = self._create_model(
-            is_bi_directional=optimal_hyperparam_combination.is_bi_directional,
-            lstm_unit=optimal_hyperparam_combination.lstm_unit
-        )
-
         with tf.device('/CPU:0'):
             # Train using the full training set
             full_training_set = tf.data.Dataset.from_tensor_slices(
@@ -185,34 +182,45 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
                  training_val_test_set_labels)
             ).cache().batch(self._batch_size)
 
-        # Retrain the model and set the epoch size to the most optimal one derived from the
-        # k-fold cross validation
-        self.train_model(
-            training_data=full_training_set,
-            val_data=full_training_set.take(10),
-            model_name=f'{self._sequence_model_name}_final'
-        )
+        for _ in range(self._num_of_folds):
+            # Recreate the model
+            self._model = self._create_model(
+                is_bi_directional=optimal_hyperparam_combination.is_bi_directional,
+                lstm_unit=optimal_hyperparam_combination.lstm_unit
+            )
 
-        # Construct the held-out tensorflow dataset to calculate the metrics
-        held_out_set_inputs = {
-            k: v[held_out_set_idx]
-            for k, v in features.items()
-        }
-        held_out_set_labels = labels[held_out_set_idx]
+            # Retrain the model and set the epoch size to the most optimal one derived from the
+            # k-fold cross validation
+            self.train_model(
+                training_data=full_training_set.shuffle(512, seed=10),
+                val_data=full_training_set.take(10),
+                model_name=f'{self._sequence_model_name}_final'
+            )
 
-        with tf.device('/CPU:0'):
-            hold_out_set = tf.data.Dataset.from_tensor_slices(
-                (held_out_set_inputs,
-                 held_out_set_labels)
-            ).cache().batch(self._batch_size)
+            # Construct the held-out tensorflow dataset to calculate the metrics
+            held_out_set_inputs = {
+                k: v[held_out_set_idx]
+                for k, v in features.items()
+            }
+            held_out_set_labels = labels[held_out_set_idx]
 
-        compute_binary_metrics(
-            self._model,
-            hold_out_set,
-            self.get_model_test_metrics_folder(),
-            evaluation_model_folder=self.get_model_test_prediction_folder(),
-            model_name=f'{self._sequence_model_name}_final'
-        )
+            with tf.device('/CPU:0'):
+                hold_out_set = tf.data.Dataset.from_tensor_slices(
+                    (held_out_set_inputs,
+                     held_out_set_labels)
+                ).cache().batch(self._batch_size)
+
+            compute_binary_metrics(
+                self._model,
+                hold_out_set,
+                self.get_model_test_metrics_folder(),
+                evaluation_model_folder=self.get_model_test_prediction_folder(),
+                model_name=f'{self._sequence_model_name}_final',
+                calculate_ci=not self._multiple_test_run
+            )
+            # If multiple test run is not enabled, we break out of the loop
+            if not self._multiple_test_run:
+                break
 
     def grid_search_cross_validation(
             self,
