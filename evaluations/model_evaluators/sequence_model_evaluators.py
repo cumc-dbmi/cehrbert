@@ -192,7 +192,7 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             # Retrain the model and set the epoch size to the most optimal one derived from the
             # k-fold cross validation
             self.train_model(
-                training_data=full_training_set.shuffle(512, seed=10),
+                training_data=full_training_set,
                 val_data=full_training_set.take(10),
                 model_name=f'{self._sequence_model_name}_final'
             )
