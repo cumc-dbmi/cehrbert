@@ -23,9 +23,22 @@ We will release the model that we pre-trained soon
 ### Pre-requisite
 The project is built in python 3.7, and project dependency needs to be installed 
 
+Create a new Python virtual environment
+```console
+python3 -m venv venv3.7;
+source venv3.7/bin/activate;
+```
+
+Install the packages in requirements.txt
 ```console
 pip3 install -r requirements.txt
 ```
+
+Add the JTDS jar to the spark jars folder in the python environment 
+```console
+cp extra/jtds-1.3.1.jar venv3.7/lib/python3.7/site-packages/pyspark/jars/
+```
+
 Create the following folders for the tutorial below
 ```console
 mkdir -p ~/Documents/omop_test/cehr-bert;
