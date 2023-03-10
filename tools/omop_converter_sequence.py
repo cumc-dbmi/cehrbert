@@ -1,13 +1,4 @@
-import sys
-from pathlib import Path
-import math
-from datetime import datetime, date, timedelta
-
-import csv
-# from pyspark.sql import SparkSession
-from models.gpt_model import generate_artificial_time_tokens
-
-
+from datetime import datetime, date
 from abc import ABC, abstractmethod
 
 
@@ -103,9 +94,9 @@ class Person(OmopEntity):
 class VisitOccurrence(OmopEntity):
     def __init__(
             self,
-            visit_occurrence_id,
-            visit_concept_id,
-            visit_start_date,
+            visit_occurrence_id: int,
+            visit_concept_id: int,
+            visit_start_date: date,
             person: Person
     ):
         self._visit_occurrence_id = visit_occurrence_id
@@ -120,7 +111,7 @@ class VisitOccurrence(OmopEntity):
         return {
             'visit_occurrence_id': self._visit_occurrence_id,
             'visit_concept_id': self._visit_concept_id,
-            'person_id': self._person.self._person_id,
+            'person_id': self._person._person_id,
             'visit_start_date': self._visit_start_date,
             'visit_start_datetime': self._visit_start_datetime,
             'visit_end_date': self._visit_end_date,
@@ -222,3 +213,127 @@ class ConditionOccurrence(OmopEntity):
 
     def get_table_name(self):
         return 'condition_occurrence'
+
+
+class DrugExposure(OmopEntity):
+
+    def __init__(
+            self,
+            drug_exposure_id,
+            drug_concept_id,
+            visit_occurrence: VisitOccurrence
+    ):
+        self._drug_exposure_id = drug_exposure_id
+        self._drug_concept_id = drug_concept_id
+        self._visit_occurrence = visit_occurrence
+
+    def export_as_json(self):
+        return {
+            'drug_exposure_id': self._drug_exposure_id,
+            'person_id': self._visit_occurrence._person._person_id,
+            'drug_concept_id': self._drug_concept_id,
+            'drug_exposure_start_date': self._visit_occurrence._visit_start_date,
+            'drug_exposure_start_datetime': self._visit_occurrence._visit_start_datetime,
+            'drug_exposure_end_date': self._visit_occurrence._visit_end_date,
+            'drug_exposure_end_datetime': self._visit_occurrence._visit_end_datetime,
+            'verbatim_end_date': self._visit_occurrence._visit_end_date,
+            'drug_type_concept_id': 38000177,
+            'stop_reason': '',
+            'refills': None,
+            'quantity': None,
+            'days_supply': None,
+            'sig': '',
+            'route_concept_id': 0,
+            'lot_number': '',
+            'provider_id': 0,
+            'visit_occurrence_id': self._visit_occurrence._visit_occurrence_id,
+            'visit_detail_id': 0,
+            'drug_source_value': '',
+            'drug_source_concept_id': self._drug_concept_id,
+            'route_source_value': '',
+            'dose_unit_source_value': ''
+        }
+
+    @classmethod
+    def get_schema(cls):
+        return {
+            'drug_exposure_id': int,
+            'person_id': int,
+            'drug_concept_id': int,
+            'drug_exposure_start_date': date,
+            'drug_exposure_start_datetime': datetime,
+            'drug_exposure_end_date': date,
+            'drug_exposure_end_datetime': datetime,
+            'verbatim_end_date': date,
+            'drug_type_concept_id': int,
+            'stop_reason': str,
+            'refills': int,
+            'quantity': int,
+            'days_supply': int,
+            'sig': str,
+            'route_concept_id': int,
+            'lot_number': str,
+            'provider_id': int,
+            'visit_occurrence_id': int,
+            'visit_detail_id': int,
+            'drug_source_value': str,
+            'drug_source_concept_id': int,
+            'route_source_value': str,
+            'dose_unit_source_value': str
+        }
+
+    def get_table_name(self):
+        return 'drug_exposure'
+
+
+class ProcedureOccurrence(OmopEntity):
+
+    def __init__(
+            self,
+            procedure_occurrence_id,
+            procedure_concept_id,
+            visit_occurrence: VisitOccurrence
+    ):
+        self._procedure_occurrence_id = procedure_occurrence_id
+        self._procedure_concept_id = procedure_concept_id
+        self._visit_occurrence = visit_occurrence
+
+    def export_as_json(self):
+        return {
+            'procedure_occurrence_id': self._procedure_occurrence_id,
+            'person_id': self._visit_occurrence._person._person_id,
+            'procedure_concept_id': self._procedure_concept_id,
+            'procedure_date': self._visit_occurrence._visit_start_date,
+            'procedure_datetime': self._visit_occurrence._visit_start_datetime,
+            'procedure_type_concept_id': 38000178,
+            'modifier_concept_id': 0,
+            'quantity': 1,
+            'provider_id': 0,
+            'visit_occurrence_id': self._visit_occurrence._visit_occurrence_id,
+            'visit_detail_id': 0,
+            'procedure_source_value': '',
+            'procedure_source_concept_id': self._procedure_concept_id,
+            'qualifier_source_value': ''
+        }
+
+    @classmethod
+    def get_schema(cls):
+        return {
+            'procedure_occurrence_id': int,
+            'person_id': int,
+            'procedure_concept_id': int,
+            'procedure_date': date,
+            'procedure_datetime': datetime,
+            'procedure_type_concept_id': int,
+            'modifier_concept_id': int,
+            'quantity': int,
+            'provider_id': int,
+            'visit_occurrence_id': int,
+            'visit_detail_id': int,
+            'procedure_source_value': str,
+            'procedure_source_concept_id': int,
+            'qualifier_source_value': str
+        }
+
+    def get_table_name(self):
+        return 'procedure_occurrence'
