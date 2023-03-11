@@ -997,9 +997,9 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         )
 
         # Add the entropy as a loss to encourage the model to focus on a subset of phenotypes
-        # self.add_loss(
-        #     tf.reduce_mean(phenotype_prob_entropy) * self.phenotype_entropy_weight,
-        # )
+        self.add_loss(
+            tf.reduce_mean(phenotype_prob_entropy) * self.phenotype_entropy_weight,
+        )
 
         # Get phenotype pairwise distance metrics
         phe_inv_loss, phe_dist_metric, phe_dist_var = self.get_inverse_phenotype_dist_loss_metric()
