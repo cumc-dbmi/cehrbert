@@ -43,6 +43,7 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
             phenotype_euclidean_weight: float = 2e-05,
             phenotype_concept_distance_weight: float = 1e-04,
             random_mask_prob: float = 0.0,
+            warmup_step: int = -1,
             *args, **kwargs
     ):
 
@@ -69,6 +70,7 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
         self._phenotype_entropy_weight = phenotype_entropy_weight
         self._phenotype_euclidean_weight = phenotype_euclidean_weight
         self._phenotype_concept_distance_weight = phenotype_concept_distance_weight
+        self._warmup_step = warmup_step
 
         super(ProbabilisticPhenotypeTrainer, self).__init__(*args, **kwargs)
 
@@ -97,6 +99,7 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
             f'phenotype_euclidean_weight: {phenotype_euclidean_weight}\n'
             f'phenotype_concept_distance_weight: {phenotype_concept_distance_weight}\n'
             f'random_mask_prob: {random_mask_prob}\n'
+            f'warmup_step: {warmup_step}\n'
         )
 
     def _load_dependencies(self):
@@ -144,7 +147,8 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
             parameters.update({
                 'include_readmission': self._include_readmission,
                 'include_prolonged_length_stay': self._include_prolonged_length_stay,
-                'random_mask_prob': self._random_mask_prob
+                'random_mask_prob': self._random_mask_prob,
+                'warmup_step': self._warmup_step
             })
             data_generator_class = HierarchicalBertMultiTaskDataGenerator
 
@@ -260,6 +264,7 @@ def main(args):
         include_visit_prediction=args.include_visit_prediction,
         include_prolonged_length_stay=args.include_prolonged_length_stay,
         random_mask_prob=args.random_mask_prob,
+        warmup_step=args.warmup_step,
         include_readmission=args.include_readmission,
         time_embeddings_size=args.time_embeddings_size,
         use_dask=args.use_dask,
