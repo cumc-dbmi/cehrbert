@@ -289,13 +289,4 @@ def create_parse_args_hierarchical_bert_phenotype():
         default=1e-04,
         required=False
     )
-    parser.add_argument(
-        '--secondary_learning_warmup_step',
-        dest='warmup_step',
-        action='store',
-        type=int,
-        help='The number steps before secondary learning objectives start',
-        default=-1,
-        required=False
-    )
     return parser

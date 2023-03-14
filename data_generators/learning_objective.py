@@ -741,15 +741,12 @@ class HierarchicalVisitTypePredictionLearningObjective(
             visit_tokenizer: ConceptTokenizer,
             max_num_of_visits: int,
             is_pretraining: bool,
-            include_visit_prediction: bool,
-            warmup_step: int
+            include_visit_prediction: bool
     ):
         self._visit_tokenizer = visit_tokenizer
         self._max_num_of_visits = max_num_of_visits
         self._is_pretraining = is_pretraining
         self._include_visit_prediction = include_visit_prediction
-        self._warmup_step = warmup_step
-        self._counter = 0
 
     def get_tf_dataset_schema(self):
         input_dict_schema = {
@@ -795,12 +792,6 @@ class HierarchicalVisitTypePredictionLearningObjective(
                 padded_token=0,
                 maxlen=self._max_num_of_visits
             )
-
-            if self._counter < self._warmup_step:
-                self._counter += 1
-                padded_output_masks = np.zeros_like(
-                    padded_output_masks
-                )
 
             output_dict['visit_predictions'] = np.stack(
                 [padded_visit_token_ids, padded_output_masks],
@@ -860,14 +851,11 @@ class HierarchicalReadmissionLearningObjective(
             self,
             max_num_of_visits: int,
             is_pretraining: bool,
-            random_mask_prob: float,
-            warmup_step: int
+            random_mask_prob: float
     ):
         self._max_num_of_visits = max_num_of_visits
         self._is_pretraining = is_pretraining
         self._random_mask_prob = random_mask_prob
-        self._warmup_step = warmup_step
-        self._counter = 0
 
     def get_tf_dataset_schema(self):
         output_dict_schema = {
@@ -899,12 +887,6 @@ class HierarchicalReadmissionLearningObjective(
         # if _random_mask_prob=0.2, there is 20% chance of being masked
         random_mask = np.random.rand(*padded_is_inpatients.shape) < self._random_mask_prob
         mask = padded_is_inpatients & random_mask
-
-        if self._counter < self._warmup_step:
-            self._counter += 1
-            mask = np.zeros_like(
-                mask
-            )
 
         output_dict = {
             'is_readmission': np.stack([padded_is_readmissions, mask], axis=-1)
@@ -941,14 +923,11 @@ class HierarchicalProlongedLengthStayLearningObjective(
             self,
             max_num_of_visits: int,
             is_pretraining: bool,
-            random_mask_prob: float,
-            warmup_step: int
+            random_mask_prob: float
     ):
         self._max_num_of_visits = max_num_of_visits
         self._is_pretraining = is_pretraining
         self._random_mask_prob = random_mask_prob
-        self._warmup_step = warmup_step
-        self._counter = 0
 
     def get_tf_dataset_schema(self):
         output_dict_schema = {
@@ -980,12 +959,6 @@ class HierarchicalProlongedLengthStayLearningObjective(
         # if _random_mask_prob=0.2, there is 20% chance of being masked
         random_mask = np.random.rand(*padded_is_inpatients.shape) < self._random_mask_prob
         mask = padded_is_inpatients & random_mask
-
-        if self._counter < self._warmup_step:
-            self._counter += 1
-            mask = np.zeros_like(
-                mask
-            )
 
         output_dict = {
             'visit_prolonged_stay':
