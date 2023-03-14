@@ -343,10 +343,9 @@ def create_hierarchical_bert_bi_lstm_model_with_model(
         hierarchical_bert_model.trainable = False
 
     if is_phenotype_enabled:
-        hidden_visit_embeddings = hierarchical_bert_model.get_layer('hidden_visit_embeddings')
-        # Set the loss coefficient to 0
-        hidden_visit_embeddings.phenotype_entropy_weight = 0.0
-        contextualized_visit_embeddings, _ = hidden_visit_embeddings.output
+        contextualized_visit_embeddings, _ = hierarchical_bert_model.get_layer(
+            'hidden_visit_embeddings'
+        ).output
     else:
         contextualized_visit_embeddings, _ = hierarchical_bert_model.get_layer(
             'visit_encoder'
