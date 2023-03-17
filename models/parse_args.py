@@ -262,31 +262,4 @@ def create_parse_args_hierarchical_bert_phenotype():
         default=10,
         required=False
     )
-    parser.add_argument(
-        '--phenotype_euclidean_weight',
-        dest='phenotype_euclidean_weight',
-        action='store',
-        type=float,
-        help='Weight to control the phenotype euclidean distance loss',
-        default=2e-05,
-        required=False
-    )
-    parser.add_argument(
-        '--phenotype_entropy_weight',
-        dest='phenotype_entropy_weight',
-        action='store',
-        type=float,
-        help='Weight to control the phenotype entropy weight loss',
-        default=2e-05,
-        required=False
-    )
-    parser.add_argument(
-        '--phenotype_concept_distance_weight',
-        dest='phenotype_concept_distance_weight',
-        action='store',
-        type=float,
-        help='Weight to control the phenotype concept distance loss',
-        default=1e-04,
-        required=False
-    )
     return parser
