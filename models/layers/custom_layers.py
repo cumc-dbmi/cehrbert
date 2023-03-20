@@ -914,7 +914,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         # (num_of_phenotypes, embedding_size)
         self.phenotype_embeddings = self.add_weight(
             shape=(num_of_phenotypes, embedding_size),
-            initializer=tf.keras.initializers.GlorotNormal(seed=0),
+            initializer=tf.keras.initializers.GlorotUniform(seed=0),
             trainable=True,
             name='phenotype_embeddings_matrix'
         )
