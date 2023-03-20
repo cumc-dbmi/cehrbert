@@ -40,6 +40,7 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
             include_readmission: bool,
             include_prolonged_length_stay: bool,
             random_mask_prob: float = 0.0,
+            warmup_step: int = -1,
             *args, **kwargs
     ):
 
@@ -63,6 +64,7 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
         self._include_readmission = include_readmission
         self._include_prolonged_length_stay = include_prolonged_length_stay
         self._random_mask_prob = random_mask_prob
+        self._warmup_step = warmup_step
 
         super(ProbabilisticPhenotypeTrainer, self).__init__(*args, **kwargs)
 
@@ -88,6 +90,7 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
             f'include_prolonged_length_stay: {include_prolonged_length_stay}\n'
             f'include_readmission: {include_readmission}\n'
             f'random_mask_prob: {random_mask_prob}\n'
+            f'warmup_step: {warmup_step}\n'
         )
 
     def _load_dependencies(self):
@@ -135,7 +138,8 @@ class ProbabilisticPhenotypeTrainer(AbstractConceptEmbeddingTrainer):
             parameters.update({
                 'include_readmission': self._include_readmission,
                 'include_prolonged_length_stay': self._include_prolonged_length_stay,
-                'random_mask_prob': self._random_mask_prob
+                'random_mask_prob': self._random_mask_prob,
+                'warmup_step': self._warmup_step
             })
             data_generator_class = HierarchicalBertMultiTaskDataGenerator
 
@@ -245,6 +249,7 @@ def main(args):
         include_visit_prediction=args.include_visit_prediction,
         include_prolonged_length_stay=args.include_prolonged_length_stay,
         random_mask_prob=args.random_mask_prob,
+        warmup_step=args.warmup_step,
         include_readmission=args.include_readmission,
         time_embeddings_size=args.time_embeddings_size,
         use_dask=args.use_dask,
