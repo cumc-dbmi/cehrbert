@@ -67,7 +67,7 @@ PYTHONPATH=./: spark-submit spark_apps/generate_training_data.py -i ~/Documents/
 ### 3. Pre-train CEHR-BERT
 If you don't have your own OMOP instance, we have provided a sample of patient sequence data generated using Synthea at `sample/patient_sequence` in the repo. CEHR-BERT expects the data folder to be named as `patient_sequence`
 ```console
-PYTHONPATH=./: python3 trainers/train_bert_only.py -i sample_data/ -o ~/Documents/omop_test/cehr-bert -iv -m 512 -e 1 -b 32 -d 5 --use_time_embedding 
+PYTHONPATH=./: python3 trainers/train_bert_only.py -i sample_data/ -o ~/Documents/omop_test/cehr-bert -iv -m 512 -e 2 -b 32 -d 5 --use_time_embedding 
 ```
 ### 4. Generate hf readmission prediction task
 If you don't have your own OMOP instance, we have provided a sample of patient sequence data generated using Synthea at `sample/hf_readmissioon` in the repo
@@ -78,7 +78,7 @@ PYTHONPATH=./:$PYTHONPATH spark-submit spark_apps/prediction_cohorts/hf_readmiss
 ### 5. Fine-tune CEHR-BERT for hf readmission
 ```console
 # Copy the pretrained bert model
-mv sample_data/hf_readmission ~/Documents/omop_test/cehr-bert/hf_readmission;
+cp sample_data/hf_readmission ~/Documents/omop_test/cehr-bert/hf_readmission;
 
 # Create the evaluation folder
 mkdir -p ~/Documents/omop_test/evaluation_train_val_split/hf_readmission/;
