@@ -23,9 +23,7 @@ def main(input_folder, output_folder, domain_table_list, date_filter,
     visit_occurrence = visit_occurrence.select('visit_occurrence_id', 'visit_concept_id',
                                                'person_id')
     person = preprocess_domain_table(spark, input_folder, PERSON)
-    person = person.select('person_id', F.coalesce('birth_datetime',
-                                                   F.concat('year_of_birth', F.lit('-01-01')).cast(
-                                                       'timestamp')).alias('birth_datetime'))
+    person = person.select('person_id', F.concat('year_of_birth', F.lit('-'), F.coalesce('month_of_birth', F.lit('01')), F.lit('-'), F.coalesce('day_of_birth', F.lit('01'))).cast('timestamp').alias('birth_datetime'))
     visit_occurrence_person = visit_occurrence.join(person, 'person_id')
 
     patient_event = join_domain_tables(domain_tables)
