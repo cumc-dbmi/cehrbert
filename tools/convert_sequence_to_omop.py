@@ -86,51 +86,54 @@ def gpt_to_omop_converter(concept_parquet_file, patient_sequences_concept_ids, s
        # [start_year, start_age, start_gender, start_race] = [detokenize_concept_ids(_, tokenizer) for _ in
        #                                                      start_tokens] No need to detokenize for now
         [start_year, start_age, start_gender, start_race] = [_ for _ in start_tokens]
-        start_year = start_year.split(':')[1]
-        start_age = start_age.split(':')[1]
-        birth_year = int(start_year) - int(start_age)
-        p = Person(person_id, start_gender, birth_year, start_race)
-        person_id += 1
-        append_to_dict(omop_export_dict, p)
-        VS_DATE = date(int(start_year), 1, 1)
-        ATT_DATE_DELTA = 0
+        if 'year' not in start_year:
+            pass
+        else:
+            start_year = start_year.split(':')[1]
+            start_age = start_age.split(':')[1]
+            birth_year = int(start_year) - int(start_age)
+            p = Person(person_id, start_gender, birth_year, start_race)
+            person_id += 1
+            append_to_dict(omop_export_dict, p)
+            VS_DATE = date(int(start_year), 1, 1)
+            ATT_DATE_DELTA = 0
 
-        vo = None
-        for idx, x in enumerate(tokens_generated, 0):
-            if x == 'VS':
-                visit_concept_id = int(tokens_generated[idx + 1])
-                VS_DATE = VS_DATE + timedelta(days=ATT_DATE_DELTA)
-                vo = VisitOccurrence(visit_occurrence_id, visit_concept_id, VS_DATE, p)
-                append_to_dict(omop_export_dict, vo)
-                visit_occurrence_id += 1
-            elif x in ATT_TIME_TOKENS:
-                if x[0] == 'W':
-                    ATT_DATE_DELTA = int(x[1:]) * 7
-                elif x[0] == 'M':
-                    ATT_DATE_DELTA = int(x[1:]) * 30
-                elif x == 'LT':
-                    ATT_DATE_DELTA = 365
-            elif x == 'VE':
-                # If it's a VE token, nothing needs to be updated because it just means the visit ended
-                pass
-            elif x in ['START', start_year, start_age, start_gender, start_race]:
-                # If it's a start token, skip it
-                pass
-            else:
-                domain = domain_map[int(x)]
-                if domain == 'Condition':
-                    co = ConditionOccurrence(condition_occurrence_id, x, vo)
-                    append_to_dict(omop_export_dict, co)
-                    condition_occurrence_id += 1
-                elif domain == 'Procedure':
-                    po = ProcedureOccurrence(procedure_occurrence_id, x, vo)
-                    append_to_dict(omop_export_dict, po)
-                    procedure_occurrence_id += 1
-                elif domain == 'Drug':
-                    de = DrugExposure(drug_exposure_id, x, vo)
-                    append_to_dict(omop_export_dict, de)
-                    drug_exposure_id += 1
-            omop_export_dict = export_and_clear(omop_export_dict, batch_size)
+            vo = None
+            for idx, x in enumerate(tokens_generated, 0):
+                if x == 'VS':
+                    visit_concept_id = int(tokens_generated[idx + 1])
+                    VS_DATE = VS_DATE + timedelta(days=ATT_DATE_DELTA)
+                    vo = VisitOccurrence(visit_occurrence_id, visit_concept_id, VS_DATE, p)
+                    append_to_dict(omop_export_dict, vo)
+                    visit_occurrence_id += 1
+                elif x in ATT_TIME_TOKENS:
+                    if x[0] == 'W':
+                        ATT_DATE_DELTA = int(x[1:]) * 7
+                    elif x[0] == 'M':
+                        ATT_DATE_DELTA = int(x[1:]) * 30
+                    elif x == 'LT':
+                        ATT_DATE_DELTA = 365
+                elif x == 'VE':
+                    # If it's a VE token, nothing needs to be updated because it just means the visit ended
+                    pass
+                elif x in ['START', start_year, start_age, start_gender, start_race]:
+                    # If it's a start token, skip it
+                    pass
+                else:
+                    domain = domain_map[int(x)]
+                    if domain == 'Condition':
+                        co = ConditionOccurrence(condition_occurrence_id, x, vo)
+                        append_to_dict(omop_export_dict, co)
+                        condition_occurrence_id += 1
+                    elif domain == 'Procedure':
+                        po = ProcedureOccurrence(procedure_occurrence_id, x, vo)
+                        append_to_dict(omop_export_dict, po)
+                        procedure_occurrence_id += 1
+                    elif domain == 'Drug':
+                        de = DrugExposure(drug_exposure_id, x, vo)
+                        append_to_dict(omop_export_dict, de)
+                        drug_exposure_id += 1
+                omop_export_dict = export_and_clear(omop_export_dict, batch_size)
     return print('Done')
 
 
