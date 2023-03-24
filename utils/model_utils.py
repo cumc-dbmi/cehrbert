@@ -79,12 +79,14 @@ def tokenize_concepts(training_data: Union[pd_dataframe, dd_dataframe],
     if isinstance(training_data, dd_dataframe):
         training_data[tokenized_column_name] = training_data[column_name].map_partitions(
             lambda ds: pd.Series(
-                tokenizer.encode(map(lambda t: t[1].tolist(), ds.iteritems()), is_generator=True),
-                name='concept_ids'), meta='iterable')
+                tokenizer.encode(map(lambda t: list(t[1]), ds.iteritems()), is_generator=True),
+                name='concept_ids'),
+            meta='iterable'
+        )
     else:
-        training_data[column_name] = training_data[column_name].apply(
-            lambda concept_ids: concept_ids.tolist())
-        training_data[tokenized_column_name] = tokenizer.encode(training_data[column_name])
+        training_data[tokenized_column_name] = tokenizer.encode(
+            map(list, training_data[column_name])
+        )
 
     if not os.path.exists(tokenizer_path) or recreate:
         pickle.dump(tokenizer, open(tokenizer_path, 'wb'))

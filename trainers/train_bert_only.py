@@ -59,7 +59,8 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
             f'include_prolonged_length_stay: {include_prolonged_length_stay}\n'
             f'use_time_embeddings: {use_time_embedding}\n'
             f'use_behrt: {use_behrt}\n'
-            f'time_embeddings_size: {time_embeddings_size}')
+            f'time_embeddings_size: {time_embeddings_size}'
+        )
 
     def _load_dependencies(self):
 
