@@ -29,6 +29,7 @@ iniconfig==1.0.1
 jedi==0.18.0
 Jinja2==2.11.2
 joblib==0.17.0
+keras==2.9.0
 locket==0.2.1
 Markdown==3.3
 MarkupSafe==1.1.1
