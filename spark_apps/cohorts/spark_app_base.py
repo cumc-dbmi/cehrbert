@@ -404,13 +404,7 @@ class NestedCohortBuilder:
 
         ehr_records_for_cohorts = self.extract_ehr_records_for_cohort(cohort)
         # ehr_records_for_cohorts.show()
-        demographics = self._dependency_dict[PERSON].select(
-            'person_id',
-            'race_concept_id',
-            'gender_concept_id'
-        )
-        cohort = cohort.join(demographics, 'person_id') \
-            .join(ehr_records_for_cohorts, ['person_id', 'cohort_member_id']) \
+        cohort = cohort.join(ehr_records_for_cohorts, ['person_id', 'cohort_member_id']) \
             .where(F.col('num_of_visits') >= self._num_of_visits) \
             .where(F.col('num_of_concepts') >= self._num_of_concepts)
 
