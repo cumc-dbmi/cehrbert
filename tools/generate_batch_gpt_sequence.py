@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import pickle
 import tensorflow as tf
+import atexit
 import uuid
 from models.layers.custom_layers import get_custom_objects
 from data_generators.learning_objective import post_pad_pre_truncate
