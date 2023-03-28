@@ -48,14 +48,15 @@ def append_to_dict(export_dict, omop_entity):
     return export_dict
 
 
-def export_and_clear(export_dict, batch_size):
+def export_and_clear(output_folder, export_dict, batch_size):
     for table_name in export_dict.keys():
         if len(export_dict[table_name]) >= batch_size:
             records_to_export = export_dict[table_name]
             records_in_json = [record.export_as_json() for record in export_dict[table_name]]
             schema = records_to_export[0].get_schema()
             file_name = table_name + '.csv'
-            file_path = CURRENT_PATH.parent / 'gpt_omop_data' / file_name
+            output_folder_path = Path(output_folder)
+            file_path = output_folder_path / file_name
             if not os.path.isfile(file_path):
                 pd.DataFrame(
                     records_in_json,
@@ -70,7 +71,7 @@ def export_and_clear(export_dict, batch_size):
     return export_dict
 
 
-def gpt_to_omop_converter(concept_parquet_file, patient_sequences_concept_ids, start_token_size):
+def gpt_to_omop_converter(output_folder, concept_parquet_file, patient_sequences_concept_ids, start_token_size):
     person_id: int = 1
     visit_occurrence_id: int = 1
     condition_occurrence_id: int = 1
@@ -132,7 +133,7 @@ def gpt_to_omop_converter(concept_parquet_file, patient_sequences_concept_ids, s
                     de = DrugExposure(drug_exposure_id, x, vo)
                     append_to_dict(omop_export_dict, de)
                     drug_exposure_id += 1
-            omop_export_dict = export_and_clear(omop_export_dict, batch_size)
+            omop_export_dict = export_and_clear(output_folder, omop_export_dict, batch_size)
     return print('Done')
 
 
@@ -141,7 +142,7 @@ def main(args):
     #tokenizer = pickle.load(open(tokenizer_path, 'rb'))
     concept_parquet_file = pd.read_parquet(os.path.join(args.concept_path))
     patient_sequences_conept_ids = pd.read_parquet(os.path.join(args.patient_sequence_path), columns=['concept_ids'])
-    gpt_to_omop_converter(concept_parquet_file, patient_sequences_conept_ids, start_token_size)
+    gpt_to_omop_converter(args.output_folder, concept_parquet_file, patient_sequences_conept_ids, start_token_size)
 
 
 if __name__ == "__main__":
@@ -152,6 +153,14 @@ if __name__ == "__main__":
         dest='model_folder',
         action='store',
         help='The path for your model_folder',
+        required=True
+    )
+
+    parser.add_argument(
+        '--output_folder',
+        dest='output_folder',
+        action='store',
+        help='The path for the output_folder',
         required=True
     )
 
