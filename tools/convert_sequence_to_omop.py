@@ -81,6 +81,9 @@ def gpt_to_omop_converter(output_folder, concept_parquet_file, patient_sequences
     domain_map = generate_omop_concept_domain(concept_parquet_file)
     omop_export_dict: [str, List[OmopEntity]] = dict()
     for row in tqdm(patient_sequences):
+        # ignore start token
+        if 'start' in row[0].lower():
+            row = row[1:]
         tokens_generated = row[start_token_size:]
         #TODO:Need to decode if the input is tokenized
         start_tokens = row[0:start_token_size]
