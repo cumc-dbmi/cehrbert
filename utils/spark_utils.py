@@ -419,7 +419,8 @@ def create_sequence_data(patient_event,
 
 def create_sequence_data_with_att(patient_event, date_filter=None,
                                   include_visit_type=False,
-                                  exclude_visit_tokens=False):
+                                  exclude_visit_tokens=False,
+                                  create_visits_from_dates=False):
     """
     Create a sequence of the events associated with one patient in a chronological order
 
@@ -427,6 +428,7 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
     :param date_filter:
     :param include_visit_type:
     :param exclude_visit_tokens:
+    :param create_visits_from_dates: Creates visit occurrences using consecutive dates
     :return:
     """
 
@@ -444,6 +446,25 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
     if date_filter:
         patient_event = patient_event.where(F.col('date').cast('date') >= date_filter)
 
+    if create_visits_from_dates:
+        # create date_diff column
+        window = W.partitionBy("cohort_member_id", "person_id").orderBy("date")
+        patient_event = patient_event.withColumn("date_difference",
+                                                 F.datediff(patient_event.date,
+                                                            F.lag(patient_event.date, 1).over(
+                                                                window)))
+        # first row per person_id gives nan for date_difference, replace with value 2
+        patient_event = patient_event.na.fill(2, "date_difference")
+
+        # create visit_occurrence_ids
+        patient_event = patient_event.withColumn("_flg", F.coalesce(F.when(F.col("date_difference") > 1, 1),
+                                                                    F.lit(0)))
+        patient_event = patient_event.withColumn("visit_occurrence_id", F.sum("_flg").over(window))
+
+        # add visit_concept_id=0 for the artificially constructed visits
+        patient_event = patient_event .withColumn('visit_concept_id', F.lit(0))
+        
+        patient_event = patient_event .drop("date_difference", "_flg")
     # Udf for identifying the earliest date associated with a visit_occurrence_id
     visit_start_date_udf = F.first('date').over(
         W.partitionBy('cohort_member_id', 'person_id', 'visit_occurrence_id').orderBy('date'))

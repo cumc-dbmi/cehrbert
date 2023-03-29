@@ -13,7 +13,7 @@ PERSON = 'person'
 
 def main(input_folder, output_folder, domain_table_list, date_filter,
          include_visit_type, is_new_patient_representation, exclude_visit_tokens,
-         is_classic_bert, include_prolonged_stay):
+         is_classic_bert, include_prolonged_stay, create_visits_from_dates):
     spark = SparkSession.builder.appName('Generate Bert Training Data').getOrCreate()
     domain_tables = []
     for domain_table_name in domain_table_list:
@@ -27,18 +27,29 @@ def main(input_folder, output_folder, domain_table_list, date_filter,
     visit_occurrence_person = visit_occurrence.join(person, 'person_id')
 
     patient_event = join_domain_tables(domain_tables)
-    patient_event = patient_event.join(visit_occurrence_person, 'visit_occurrence_id') \
-        .select([patient_event[fieldName] for fieldName in patient_event.schema.fieldNames()] +
-                ['visit_concept_id', 'birth_datetime']) \
-        .withColumn('cohort_member_id', F.col('person_id')) \
-        .withColumn('age', F.ceil(F.months_between(F.col('date'),
-                                                   F.col("birth_datetime")) / F.lit(12)))
+    if create_visits_from_dates:
+        patient_event = patient_event.join(person, 'person_id') \
+            .select([patient_event[fieldName] for fieldName in patient_event.schema.fieldNames()] +
+                    ['birth_datetime']) \
+            .withColumn('cohort_member_id', F.col('person_id')) \
+            .withColumn('age', F.ceil(F.months_between(F.col('date'),
+                                                       F.col("birth_datetime")) / F.lit(12)))
+    else:
+        visit_occurrence_person = visit_occurrence.join(person, 'person_id')
+
+        patient_event = patient_event.join(visit_occurrence_person, 'visit_occurrence_id') \
+            .select([patient_event[fieldName] for fieldName in patient_event.schema.fieldNames()] +
+                    ['visit_concept_id', 'birth_datetime']) \
+            .withColumn('cohort_member_id', F.col('person_id')) \
+            .withColumn('age', F.ceil(F.months_between(F.col('date'),
+                                                       F.col("birth_datetime")) / F.lit(12)))
 
     if is_new_patient_representation:
         sequence_data = create_sequence_data_with_att(patient_event,
                                                       date_filter=date_filter,
                                                       include_visit_type=include_visit_type,
-                                                      exclude_visit_tokens=exclude_visit_tokens)
+                                                      exclude_visit_tokens=exclude_visit_tokens,
+                                                      create_visits_from_dates=create_visits_from_dates)
     else:
         sequence_data = create_sequence_data(patient_event,
                                              date_filter=date_filter,
@@ -115,8 +126,13 @@ if __name__ == '__main__':
                         action='store_true',
                         help='Specify whether or not to include the data for the second learning '
                              'objective for Med-BERT')
+    parser.add_argument('--create_visits_from_dates',
+                        dest='create_visits_from_dates',
+                        action='store_true',
+                        help='Specify whether to create visits so events falling on consecutive '
+                             'days belong to same visit')
     ARGS = parser.parse_args()
 
     main(ARGS.input_folder, ARGS.output_folder, ARGS.domain_table_list, ARGS.date_filter,
          ARGS.include_visit_type, ARGS.is_new_patient_representation, ARGS.exclude_visit_tokens,
-         ARGS.is_classic_bert_sequence, ARGS.include_prolonged_stay)
+         ARGS.is_classic_bert_sequence, ARGS.include_prolonged_stay, ARGS.create_visits_from_dates)
