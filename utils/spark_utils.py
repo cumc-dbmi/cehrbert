@@ -461,7 +461,10 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
                                                                     F.lit(0)))
         patient_event = patient_event.withColumn("visit_occurrence_id", F.sum("_flg").over(window))
 
-        patient_event = patient_event.drop("date_difference", "_flg")
+        # add visit_concept_id=0 for the artificially constructed visits
+        patient_event = patient_event .withColumn('visit_concept_id', F.lit(0))
+        
+        patient_event = patient_event .drop("date_difference", "_flg")
     # Udf for identifying the earliest date associated with a visit_occurrence_id
     visit_start_date_udf = F.first('date').over(
         W.partitionBy('cohort_member_id', 'person_id', 'visit_occurrence_id').orderBy('date'))
