@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import pickle
 import tensorflow as tf
+import atexit
 import uuid
 from models.layers.custom_layers import get_custom_objects
 from data_generators.learning_objective import post_pad_pre_truncate
@@ -77,7 +78,10 @@ def main(
     tokenizer_path = os.path.join(args.model_folder, 'tokenizer.pickle')
     model_path = os.path.join(args.model_folder, 'bert_model.h5')
     tokenizer = pickle.load(open(tokenizer_path, 'rb'))
-    strategy = tf.distribute.MirroredStrategy()
+    strategy = tf.distribute.MirroredStrategy(["GPU:0", "GPU:1"])
+    atexit.register(strategy._extended._collective_ops._pool.close)  # type: ignore
+    # atexit.register(strategy._extended._cross_device_ops._pool.close) # type: ignore
+    # atexit.register(strategy._extended._host_cross_device_ops._pool.close) #type: ignore
     with strategy.scope():
         model = tf.keras.models.load_model(model_path, custom_objects=get_custom_objects())
 
