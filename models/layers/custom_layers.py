@@ -392,7 +392,13 @@ class SimpleDecoderLayer(tf.keras.layers.Layer):
 
 
 class PositionalEncodingLayer(tf.keras.layers.Layer):
-    def __init__(self, embedding_size, max_sequence_length=512, *args, **kwargs):
+    def __init__(
+            self,
+            embedding_size,
+            max_sequence_length=512,
+            *args,
+            **kwargs
+    ):
         super(PositionalEncodingLayer, self).__init__(*args, **kwargs)
         self.embedding_size = embedding_size
         self.max_sequence_length = max_sequence_length

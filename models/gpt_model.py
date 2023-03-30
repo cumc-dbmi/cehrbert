@@ -7,7 +7,8 @@ from keras import backend as K
 
 from data_generators.tokenizer import ConceptTokenizer
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
-from models.layers.custom_layers import GptDecoder, PositionalEncodingLayer
+from keras_transformer.position import TransformerCoordinateEmbedding
+from models.layers.custom_layers import GptDecoder
 
 
 def create_model(
@@ -57,8 +58,8 @@ def create_model(
         embeddings_regularizer=tf.keras.regularizers.l2(1e-4)
     )
 
-    positional_encoding_layer = PositionalEncodingLayer(
-        embedding_size=embedding_size
+    positional_encoding_layer = TransformerCoordinateEmbedding(
+        max_transformer_depth=depth
     )
 
     output_layer = TiedOutputEmbedding(
@@ -70,7 +71,10 @@ def create_model(
     # embeddings for encoder input
     x, concept_embedding_matrix = concept_embedding_layer(concept_inputs)
 
-    x += positional_encoding_layer(x)
+    x += positional_encoding_layer(
+        x,
+        step=0
+    )
 
     transformer_block = GptDecoder(depth, embedding_size, num_heads)
     x, _ = transformer_block(x, look_ahead_mask_base)
