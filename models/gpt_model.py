@@ -1,15 +1,13 @@
 import copy
+import random
 
 import numpy as np
-import random
 import tensorflow as tf
-
-from models.layers.custom_layers import (
-    GptDecoder,
-    TokenAndPositionEmbedding
-)
+from keras import backend as K
 
 from data_generators.tokenizer import ConceptTokenizer
+from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
+from models.layers.custom_layers import GptDecoder, PositionalEncodingLayer
 
 
 def create_model(
@@ -17,7 +15,9 @@ def create_model(
         vocab_size,
         embedding_size,
         num_heads,
-        depth
+        depth,
+        embedding_dropout: float = 0.6,
+        confidence_penalty_weight: float = 0.1
 ):
     """
     model = create_model(
@@ -32,6 +32,8 @@ def create_model(
     :param embedding_size:
     :param num_heads:
     :param depth:
+    :param confidence_penalty_weight:
+    :param embedding_dropout:
     :return:
     """
     concept_inputs = tf.keras.layers.Input(
@@ -45,8 +47,30 @@ def create_model(
         dtype=tf.int32
     )[tf.newaxis, tf.newaxis, :, :]
 
-    embedding_layer = TokenAndPositionEmbedding(context_window_size, vocab_size, embedding_size)
-    x = embedding_layer(concept_inputs)
+    concept_embedding_layer = ReusableEmbedding(
+        vocab_size, embedding_size,
+        input_length=context_window_size,
+        name='concept_embeddings',
+        # Regularization is based on paper "A Comparative Study on
+        # Regularization Strategies for Embedding-based Neural Networks"
+        # https://arxiv.org/pdf/1508.03721.pdf
+        embeddings_regularizer=tf.keras.regularizers.l2(1e-4)
+    )
+
+    positional_encoding_layer = PositionalEncodingLayer(
+        embedding_size=embedding_size
+    )
+
+    output_layer = TiedOutputEmbedding(
+        projection_regularizer=tf.keras.regularizers.l2(1e-4),
+        projection_dropout=embedding_dropout,
+        name='concept_prediction_logits'
+    )
+
+    # embeddings for encoder input
+    x, concept_embedding_matrix = concept_embedding_layer(concept_inputs)
+
+    x += positional_encoding_layer(x)
 
     transformer_block = GptDecoder(depth, embedding_size, num_heads)
     x, _ = transformer_block(x, look_ahead_mask_base)
@@ -55,11 +79,22 @@ def create_model(
         name='concept_predictions'
     )
 
-    outputs = tf.keras.layers.Dense(vocab_size)(x)
+    outputs = concept_prediction_layer(
+        output_layer([x, concept_embedding_matrix])
+    )
 
-    outputs = concept_prediction_layer(outputs)
+    model = tf.keras.Model(inputs=[concept_inputs], outputs=[outputs])
 
-    return tf.keras.Model(inputs=[concept_inputs], outputs=[outputs])
+    # Penalty for confidence of the output distribution, as described in
+    # "Regularizing Neural Networks by Penalizing Confident
+    # Output Distributions" (https://arxiv.org/abs/1701.06548)
+    confidence_penalty = K.mean(
+        confidence_penalty_weight * K.sum(outputs * K.log(outputs), axis=-1)
+    )
+
+    model.add_loss(confidence_penalty)
+
+    return model
 
 
 def sample_predicted_probabibility(
