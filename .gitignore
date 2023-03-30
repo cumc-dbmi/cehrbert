@@ -1,3 +1,4 @@
+.DS_Store
 .idea/
 venv*
 
@@ -18,3 +19,4 @@ hospitalization_baseline.py
 hospitalization_prediction-new-data-generator.py
 build/
 concept_embeddings.egg-info/
+*.parquet
