@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.utils import get_custom_objects
 
+from keras_transformer.position import TransformerCoordinateEmbedding
 from keras_transformer.bert import MaskedPenalizedSparseCategoricalCrossentropy
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 from utils.model_utils import create_concept_mask
@@ -1161,6 +1162,7 @@ get_custom_objects().update({
     'MultiHeadAttention': MultiHeadAttention,
     'Encoder': Encoder,
     'GptDecoder': GptDecoder,
+    'TransformerCoordinateEmbedding': TransformerCoordinateEmbedding,
     'EncoderLayer': EncoderLayer,
     'DecoderLayer': DecoderLayer,
     'GptDecoderLayer': GptDecoderLayer,
