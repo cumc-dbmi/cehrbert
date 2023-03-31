@@ -11,6 +11,166 @@ from keras_transformer.position import TransformerCoordinateEmbedding
 from models.layers.custom_layers import GptDecoder
 
 
+class GptInferenceModel(tf.keras.Model):
+    def __init__(
+            self,
+            gpt_model: tf.keras.Model,
+            tokenizer: ConceptTokenizer,
+            context_window: int,
+            *args,
+            **kwargs
+    ):
+        super(GptInferenceModel, self).__init__(*args, **kwargs)
+
+        self.context_window = context_window
+        self.tokenizer = tokenizer
+        self.concept_embedding_layer = self._get_concept_embedding(gpt_model)
+        self.positional_encoding_layer = self._get_positional_encoding_layer(gpt_model)
+        self.output_layer = self._get_output_layer(gpt_model)
+        self.gpt_decoder = self._get_gpt_decoder(gpt_model)
+
+    def _generate_next_token(
+            self,
+            generated_tokens,
+            cached_contexts
+    ):
+        current_length = tf.shape(generated_tokens)[-1]
+        previous_length = tf.shape(cached_contexts)[2] if cached_contexts is not None else 0
+
+        first_layer_context, concept_embedding_matrix = self.concept_embedding_layer(
+            generated_tokens,
+            training=False
+        )
+        # Add the positional embeddings
+        first_layer_context += self.positional_encoding_layer.word_position_embeddings[
+                               :current_length]
+        first_layer_context += self.positional_encoding_layer.depth_embeddings[0]
+
+        look_ahead_mask_base = tf.cast(
+            1 - tf.linalg.band_part(
+                tf.ones((current_length - previous_length, current_length)), -1, 0
+            ),
+            dtype=tf.int32
+        )[tf.newaxis, tf.newaxis, :, :]
+
+        if cached_contexts is not None:
+            # Slice out the new token representations
+            x = first_layer_context[:, previous_length: current_length]
+        else:
+            x = first_layer_context
+
+        layer_contexts = []
+        for i in range(self.gpt_decoder.num_layers):
+            if i == 0:
+                value = first_layer_context
+            elif cached_contexts is not None:
+                # Concat the previous context with the x representation
+                value = tf.concat([cached_contexts[i - 1], x], axis=1)
+            else:
+                value = x
+
+            x, attn_weights = self.gpt_decoder.decoder_layers[i](
+                query=x,
+                key=value,
+                value=value,
+                decoder_mask=look_ahead_mask_base,
+                training=False
+            )
+            layer_contexts.append(x)
+
+        layer_contexts = tf.stack(layer_contexts, axis=0)
+
+        if cached_contexts is not None:
+            new_cached_contexts = tf.concat([cached_contexts, layer_contexts], axis=2)
+        else:
+            new_cached_contexts = layer_contexts
+
+        output = tf.nn.softmax(
+            self.output_layer([x, concept_embedding_matrix])
+        )
+
+        return output, new_cached_contexts
+
+    def call(
+            self,
+            inputs
+    ):
+
+        # Get the current sequence length
+        length = tf.shape(
+            inputs
+        )[1]
+        #  Create a cache contexts to store the previous states
+        cached_contexts = None
+
+        while length < self.context_window:
+            # Generate the next batch of tokens and update the contexts
+            outputs, cached_contexts = self._generate_next_token(
+                inputs,
+                cached_contexts
+            )
+            # Randomly sample a batch of tokens
+            pred_logits, indices = tf.math.top_k(outputs, k=10, sorted=True)
+            indices = np.asarray(indices).astype("int32")
+            preds = tf.keras.activations.softmax(pred_logits)
+            preds = np.asarray(preds).astype("float32")
+
+            next_token_indices = indices[:, -1, :]
+            next_token_logits = preds[:, -1, :]
+
+            next_tokens = tf.gather(
+                next_token_indices,
+                tf.random.categorical(next_token_logits, 1),
+                axis=1,
+                batch_dims=1
+            ).numpy()
+
+            # Stitch up the new tokens and previously generated tokens
+            inputs = np.hstack(
+                [inputs, next_tokens]
+            )
+
+            # Get the new length of the sequence
+            _, length = np.shape(
+                inputs
+            )
+
+            # This indicates all the sequences have ended
+            if np.all(np.any(inputs == self.tokenizer.get_end_token_id(), axis=-1)):
+                break
+
+        return inputs
+
+    @staticmethod
+    def _get_concept_embedding(gpt_model):
+        layers = [layer for layer in gpt_model.layers if isinstance(layer, ReusableEmbedding)]
+        if len(layers) == 0:
+            raise RuntimeError(f'Could not find ReusableEmbedding')
+        return layers[0]
+
+    @staticmethod
+    def _get_output_layer(gpt_model):
+        layers = [layer for layer in gpt_model.layers if isinstance(layer, TiedOutputEmbedding)]
+        if len(layers) == 0:
+            raise RuntimeError(f'Could not find TiedOutputEmbedding')
+        return layers[0]
+
+    @staticmethod
+    def _get_positional_encoding_layer(gpt_model):
+        layers = [layer for layer in gpt_model.layers if
+                  isinstance(layer, TransformerCoordinateEmbedding)]
+        if len(layers) == 0:
+            raise RuntimeError(f'Could not find TransformerCoordinateEmbedding')
+        return layers[0]
+
+    @staticmethod
+    def _get_gpt_decoder(gpt_model):
+        layers = [layer for layer in gpt_model.layers if isinstance(layer, GptDecoder)]
+        if len(layers) == 0:
+            raise RuntimeError(f'Could not find GPT Decoder')
+        return layers[0]
+
+
 def create_model(
         context_window_size,
         vocab_size,
@@ -59,7 +219,8 @@ def create_model(
     )
 
     positional_encoding_layer = TransformerCoordinateEmbedding(
-        max_transformer_depth=depth
+        max_transformer_depth=depth,
+        name='positional_encoding_layer'
     )
 
     output_layer = TiedOutputEmbedding(
@@ -76,15 +237,23 @@ def create_model(
         step=0
     )
 
-    transformer_block = GptDecoder(depth, embedding_size, num_heads)
-    x, _ = transformer_block(x, look_ahead_mask_base)
+    transformer_block = GptDecoder(
+        depth,
+        embedding_size,
+        num_heads,
+        name='decoder'
+    )
+    contextualized_embeddings, _, _ = transformer_block(
+        x,
+        look_ahead_mask_base
+    )
 
     concept_prediction_layer = tf.keras.layers.Softmax(
         name='concept_predictions'
     )
 
     outputs = concept_prediction_layer(
-        output_layer([x, concept_embedding_matrix])
+        output_layer([contextualized_embeddings, concept_embedding_matrix])
     )
 
     model = tf.keras.Model(inputs=[concept_inputs], outputs=[outputs])

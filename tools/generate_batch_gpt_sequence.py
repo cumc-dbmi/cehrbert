@@ -1,14 +1,16 @@
-import os
 import argparse
+import atexit
+import os
+import pickle
 import random
+import uuid
+
 import numpy as np
 import pandas as pd
-import pickle
 import tensorflow as tf
-import atexit
-import uuid
+
+from models.gpt_model import GptInferenceModel
 from models.layers.custom_layers import get_custom_objects
-from data_generators.learning_objective import post_pad_pre_truncate
 
 
 def generate_single_batch(
@@ -30,44 +32,16 @@ def generate_single_batch(
     _, length = np.shape(
         prompt_batch
     )
-    while length < context_window:
 
-        token_index = length - 1
+    gpt_inference_model = GptInferenceModel(
+        gpt_model=model,
+        tokenizer=tokenizer,
+        context_window=context_window
+    )
 
-        padded_prompt_batch = post_pad_pre_truncate(
-            prompt_batch,
-            0,
-            context_window
-        )
-
-        predictions = model.predict(padded_prompt_batch)
-
-        pred_logits, indices = tf.math.top_k(predictions, k=10, sorted=True)
-        indices = np.asarray(indices).astype("int32")
-        preds = tf.keras.activations.softmax(pred_logits)
-        preds = np.asarray(preds).astype("float32")
-
-        next_token_indices = indices[:, token_index, :]
-        next_token_logits = preds[:, token_index, :]
-
-        next_tokens = tf.gather(
-            next_token_indices,
-            tf.random.categorical(next_token_logits, 1),
-            axis=1,
-            batch_dims=1
-        ).numpy()
-
-        prompt_batch = np.hstack(
-            [prompt_batch, next_tokens]
-        )
-
-        _, length = np.shape(
-            prompt_batch
-        )
-
-        # This indicates all the sequences have ended
-        if np.all(np.any(prompt_batch == tokenizer.get_end_token_id(), axis=-1)):
-            break
+    prompt_batch = gpt_inference_model(
+        prompt_batch
+    )
 
     return [s.split(' ') for s in tokenizer.decode(prompt_batch)]
 

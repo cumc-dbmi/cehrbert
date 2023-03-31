@@ -2,9 +2,9 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.utils import get_custom_objects
 
-from keras_transformer.position import TransformerCoordinateEmbedding
 from keras_transformer.bert import MaskedPenalizedSparseCategoricalCrossentropy
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
+from keras_transformer.position import TransformerCoordinateEmbedding
 from utils.model_utils import create_concept_mask
 
 
@@ -207,8 +207,16 @@ class Encoder(tf.keras.layers.Layer):
 
 
 class GptDecoder(tf.keras.layers.Layer):
-    def __init__(self, num_layers, d_model, num_heads, dff=2148, dropout_rate=0.1, *args,
-                 **kwargs):
+    def __init__(
+            self,
+            num_layers,
+            d_model,
+            num_heads,
+            dff=2148,
+            dropout_rate=0.1,
+            *args,
+            **kwargs
+    ):
         super(GptDecoder, self).__init__(*args, **kwargs)
 
         self.d_model = d_model
@@ -232,10 +240,12 @@ class GptDecoder(tf.keras.layers.Layer):
 
     def call(self, x, mask, **kwargs):
         attention_weights = []
+        layer_contexts = []
         for i in range(self.num_layers):
-            x, attn_weights = self.decoder_layers[i](x, mask, **kwargs)
+            x, attn_weights = self.decoder_layers[i](x, x, x, mask, **kwargs)
             attention_weights.append(attn_weights)
-        return x, tf.stack(attention_weights, axis=0)  # (batch_size, input_seq_len, d_model)
+            layer_contexts.append(x)
+        return x, tf.stack(layer_contexts, axis=0), tf.stack(attention_weights, axis=0)
 
 
 class DecoderLayer(tf.keras.layers.Layer):
@@ -297,15 +307,15 @@ class GptDecoderLayer(tf.keras.layers.Layer):
         self.dff = dff
         self.rate = rate
 
-        self.mha1 = MultiHeadAttention(d_model, num_heads)
+        self.mha = MultiHeadAttention(d_model, num_heads)
 
         self.ffn = point_wise_feed_forward_network(d_model, dff)
 
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
-        self.layernorm3 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
 
         self.dropout1 = tf.keras.layers.Dropout(rate)
-        self.dropout3 = tf.keras.layers.Dropout(rate)
+        self.dropout2 = tf.keras.layers.Dropout(rate)
 
     def get_config(self):
         config = super().get_config()
@@ -315,19 +325,23 @@ class GptDecoderLayer(tf.keras.layers.Layer):
         config['rate'] = self.rate
         return config
 
-    def call(self, x, decoder_mask, **kwargs):
-        # enc_output.shape == (batch_size, input_seq_len, d_model)
+    def call(self, query, key, value, decoder_mask, **kwargs):
+        # (batch_size, target_seq_len, d_model)
+        attn, attn_weights_block = self.mha(
+            v=value,
+            k=key,
+            q=query,
+            mask=decoder_mask,
+            **kwargs
+        )
+        attn = self.dropout1(attn)
+        out = self.layernorm1(attn + query)
 
-        attn1, attn_weights_block1 = self.mha1(x, x, x,
-                                               decoder_mask)  # (batch_size, target_seq_len, d_model)
-        attn1 = self.dropout1(attn1)
-        out1 = self.layernorm1(attn1 + x)
+        ffn_output = self.ffn(out)  # (batch_size, target_seq_len, d_model)
+        ffn_output = self.dropout2(ffn_output, **kwargs)
+        out2 = self.layernorm2(ffn_output + out)  # (batch_size, target_seq_len, d_model)
 
-        ffn_output = self.ffn(out1)  # (batch_size, target_seq_len, d_model)
-        ffn_output = self.dropout3(ffn_output, **kwargs)
-        out3 = self.layernorm3(ffn_output + out1)  # (batch_size, target_seq_len, d_model)
-
-        return out3, attn_weights_block1
+        return out2, attn_weights_block
 
 
 class SimpleDecoderLayer(tf.keras.layers.Layer):
@@ -1181,6 +1195,5 @@ get_custom_objects().update({
     'BertLayer': BertLayer,
     'ConvolutionBertLayer': ConvolutionBertLayer,
     'HiddenPhenotypeLayer': HiddenPhenotypeLayer,
-    'VisitPhenotypeLayer': VisitPhenotypeLayer,
-    'ConvolutionBertLayer': ConvolutionBertLayer
+    'VisitPhenotypeLayer': VisitPhenotypeLayer
 })
