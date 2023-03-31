@@ -16,7 +16,7 @@ def main(input_folder, output_folder, domain_table_list, date_filter,
          include_visit_type, is_new_patient_representation, exclude_visit_tokens,
          is_classic_bert, include_prolonged_stay, create_visits_from_dates, create_visit_gap,
          link_events_visits):
-    spark = SparkSession.builder.appName('Generate Bert Training Data').config('spark.driver.memory', '15g').getOrCreate()
+    spark = SparkSession.builder.appName('Generate Bert Training Data').getOrCreate()
     domain_tables = []
     for domain_table_name in domain_table_list:
         domain_tables.append(preprocess_domain_table(spark, input_folder, domain_table_name))
@@ -41,6 +41,9 @@ def main(input_folder, output_folder, domain_table_list, date_filter,
 
     if create_visits_from_dates:
         patient_event = create_visits(patient_event, link_events_visits, create_visit_gap)
+
+    patient_event = patient_event.filter(F.col("visit_occurrence_id").isNotNull())
+
 
     if is_new_patient_representation:
         sequence_data = create_sequence_data_with_att(patient_event,
@@ -132,6 +135,7 @@ if __name__ == '__main__':
                         dest='create_visit_gap',
                         action='store',
                         type=int,
+                        default=1,
                         help='Specify gap when creating visits artificially')
     parser.add_argument('--link_events_to_visits',
                         dest='link_events_visits',
