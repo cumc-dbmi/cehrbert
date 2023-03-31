@@ -17,6 +17,7 @@ class GptInferenceModel(tf.keras.Model):
             gpt_model: tf.keras.Model,
             tokenizer: ConceptTokenizer,
             context_window: int,
+            top_k: int,
             *args,
             **kwargs
     ):
@@ -24,6 +25,7 @@ class GptInferenceModel(tf.keras.Model):
 
         self.context_window = context_window
         self.tokenizer = tokenizer
+        self.top_k = top_k
         self.concept_embedding_layer = self._get_concept_embedding(gpt_model)
         self.positional_encoding_layer = self._get_positional_encoding_layer(gpt_model)
         self.output_layer = self._get_output_layer(gpt_model)
@@ -110,7 +112,7 @@ class GptInferenceModel(tf.keras.Model):
                 cached_contexts
             )
             # Randomly sample a batch of tokens
-            pred_logits, indices = tf.math.top_k(outputs, k=10, sorted=True)
+            pred_logits, indices = tf.math.top_k(outputs, k=self.top_k, sorted=True)
             indices = np.asarray(indices).astype("int32")
             preds = tf.keras.activations.softmax(pred_logits)
             preds = np.asarray(preds).astype("float32")

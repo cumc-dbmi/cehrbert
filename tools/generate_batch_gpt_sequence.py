@@ -1,5 +1,6 @@
 import argparse
 import atexit
+import logging
 import os
 import pickle
 import random
@@ -12,11 +13,12 @@ import tensorflow as tf
 from models.gpt_model import GptInferenceModel
 from models.layers.custom_layers import get_custom_objects
 
+LOGGING = logging.getLogger(__name__)
+
 
 def generate_single_batch(
-        model,
+        gpt_inference_model,
         tokenizer,
-        context_window,
         batch_size,
         demographic_info
 ):
@@ -31,12 +33,6 @@ def generate_single_batch(
     prompt_batch = np.hstack([start_tokens, random_prompts])
     _, length = np.shape(
         prompt_batch
-    )
-
-    gpt_inference_model = GptInferenceModel(
-        gpt_model=model,
-        tokenizer=tokenizer,
-        context_window=context_window
     )
 
     prompt_batch = gpt_inference_model(
@@ -58,6 +54,12 @@ def main(
     # atexit.register(strategy._extended._host_cross_device_ops._pool.close) #type: ignore
     with strategy.scope():
         model = tf.keras.models.load_model(model_path, custom_objects=get_custom_objects())
+        gpt_inference_model = GptInferenceModel(
+            gpt_model=model,
+            tokenizer=tokenizer,
+            context_window=args.context_window,
+            top_k=args.top_k
+        )
 
     demographic_info = pd.read_parquet(
         args.demographic_data_path
@@ -68,11 +70,10 @@ def main(
 
     sequence_to_flush = []
     for i in range(num_of_batches):
-        print(f'Batch: {i} started\n')
+        LOGGING.info(f'Batch: {i} started')
         batch_sequence = generate_single_batch(
-            model,
+            gpt_inference_model,
             tokenizer,
-            args.context_window,
             args.batch_size,
             demographic_info
         )
@@ -85,6 +86,7 @@ def main(
             sequence_to_flush.append({'concept_ids': seq_copy})
 
         if len(sequence_to_flush) > args.buffer_size:
+            LOGGING.info(f'Batch: {i} Flushing to the Disk')
             pd.DataFrame(
                 sequence_to_flush,
                 columns=['concept_ids']
