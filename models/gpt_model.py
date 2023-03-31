@@ -80,16 +80,16 @@ class GptInferenceModel(tf.keras.Model):
             )
             layer_contexts.append(x)
 
-        layer_contexts = tf.stack(layer_contexts, axis=0)
-
-        if cached_contexts is not None:
-            new_cached_contexts = tf.concat([cached_contexts, layer_contexts], axis=2)
-        else:
-            new_cached_contexts = layer_contexts
+        # layer_contexts = tf.stack(layer_contexts, axis=0)
+        #
+        # if cached_contexts is not None:
+        #     new_cached_contexts = tf.concat([cached_contexts, layer_contexts], axis=2)
+        # else:
+        #     new_cached_contexts = layer_contexts
 
         logtis = self.output_layer([x, concept_embedding_matrix])
 
-        return logtis, new_cached_contexts
+        return logtis, None
 
     def call(
             self,
