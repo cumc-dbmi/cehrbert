@@ -87,11 +87,9 @@ class GptInferenceModel(tf.keras.Model):
         else:
             new_cached_contexts = layer_contexts
 
-        output = tf.nn.softmax(
-            self.output_layer([x, concept_embedding_matrix])
-        )
+        logtis = self.output_layer([x, concept_embedding_matrix])
 
-        return output, new_cached_contexts
+        return logtis, new_cached_contexts
 
     def call(
             self,
@@ -114,11 +112,9 @@ class GptInferenceModel(tf.keras.Model):
             # Randomly sample a batch of tokens
             pred_logits, indices = tf.math.top_k(outputs, k=self.top_k, sorted=True)
             indices = np.asarray(indices).astype("int32")
-            preds = tf.keras.activations.softmax(pred_logits)
-            preds = np.asarray(preds).astype("float32")
 
             next_token_indices = indices[:, -1, :]
-            next_token_logits = preds[:, -1, :]
+            next_token_logits = pred_logits[:, -1, :]
 
             next_tokens = tf.gather(
                 next_token_indices,

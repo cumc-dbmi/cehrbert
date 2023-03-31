@@ -5,6 +5,7 @@ import os
 import pickle
 import random
 import uuid
+import datetime
 
 import numpy as np
 import pandas as pd
@@ -12,8 +13,6 @@ import tensorflow as tf
 
 from models.gpt_model import GptInferenceModel
 from models.layers.custom_layers import get_custom_objects
-
-LOGGING = logging.getLogger(__name__)
 
 
 def generate_single_batch(
@@ -52,6 +51,8 @@ def main(
     atexit.register(strategy._extended._collective_ops._pool.close)  # type: ignore
     # atexit.register(strategy._extended._cross_device_ops._pool.close) # type: ignore
     # atexit.register(strategy._extended._host_cross_device_ops._pool.close) #type: ignore
+    print(f'{datetime.datetime.now()}: Loading tokenizer at {tokenizer_path}')
+    print(f'{datetime.datetime.now()}: Loading model at {model_path}')
     with strategy.scope():
         model = tf.keras.models.load_model(model_path, custom_objects=get_custom_objects())
         gpt_inference_model = GptInferenceModel(
@@ -60,17 +61,16 @@ def main(
             context_window=args.context_window,
             top_k=args.top_k
         )
-
+    print(f'{datetime.datetime.now()}: Loading demographic_info at {args.demographic_data_path}')
     demographic_info = pd.read_parquet(
         args.demographic_data_path
     ).concept_ids.apply(lambda concept_list: concept_list[0:4])
     demographic_info = tokenizer.encode(map(list, demographic_info))
 
     num_of_batches = args.num_of_patients // args.batch_size + 1
-
     sequence_to_flush = []
     for i in range(num_of_batches):
-        LOGGING.info(f'Batch: {i} started')
+        print(f'{datetime.datetime.now()}: Batch {i} started')
         batch_sequence = generate_single_batch(
             gpt_inference_model,
             tokenizer,
@@ -86,7 +86,7 @@ def main(
             sequence_to_flush.append({'concept_ids': seq_copy})
 
         if len(sequence_to_flush) > args.buffer_size:
-            LOGGING.info(f'Batch: {i} Flushing to the Disk')
+            print(f'{datetime.datetime.now()}: Flushing to the Disk at Batch {i}')
             pd.DataFrame(
                 sequence_to_flush,
                 columns=['concept_ids']
