@@ -50,10 +50,10 @@ class GptInferenceModel(tf.keras.Model):
 
         look_ahead_mask_base = tf.cast(
             1 - tf.linalg.band_part(
-                tf.ones((current_length - previous_length, current_length)), -1, 0
+                tf.ones((current_length, current_length)), -1, 0
             ),
             dtype=tf.int32
-        )[tf.newaxis, tf.newaxis, :, :]
+        )[tf.newaxis, tf.newaxis, previous_length:current_length, :]
 
         if cached_contexts is not None:
             # Slice out the new token representations
@@ -80,16 +80,16 @@ class GptInferenceModel(tf.keras.Model):
             )
             layer_contexts.append(x)
 
-        # layer_contexts = tf.stack(layer_contexts, axis=0)
-        #
-        # if cached_contexts is not None:
-        #     new_cached_contexts = tf.concat([cached_contexts, layer_contexts], axis=2)
-        # else:
-        #     new_cached_contexts = layer_contexts
+        layer_contexts = tf.stack(layer_contexts, axis=0)
+
+        if cached_contexts is not None:
+            new_cached_contexts = tf.concat([cached_contexts, layer_contexts], axis=2)
+        else:
+            new_cached_contexts = layer_contexts
 
         logtis = self.output_layer([x, concept_embedding_matrix])
 
-        return logtis, None
+        return logtis, new_cached_contexts
 
     def call(
             self,
