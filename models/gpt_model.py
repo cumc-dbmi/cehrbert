@@ -8,7 +8,7 @@ from keras import backend as K
 from data_generators.tokenizer import ConceptTokenizer
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 from keras_transformer.position import TransformerCoordinateEmbedding
-from models.layers.custom_layers import GptDecoder
+from models.layers.custom_layers import GptDecoder, GptPositionEmbedding
 
 
 class GptInferenceModel(tf.keras.Model):
@@ -44,9 +44,9 @@ class GptInferenceModel(tf.keras.Model):
             training=False
         )
         # Add the positional embeddings
-        first_layer_context += self.positional_encoding_layer.word_position_embeddings[
-                               :current_length]
-        first_layer_context += self.positional_encoding_layer.depth_embeddings[0]
+        first_layer_context += self.positional_encoding_layer(
+            first_layer_context
+        )
 
         look_ahead_mask_base = tf.cast(
             1 - tf.linalg.band_part(
@@ -155,10 +155,11 @@ class GptInferenceModel(tf.keras.Model):
 
     @staticmethod
     def _get_positional_encoding_layer(gpt_model):
+        gpt_model.get_layer('positional_encoding_layer')
         layers = [layer for layer in gpt_model.layers if
-                  isinstance(layer, TransformerCoordinateEmbedding)]
+                  isinstance(layer, GptPositionEmbedding)]
         if len(layers) == 0:
-            raise RuntimeError(f'Could not find TransformerCoordinateEmbedding')
+            raise RuntimeError(f'Could not find GptPositionEmbedding')
         return layers[0]
 
     @staticmethod
@@ -215,9 +216,9 @@ def create_model(
         # https://arxiv.org/pdf/1508.03721.pdf
         embeddings_regularizer=tf.keras.regularizers.l2(1e-4)
     )
-
-    positional_encoding_layer = TransformerCoordinateEmbedding(
-        max_transformer_depth=depth,
+    positional_encoding_layer = GptPositionEmbedding(
+        maxlen=context_window_size,
+        embed_dim=embedding_size,
         name='positional_encoding_layer'
     )
 
@@ -231,8 +232,7 @@ def create_model(
     x, concept_embedding_matrix = concept_embedding_layer(concept_inputs)
 
     x += positional_encoding_layer(
-        x,
-        step=0
+        x
     )
 
     transformer_block = GptDecoder(

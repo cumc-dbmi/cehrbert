@@ -344,6 +344,32 @@ class GptDecoderLayer(tf.keras.layers.Layer):
         return out2, attn_weights_block
 
 
+class GptPositionEmbedding(tf.keras.layers.Layer):
+    def __init__(
+            self,
+            maxlen,
+            embed_dim,
+            *args,
+            **kwargs
+    ):
+        super().__init__(*args, **kwargs)
+        self.pos_emb = tf.keras.layers.Embedding(input_dim=maxlen, output_dim=embed_dim)
+        self._maxlen = maxlen
+        self._embed_dim = embed_dim
+
+    def get_config(self):
+        config = super().get_config()
+        config['maxlen'] = self._maxlen
+        config['embed_dim'] = self._embed_dim
+        return config
+
+    def call(self, x):
+        maxlen = tf.shape(x)[1]
+        positions = tf.range(start=0, limit=maxlen, delta=1)
+        positions = self.pos_emb(positions)
+        return x + positions
+
+
 class SimpleDecoderLayer(tf.keras.layers.Layer):
     def __init__(
             self,
@@ -1176,6 +1202,7 @@ get_custom_objects().update({
     'MultiHeadAttention': MultiHeadAttention,
     'Encoder': Encoder,
     'GptDecoder': GptDecoder,
+    'GptPositionEmbedding': GptPositionEmbedding,
     'TransformerCoordinateEmbedding': TransformerCoordinateEmbedding,
     'EncoderLayer': EncoderLayer,
     'DecoderLayer': DecoderLayer,
