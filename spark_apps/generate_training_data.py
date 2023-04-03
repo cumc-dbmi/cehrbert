@@ -2,7 +2,6 @@ import os
 import argparse
 import datetime
 
-import fsspec.implementations.webhdfs
 from pyspark.sql import SparkSession
 
 from utils.spark_utils import *
