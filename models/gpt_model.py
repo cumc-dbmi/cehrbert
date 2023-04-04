@@ -259,11 +259,11 @@ def create_model(
     # Penalty for confidence of the output distribution, as described in
     # "Regularizing Neural Networks by Penalizing Confident
     # Output Distributions" (https://arxiv.org/abs/1701.06548)
-    confidence_penalty = K.mean(
-        confidence_penalty_weight * K.sum(outputs * K.log(outputs), axis=-1)
-    )
-
-    model.add_loss(confidence_penalty)
+    # confidence_penalty = K.mean(
+    #     confidence_penalty_weight * K.sum(outputs * K.log(outputs), axis=-1)
+    # )
+    #
+    # model.add_loss(confidence_penalty)
 
     return model
 
