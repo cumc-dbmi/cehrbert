@@ -8,7 +8,7 @@ from keras import backend as K
 from data_generators.tokenizer import ConceptTokenizer
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 from keras_transformer.position import TransformerCoordinateEmbedding
-from models.layers.custom_layers import GptDecoder, GptPositionEmbedding
+from models.layers.custom_layers import GptDecoder, TrainablePositionEmbedding
 
 
 class GptInferenceModel(tf.keras.Model):
@@ -157,7 +157,7 @@ class GptInferenceModel(tf.keras.Model):
     def _get_positional_encoding_layer(gpt_model):
         gpt_model.get_layer('positional_encoding_layer')
         layers = [layer for layer in gpt_model.layers if
-                  isinstance(layer, GptPositionEmbedding)]
+                  isinstance(layer, TrainablePositionEmbedding)]
         if len(layers) == 0:
             raise RuntimeError(f'Could not find GptPositionEmbedding')
         return layers[0]
@@ -216,7 +216,7 @@ def create_model(
         # https://arxiv.org/pdf/1508.03721.pdf
         embeddings_regularizer=tf.keras.regularizers.l2(1e-4)
     )
-    positional_encoding_layer = GptPositionEmbedding(
+    positional_encoding_layer = TrainablePositionEmbedding(
         maxlen=context_window_size,
         embed_dim=embedding_size,
         name='positional_encoding_layer'
