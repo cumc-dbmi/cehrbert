@@ -1,6 +1,4 @@
 import argparse
-import atexit
-import logging
 import os
 import pickle
 import random
@@ -47,8 +45,8 @@ def main(
     tokenizer_path = os.path.join(args.model_folder, 'tokenizer.pickle')
     model_path = os.path.join(args.model_folder, 'bert_model.h5')
     tokenizer = pickle.load(open(tokenizer_path, 'rb'))
-    strategy = tf.distribute.MirroredStrategy(["GPU:0", "GPU:1"])
-    atexit.register(strategy._extended._collective_ops._pool.close)  # type: ignore
+    strategy = tf.distribute.MirroredStrategy()
+    # atexit.register(strategy._extended._collective_ops._pool.close)  # type: ignore
     # atexit.register(strategy._extended._cross_device_ops._pool.close) # type: ignore
     # atexit.register(strategy._extended._host_cross_device_ops._pool.close) #type: ignore
     print(f'{datetime.datetime.now()}: Loading tokenizer at {tokenizer_path}')
