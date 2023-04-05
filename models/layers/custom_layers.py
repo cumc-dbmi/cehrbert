@@ -344,7 +344,7 @@ class GptDecoderLayer(tf.keras.layers.Layer):
         return out2, attn_weights_block
 
 
-class TrainableTrainablePositionEmbeddingPositionEmbedding(tf.keras.layers.Layer):
+class TrainablePositionEmbedding(tf.keras.layers.Layer):
     def __init__(
             self,
             maxlen,
@@ -1203,7 +1203,7 @@ get_custom_objects().update({
     'MultiHeadAttention': MultiHeadAttention,
     'Encoder': Encoder,
     'GptDecoder': GptDecoder,
-    'GptPositionEmbedding': TrainablePositionEmbedding,
+    'TrainablePositionEmbedding': TrainablePositionEmbedding,
     'TransformerCoordinateEmbedding': TransformerCoordinateEmbedding,
     'EncoderLayer': EncoderLayer,
     'DecoderLayer': DecoderLayer,
