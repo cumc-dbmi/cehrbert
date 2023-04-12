@@ -83,7 +83,7 @@ def main(
                 seq_copy.append(token)
             sequence_to_flush.append({'concept_ids': seq_copy})
 
-        if len(sequence_to_flush) > args.buffer_size:
+        if len(sequence_to_flush) >= args.buffer_size:
             print(f'{datetime.datetime.now()}: Flushing to the Disk at Batch {i}')
             pd.DataFrame(
                 sequence_to_flush,
@@ -92,10 +92,12 @@ def main(
             sequence_to_flush.clear()
 
     if len(sequence_to_flush) > 0:
+        print(f'"Sequence length is {sequence_to_flush}')
+        print(f'{datetime.datetime.now()}: Flushing to the Disk at Final Batch')
         pd.DataFrame(
             sequence_to_flush,
             columns=['concept_ids']
-        ).to_parquet(os.path.join(args.output_folder, f'{uuid.uuid4()}.parquet'))
+        ).to_parquet(os.path.join(args.output_folder, f'{uuid.uuid4()}-last.parquet'))
 
 
 if __name__ == "__main__":
