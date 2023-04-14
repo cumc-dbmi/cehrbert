@@ -7,11 +7,11 @@ def fill_datetime(year: int):
 
 
 def fill_start_datetime(date: date):
-    return datetime.combine(date, datetime.min.time()),
+    return datetime.combine(date, datetime.min.time()).isoformat()
 
 
 def fill_end_datetime(date: date):
-    return datetime.combine(date, datetime.max.time()),
+    return datetime.combine(date, datetime.max.time()).isoformat()
 
 
 class OmopEntity(ABC):
