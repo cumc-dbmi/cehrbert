@@ -1,4 +1,5 @@
-from omop_converter_sequence import OmopEntity, Person, VisitOccurrence, ConditionOccurrence, ProcedureOccurrence, DrugExposure
+import numpy as np
+from omop_entity import OmopEntity, Person, VisitOccurrence, ConditionOccurrence, ProcedureOccurrence, DrugExposure
 from typing import List
 from datetime import date, timedelta
 from models.gpt_model import generate_artificial_time_tokens
