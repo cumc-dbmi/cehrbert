@@ -8,8 +8,11 @@ import pandas as pd
 import os
 import pickle
 import argparse
+import uuid
 from pathlib import Path
+from multiprocessing import Pool
 
+cores = 5
 
 CURRENT_PATH = Path(__file__).parent
 batch_size = 20
@@ -49,7 +52,7 @@ def append_to_dict(export_dict, omop_entity):
     return export_dict
 
 
-def export_and_clear(output_folder, export_dict, batch_size):
+def export_and_clear_csv(output_folder, export_dict, batch_size):
     for table_name in export_dict.keys():
         if len(export_dict[table_name]) >= batch_size:
             records_to_export = export_dict[table_name]
@@ -72,16 +75,25 @@ def export_and_clear(output_folder, export_dict, batch_size):
     return export_dict
 
 
-def gpt_to_omop_converter(output_folder, concept_parquet_file, patient_sequences_concept_ids, start_token_size):
-    person_id: int = 1
-    visit_occurrence_id: int = 1
-    condition_occurrence_id: int = 1
-    procedure_occurrence_id: int = 1
-    drug_exposure_id: int = 1
-    patient_sequences = patient_sequences_concept_ids['concept_ids']
-    domain_map = generate_omop_concept_domain(concept_parquet_file)
-    omop_export_dict: [str, List[OmopEntity]] = dict()
-    for row in tqdm(patient_sequences):
+def export_and_clear_parquet(output_folder, export_dict):
+    for table_name, records_to_export in export_dict.items():
+        schema = records_to_export[0].get_schema()
+        output_folder_path = Path(output_folder)
+        file_path = output_folder_path / table_name + f'.{uuid.uuid4()}' + '.parquet'
+        table_df = pd.DataFrame(records_to_export, columns=schema)
+        table_df.to_parquet(file_path)
+        export_dict[table_name].clear()
+    return export_dict
+
+
+def gpt_to_omop_converter_serial(const, patient_sequences, domain_map, output_folder, batch_size):
+    person_id: int = const+1
+    visit_occurrence_id: int = const+1
+    condition_occurrence_id: int = const+1
+    procedure_occurrence_id: int = const+1
+    drug_exposure_id: int = const+1
+    omop_export_dict = {}
+    for i, row in tqdm(patient_sequences):
         # ignore start token
         if 'start' in row[0].lower():
             row = row[1:]
@@ -137,7 +149,24 @@ def gpt_to_omop_converter(output_folder, concept_parquet_file, patient_sequences
                     de = DrugExposure(drug_exposure_id, x, vo)
                     append_to_dict(omop_export_dict, de)
                     drug_exposure_id += 1
-            omop_export_dict = export_and_clear(output_folder, omop_export_dict, batch_size)
+        if i % batch_size == 0:
+            omop_export_dict = export_and_clear_parquet(output_folder, omop_export_dict)
+
+
+def gpt_to_omop_converter_parallel(output_folder, concept_parquet_file, patient_sequences_concept_ids, batch_size):
+    patient_sequences = patient_sequences_concept_ids['concept_ids']
+    domain_map = generate_omop_concept_domain(concept_parquet_file)
+    pool_tuples = []
+    const = 10000000
+    patient_sequences_list = np.array_split(patient_sequences, cores)
+    for i in range(1, cores+1):
+        pool_tuples = (const*i, patient_sequences_list[i-1], domain_map, output_folder, batch_size)
+
+    with Pool(processes=cores) as p:
+        results = p.starmap(gpt_to_omop_converter_serial, pool_tuples)
+        p.close()
+        p.join()
+
     return print('Done')
 
 
@@ -146,7 +175,7 @@ def main(args):
     #tokenizer = pickle.load(open(tokenizer_path, 'rb'))
     concept_parquet_file = pd.read_parquet(os.path.join(args.concept_path))
     patient_sequences_conept_ids = pd.read_parquet(os.path.join(args.patient_sequence_path), columns=['concept_ids'])
-    gpt_to_omop_converter(args.output_folder, concept_parquet_file, patient_sequences_conept_ids, start_token_size)
+    gpt_to_omop_converter_parallel(args.output_folder, concept_parquet_file, patient_sequences_conept_ids, args.batch_size)
 
 
 if __name__ == "__main__":
@@ -173,6 +202,13 @@ if __name__ == "__main__":
         dest='concept_path',
         action='store',
         help='The path for your concept_path',
+        required=True
+    )
+    parser.add_argument(
+        '--batch_size',
+        dest='batch_size',
+        action='store',
+        help='The size of the batch',
         required=True
     )
     parser.add_argument(
