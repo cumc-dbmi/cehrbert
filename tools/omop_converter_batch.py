@@ -1,6 +1,5 @@
 import numpy as np
-from omop_entity import OmopEntity, Person, VisitOccurrence, ConditionOccurrence, ProcedureOccurrence, DrugExposure
-from typing import List
+from omop_entity import Person, VisitOccurrence, ConditionOccurrence, ProcedureOccurrence, DrugExposure
 from datetime import date, timedelta
 from models.gpt_model import generate_artificial_time_tokens
 from tqdm import tqdm
@@ -15,7 +14,6 @@ from multiprocessing import Pool
 cores = 5
 
 CURRENT_PATH = Path(__file__).parent
-batch_size = 20
 start_token_size = 4
 ATT_TIME_TOKENS = generate_artificial_time_tokens()
 
@@ -52,9 +50,9 @@ def append_to_dict(export_dict, omop_entity):
     return export_dict
 
 
-def export_and_clear_csv(output_folder, export_dict, batch_size):
+def export_and_clear_csv(output_folder, export_dict, buffer_size):
     for table_name in export_dict.keys():
-        if len(export_dict[table_name]) >= batch_size:
+        if len(export_dict[table_name]) >= buffer_size:
             records_to_export = export_dict[table_name]
             records_in_json = [record.export_as_json() for record in export_dict[table_name]]
             schema = records_to_export[0].get_schema()
@@ -77,32 +75,31 @@ def export_and_clear_csv(output_folder, export_dict, batch_size):
 
 def export_and_clear_parquet(output_folder, export_dict):
     for table_name, records_to_export in export_dict.items():
+        records_in_json = [record.export_as_json() for record in export_dict[table_name]]
         schema = records_to_export[0].get_schema()
         output_folder_path = Path(output_folder)
         file_path = output_folder_path / f'{table_name}.{uuid.uuid4()}.parquet'
-        table_df = pd.DataFrame(records_to_export, columns=schema)
+        table_df = pd.DataFrame(records_in_json, columns=schema)
         table_df.to_parquet(file_path)
         export_dict[table_name].clear()
     return export_dict
 
 
-def gpt_to_omop_converter_serial(const, patient_sequences, domain_map, output_folder, batch_size):
+def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder, buffer_size):
     person_id: int = const+1
     visit_occurrence_id: int = const+1
     condition_occurrence_id: int = const+1
     procedure_occurrence_id: int = const+1
     drug_exposure_id: int = const+1
     omop_export_dict = {}
-    i = 0
-    for row in tqdm(patient_sequences):
+    pat_seq_len = pat_seq_split.shape[0]
+    for index, row in tqdm(pat_seq_split.iterrows(), total=pat_seq_len):
         # ignore start token
         if 'start' in row[0].lower():
             row = row[1:]
         tokens_generated = row[start_token_size:]
         #TODO:Need to decode if the input is tokenized
         start_tokens = row[0:start_token_size]
-       # [start_year, start_age, start_gender, start_race] = [detokenize_concept_ids(_, tokenizer) for _ in
-       #                                                      start_tokens] No need to detokenize for now
         [start_year, start_age, start_gender, start_race] = [_ for _ in start_tokens]
         if 'year' not in start_year.lower():
             continue
@@ -137,6 +134,8 @@ def gpt_to_omop_converter_serial(const, patient_sequences, domain_map, output_fo
                 # If it's a start token, skip it
                 pass
             else:
+                if int(x) not in domain_map:
+                    continue
                 domain = domain_map[int(x)]
                 if domain == 'Condition':
                     co = ConditionOccurrence(condition_occurrence_id, x, vo)
@@ -150,19 +149,19 @@ def gpt_to_omop_converter_serial(const, patient_sequences, domain_map, output_fo
                     de = DrugExposure(drug_exposure_id, x, vo)
                     append_to_dict(omop_export_dict, de)
                     drug_exposure_id += 1
-        if i % int(batch_size) == 0 or i == patient_sequences.shape[0]:
+        if index % buffer_size == 0 or index == pat_seq_len:
             omop_export_dict = export_and_clear_parquet(output_folder, omop_export_dict)
-        i += 1
 
 
-def gpt_to_omop_converter_parallel(output_folder, concept_parquet_file, patient_sequences_concept_ids, batch_size):
+def gpt_to_omop_converter_parallel(output_folder, concept_parquet_file, patient_sequences_concept_ids, buffer_size):
     patient_sequences = patient_sequences_concept_ids['concept_ids']
     domain_map = generate_omop_concept_domain(concept_parquet_file)
     pool_tuples = []
+    #TODO: Need to make this dynamic
     const = 10000000
     patient_sequences_list = np.array_split(patient_sequences, cores)
     for i in range(1, cores+1):
-        pool_tuples.append((const*i, patient_sequences_list[i-1], domain_map, output_folder, batch_size))
+        pool_tuples.append((const*i, patient_sequences_list[i-1], domain_map, output_folder, buffer_size))
 
     with Pool(processes=cores) as p:
         results = p.starmap(gpt_to_omop_converter_serial, pool_tuples)
@@ -177,7 +176,7 @@ def main(args):
     #tokenizer = pickle.load(open(tokenizer_path, 'rb'))
     concept_parquet_file = pd.read_parquet(os.path.join(args.concept_path))
     patient_sequences_conept_ids = pd.read_parquet(os.path.join(args.patient_sequence_path), columns=['concept_ids'])
-    gpt_to_omop_converter_parallel(args.output_folder, concept_parquet_file, patient_sequences_conept_ids, args.batch_size)
+    gpt_to_omop_converter_parallel(args.output_folder, concept_parquet_file, patient_sequences_conept_ids, args.buffer_size)
 
 
 if __name__ == "__main__":
@@ -207,9 +206,10 @@ if __name__ == "__main__":
         required=True
     )
     parser.add_argument(
-        '--batch_size',
-        dest='batch_size',
+        '--buffer_size',
+        dest='buffer_size',
         action='store',
+        type=int,
         help='The size of the batch',
         required=True
     )
