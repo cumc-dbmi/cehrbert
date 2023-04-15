@@ -16,6 +16,11 @@ start_token_size = 4
 ATT_TIME_TOKENS = generate_artificial_time_tokens()
 
 
+def create_folder_if_not_exists(output_folder, table_name):
+    if not os.path.isdir(output_folder / table_name):
+        os.mkdir(output_folder / table_name)
+
+
 def detokenize_concept_ids(
         number,
         tokenizer):
@@ -89,6 +94,8 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
     condition_occurrence_id: int = const+1
     procedure_occurrence_id: int = const+1
     drug_exposure_id: int = const+1
+    for tb in ['person', 'visit_occurrence', 'condition_occurrence', 'procedure_occurrence', 'drug_exposure']:
+        create_folder_if_not_exists(output_folder, tb)
     omop_export_dict = {}
     pat_seq_len = pat_seq_split.shape[0]
     for index, row in tqdm(pat_seq_split.iteritems(), total=pat_seq_len):
