@@ -150,7 +150,7 @@ def gpt_to_omop_converter_serial(const, patient_sequences, domain_map, output_fo
                     de = DrugExposure(drug_exposure_id, x, vo)
                     append_to_dict(omop_export_dict, de)
                     drug_exposure_id += 1
-        if i % batch_size == 0: # or i == patient_sequences.shape[0]:
+        if i % int(batch_size) == 0 or i == patient_sequences.shape[0]:
             omop_export_dict = export_and_clear_parquet(output_folder, omop_export_dict)
         i += 1
 
