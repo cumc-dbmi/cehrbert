@@ -93,7 +93,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
     drug_exposure_id: int = const+1
     omop_export_dict = {}
     pat_seq_len = pat_seq_split.shape[0]
-    for index, row in tqdm(pat_seq_split.iteritems(), total=pat_seq_len):
+    for index, row in pat_seq_split.iteritems():
         # ignore start token
         if 'start' in row[0].lower():
             row = row[1:]
@@ -164,7 +164,7 @@ def gpt_to_omop_converter_parallel(output_folder, concept_parquet_file, patient_
         pool_tuples.append((const*i, patient_sequences_list[i-1], domain_map, output_folder, buffer_size))
 
     with Pool(processes=cores) as p:
-        results = p.starmap(gpt_to_omop_converter_serial, pool_tuples)
+        results = tqdm(p.starmap(gpt_to_omop_converter_serial, pool_tuples))
         p.close()
         p.join()
 
