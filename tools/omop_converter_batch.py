@@ -11,8 +11,6 @@ import uuid
 from pathlib import Path
 from multiprocessing import Pool
 
-cores = 5
-
 CURRENT_PATH = Path(__file__).parent
 start_token_size = 4
 ATT_TIME_TOKENS = generate_artificial_time_tokens()
@@ -93,7 +91,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
     drug_exposure_id: int = const+1
     omop_export_dict = {}
     pat_seq_len = pat_seq_split.shape[0]
-    for index, row in pat_seq_split.iteritems():
+    for index, row in tqdm(pat_seq_split.iteritems(), total=pat_seq_len):
         # ignore start token
         if 'start' in row[0].lower():
             row = row[1:]
@@ -153,7 +151,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
             omop_export_dict = export_and_clear_parquet(output_folder, omop_export_dict)
 
 
-def gpt_to_omop_converter_parallel(output_folder, concept_parquet_file, patient_sequences_concept_ids, buffer_size):
+def gpt_to_omop_converter_parallel(output_folder, concept_parquet_file, patient_sequences_concept_ids, buffer_size, cores):
     patient_sequences = patient_sequences_concept_ids['concept_ids']
     domain_map = generate_omop_concept_domain(concept_parquet_file)
     pool_tuples = []
@@ -164,7 +162,7 @@ def gpt_to_omop_converter_parallel(output_folder, concept_parquet_file, patient_
         pool_tuples.append((const*i, patient_sequences_list[i-1], domain_map, output_folder, buffer_size))
 
     with Pool(processes=cores) as p:
-        results = tqdm(p.starmap(gpt_to_omop_converter_serial, pool_tuples))
+        results = p.starmap(gpt_to_omop_converter_serial, pool_tuples)
         p.close()
         p.join()
 
@@ -176,7 +174,8 @@ def main(args):
     #tokenizer = pickle.load(open(tokenizer_path, 'rb'))
     concept_parquet_file = pd.read_parquet(os.path.join(args.concept_path))
     patient_sequences_conept_ids = pd.read_parquet(os.path.join(args.patient_sequence_path), columns=['concept_ids'])
-    gpt_to_omop_converter_parallel(args.output_folder, concept_parquet_file, patient_sequences_conept_ids, args.buffer_size)
+    gpt_to_omop_converter_parallel(args.output_folder, concept_parquet_file, patient_sequences_conept_ids,
+                                   args.buffer_size, args.cpu_cores)
 
 
 if __name__ == "__main__":
@@ -218,6 +217,14 @@ if __name__ == "__main__":
         dest='patient_sequence_path',
         action='store',
         help='The path for your patient sequence',
+        required=False
+    )
+    parser.add_argument(
+        '--cpu_cores',
+        dest='cpu_cores',
+        type=int,
+        action='store',
+        help='The number of cpu cores to use for multiprocessing',
         required=False
     )
 
