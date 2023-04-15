@@ -79,7 +79,7 @@ def export_and_clear_parquet(output_folder, export_dict):
     for table_name, records_to_export in export_dict.items():
         schema = records_to_export[0].get_schema()
         output_folder_path = Path(output_folder)
-        file_path = output_folder_path / table_name + f'.{uuid.uuid4()}' + '.parquet'
+        file_path = output_folder_path / f'{table_name}.{uuid.uuid4()}.parquet'
         table_df = pd.DataFrame(records_to_export, columns=schema)
         table_df.to_parquet(file_path)
         export_dict[table_name].clear()
