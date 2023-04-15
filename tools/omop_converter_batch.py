@@ -160,7 +160,7 @@ def gpt_to_omop_converter_parallel(output_folder, concept_parquet_file, patient_
     const = 10000000
     patient_sequences_list = np.array_split(patient_sequences, cores)
     for i in range(1, cores+1):
-        pool_tuples = (const*i, patient_sequences_list[i-1], domain_map, output_folder, batch_size)
+        pool_tuples.append((const*i, patient_sequences_list[i-1], domain_map, output_folder, batch_size))
 
     with Pool(processes=cores) as p:
         results = p.starmap(gpt_to_omop_converter_serial, pool_tuples)
