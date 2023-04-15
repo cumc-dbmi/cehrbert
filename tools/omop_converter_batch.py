@@ -93,7 +93,8 @@ def gpt_to_omop_converter_serial(const, patient_sequences, domain_map, output_fo
     procedure_occurrence_id: int = const+1
     drug_exposure_id: int = const+1
     omop_export_dict = {}
-    for i, row in tqdm(patient_sequences):
+    i = 0
+    for row in tqdm(patient_sequences):
         # ignore start token
         if 'start' in row[0].lower():
             row = row[1:]
@@ -149,8 +150,9 @@ def gpt_to_omop_converter_serial(const, patient_sequences, domain_map, output_fo
                     de = DrugExposure(drug_exposure_id, x, vo)
                     append_to_dict(omop_export_dict, de)
                     drug_exposure_id += 1
-        if i % batch_size == 0:
+        if i % batch_size == 0 or i == patient_sequences.shape[0]:
             omop_export_dict = export_and_clear_parquet(output_folder, omop_export_dict)
+        i += 1
 
 
 def gpt_to_omop_converter_parallel(output_folder, concept_parquet_file, patient_sequences_concept_ids, batch_size):
