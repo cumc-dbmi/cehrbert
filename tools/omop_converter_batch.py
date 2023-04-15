@@ -93,7 +93,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
     drug_exposure_id: int = const+1
     omop_export_dict = {}
     pat_seq_len = pat_seq_split.shape[0]
-    for index, row in tqdm(pat_seq_split.iterrows(), total=pat_seq_len):
+    for index, row in tqdm(pat_seq_split.iteritems(), total=pat_seq_len):
         # ignore start token
         if 'start' in row[0].lower():
             row = row[1:]
