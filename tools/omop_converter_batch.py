@@ -17,8 +17,8 @@ ATT_TIME_TOKENS = generate_artificial_time_tokens()
 
 
 def create_folder_if_not_exists(output_folder, table_name):
-    if not os.path.isdir(output_folder / table_name):
-        os.mkdir(output_folder / table_name)
+    if not os.path.isdir(Path(output_folder) / table_name):
+        os.mkdir(Path(output_folder) / table_name)
 
 
 def detokenize_concept_ids(
