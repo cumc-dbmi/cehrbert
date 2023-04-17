@@ -116,13 +116,14 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
         append_to_dict(omop_export_dict, p)
         VS_DATE = date(int(start_year), 1, 1)
         ATT_DATE_DELTA = 0
-
+        error_dict = {}
         vo = None
         for idx, x in enumerate(tokens_generated, 0):
             if x == 'VS':
                 try:
                     visit_concept_id = int(tokens_generated[idx + 1])
-                except IndexError or ValueError:
+                except (IndexError, ValueError):
+                    error_dict[person_id] = tokens_generated
                     print(person_id, tokens_generated)
                 VS_DATE = VS_DATE + timedelta(days=ATT_DATE_DELTA)
                 vo = VisitOccurrence(visit_occurrence_id, visit_concept_id, VS_DATE, p)
@@ -157,6 +158,9 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                     de = DrugExposure(drug_exposure_id, x, vo)
                     append_to_dict(omop_export_dict, de)
                     drug_exposure_id += 1
+            f = open("errors.txt", "w")
+            f.write(str(error_dict))
+            f.close()
         if index % buffer_size == 0 or index == pat_seq_len:
             omop_export_dict = export_and_clear_parquet(output_folder, omop_export_dict)
 
