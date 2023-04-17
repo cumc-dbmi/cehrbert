@@ -122,7 +122,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
             if x == 'VS':
                 try:
                     visit_concept_id = int(tokens_generated[idx + 1])
-                except IndexError:
+                except IndexError or ValueError:
                     print(person_id, tokens_generated)
                 VS_DATE = VS_DATE + timedelta(days=ATT_DATE_DELTA)
                 vo = VisitOccurrence(visit_occurrence_id, visit_concept_id, VS_DATE, p)
