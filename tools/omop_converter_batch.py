@@ -83,9 +83,10 @@ def export_and_clear_parquet(output_folder, export_dict):
         for idx, record in enumerate(export_dict[table_name]):
             try:
                 records_in_json.append(record.export_as_json())
+                ok_idx = idx
             except AttributeError:
-                print(export_dict[table_name][idx - 1].export_as_json())
-                export_error[table_name] = export_dict[table_name][idx - 1].export_as_json()
+                print(export_dict[table_name][ok_idx].export_as_json())
+                export_error[table_name] = export_dict[table_name][ok_idx].export_as_json()
                 pass
 #            records_in_json = [record.export_as_json() for record in export_dict[table_name]]
         schema = records_to_export[0].get_schema()
