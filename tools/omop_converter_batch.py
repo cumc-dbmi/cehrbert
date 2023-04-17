@@ -76,8 +76,7 @@ def export_and_clear_csv(output_folder, export_dict, buffer_size):
     return export_dict
 
 
-def export_and_clear_parquet(output_folder, export_dict):
-    export_error = {}
+def export_and_clear_parquet(output_folder, export_dict, export_error):
     for table_name, records_to_export in export_dict.items():
         records_in_json = []
         for idx, record in enumerate(export_dict[table_name]):
@@ -95,9 +94,7 @@ def export_and_clear_parquet(output_folder, export_dict):
         table_df = pd.DataFrame(records_in_json, columns=schema)
         table_df.to_parquet(file_path)
         export_dict[table_name].clear()
-    with open(Path(output_folder) / 'export_error.txt', 'a') as f:
-        f.write(str(export_error))
-    return export_dict
+    return export_dict, export_error
 
 
 def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder, buffer_size):
@@ -109,6 +106,8 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
     for tb in ['person', 'visit_occurrence', 'condition_occurrence', 'procedure_occurrence', 'drug_exposure']:
         create_folder_if_not_exists(output_folder, tb)
     omop_export_dict = {}
+    error_dict = {}
+    export_error = {}
     pat_seq_len = pat_seq_split.shape[0]
     for index, row in tqdm(pat_seq_split.iteritems(), total=pat_seq_len):
         # ignore start token
@@ -128,7 +127,6 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
         append_to_dict(omop_export_dict, p)
         VS_DATE = date(int(start_year), 1, 1)
         ATT_DATE_DELTA = 0
-        error_dict = {}
         vo = None
         for idx, x in enumerate(tokens_generated, 0):
             if x == 'VS':
@@ -179,10 +177,12 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                     error_dict[person_id] = tokens_generated
                     print(person_id, tokens_generated)
                     continue
-        with open(Path(output_folder) / "concept_errors.txt", "a") as f:
-            f.write(str(error_dict))
         if index % buffer_size == 0 or index == pat_seq_len:
-            omop_export_dict = export_and_clear_parquet(output_folder, omop_export_dict)
+            omop_export_dict, export_error = export_and_clear_parquet(output_folder, omop_export_dict, export_error)
+    with open(Path(output_folder) / "concept_errors.txt", "a") as f:
+        f.write(str(error_dict))
+    with open(Path(output_folder) / "export_errors.txt", "a") as f:
+        f.write(str(export_error))
 
 
 def gpt_to_omop_converter_parallel(output_folder, concept_parquet_file, patient_sequences_concept_ids, buffer_size, cores):
