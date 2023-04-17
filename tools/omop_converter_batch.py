@@ -167,7 +167,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                     error_dict[person_id] = tokens_generated
                     print(person_id, tokens_generated)
                     continue
-        with open("errors.txt", "w") as f:
+        with open(Path(output_folder) / "errors.txt", "w") as f:
             f.write(str(error_dict))
         f.close()
         if index % buffer_size == 0 or index == pat_seq_len:
