@@ -84,7 +84,6 @@ def export_and_clear_parquet(output_folder, export_dict, export_error):
                 records_in_json.append(record.export_as_json())
                 ok_idx = idx
             except AttributeError:
-                print(export_dict[table_name][ok_idx].export_as_json())
                 export_error[table_name] = export_dict[table_name][ok_idx].export_as_json()
                 pass
 #            records_in_json = [record.export_as_json() for record in export_dict[table_name]]
@@ -134,7 +133,6 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                     visit_concept_id = int(tokens_generated[idx + 1])
                 except (IndexError, ValueError):
                     error_dict[person_id] = tokens_generated
-                    print(person_id, tokens_generated)
                     continue
                 VS_DATE = VS_DATE + timedelta(days=ATT_DATE_DELTA)
                 vo = VisitOccurrence(visit_occurrence_id, visit_concept_id, VS_DATE, p)
@@ -175,7 +173,6 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                             drug_exposure_id += 1
                 except ValueError:
                     error_dict[person_id] = tokens_generated
-                    print(person_id, tokens_generated)
                     continue
         if index % buffer_size == 0 or index == pat_seq_len:
             omop_export_dict, export_error = export_and_clear_parquet(output_folder, omop_export_dict, export_error)
