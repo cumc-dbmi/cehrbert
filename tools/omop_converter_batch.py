@@ -78,16 +78,13 @@ def export_and_clear_csv(output_folder, export_dict, buffer_size):
 
 def export_and_clear_parquet(output_folder, export_dict):
     for table_name, records_to_export in export_dict.items():
-        try:
-            records_in_json = [record.export_as_json() for record in export_dict[table_name]]
-            schema = records_to_export[0].get_schema()
-            output_folder_path = Path(output_folder)
-            file_path = output_folder_path / table_name / f'{uuid.uuid4()}.parquet'
-            table_df = pd.DataFrame(records_in_json, columns=schema)
-            table_df.to_parquet(file_path)
-            export_dict[table_name].clear()
-        except AttributeError:
-            print(table_name, records_to_export)
+        records_in_json = [record.export_as_json() for record in export_dict[table_name]]
+        schema = records_to_export[0].get_schema()
+        output_folder_path = Path(output_folder)
+        file_path = output_folder_path / table_name / f'{uuid.uuid4()}.parquet'
+        table_df = pd.DataFrame(records_in_json, columns=schema)
+        table_df.to_parquet(file_path)
+        export_dict[table_name].clear()
     return export_dict
 
 
@@ -128,6 +125,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                 except (IndexError, ValueError):
                     error_dict[person_id] = tokens_generated
                     print(person_id, tokens_generated)
+                    continue
                 VS_DATE = VS_DATE + timedelta(days=ATT_DATE_DELTA)
                 vo = VisitOccurrence(visit_occurrence_id, visit_concept_id, VS_DATE, p)
                 append_to_dict(omop_export_dict, vo)
@@ -151,26 +149,27 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                     if concept_id not in domain_map:
                         error_dict[person_id] = tokens_generated
                         continue
-                    domain = domain_map[concept_id]
-                    if domain == 'Condition':
-                        co = ConditionOccurrence(condition_occurrence_id, x, vo)
-                        append_to_dict(omop_export_dict, co)
-                        condition_occurrence_id += 1
-                    elif domain == 'Procedure':
-                        po = ProcedureOccurrence(procedure_occurrence_id, x, vo)
-                        append_to_dict(omop_export_dict, po)
-                        procedure_occurrence_id += 1
-                    elif domain == 'Drug':
-                        de = DrugExposure(drug_exposure_id, x, vo)
-                        append_to_dict(omop_export_dict, de)
-                        drug_exposure_id += 1
+                    else:
+                        domain = domain_map[concept_id]
+                        if domain == 'Condition':
+                            co = ConditionOccurrence(condition_occurrence_id, x, vo)
+                            append_to_dict(omop_export_dict, co)
+                            condition_occurrence_id += 1
+                        elif domain == 'Procedure':
+                            po = ProcedureOccurrence(procedure_occurrence_id, x, vo)
+                            append_to_dict(omop_export_dict, po)
+                            procedure_occurrence_id += 1
+                        elif domain == 'Drug':
+                            de = DrugExposure(drug_exposure_id, x, vo)
+                            append_to_dict(omop_export_dict, de)
+                            drug_exposure_id += 1
                 except ValueError:
                     error_dict[person_id] = tokens_generated
                     print(person_id, tokens_generated)
                     continue
-            f = open("errors.txt", "w")
+        with open("errors.txt", "w") as f:
             f.write(str(error_dict))
-            f.close()
+        f.close()
         if index % buffer_size == 0 or index == pat_seq_len:
             omop_export_dict = export_and_clear_parquet(output_folder, omop_export_dict)
 
