@@ -143,21 +143,28 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                 # If it's a start token, skip it
                 pass
             else:
-                if int(x) not in domain_map:
+                try:
+                    concept_id = int(x)
+                    if concept_id not in domain_map:
+                        error_dict[person_id] = tokens_generated
+                        continue
+                    domain = domain_map[concept_id]
+                    if domain == 'Condition':
+                        co = ConditionOccurrence(condition_occurrence_id, x, vo)
+                        append_to_dict(omop_export_dict, co)
+                        condition_occurrence_id += 1
+                    elif domain == 'Procedure':
+                        po = ProcedureOccurrence(procedure_occurrence_id, x, vo)
+                        append_to_dict(omop_export_dict, po)
+                        procedure_occurrence_id += 1
+                    elif domain == 'Drug':
+                        de = DrugExposure(drug_exposure_id, x, vo)
+                        append_to_dict(omop_export_dict, de)
+                        drug_exposure_id += 1
+                except ValueError:
+                    error_dict[person_id] = tokens_generated
+                    print(person_id, tokens_generated)
                     continue
-                domain = domain_map[int(x)]
-                if domain == 'Condition':
-                    co = ConditionOccurrence(condition_occurrence_id, x, vo)
-                    append_to_dict(omop_export_dict, co)
-                    condition_occurrence_id += 1
-                elif domain == 'Procedure':
-                    po = ProcedureOccurrence(procedure_occurrence_id, x, vo)
-                    append_to_dict(omop_export_dict, po)
-                    procedure_occurrence_id += 1
-                elif domain == 'Drug':
-                    de = DrugExposure(drug_exposure_id, x, vo)
-                    append_to_dict(omop_export_dict, de)
-                    drug_exposure_id += 1
             f = open("errors.txt", "w")
             f.write(str(error_dict))
             f.close()
