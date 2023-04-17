@@ -77,14 +77,26 @@ def export_and_clear_csv(output_folder, export_dict, buffer_size):
 
 
 def export_and_clear_parquet(output_folder, export_dict):
+    export_error = {}
     for table_name, records_to_export in export_dict.items():
-        records_in_json = [record.export_as_json() for record in export_dict[table_name]]
+        records_in_json = []
+        for idx, record in enumerate(export_dict[table_name]):
+            try:
+                records_in_json.append(record.export_as_json())
+            except AttributeError:
+                print(export_dict[table_name][idx - 1].export_as_json())
+                export_error[table_name] = export_dict[table_name][idx - 1].export_as_json()
+                pass
+#            records_in_json = [record.export_as_json() for record in export_dict[table_name]]
         schema = records_to_export[0].get_schema()
         output_folder_path = Path(output_folder)
         file_path = output_folder_path / table_name / f'{uuid.uuid4()}.parquet'
         table_df = pd.DataFrame(records_in_json, columns=schema)
         table_df.to_parquet(file_path)
         export_dict[table_name].clear()
+    with open(Path(output_folder) / 'export_error.txt', 'w') as f:
+        f.write(str(export_error))
+    f.close()
     return export_dict
 
 
