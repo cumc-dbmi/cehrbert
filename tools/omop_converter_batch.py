@@ -95,9 +95,8 @@ def export_and_clear_parquet(output_folder, export_dict):
         table_df = pd.DataFrame(records_in_json, columns=schema)
         table_df.to_parquet(file_path)
         export_dict[table_name].clear()
-    with open(Path(output_folder) / 'export_error.txt', 'w') as f:
+    with open(Path(output_folder) / 'export_error.txt', 'a') as f:
         f.write(str(export_error))
-    f.close()
     return export_dict
 
 
@@ -180,9 +179,8 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                     error_dict[person_id] = tokens_generated
                     print(person_id, tokens_generated)
                     continue
-        with open(Path(output_folder) / "errors.txt", "w") as f:
+        with open(Path(output_folder) / "concept_errors.txt", "a") as f:
             f.write(str(error_dict))
-        f.close()
         if index % buffer_size == 0 or index == pat_seq_len:
             omop_export_dict = export_and_clear_parquet(output_folder, omop_export_dict)
 
