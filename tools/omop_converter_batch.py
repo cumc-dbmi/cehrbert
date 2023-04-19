@@ -121,15 +121,14 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
     for tb in TABLE_LIST:
         create_folder_if_not_exists(output_folder, tb)
 
-
     pat_seq_len = pat_seq_split.shape[0]
     bad_sequence = False
 
     for index, row in tqdm(pat_seq_split.iteritems(), total=pat_seq_len):
         id_mappings_dict[person_id] = {}
         for tb in TABLE_LIST:
-            if tb != 'person':
-                id_mappings_dict[person_id][tb] = []
+            id_mappings_dict[person_id][tb] = []
+        id_mappings_dict[person_id]['person'].append(person_id)
         # ignore start token
         if 'start' in row[0].lower():
             row = row[1:]
@@ -144,7 +143,6 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
         birth_year = int(start_year) - int(start_age)
         p = Person(person_id, start_gender, birth_year, start_race)
         omop_export_dict = append_to_dict(omop_export_dict, p, person_id)
-        #print(omop_export_dict)
         VS_DATE = date(int(start_year), 1, 1)
         ATT_DATE_DELTA = 0
         vo = None
@@ -160,7 +158,6 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                 vo = VisitOccurrence(visit_occurrence_id, visit_concept_id, VS_DATE, p)
                 omop_export_dict = append_to_dict(omop_export_dict, vo, visit_occurrence_id)
                 id_mappings_dict[person_id]['visit_occurrence'].append(visit_occurrence_id)
-                #print(id_mappings_dict)
                 visit_occurrence_id += 1
             elif x in ATT_TIME_TOKENS:
                 if x[0] == 'W':
