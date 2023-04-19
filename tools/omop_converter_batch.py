@@ -117,7 +117,6 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
     omop_export_dict = {}
     error_dict = {}
     id_mappings_dict = {}
-    id_mappings_dict[person_id] = {}
 
     for tb in TABLE_LIST:
         create_folder_if_not_exists(output_folder, tb)
@@ -127,6 +126,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
     bad_sequence = False
 
     for index, row in tqdm(pat_seq_split.iteritems(), total=pat_seq_len):
+        id_mappings_dict[person_id] = {}
         for tb in TABLE_LIST:
             if tb != 'person':
                 id_mappings_dict[person_id][tb] = []
