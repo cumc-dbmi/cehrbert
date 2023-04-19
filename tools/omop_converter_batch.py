@@ -47,8 +47,8 @@ def generate_omop_concept_domain(concept_parquet):
 
 
 def append_to_dict(export_dict, omop_entity, id):
-    if omop_entity.get_table_name() not in export_dict:
-        export_dict[omop_entity.get_table_name()] = {}
+    # if omop_entity.get_table_name() not in list(export_dict.keys):
+    #     export_dict[omop_entity.get_table_name()] = {}
     export_dict[omop_entity.get_table_name()][id] = omop_entity
     return export_dict
 
