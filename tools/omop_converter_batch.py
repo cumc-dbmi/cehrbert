@@ -14,6 +14,7 @@ from multiprocessing import Pool
 CURRENT_PATH = Path(__file__).parent
 start_token_size = 4
 ATT_TIME_TOKENS = generate_artificial_time_tokens()
+TABLE_LIST = ['person', 'visit_occurrence', 'condition_occurrence', 'procedure_occurrence', 'drug_exposure']
 
 
 def create_folder_if_not_exists(output_folder, table_name):
@@ -47,8 +48,8 @@ def generate_omop_concept_domain(concept_parquet):
 
 
 def append_to_dict(export_dict, omop_entity, id):
-    # if omop_entity.get_table_name() not in list(export_dict.keys):
-    #     export_dict[omop_entity.get_table_name()] = {}
+    if omop_entity.get_table_name() not in TABLE_LIST:
+        export_dict[omop_entity.get_table_name()] = {}
     export_dict[omop_entity.get_table_name()][id] = omop_entity
     return export_dict
 
@@ -112,17 +113,18 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
     condition_occurrence_id: int = const + 1
     procedure_occurrence_id: int = const + 1
     drug_exposure_id: int = const + 1
-    for tb in ['person', 'visit_occurrence', 'condition_occurrence', 'procedure_occurrence', 'drug_exposure']:
-        create_folder_if_not_exists(output_folder, tb)
+
     omop_export_dict = {}
-    id_mappings_dict = dict()
-    id_mappings_dict[person_id] = {'visit_occurrence': [],
-                                   'condition_occurrence': [],
-                                   'procedure_occurrence': [],
-                                   'drug_exposure': []}
     error_dict = {}
+    id_mappings_dict = {person_id: {}}
+
+    for tb in TABLE_LIST:
+        create_folder_if_not_exists(output_folder, tb)
+        id_mappings_dict[person_id][tb] = []
+
     pat_seq_len = pat_seq_split.shape[0]
     bad_sequence = False
+
     for index, row in tqdm(pat_seq_split.iteritems(), total=pat_seq_len):
         # ignore start token
         if 'start' in row[0].lower():
@@ -196,8 +198,10 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
         if bad_sequence:
             omop_export_dict = delete_bad_sequence(omop_export_dict, id_mappings_dict, person_id)
         person_id += 1
+
         if index % buffer_size == 0 or index == pat_seq_len:
             omop_export_dict = export_and_clear_parquet(output_folder, omop_export_dict)
+
     with open(Path(output_folder) / "concept_errors.txt", "a") as f:
         f.write(str(error_dict))
     # with open(Path(output_folder) / "export_errors.txt", "a") as f:
