@@ -84,24 +84,26 @@ def export_and_clear_csv(output_folder, export_dict, buffer_size):
     return export_dict
 
 
-def export_and_clear_parquet(output_folder, export_dict, export_error):
+def export_and_clear_parquet(output_folder, export_dict):
     for table_name, records_to_export in export_dict.items():
         records_in_json = []
-        for idx, record in enumerate(list(export_dict[table_name].values())):
-            try:
-                records_in_json.append(record.export_as_json())
-                ok_idx = idx
-            except AttributeError:
-                export_error[table_name] = export_dict[table_name][ok_idx].export_as_json()
-                pass
+        for record in list(records_to_export.values()):
+            records_in_json.append(record.export_as_json())
+        # for idx, record in enumerate(list(export_dict[table_name].values())):
+        #     try:
+        #         records_in_json.append(record.export_as_json())
+        #         ok_idx = idx
+        #     except AttributeError:
+        #         export_error[table_name] = export_dict[table_name][ok_idx].export_as_json()
+        #         pass
         #            records_in_json = [record.export_as_json() for record in export_dict[table_name]]
-        schema = records_to_export[0].get_schema()
+        schema = next(iter(records_to_export.items()))[1].get_schema()
         output_folder_path = Path(output_folder)
         file_path = output_folder_path / table_name / f'{uuid.uuid4()}.parquet'
         table_df = pd.DataFrame(records_in_json, columns=schema)
         table_df.to_parquet(file_path)
         export_dict[table_name].clear()
-    return export_dict, export_error
+    return export_dict
 
 
 def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder, buffer_size):
@@ -196,7 +198,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
             omop_export_dict = delete_bad_sequence(omop_export_dict, id_mappings_dict, person_id)
         person_id += 1
         if index % buffer_size == 0 or index == pat_seq_len:
-            omop_export_dict, export_error = export_and_clear_parquet(output_folder, omop_export_dict, export_error)
+            omop_export_dict = export_and_clear_parquet(output_folder, omop_export_dict)
     with open(Path(output_folder) / "concept_errors.txt", "a") as f:
         f.write(str(error_dict))
     with open(Path(output_folder) / "export_errors.txt", "a") as f:
