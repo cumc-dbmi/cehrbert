@@ -121,7 +121,6 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                                    'procedure_occurrence': [],
                                    'drug_exposure': []}
     error_dict = {}
-    export_error = {}
     pat_seq_len = pat_seq_split.shape[0]
     bad_sequence = False
     for index, row in tqdm(pat_seq_split.iteritems(), total=pat_seq_len):
@@ -138,7 +137,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
         start_age = start_age.split(':')[1]
         birth_year = int(start_year) - int(start_age)
         p = Person(person_id, start_gender, birth_year, start_race)
-        append_to_dict(omop_export_dict, p, person_id)
+        omop_export_dict = append_to_dict(omop_export_dict, p, person_id)
         VS_DATE = date(int(start_year), 1, 1)
         ATT_DATE_DELTA = 0
         vo = None
@@ -152,7 +151,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                     continue
                 VS_DATE = VS_DATE + timedelta(days=ATT_DATE_DELTA)
                 vo = VisitOccurrence(visit_occurrence_id, visit_concept_id, VS_DATE, p)
-                append_to_dict(omop_export_dict, vo, visit_occurrence_id)
+                omop_export_dict = append_to_dict(omop_export_dict, vo, visit_occurrence_id)
                 id_mappings_dict[person_id]['visit_occurrence'].append(visit_occurrence_id)
                 visit_occurrence_id += 1
             elif x in ATT_TIME_TOKENS:
@@ -178,17 +177,17 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                         domain = domain_map[concept_id]
                         if domain == 'Condition':
                             co = ConditionOccurrence(condition_occurrence_id, x, vo)
-                            append_to_dict(omop_export_dict, co, condition_occurrence_id)
+                            omop_export_dict = append_to_dict(omop_export_dict, co, condition_occurrence_id)
                             id_mappings_dict[person_id]['condition_occurrence'].append(condition_occurrence_id)
                             condition_occurrence_id += 1
                         elif domain == 'Procedure':
                             po = ProcedureOccurrence(procedure_occurrence_id, x, vo)
-                            append_to_dict(omop_export_dict, po, procedure_occurrence_id)
+                            omop_export_dict = append_to_dict(omop_export_dict, po, procedure_occurrence_id)
                             id_mappings_dict[person_id]['procedure_occurrence'].append(procedure_occurrence_id)
                             procedure_occurrence_id += 1
                         elif domain == 'Drug':
                             de = DrugExposure(drug_exposure_id, x, vo)
-                            append_to_dict(omop_export_dict, de, drug_exposure_id)
+                            omop_export_dict = append_to_dict(omop_export_dict, de, drug_exposure_id)
                             id_mappings_dict[person_id]['drug_exposure'].append(drug_exposure_id)
                             drug_exposure_id += 1
                 except ValueError:
@@ -201,8 +200,8 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
             omop_export_dict = export_and_clear_parquet(output_folder, omop_export_dict)
     with open(Path(output_folder) / "concept_errors.txt", "a") as f:
         f.write(str(error_dict))
-    with open(Path(output_folder) / "export_errors.txt", "a") as f:
-        f.write(str(export_error))
+    # with open(Path(output_folder) / "export_errors.txt", "a") as f:
+    #     f.write(str(export_error))
 
 
 def gpt_to_omop_converter_parallel(output_folder, concept_parquet_file, patient_sequences_concept_ids, buffer_size,
