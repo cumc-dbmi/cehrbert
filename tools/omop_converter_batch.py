@@ -121,12 +121,15 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
 
     for tb in TABLE_LIST:
         create_folder_if_not_exists(output_folder, tb)
-        id_mappings_dict[person_id][tb] = []
+
 
     pat_seq_len = pat_seq_split.shape[0]
     bad_sequence = False
 
     for index, row in tqdm(pat_seq_split.iteritems(), total=pat_seq_len):
+        for tb in TABLE_LIST:
+            if tb != 'person':
+                id_mappings_dict[person_id][tb] = []
         # ignore start token
         if 'start' in row[0].lower():
             row = row[1:]
