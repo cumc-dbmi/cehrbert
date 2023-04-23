@@ -177,6 +177,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                     concept_id = int(x)
                     if concept_id not in domain_map:
                         error_dict[person_id] = tokens_generated
+                        bad_sequence = True
                         continue
                     else:
                         domain = domain_map[concept_id]
@@ -197,6 +198,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                             drug_exposure_id += 1
                 except ValueError:
                     error_dict[person_id] = tokens_generated
+                    bad_sequence = True
                     continue
         if bad_sequence:
             omop_export_dict = delete_bad_sequence(omop_export_dict, id_mappings_dict, person_id)
