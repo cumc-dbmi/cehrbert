@@ -151,6 +151,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                 try:
                     visit_concept_id = int(tokens_generated[idx + 1])
                 except (IndexError, ValueError):
+                    error_dict[person_id] = {}
                     error_dict[person_id]['row'] = row
                     error_dict[person_id]['error'] = 'Wrong visit concept id'
                     bad_sequence = True
@@ -177,6 +178,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                 try:
                     concept_id = int(x)
                     if concept_id not in domain_map:
+                        error_dict[person_id] = {}
                         error_dict[person_id]['row'] = row
                         error_dict[person_id]['error'] = 'No concept id found'
                         bad_sequence = True
@@ -199,6 +201,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                             id_mappings_dict[person_id]['drug_exposure'].append(drug_exposure_id)
                             drug_exposure_id += 1
                 except ValueError:
+                    error_dict[person_id] = {}
                     error_dict[person_id]['row'] = row
                     error_dict[person_id]['error'] = 'Wrong concept id'
                     bad_sequence = True
