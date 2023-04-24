@@ -61,6 +61,7 @@ def delete_bad_sequence(target_dict, id_mappings, person_id):
         ids_to_delete = omop_id_mapping[np.where(person_id_mapping == person_id)]
         for id in ids_to_delete:
             target_dict[table_name].pop(id)
+        target_dict['person'].pop(person_id)
     return target_dict
 
 
@@ -91,8 +92,11 @@ def export_and_clear_parquet(output_folder, export_dict, export_error, id_mappin
     for table_name, records_to_export in export_dict.items():
         export_error[table_name] = []
         records_in_json = []
-        omop_id_mapping = np.array(list(id_mappings_dict[table_name].keys()))
-        person_id_mapping = np.array(list(id_mappings_dict[table_name].values()))
+        if table_name == 'person':
+            pass
+        else:
+            omop_id_mapping = np.array(list(id_mappings_dict[table_name].keys()))
+            person_id_mapping = np.array(list(id_mappings_dict[table_name].values()))
         # for record in list(records_to_export.values()):
         #     records_in_json.append(record.export_as_json())
         for idx, record in export_dict[table_name].items():
