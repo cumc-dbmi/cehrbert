@@ -151,7 +151,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                 try:
                     visit_concept_id = int(tokens_generated[idx + 1])
                 except (IndexError, ValueError):
-                    error_dict[person_id] = tokens_generated
+                    error_dict[person_id] = row
                     bad_sequence = True
                     continue
                 VS_DATE = VS_DATE + timedelta(days=ATT_DATE_DELTA)
@@ -176,7 +176,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                 try:
                     concept_id = int(x)
                     if concept_id not in domain_map:
-                        error_dict[person_id] = tokens_generated
+                        error_dict[person_id] = row
                         bad_sequence = True
                         continue
                     else:
@@ -197,7 +197,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                             id_mappings_dict[person_id]['drug_exposure'].append(drug_exposure_id)
                             drug_exposure_id += 1
                 except ValueError:
-                    error_dict[person_id] = tokens_generated
+                    error_dict[person_id] = row
                     bad_sequence = True
                     continue
         if bad_sequence:
