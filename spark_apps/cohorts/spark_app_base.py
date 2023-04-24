@@ -576,6 +576,7 @@ def create_prediction_cohort(
         is_roll_up_concept=is_roll_up_concept,
         include_concept_list=spark_args.include_concept_list,
         is_new_patient_representation=is_new_patient_representation,
+        gpt_patient_sequence=spark_args.gpt_patient_sequence,
         is_hierarchical_bert=is_hierarchical_bert,
         classic_bert_seq=classic_bert_seq,
         is_first_time_outcome=is_first_time_outcome,
