@@ -246,6 +246,7 @@ class NestedCohortBuilder:
             is_roll_up_concept: bool = False,
             include_concept_list: bool = True,
             is_new_patient_representation: bool = False,
+            gpt_patient_sequence: bool = False,
             is_hierarchical_bert: bool = False,
             classic_bert_seq: bool = False,
             is_first_time_outcome: bool = False,
@@ -274,6 +275,7 @@ class NestedCohortBuilder:
         self._is_feature_concept_frequency = is_feature_concept_frequency
         self._is_roll_up_concept = is_roll_up_concept
         self._is_new_patient_representation = is_new_patient_representation
+        self._gpt_patient_sequence = gpt_patient_sequence
         self._is_hierarchical_bert = is_hierarchical_bert
         self._is_first_time_outcome = is_first_time_outcome
         self._is_remove_index_prediction_starts = is_remove_index_prediction_starts
@@ -302,6 +304,7 @@ class NestedCohortBuilder:
                                f'is_feature_concept_frequency: {is_feature_concept_frequency}\n'
                                f'is_roll_up_concept: {is_roll_up_concept}\n'
                                f'is_new_patient_representation: {is_new_patient_representation}\n'
+                               f'gpt_patient_sequence: {gpt_patient_sequence}\n'
                                f'is_hierarchical_bert: {is_hierarchical_bert}\n'
                                f'is_first_time_outcome: {is_first_time_outcome}\n'
                                f'is_questionable_outcome_existed: {is_questionable_outcome_existed}\n'
@@ -457,9 +460,13 @@ class NestedCohortBuilder:
             return create_concept_frequency_data(cohort_ehr_records, None)
 
         if self._is_new_patient_representation:
-            return create_sequence_data_with_att(cohort_ehr_records,
-                                                 include_visit_type=self._include_visit_type,
-                                                 exclude_visit_tokens=self._exclude_visit_tokens)
+            return create_sequence_data_with_att(
+                cohort_ehr_records,
+                include_visit_type=self._include_visit_type,
+                exclude_visit_tokens=self._exclude_visit_tokens,
+                patient_demographic=self._dependency_dict[
+                    PERSON] if self._gpt_patient_sequence else None
+            )
 
         return create_sequence_data(
             cohort_ehr_records,

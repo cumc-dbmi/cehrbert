@@ -145,6 +145,11 @@ def create_spark_args():
                         action='store_true',
                         help='Specify whether to generate the sequence of '
                              'EHR records using the new patient representation')
+    parser.add_argument('--gpt_patient_sequence',
+                        dest='gpt_patient_sequence',
+                        action='store_true',
+                        help='Specify whether to generate the GPT sequence of '
+                             'EHR records using the new patient representation')
     parser.add_argument('-ih',
                         '--is_hierarchical_bert',
                         dest='is_hierarchical_bert',

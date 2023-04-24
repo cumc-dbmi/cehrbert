@@ -169,7 +169,7 @@ class DemographicPromptDecorator(
         # Get the first token of the patient history
         first_token_udf = F.row_number().over(
             W.partitionBy('cohort_member_id', 'person_id').orderBy(
-                'visit_start_date', 'priority'
+                'date', 'priority'
             )
         )
 
