@@ -87,6 +87,7 @@ def export_and_clear_csv(output_folder, export_dict, buffer_size):
 
 def export_and_clear_parquet(output_folder, export_dict, export_error, id_mappings_dict):
     for table_name, records_to_export in export_dict.items():
+        export_error[table_name] = []
         records_in_json = []
         # for record in list(records_to_export.values()):
         #     records_in_json.append(record.export_as_json())
@@ -94,7 +95,7 @@ def export_and_clear_parquet(output_folder, export_dict, export_error, id_mappin
             try:
                 records_in_json.append(record.export_as_json())
             except AttributeError:
-                export_error[table_name] = [id_mappings_dict.values()].index(idx)
+                export_error[table_name].append(id_mappings_dict[table_name][idx])
                 pass
             #records_in_json = [record.export_as_json() for record in export_dict[table_name]]
         schema = next(iter(records_to_export.items()))[1].get_schema()
@@ -125,10 +126,10 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
 
     for index, row in tqdm(pat_seq_split.iteritems(), total=pat_seq_len):
         bad_sequence = False
-        id_mappings_dict[person_id] = {}
+        #id_mappings_dict[person_id] = {}
         for tb in TABLE_LIST:
-            id_mappings_dict[person_id][tb] = []
-        id_mappings_dict[person_id]['person'].append(person_id)
+            id_mappings_dict[tb] = {}
+        #id_mappings_dict[person_id]['person'].append(person_id)
         # ignore start token
         if 'start' in row[0].lower():
             row = row[1:]
@@ -159,7 +160,8 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                 VS_DATE = VS_DATE + timedelta(days=ATT_DATE_DELTA)
                 vo = VisitOccurrence(visit_occurrence_id, visit_concept_id, VS_DATE, p)
                 omop_export_dict = append_to_dict(omop_export_dict, vo, visit_occurrence_id)
-                id_mappings_dict[person_id]['visit_occurrence'].append(visit_occurrence_id)
+                #id_mappings_dict[person_id]['visit_occurrence'].append(visit_occurrence_id)
+                id_mappings_dict['visit_occurrence'][visit_occurrence_id] = person_id
                 visit_occurrence_id += 1
             elif x in ATT_TIME_TOKENS:
                 if x[0] == 'W':
@@ -188,17 +190,20 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                         if domain == 'Condition':
                             co = ConditionOccurrence(condition_occurrence_id, x, vo)
                             omop_export_dict = append_to_dict(omop_export_dict, co, condition_occurrence_id)
-                            id_mappings_dict[person_id]['condition_occurrence'].append(condition_occurrence_id)
+                            #id_mappings_dict[person_id]['condition_occurrence'].append(condition_occurrence_id)
+                            id_mappings_dict['condition_occurrence'][condition_occurrence_id] = person_id
                             condition_occurrence_id += 1
                         elif domain == 'Procedure':
                             po = ProcedureOccurrence(procedure_occurrence_id, x, vo)
                             omop_export_dict = append_to_dict(omop_export_dict, po, procedure_occurrence_id)
-                            id_mappings_dict[person_id]['procedure_occurrence'].append(procedure_occurrence_id)
+                            #id_mappings_dict[person_id]['procedure_occurrence'].append(procedure_occurrence_id)
+                            id_mappings_dict['procedure_occurrence'][procedure_occurrence_id] = person_id
                             procedure_occurrence_id += 1
                         elif domain == 'Drug':
                             de = DrugExposure(drug_exposure_id, x, vo)
                             omop_export_dict = append_to_dict(omop_export_dict, de, drug_exposure_id)
-                            id_mappings_dict[person_id]['drug_exposure'].append(drug_exposure_id)
+                            #id_mappings_dict[person_id]['drug_exposure'].append(drug_exposure_id)
+                            id_mappings_dict['drug_exposure'][drug_exposure_id] = person_id
                             drug_exposure_id += 1
                 except ValueError:
                     error_dict[person_id] = {}
