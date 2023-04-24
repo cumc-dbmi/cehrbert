@@ -127,7 +127,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
     for tb in TABLE_LIST:
         create_folder_if_not_exists(output_folder, tb)
         id_mappings_dict[tb] = {}
-
+    print(id_mappings_dict)
     pat_seq_len = pat_seq_split.shape[0]
 
     for index, row in tqdm(pat_seq_split.iteritems(), total=pat_seq_len):
@@ -222,10 +222,10 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
             omop_export_dict = delete_bad_sequence(omop_export_dict, id_mappings_dict, person_id)
         person_id += 1
 
-        if index % buffer_size == 0 or index == pat_seq_len:
+        if index != 0 and (index % buffer_size == 0 or index == pat_seq_len):
             print(index)
-            omop_export_dict, export_error = export_and_clear_parquet(output_folder, omop_export_dict, id_mappings_dict,
-                                                                      export_error)
+            omop_export_dict, export_error = export_and_clear_parquet(output_folder, omop_export_dict,
+                                                                      export_error, id_mappings_dict)
 
     with open(Path(output_folder) / "concept_errors.txt", "a") as f:
         f.write(str(error_dict))
