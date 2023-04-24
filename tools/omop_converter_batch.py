@@ -55,9 +55,11 @@ def append_to_dict(export_dict, omop_entity, id):
 
 
 def delete_bad_sequence(target_dict, id_mappings, person_id):
-    ids_to_delete = id_mappings[person_id]
-    for table_name, ids in ids_to_delete.items():
-        for id in ids:
+    for table_name, id_mapping in id_mappings.items():
+        omop_id_mapping = np.array(list(id_mapping.keys()))
+        person_id_mapping = np.array(list(id_mapping.values()))
+        ids_to_delete = omop_id_mapping[np.where(person_id_mapping == person_id)]
+        for id in ids_to_delete:
             target_dict[table_name].pop(id)
     return target_dict
 
@@ -89,14 +91,16 @@ def export_and_clear_parquet(output_folder, export_dict, export_error, id_mappin
     for table_name, records_to_export in export_dict.items():
         export_error[table_name] = []
         records_in_json = []
+        omop_id_mapping = np.array(list(id_mappings_dict[table_name].keys()))
+        person_id_mapping = np.array(list(id_mappings_dict[table_name].values()))
         # for record in list(records_to_export.values()):
         #     records_in_json.append(record.export_as_json())
         for idx, record in export_dict[table_name].items():
             try:
                 records_in_json.append(record.export_as_json())
             except AttributeError:
-                export_error[table_name].append(id_mappings_dict[table_name][idx])
-                pass
+                export_error[table_name].append(person_id_mapping[np.where(omop_id_mapping == idx)])
+                continue
             #records_in_json = [record.export_as_json() for record in export_dict[table_name]]
         schema = next(iter(records_to_export.items()))[1].get_schema()
         output_folder_path = Path(output_folder)
