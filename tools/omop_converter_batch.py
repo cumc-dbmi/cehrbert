@@ -61,7 +61,6 @@ def delete_bad_sequence(target_dict, id_mappings, person_id):
         ids_to_delete = omop_id_mapping[np.where(person_id_mapping == person_id)]
         for id in ids_to_delete:
             target_dict[table_name].pop(id)
-        target_dict['person'].pop(person_id)
     return target_dict
 
 
@@ -89,14 +88,12 @@ def export_and_clear_csv(output_folder, export_dict, buffer_size):
 
 
 def export_and_clear_parquet(output_folder, export_dict, export_error, id_mappings_dict):
+    print(id_mappings_dict)
     for table_name, records_to_export in export_dict.items():
         export_error[table_name] = []
         records_in_json = []
-        if table_name == 'person':
-            pass
-        else:
-            omop_id_mapping = np.array(list(id_mappings_dict[table_name].keys()))
-            person_id_mapping = np.array(list(id_mappings_dict[table_name].values()))
+        omop_id_mapping = np.array(list(id_mappings_dict[table_name].keys()))
+        person_id_mapping = np.array(list(id_mappings_dict[table_name].values()))
         # for record in list(records_to_export.values()):
         #     records_in_json.append(record.export_as_json())
         for idx, record in export_dict[table_name].items():
@@ -129,14 +126,15 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
 
     for tb in TABLE_LIST:
         create_folder_if_not_exists(output_folder, tb)
+        id_mappings_dict[tb] = {}
 
     pat_seq_len = pat_seq_split.shape[0]
 
     for index, row in tqdm(pat_seq_split.iteritems(), total=pat_seq_len):
         bad_sequence = False
         #id_mappings_dict[person_id] = {}
-        for tb in TABLE_LIST:
-            id_mappings_dict[tb] = {}
+        # for tb in TABLE_LIST:
+        #     id_mappings_dict[tb] = {}
         #id_mappings_dict[person_id]['person'].append(person_id)
         # ignore start token
         if 'start' in row[0].lower():
@@ -152,6 +150,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
         birth_year = int(start_year) - int(start_age)
         p = Person(person_id, start_gender, birth_year, start_race)
         omop_export_dict = append_to_dict(omop_export_dict, p, person_id)
+        id_mappings_dict['person'][person_id] = person_id
         VS_DATE = date(int(start_year), 1, 1)
         ATT_DATE_DELTA = 0
         vo = None
@@ -224,6 +223,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
         person_id += 1
 
         if index % buffer_size == 0 or index == pat_seq_len:
+            print(index)
             omop_export_dict, export_error = export_and_clear_parquet(output_folder, omop_export_dict, id_mappings_dict,
                                                                       export_error)
 
