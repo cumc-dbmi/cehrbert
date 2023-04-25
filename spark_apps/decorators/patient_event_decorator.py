@@ -169,18 +169,19 @@ class DemographicPromptDecorator(
         if self._patient_demographic is None:
             return patient_event
 
-        demo = self._patient_demographic.select(
-            'person_id',
-            'gender_concept_id', 'race_concept_id',
-            'birth_datetime'
-        )
-
         # Get the first token of the patient history
         first_token_udf = F.row_number().over(
             W.partitionBy('cohort_member_id', 'person_id').orderBy(
-                'date', 'priority'
-            )
+                'visit_start_date',
+                'visit_occurrence_id',
+                'priority',
+                'days_since_epoch',
+                'standard_concept_id')
         )
+
+        # Udf for identifying the earliest date associated with a visit_occurrence_id
+        visit_start_date_udf = F.first('date').over(
+            W.partitionBy('cohort_member_id', 'person_id', 'visit_occurrence_id').orderBy('date'))
 
         # Identify the first token of each patient history
         patient_first_token = patient_event \
@@ -204,7 +205,7 @@ class DemographicPromptDecorator(
             F.col('person_id'),
             F.col('birth_datetime')
         ).join(
-            sequence_start_year_token, 
+            sequence_start_year_token,
             'person_id'
         ).withColumn(
             'standard_concept_id',
