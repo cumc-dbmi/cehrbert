@@ -442,7 +442,7 @@ class NestedCohortBuilder:
         if self._is_population_estimation:
             # Allow the data records that occurred within 7 days from the outcome date
             record_window_filter = ehr_records['date'] <= F.date_add(
-                ehr_records['outcome_date'],
+                cohort['outcome_date'],
                 7
             )
         else:
@@ -463,7 +463,7 @@ class NestedCohortBuilder:
                         F.date_sub(cohort['index_date'], self._hold_off_window)
                     )
 
-        cohort_ehr_records = ehr_records.where(record_window_filter).join(cohort, 'person_id') \
+        cohort_ehr_records = ehr_records.join(cohort, 'person_id').where(record_window_filter) \
             .select([ehr_records[field_name] for field_name in ehr_records.schema.fieldNames()]
                     + ['cohort_member_id'])
 
