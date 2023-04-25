@@ -50,9 +50,8 @@ class PatientEventBaseDecorator(
             .withColumn('mlm_skip_value',
                         (F.col('domain').isin([MEASUREMENT, CATEGORICAL_MEASUREMENT])).cast('int'))
 
-        if not patient_event.schema.fieldNames.contains('concept_value'):
+        if 'concept_value' not in patient_event.schema.fieldNames():
             patient_event = patient_event.withColumn('concept_value', F.lit(-1.0))
-
         return patient_event
 
 
