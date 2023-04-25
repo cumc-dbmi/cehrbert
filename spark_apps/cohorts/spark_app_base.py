@@ -382,7 +382,7 @@ class NestedCohortBuilder:
             query_template = """
             SELECT DISTINCT
                 t.*,
-                o.index_date as outcome_date
+                o.index_date as outcome_date,
                 CAST(ISNOTNULL(o.person_id) AS INT) AS label
             FROM global_temp.target_cohort AS t 
             LEFT JOIN global_temp.outcome_cohort AS o
