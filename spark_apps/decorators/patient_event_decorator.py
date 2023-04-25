@@ -179,10 +179,6 @@ class DemographicPromptDecorator(
                 'standard_concept_id')
         )
 
-        # Udf for identifying the earliest date associated with a visit_occurrence_id
-        visit_start_date_udf = F.first('date').over(
-            W.partitionBy('cohort_member_id', 'person_id', 'visit_occurrence_id').orderBy('date'))
-
         # Identify the first token of each patient history
         patient_first_token = patient_event \
             .withColumn('token_order', first_token_udf) \
