@@ -187,4 +187,9 @@ def create_spark_args():
                         dest='allow_measurement_only',
                         action='store_true',
                         help='Indicate whether we allow patients with measurements only')
+    parser.add_argument('--is_population_estimation',
+                        dest='is_population_estimation',
+                        action='store_true',
+                        help='Indicate whether the cohort is constructed for population level '
+                             'estimation')
     return parser.parse_args()

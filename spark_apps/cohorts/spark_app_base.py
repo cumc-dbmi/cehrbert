@@ -253,7 +253,8 @@ class NestedCohortBuilder:
             is_questionable_outcome_existed: bool = False,
             is_remove_index_prediction_starts: bool = False,
             is_prediction_window_unbounded: bool = False,
-            is_observation_window_unbounded: bool = False
+            is_observation_window_unbounded: bool = False,
+            is_population_estimation: bool = False
     ):
         self._cohort_name = cohort_name
         self._input_folder = input_folder
@@ -286,32 +287,36 @@ class NestedCohortBuilder:
         self._output_data_folder = os.path.join(self._output_folder,
                                                 re.sub('[^a-z0-9]+', '_',
                                                        self._cohort_name.lower()))
+        self._is_population_estimation = is_population_estimation
 
-        self.get_logger().info(f'cohort_name: {cohort_name}\n'
-                               f'input_folder: {input_folder}\n'
-                               f'output_folder: {output_folder}\n'
-                               f'ehr_table_list: {ehr_table_list}\n'
-                               f'observation_window: {observation_window}\n'
-                               f'prediction_start_days: {prediction_start_days}\n'
-                               f'prediction_window: {prediction_window}\n'
-                               f'hold_off_window: {hold_off_window}\n'
-                               f'num_of_visits: {num_of_visits}\n'
-                               f'num_of_concepts: {num_of_concepts}\n'
-                               f'is_window_post_index: {is_window_post_index}\n'
-                               f'include_visit_type: {include_visit_type}\n'
-                               f'exclude_visit_tokens: {exclude_visit_tokens}\n'
-                               f'allow_measurement_only: {allow_measurement_only}\n'
-                               f'is_feature_concept_frequency: {is_feature_concept_frequency}\n'
-                               f'is_roll_up_concept: {is_roll_up_concept}\n'
-                               f'is_new_patient_representation: {is_new_patient_representation}\n'
-                               f'gpt_patient_sequence: {gpt_patient_sequence}\n'
-                               f'is_hierarchical_bert: {is_hierarchical_bert}\n'
-                               f'is_first_time_outcome: {is_first_time_outcome}\n'
-                               f'is_questionable_outcome_existed: {is_questionable_outcome_existed}\n'
-                               f'is_remove_index_prediction_starts: {is_remove_index_prediction_starts}\n'
-                               f'is_prediction_window_unbounded: {is_prediction_window_unbounded}\n'
-                               f'include_concept_list: {include_concept_list}\n'
-                               f'is_observation_window_unbounded: {is_observation_window_unbounded}\n')
+        self.get_logger().info(
+            f'cohort_name: {cohort_name}\n'
+            f'input_folder: {input_folder}\n'
+            f'output_folder: {output_folder}\n'
+            f'ehr_table_list: {ehr_table_list}\n'
+            f'observation_window: {observation_window}\n'
+            f'prediction_start_days: {prediction_start_days}\n'
+            f'prediction_window: {prediction_window}\n'
+            f'hold_off_window: {hold_off_window}\n'
+            f'num_of_visits: {num_of_visits}\n'
+            f'num_of_concepts: {num_of_concepts}\n'
+            f'is_window_post_index: {is_window_post_index}\n'
+            f'include_visit_type: {include_visit_type}\n'
+            f'exclude_visit_tokens: {exclude_visit_tokens}\n'
+            f'allow_measurement_only: {allow_measurement_only}\n'
+            f'is_feature_concept_frequency: {is_feature_concept_frequency}\n'
+            f'is_roll_up_concept: {is_roll_up_concept}\n'
+            f'is_new_patient_representation: {is_new_patient_representation}\n'
+            f'gpt_patient_sequence: {gpt_patient_sequence}\n'
+            f'is_hierarchical_bert: {is_hierarchical_bert}\n'
+            f'is_first_time_outcome: {is_first_time_outcome}\n'
+            f'is_questionable_outcome_existed: {is_questionable_outcome_existed}\n'
+            f'is_remove_index_prediction_starts: {is_remove_index_prediction_starts}\n'
+            f'is_prediction_window_unbounded: {is_prediction_window_unbounded}\n'
+            f'include_concept_list: {include_concept_list}\n'
+            f'is_observation_window_unbounded: {is_observation_window_unbounded}\n'
+            f'is_population_estimation: {is_population_estimation}'
+        )
 
         self.spark = SparkSession.builder.appName(f'Generate {self._cohort_name}').getOrCreate()
         self._dependency_dict = instantiate_dependencies(self.spark, self._input_folder,
@@ -431,20 +436,27 @@ class NestedCohortBuilder:
             self._include_concept_list
         )
 
-        if self._is_observation_post_index:
-            record_window_filter = ehr_records['date'].between(
-                cohort['index_date'], F.date_add(cohort['index_date'], self._observation_window))
-        else:
-            if self._is_observation_window_unbounded:
-                record_window_filter = ehr_records['date'] <= F.date_sub(cohort['index_date'],
-                                                                         self._hold_off_window)
-            else:
+        # We don't remove records for population level estimation
+        if not self._is_population_estimation:
+            # For patient level prediction, we remove all records post index date
+            if self._is_observation_post_index:
                 record_window_filter = ehr_records['date'].between(
-                    F.date_sub(cohort['index_date'],
-                               self._observation_window + self._hold_off_window),
-                    F.date_sub(cohort['index_date'], self._hold_off_window))
+                    cohort['index_date'],
+                    F.date_add(cohort['index_date'], self._observation_window))
+            else:
+                if self._is_observation_window_unbounded:
+                    record_window_filter = ehr_records['date'] <= F.date_sub(
+                        cohort['index_date'], self._hold_off_window
+                    )
+                else:
+                    record_window_filter = ehr_records['date'].between(
+                        F.date_sub(cohort['index_date'],
+                                   self._observation_window + self._hold_off_window),
+                        F.date_sub(cohort['index_date'], self._hold_off_window)
+                    )
+            ehr_records = ehr_records.where(record_window_filter)
 
-        cohort_ehr_records = ehr_records.join(cohort, 'person_id').where(record_window_filter) \
+        cohort_ehr_records = ehr_records.join(cohort, 'person_id') \
             .select([ehr_records[field_name] for field_name in ehr_records.schema.fieldNames()]
                     + ['cohort_member_id'])
 
@@ -591,5 +603,6 @@ def create_prediction_cohort(
         is_questionable_outcome_existed=is_questionable_outcome_existed,
         is_prediction_window_unbounded=is_prediction_window_unbounded,
         is_remove_index_prediction_starts=is_remove_index_prediction_starts,
-        is_observation_window_unbounded=is_observation_window_unbounded
+        is_observation_window_unbounded=is_observation_window_unbounded,
+        is_population_estimation=spark_args.is_population_estimation
     ).build()
