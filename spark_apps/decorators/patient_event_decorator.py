@@ -35,7 +35,7 @@ class PatientEventBaseDecorator(
             W.partitionBy('cohort_member_id', 'person_id', 'visit_occurrence_id').orderBy(
                 'days_since_epoch'))
 
-        visit_rank_udf = F.dense_rank().over(
+        visit_rank_udf = F.row_number().over(
             W.partitionBy('cohort_member_id', 'person_id').orderBy('visit_start_date'))
         visit_segment_udf = F.col('visit_rank_order') % F.lit(2) + 1
 
