@@ -382,6 +382,7 @@ class NestedCohortBuilder:
             query_template = """
             SELECT DISTINCT
                 t.*,
+                o.index_date as outcome_date
                 CAST(ISNOTNULL(o.person_id) AS INT) AS label
             FROM global_temp.target_cohort AS t 
             LEFT JOIN global_temp.outcome_cohort AS o
@@ -392,6 +393,7 @@ class NestedCohortBuilder:
             query_template = """
             SELECT DISTINCT
                 t.*,
+                o.index_date as outcome_date,
                 CAST(ISNOTNULL(o.person_id) AS INT) AS label
             FROM global_temp.target_cohort AS t 
             LEFT JOIN global_temp.observation_period AS op
@@ -437,7 +439,13 @@ class NestedCohortBuilder:
         )
 
         # We don't remove records for population level estimation
-        if not self._is_population_estimation:
+        if self._is_population_estimation:
+            # Allow the data records that occurred within 7 days from the outcome date
+            record_window_filter = ehr_records['date'] <= F.date_add(
+                ehr_records['outcome_date'],
+                7
+            )
+        else:
             # For patient level prediction, we remove all records post index date
             if self._is_observation_post_index:
                 record_window_filter = ehr_records['date'].between(
@@ -454,9 +462,8 @@ class NestedCohortBuilder:
                                    self._observation_window + self._hold_off_window),
                         F.date_sub(cohort['index_date'], self._hold_off_window)
                     )
-            ehr_records = ehr_records.where(record_window_filter)
 
-        cohort_ehr_records = ehr_records.join(cohort, 'person_id') \
+        cohort_ehr_records = ehr_records.where(record_window_filter).join(cohort, 'person_id') \
             .select([ehr_records[field_name] for field_name in ehr_records.schema.fieldNames()]
                     + ['cohort_member_id'])
 
