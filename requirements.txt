@@ -37,8 +37,6 @@ jedi==0.18.0
 Jinja2==2.11.2
 joblib==0.17.0
 keras==2.9.0
-Keras-Preprocessing==1.1.2
-libclang==16.0.0
 locket==0.2.1
 Markdown==3.3
 MarkupSafe==1.1.1
@@ -107,3 +105,8 @@ wrapt==1.12.1
 xgboost==1.2.1
 zict==2.0.0
 zipp==3.3.0
+fastparquet==0.8.1
+pyarrow==9.0.0
+numpy~=1.21.6
+setuptools~=41.2.0
+networkx~=2.6.3

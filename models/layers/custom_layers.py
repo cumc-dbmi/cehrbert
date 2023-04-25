@@ -1021,10 +1021,8 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             embedding_size: int,
             transformer_dropout: float,
             dff: int = 2148,
-            phenotype_entropy_weight: float = 2e-05,
-            phenotype_euclidean_weight: float = 2e-05,
-            phenotype_concept_distance_weight: float = 1e-04,
-            *args, **kwargs
+            *args,
+            **kwargs
     ):
         super(VisitPhenotypeLayer, self).__init__(*args, **kwargs)
         self.num_of_phenotypes = num_of_phenotypes
@@ -1033,15 +1031,12 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         self.dff = dff
         self.num_of_concept_neighbors = num_of_concept_neighbors
         self.num_of_phenotype_neighbors = num_of_phenotype_neighbors
-        self.phenotype_entropy_weight = phenotype_entropy_weight
-        self.phenotype_euclidean_weight = phenotype_euclidean_weight
-        self.phenotype_concept_distance_weight = phenotype_concept_distance_weight
 
         # We assume there exists hidden phenotype embeddings
         # (num_of_phenotypes, embedding_size)
         self.phenotype_embeddings = self.add_weight(
             shape=(num_of_phenotypes, embedding_size),
-            initializer=tf.keras.initializers.GlorotNormal(seed=0),
+            initializer=tf.keras.initializers.GlorotUniform(seed=0),
             trainable=True,
             name='phenotype_embeddings_matrix'
         )
@@ -1064,9 +1059,6 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         config['dff'] = self.dff
         config['num_of_concept_neighbors'] = self.num_of_concept_neighbors
         config['num_of_phenotype_neighbors'] = self.num_of_phenotype_neighbors
-        config['phenotype_entropy_weight'] = self.phenotype_entropy_weight
-        config['phenotype_euclidean_weight'] = self.phenotype_euclidean_weight
-        config['phenotype_concept_distance_weight'] = self.phenotype_concept_distance_weight
         return config
 
     def call(self, inputs, **kwargs):
@@ -1118,17 +1110,8 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             name='phenotype_probability_entropy'
         )
 
-        # Add the entropy as a loss to encourage the model to focus on a subset of phenotypes
-        # self.add_loss(
-        #     tf.reduce_mean(phenotype_prob_entropy) * self.phenotype_entropy_weight,
-        # )
-
         # Get phenotype pairwise distance metrics
         phe_inv_loss, phe_dist_metric, phe_dist_var = self.get_inverse_phenotype_dist_loss_metric()
-        #
-        # self.add_loss(
-        #     phe_inv_loss * self.phenotype_euclidean_weight
-        # )
 
         self.add_metric(
             phe_dist_metric,
