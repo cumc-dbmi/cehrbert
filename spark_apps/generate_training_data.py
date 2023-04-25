@@ -106,7 +106,8 @@ def main(
                 ['visit_concept_id', 'birth_datetime']) \
         .withColumn('cohort_member_id', F.col('person_id')) \
         .withColumn('age',
-                    F.ceil(F.months_between(F.col('date'), F.col("birth_datetime")) / F.lit(12)))
+                    F.ceil(F.months_between(F.col('date'), F.col('birth_datetime')) / F.lit(12))) \
+        .drop('birth_datetime')
 
     # Apply the age security measure
     # We only keep the patient records, whose corresponding age is less than 90

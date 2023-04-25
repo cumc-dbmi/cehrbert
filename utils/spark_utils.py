@@ -585,9 +585,13 @@ def extract_ehr_records(spark, input_folder, domain_table_list, include_visit_ty
     patient_ehr_records = patient_ehr_records.where('visit_occurrence_id IS NOT NULL').distinct()
 
     person = preprocess_domain_table(spark, input_folder, PERSON)
+    person = person.withColumn('birth_datetime',
+                               F.coalesce('birth_datetime',
+                                          F.concat('year_of_birth', F.lit('-01-01')).cast(
+                                              'timestamp')))
     patient_ehr_records = patient_ehr_records.join(person, 'person_id') \
         .withColumn('age',
-                    F.ceil(F.months_between(F.col('date'), F.col("birth_datetime")) / F.lit(12)))
+                    F.ceil(F.months_between(F.col('date'), F.col('birth_datetime')) / F.lit(12)))
     if include_visit_type:
         visit_occurrence = preprocess_domain_table(spark, input_folder, VISIT_OCCURRENCE)
         patient_ehr_records = patient_ehr_records.join(visit_occurrence, 'visit_occurrence_id') \

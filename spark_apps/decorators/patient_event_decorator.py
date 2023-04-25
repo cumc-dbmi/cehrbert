@@ -169,6 +169,15 @@ class DemographicPromptDecorator(
         if self._patient_demographic is None:
             return patient_event
 
+        demo = self._patient_demographic.select(
+            'person_id', 'cohort_member_id',
+            'gender_concept_id', 'race_concept_id',
+            'birth_datetime'
+        )
+        patient_event = patient_event.join(
+            demo
+            ['person_id', 'cohort_member_id']
+        )
         # Get the first token of the patient history
         first_token_udf = F.row_number().over(
             W.partitionBy('cohort_member_id', 'person_id').orderBy(
@@ -176,6 +185,7 @@ class DemographicPromptDecorator(
             )
         )
 
+        # Identify the first token of each patient history
         patient_first_token = patient_event \
             .withColumn('token_order', first_token_udf) \
             .where('token_order = 1') \
@@ -198,7 +208,7 @@ class DemographicPromptDecorator(
                         F.concat(F.lit('age:'), age_at_first_visit_udf.cast(T.StringType()))) \
             .withColumn('priority', F.lit(-9))
 
-        sequence_gender_token = self._patient_demographic.select(
+        sequence_gender_token = patient_event.select(
             F.col('person_id'),
             F.col('gender_concept_id')
         ).join(
@@ -209,7 +219,7 @@ class DemographicPromptDecorator(
             F.col('gender_concept_id').cast(T.StringType())
         ).withColumn('priority', F.lit(-8)).drop('gender_concept_id')
 
-        sequence_race_token = self._patient_demographic.select(
+        sequence_race_token = patient_event.select(
             F.col('person_id'),
             F.col('race_concept_id')
         ).join(
