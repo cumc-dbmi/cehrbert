@@ -438,12 +438,11 @@ class NestedCohortBuilder:
             self._include_concept_list
         )
 
-        # We don't remove records for population level estimation
+        # Only allow the data records that occurred between the index date and the prediction window
         if self._is_population_estimation:
-            # Allow the data records that occurred within 7 days from the outcome date
             record_window_filter = ehr_records['date'] <= F.date_add(
-                cohort['outcome_date'],
-                7
+                cohort['index_date'],
+                self._prediction_window
             )
         else:
             # For patient level prediction, we remove all records post index date
