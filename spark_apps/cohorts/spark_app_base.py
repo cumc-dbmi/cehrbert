@@ -440,10 +440,13 @@ class NestedCohortBuilder:
 
         # Only allow the data records that occurred between the index date and the prediction window
         if self._is_population_estimation:
-            record_window_filter = ehr_records['date'] <= F.date_add(
-                cohort['index_date'],
-                self._prediction_window
-            )
+            if self._is_prediction_window_unbounded:
+                record_window_filter = ehr_records['date'] <= F.current_date()
+            else:
+                record_window_filter = ehr_records['date'] <= F.date_add(
+                    cohort['index_date'],
+                    self._prediction_window
+                )
         else:
             # For patient level prediction, we remove all records post index date
             if self._is_observation_post_index:
