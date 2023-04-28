@@ -87,21 +87,19 @@ def export_and_clear_csv(output_folder, export_dict, buffer_size):
     return export_dict
 
 
-def export_and_clear_parquet(output_folder, export_dict, export_error, id_mappings_dict):
+def export_and_clear_parquet(output_folder, export_dict, export_error, id_mappings_dict, pt_seq_dict):
     for table_name, records_to_export in export_dict.items():
         export_error[table_name] = []
         records_in_json = []
         omop_id_mapping = np.array(list(id_mappings_dict[table_name].keys()))
         person_id_mapping = np.array(list(id_mappings_dict[table_name].values()))
-        # for record in list(records_to_export.values()):
-        #     records_in_json.append(record.export_as_json())
         for idx, record in export_dict[table_name].items():
             try:
                 records_in_json.append(record.export_as_json())
             except AttributeError:
-                export_error[table_name].append(person_id_mapping[np.where(omop_id_mapping == idx)])
+                # append patient sequence to export error list using pt_seq_dict.
+                export_error[table_name].append(pt_seq_dict[person_id_mapping[np.where(omop_id_mapping == idx)]])
                 continue
-            #records_in_json = [record.export_as_json() for record in export_dict[table_name]]
         schema = next(iter(records_to_export.items()))[1].get_schema()
         output_folder_path = Path(output_folder)
         file_path = output_folder_path / table_name / f'{uuid.uuid4()}.parquet'
@@ -122,6 +120,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
     error_dict = {}
     export_error = {}
     id_mappings_dict = {}
+    pt_seq_dict = {}
 
     for tb in TABLE_LIST:
         create_folder_if_not_exists(output_folder, tb)
@@ -130,10 +129,6 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
 
     for index, row in tqdm(pat_seq_split.iteritems(), total=pat_seq_len):
         bad_sequence = False
-        #id_mappings_dict[person_id] = {}
-        # for tb in TABLE_LIST:
-        #     id_mappings_dict[tb] = {}
-        #id_mappings_dict[person_id]['person'].append(person_id)
         # ignore start token
         if 'start' in row[0].lower():
             row = row[1:]
@@ -149,6 +144,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
         p = Person(person_id, start_gender, birth_year, start_race)
         omop_export_dict = append_to_dict(omop_export_dict, p, person_id)
         id_mappings_dict['person'][person_id] = person_id
+        pt_seq_dict[person_id] = row
         VS_DATE = date(int(start_year), 1, 1)
         ATT_DATE_DELTA = 0
         vo = None
@@ -165,7 +161,6 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                 VS_DATE = VS_DATE + timedelta(days=ATT_DATE_DELTA)
                 vo = VisitOccurrence(visit_occurrence_id, visit_concept_id, VS_DATE, p)
                 omop_export_dict = append_to_dict(omop_export_dict, vo, visit_occurrence_id)
-                #id_mappings_dict[person_id]['visit_occurrence'].append(visit_occurrence_id)
                 id_mappings_dict['visit_occurrence'][visit_occurrence_id] = person_id
                 visit_occurrence_id += 1
             elif x in ATT_TIME_TOKENS:
@@ -195,19 +190,16 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                         if domain == 'Condition':
                             co = ConditionOccurrence(condition_occurrence_id, x, vo)
                             omop_export_dict = append_to_dict(omop_export_dict, co, condition_occurrence_id)
-                            #id_mappings_dict[person_id]['condition_occurrence'].append(condition_occurrence_id)
                             id_mappings_dict['condition_occurrence'][condition_occurrence_id] = person_id
                             condition_occurrence_id += 1
                         elif domain == 'Procedure':
                             po = ProcedureOccurrence(procedure_occurrence_id, x, vo)
                             omop_export_dict = append_to_dict(omop_export_dict, po, procedure_occurrence_id)
-                            #id_mappings_dict[person_id]['procedure_occurrence'].append(procedure_occurrence_id)
                             id_mappings_dict['procedure_occurrence'][procedure_occurrence_id] = person_id
                             procedure_occurrence_id += 1
                         elif domain == 'Drug':
                             de = DrugExposure(drug_exposure_id, x, vo)
                             omop_export_dict = append_to_dict(omop_export_dict, de, drug_exposure_id)
-                            #id_mappings_dict[person_id]['drug_exposure'].append(drug_exposure_id)
                             id_mappings_dict['drug_exposure'][drug_exposure_id] = person_id
                             drug_exposure_id += 1
                 except ValueError:
@@ -222,7 +214,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
 
         if index != 0 and (index % buffer_size == 0 or index == pat_seq_len):
             omop_export_dict, export_error = export_and_clear_parquet(output_folder, omop_export_dict,
-                                                                      export_error, id_mappings_dict)
+                                                                      export_error, id_mappings_dict, pt_seq_dict)
 
     with open(Path(output_folder) / "concept_errors.txt", "a") as f:
         f.write(str(error_dict))
