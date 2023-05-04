@@ -13,6 +13,6 @@ if __name__ == '__main__':
     create_prediction_cohort(
         spark_args,
         cad.query_builder(spark_args),
-        cabg.query_builder(),
+        cabg.query_builder(spark_args),
         ehr_table_list
     )
