@@ -26,7 +26,7 @@ WHERE c.index_date >= '{date_lower_bound}'
 """
 
 DEFAULT_COHORT_NAME = 'cabg'
-DEPENDENCY_LIST = ['person', 'procedure', 'visit_occurrence']
+DEPENDENCY_LIST = ['person', 'procedure_occurrence', 'visit_occurrence']
 CABG_INCLUSION_TABLE = 'CABG'
 CABG_CONCEPTS = [
     43528001, 43528003, 43528004, 43528002, 4305852, 4168831, 2107250,
