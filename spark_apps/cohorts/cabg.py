@@ -18,7 +18,7 @@ FROM
         ON po.visit_occurrence_id = vo.visit_occurrence_id
     WHERE EXISTS (
         SELECT 1 
-        FROM global_temp.{cad_concept_table} AS ie
+        FROM global_temp.{cabg_concept_table} AS ie
         WHERE po.procedure_concept_id = ie.concept_id
     )
 ) c
@@ -50,7 +50,6 @@ def query_builder(spark_args):
             ancestor_concept_ids=CABG_CONCEPTS,
             is_standard=True
         )
-
     ]
     return QueryBuilder(
         cohort_name=DEFAULT_COHORT_NAME,
