@@ -44,7 +44,7 @@ WHERE NOT EXISTS (
 """
 
 DEFAULT_COHORT_NAME = 'coronary_artery_disease'
-DEPENDENCY_LIST = ['person', 'condition_occurrence', 'visit_occurrence']
+DEPENDENCY_LIST = ['person', 'condition_occurrence', 'procedure_occurrence', 'visit_occurrence']
 CAD_INCLUSION_TABLE = 'CAD'
 CAD_CONCEPTS = [317576]
 
