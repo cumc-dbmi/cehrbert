@@ -13,7 +13,8 @@ PERSON = 'person'
 
 def main(input_folder, output_folder, domain_table_list, date_filter,
          include_visit_type, is_new_patient_representation, exclude_visit_tokens,
-         is_classic_bert, include_prolonged_stay, create_visits_from_dates):
+         is_classic_bert, include_prolonged_stay, create_visits_from_dates, create_visit_gap,
+         link_events_visits):
     spark = SparkSession.builder.appName('Generate Bert Training Data').getOrCreate()
     domain_tables = []
     for domain_table_name in domain_table_list:
@@ -24,32 +25,30 @@ def main(input_folder, output_folder, domain_table_list, date_filter,
                                                'person_id')
     person = preprocess_domain_table(spark, input_folder, PERSON)
     person = person.select('person_id', F.concat('year_of_birth', F.lit('-'), F.coalesce('month_of_birth', F.lit('01')), F.lit('-'), F.coalesce('day_of_birth', F.lit('01'))).cast('timestamp').alias('birth_datetime'))
-    visit_occurrence_person = visit_occurrence.join(person, 'person_id')
 
     patient_event = join_domain_tables(domain_tables)
-    if create_visits_from_dates:
-        patient_event = patient_event.join(person, 'person_id') \
-            .select([patient_event[fieldName] for fieldName in patient_event.schema.fieldNames()] +
-                    ['birth_datetime']) \
-            .withColumn('cohort_member_id', F.col('person_id')) \
-            .withColumn('age', F.ceil(F.months_between(F.col('date'),
-                                                       F.col("birth_datetime")) / F.lit(12)))
-    else:
-        visit_occurrence_person = visit_occurrence.join(person, 'person_id')
 
-        patient_event = patient_event.join(visit_occurrence_person, 'visit_occurrence_id') \
-            .select([patient_event[fieldName] for fieldName in patient_event.schema.fieldNames()] +
-                    ['visit_concept_id', 'birth_datetime']) \
-            .withColumn('cohort_member_id', F.col('person_id')) \
-            .withColumn('age', F.ceil(F.months_between(F.col('date'),
-                                                       F.col("birth_datetime")) / F.lit(12)))
+    patient_event = patient_event.join(visit_occurrence, on=['visit_occurrence_id'], how='left') \
+        .join(person, on="person_id") \
+        .select([patient_event[fieldName] for fieldName in patient_event.schema.fieldNames()] +
+                ['visit_concept_id', 'birth_datetime']) \
+        .withColumn('cohort_member_id', F.col('person_id')) \
+        .withColumn('age', F.ceil(F.months_between(F.col('date'),
+                                                   F.col("birth_datetime")) / F.lit(12)))
+    if link_events_visits:
+        patient_event = link_events_with_visits(patient_event)
+
+    if create_visits_from_dates:
+        patient_event = create_visits(patient_event, link_events_visits, create_visit_gap)
+
+    patient_event = patient_event.filter(F.col("visit_occurrence_id").isNotNull())
+
 
     if is_new_patient_representation:
         sequence_data = create_sequence_data_with_att(patient_event,
                                                       date_filter=date_filter,
                                                       include_visit_type=include_visit_type,
-                                                      exclude_visit_tokens=exclude_visit_tokens,
-                                                      create_visits_from_dates=create_visits_from_dates)
+                                                      exclude_visit_tokens=exclude_visit_tokens)
     else:
         sequence_data = create_sequence_data(patient_event,
                                              date_filter=date_filter,
@@ -131,8 +130,20 @@ if __name__ == '__main__':
                         action='store_true',
                         help='Specify whether to create visits so events falling on consecutive '
                              'days belong to same visit')
+    parser.add_argument('--create_visit_gap',
+                        dest='create_visit_gap',
+                        action='store',
+                        type=int,
+                        default=1,
+                        help='Specify gap when creating visits artificially')
+    parser.add_argument('--link_events_to_visits',
+                        dest='link_events_visits',
+                        action='store_true',
+                        help='Try to link events without visit info to same day visits')
+
     ARGS = parser.parse_args()
 
     main(ARGS.input_folder, ARGS.output_folder, ARGS.domain_table_list, ARGS.date_filter,
          ARGS.include_visit_type, ARGS.is_new_patient_representation, ARGS.exclude_visit_tokens,
-         ARGS.is_classic_bert_sequence, ARGS.include_prolonged_stay, ARGS.create_visits_from_dates)
+         ARGS.is_classic_bert_sequence, ARGS.include_prolonged_stay, ARGS.create_visits_from_dates,
+         ARGS.create_visit_gap, ARGS.link_events_visits)

@@ -446,25 +446,6 @@ def create_sequence_data_with_att(patient_event, date_filter=None,
     if date_filter:
         patient_event = patient_event.where(F.col('date').cast('date') >= date_filter)
 
-    if create_visits_from_dates:
-        # create date_diff column
-        window = W.partitionBy("cohort_member_id", "person_id").orderBy("date")
-        patient_event = patient_event.withColumn("date_difference",
-                                                 F.datediff(patient_event.date,
-                                                            F.lag(patient_event.date, 1).over(
-                                                                window)))
-        # first row per person_id gives nan for date_difference, replace with value 2
-        patient_event = patient_event.na.fill(2, "date_difference")
-
-        # create visit_occurrence_ids
-        patient_event = patient_event.withColumn("_flg", F.coalesce(F.when(F.col("date_difference") > 1, 1),
-                                                                    F.lit(0)))
-        patient_event = patient_event.withColumn("visit_occurrence_id", F.sum("_flg").over(window))
-
-        # add visit_concept_id=0 for the artificially constructed visits
-        patient_event = patient_event .withColumn('visit_concept_id', F.lit(0))
-        
-        patient_event = patient_event .drop("date_difference", "_flg")
     # Udf for identifying the earliest date associated with a visit_occurrence_id
     visit_start_date_udf = F.first('date').over(
         W.partitionBy('cohort_member_id', 'person_id', 'visit_occurrence_id').orderBy('date'))
@@ -759,3 +740,60 @@ def get_standard_concept_ids(spark, concept_ids):
             WHERE ca.concept_id_1 IN ({concept_ids})
         """.format(concept_ids=','.join([str(c) for c in concept_ids])))
     return standard_concept_ids
+
+
+def link_events_with_visits(patient_event):
+    """
+    Links events without a visit_occurrence_id to a same day visit
+    """
+    window = W.partitionBy(['cohort_member_id', 'person_id', 'date'])
+    patient_event = patient_event.withColumn('visit_occurrence_id',
+                                             F.last('visit_occurrence_id', ignorenulls=True).over(window)) \
+        .withColumn('visit_concept_id', F.last('visit_concept_id', ignorenulls=True).over(window))
+    return patient_event
+
+
+def create_visits(patient_event, link_events_visits, gap):
+    """
+    Creates visits as a consecutive sequence of events.
+    The parameter gap controls what events are considered consecutive. A gap of 1
+    means events with 0 days between them are consecutive. A gap of 0 means only same day events
+    are consecutive.
+    """
+    # create date_diff column
+    window = W.partitionBy("cohort_member_id", "person_id").orderBy("date")
+    patient_event = patient_event.withColumn("date_difference",
+                                             F.datediff(patient_event.date,
+                                                        F.lag(patient_event.date, 1).over(
+                                                            window)))
+    # first row per person_id gives nan for date_difference, replace with value 2
+    patient_event = patient_event.na.fill(2, "date_difference")
+
+    if link_events_visits:
+        # only create visits when visit info is missing
+        patient_event = patient_event.withColumn("_flg",
+                                                 F.coalesce(F.when((F.col("date_difference") > gap) & \
+                                                                   (F.col("visit_occurrence_id").isNull()), 1),
+                                                            F.lit(0)))
+
+        # make sure new visit ids are not clashing with existing
+        whole_window = W.partitionBy("cohort_member_id", "person_id")
+        patient_event = patient_event.withColumn("_max", F.max(F.col("visit_occurrence_id")).over(whole_window))
+
+        patient_event = patient_event.withColumn("visit_occurrence_id",
+                                                 F. coalesce(F.col("visit_occurrence_id"), F.col("_max") + F.sum("_flg").over(window))
+        patient_event = patient_event.drop("_max")
+        # add visit_concept_id=0 for the artificially constructed visits
+        patient_event = patient_event.withColumn('visit_concept_id', F. coalesce('visit_concept_id', F.lit(0)))
+    else:
+        # create visit_occurrence_ids
+        patient_event = patient_event.withColumn("_flg", F.coalesce(F.when(F.col("date_difference") > gap, 1),
+                                                                    F.lit(0)))
+        patient_event = patient_event.withColumn("visit_occurrence_id", F.sum("_flg").over(window))
+
+        # add visit_concept_id=0 for the artificially constructed visits
+        patient_event = patient_event.withColumn('visit_concept_id', F.lit(0))
+
+    patient_event = patient_event.drop("date_difference", "_flg")
+
+    return patient_event
