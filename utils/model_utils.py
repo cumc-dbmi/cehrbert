@@ -63,7 +63,7 @@ def log_function_decorator(function):
 @log_function_decorator
 def tokenize_concepts(training_data: Union[pd_dataframe, dd_dataframe],
                       column_name, tokenized_column_name, tokenizer_path,
-                      oov_token='0', recreate=False):
+                      oov_token='-1', recreate=False):
     """
     Tokenize the concept sequence and save the tokenizer as a pickle file
     :return:
