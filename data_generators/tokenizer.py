@@ -24,11 +24,10 @@ class ConceptTokenizer:
     def fit_on_concept_sequences(self, concept_sequences: Union[df_series, dd_series]):
 
         if isinstance(concept_sequences, df_series):
-            self.tokenizer.fit_on_texts(concept_sequences.apply(
-                lambda concept_ids: concept_ids.tolist()))
+            self.tokenizer.fit_on_texts(concept_sequences.apply(list))
         else:
             self.tokenizer.fit_on_texts(
-                concept_sequences.apply(lambda s: s.tolist(), meta='iterable'))
+                concept_sequences.apply(list, meta='iterable'))
 
         self.tokenizer.fit_on_texts([self.mask_token])
         self.tokenizer.fit_on_texts([self.att_mask_token])
