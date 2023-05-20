@@ -3,9 +3,11 @@ import random
 
 import numpy as np
 import tensorflow as tf
+from keras import backend as K
 
 from data_generators.tokenizer import ConceptTokenizer
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
+from keras_transformer.position import TransformerCoordinateEmbedding
 from models.layers.custom_layers import GptDecoder, TrainablePositionEmbedding
 
 
@@ -28,7 +30,6 @@ class GptInferenceModel(tf.keras.Model):
         self.positional_encoding_layer = self._get_positional_encoding_layer(gpt_model)
         self.output_layer = self._get_output_layer(gpt_model)
         self.gpt_decoder = self._get_gpt_decoder(gpt_model)
-        self.vocab_size = self.concept_embedding_layer.input_dim
 
     def _generate_next_token(
             self,
@@ -90,51 +91,6 @@ class GptInferenceModel(tf.keras.Model):
 
         return logtis, new_cached_contexts
 
-    def _block_recurring_tokens(
-            self,
-            inputs,
-            outputs,
-            vs_token_id,
-            unknown_token_id
-    ):
-        batch, length = tf.shape(inputs)
-        # Get the index of the last occurrence of VS token in the sequence
-        last_token_index = self._find_last_index_of_token(
-            sequence_in_batch=inputs,
-            token_id=vs_token_id
-        )
-        # Create the sequence index
-        sequence_index = tf.tile(tf.range(0, length)[tf.newaxis, :], (batch, 1))
-        # Detect current visit boundary in the patient sequence
-        current_visit_boundary = tf.cast(
-            sequence_index <= last_token_index,
-            dtype=tf.int32
-        )
-
-        # Extract disallowed token ids from the current visits. We don't want to create the same
-        # tokens that have been created in the same visit. We explicitly change all the tokens that
-        # come before the current visit to vs_token_id so the operation could be done on the
-        # entire tensor
-        disallowed_token_ids = current_visit_boundary * unknown_token_id
-        disallowed_token_ids += (1 - current_visit_boundary) * inputs
-
-        # Create the logit index (batch, vocab_size)
-        logit_index = tf.tile(tf.range(self.vocab_size)[tf.newaxis, :], (batch, 1))
-        # Find the token ids that already appeared in the same visit and mask them in the logits
-        mask_token_ids = tf.math.equal(
-            logit_index[:, :, tf.newaxis],
-            disallowed_token_ids[:, tf.newaxis, :]
-        )
-        # If any of the disallowed tokens are present, we block the sampling of those tokens
-        mask_token_ids = tf.cast(
-            tf.reduce_any(
-                mask_token_ids, axis=-1
-            ),
-            dtype=tf.float32
-        )[:, tf.newaxis, :]
-        # Mask token ids by adding -1e9 to their corresponding logits
-        return mask_token_ids * -1e9 + outputs
-
     def call(
             self,
             inputs
@@ -153,16 +109,6 @@ class GptInferenceModel(tf.keras.Model):
                 inputs,
                 cached_contexts
             )
-
-            # Block the sampling of the tokens that already appear within the same visit (defined
-            # as the tokens that appear since the last VS)
-            outputs = self._block_recurring_tokens(
-                inputs,
-                outputs,
-                self.tokenizer.get_visit_start_token_id(),
-                unknown_token_id=0  # 0 is the placeholder for unknown
-            )
-
             # Randomly sample a batch of tokens
             pred_logits, indices = tf.math.top_k(outputs, k=self.top_k, sorted=True)
             indices = np.asarray(indices).astype("int32")
@@ -192,16 +138,6 @@ class GptInferenceModel(tf.keras.Model):
                 break
 
         return inputs
-
-    @staticmethod
-    def _find_last_index_of_token(
-            sequence_in_batch,
-            token_id
-    ):
-        length = tf.shape(sequence_in_batch)[1].numpy()
-        argmax_in_reverse = tf.argmax(tf.reverse(sequence_in_batch == token_id, [-1]), axis=-1)
-        last_token_index = length - argmax_in_reverse[:, tf.newaxis] - 1
-        return tf.cast(last_token_index, dtype=tf.int32)
 
     @staticmethod
     def _get_concept_embedding(gpt_model):

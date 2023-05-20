@@ -1,10 +1,8 @@
+from const.common import UNKNOWN_CONCEPT
 from typing import Optional, Sequence, Union
-
 from dask.dataframe import Series as dd_series
 from pandas import Series as df_series
 from tensorflow.keras.preprocessing.text import Tokenizer
-
-from const.common import UNKNOWN_CONCEPT
 
 
 class ConceptTokenizer:
@@ -14,8 +12,6 @@ class ConceptTokenizer:
     cls_token = '[CLS]'
     start_token = '[START]'
     end_token = '[END]'
-    visit_start_token = 'VS'
-    visit_end_token = 'VE'
 
     def __init__(self, special_tokens: Optional[Sequence[str]] = None, oov_token='0'):
         self.special_tokens = special_tokens
@@ -36,8 +32,6 @@ class ConceptTokenizer:
         self.tokenizer.fit_on_texts([self.start_token])
         self.tokenizer.fit_on_texts([self.end_token])
         self.tokenizer.fit_on_texts([UNKNOWN_CONCEPT])
-        self.tokenizer.fit_on_texts([self.visit_start_token])
-        self.tokenizer.fit_on_texts([self.visit_end_token])
 
         if self.special_tokens is not None:
             self.tokenizer.fit_on_texts(self.special_tokens)
@@ -121,15 +115,3 @@ class ConceptTokenizer:
 
     def get_att_mask_token(self):
         return self.att_mask_token
-
-    def get_visit_start_token_id(self):
-        visit_start_token_id = self.encode([self.visit_start_token])
-        while isinstance(visit_start_token_id, list):
-            visit_start_token_id = visit_start_token_id[0]
-        return visit_start_token_id
-
-    def get_visit_end_token_id(self):
-        visit_end_token_id = self.encode([self.visit_end_token])
-        while isinstance(visit_end_token_id, list):
-            visit_end_token_id = visit_end_token_id[0]
-        return visit_end_token_id
