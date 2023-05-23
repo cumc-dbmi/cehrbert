@@ -103,7 +103,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             raise FileExistsError(f'{self._training_data_parquet_path} does not exist!')
 
         if self._use_dask:
-            return dd.read_parquet(self._training_data_parquet_path)
+            return dd.read_parquet(self._training_data_parquet_path, engine='pyarrow')
         else:
             return pd.read_parquet(self._training_data_parquet_path)
 
