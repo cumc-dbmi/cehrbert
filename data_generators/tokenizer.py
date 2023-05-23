@@ -10,7 +10,7 @@ class ConceptTokenizer:
     unused_token = ['[UNUSED]']
     mask_token = ['[MASK]']
 
-    def __init__(self, special_tokens: Optional[Sequence[str]] = None, oov_token='0'):
+    def __init__(self, special_tokens: Optional[Sequence[str]] = None, oov_token='-1'):
         self.special_tokens = special_tokens
         self.tokenizer = Tokenizer(oov_token=oov_token, filters='', lower=False)
 
