@@ -104,12 +104,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             raise FileExistsError(f'{self._training_data_parquet_path} does not exist!')
 
         if self._use_dask:
-            # if the path is a directory
-            if os.path.isdir(self._training_data_parquet_path):
-                parquet_files = glob.glob(os.path.join(self._training_data_parquet_path, '*.parquet'))
-                return dd.read_parquet(parquet_files, engine='pyarrow')
-            else:
-                return dd.read_parquet(self._training_data_parquet_path, engine='pyarrow')
+            return dd.read_parquet(self._training_data_parquet_path, engine='pyarrow')
         else:
             return pd.read_parquet(self._training_data_parquet_path)
 
