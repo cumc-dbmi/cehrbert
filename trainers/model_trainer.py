@@ -121,7 +121,9 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         :return:
         """
         data_generator = self.create_data_generator()
+        self.get_logger().info('Calculating steps per epoch')
         steps_per_epoch = data_generator.get_steps_per_epoch()
+        self.get_logger().info(f'Calculated {steps_per_epoch} steps per epoch')
         dataset = tf.data.Dataset.from_generator(data_generator.create_batch_generator,
                                                  output_types=(
                                                      data_generator.get_tf_dataset_schema()))

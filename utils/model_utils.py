@@ -77,19 +77,22 @@ def tokenize_concepts(training_data: Union[pd_dataframe, dd_dataframe],
         tokenizer = pickle.load(open(tokenizer_path, 'rb'))
 
     if isinstance(training_data, dd_dataframe):
-        training_data[tokenized_column_name] = training_data[column_name].map_partitions(
-            lambda ds: pd.Series(
-                tokenizer.encode(map(lambda t: list(t[1]), ds.iteritems()), is_generator=True),
-                name='concept_ids'),
-            meta='iterable'
+        # update the training data
+        new_df = training_data.map_partitions(
+            lambda ds: ds.assign(**{
+                tokenized_column_name: tokenizer.encode(
+                    map(lambda t: list(t[1]), ds[column_name].iteritems()))
+            })
         )
+        # This is a workaround as direct assignment the partitions don't match up for some reason
+        training_data[tokenized_column_name] = new_df[tokenized_column_name]
     else:
         training_data[tokenized_column_name] = tokenizer.encode(
             map(list, training_data[column_name])
         )
-
     if not os.path.exists(tokenizer_path) or recreate:
         pickle.dump(tokenizer, open(tokenizer_path, 'wb'))
+
     return tokenizer
 
 
