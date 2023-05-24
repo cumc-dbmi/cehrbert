@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import os
+import glob
 from pathlib import Path
 import pandas as pd
 import dask.dataframe as dd
@@ -103,7 +104,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             raise FileExistsError(f'{self._training_data_parquet_path} does not exist!')
 
         if self._use_dask:
-            return dd.read_parquet(self._training_data_parquet_path)
+            return dd.read_parquet(self._training_data_parquet_path, engine='pyarrow')
         else:
             return pd.read_parquet(self._training_data_parquet_path)
 
@@ -121,7 +122,9 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         :return:
         """
         data_generator = self.create_data_generator()
+        self.get_logger().info('Calculating steps per epoch')
         steps_per_epoch = data_generator.get_steps_per_epoch()
+        self.get_logger().info(f'Calculated {steps_per_epoch} steps per epoch')
         dataset = tf.data.Dataset.from_generator(data_generator.create_batch_generator,
                                                  output_types=(
                                                      data_generator.get_tf_dataset_schema()))

@@ -4,8 +4,8 @@ import inspect
 
 from collections import ChainMap
 from pandas import DataFrame
+from dask.dataframe import DataFrame as dd_dataframe
 from itertools import chain
-
 from data_generators.learning_objective import *
 from data_generators.tokenizer import ConceptTokenizer
 
@@ -184,8 +184,8 @@ class AbstractDataGeneratorBase(ABC):
         pass
 
     def get_steps_per_epoch(self):
-        return self.estimate_data_size() // self._batch_size \
-               + self.estimate_data_size() % self._batch_size
+        size = self.estimate_data_size()
+        return size // self._batch_size + size % self._batch_size
 
     def _get_required_columns(self) -> Set[str]:
         """
@@ -252,7 +252,10 @@ class BertDataGenerator(AbstractDataGeneratorBase):
                     yield RowSlicer(row, 0, seq_length)
 
     def estimate_data_size(self):
-        return len(self._training_data)
+        if isinstance(self._training_data, dd_dataframe):
+            return self._training_data.index.size.compute()
+        else:
+            return len(self._training_data)
 
 
 class BertVisitPredictionDataGenerator(BertDataGenerator):

@@ -64,10 +64,12 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
 
     def _load_dependencies(self):
 
-        self._tokenizer = tokenize_concepts(self._training_data,
-                                            'concept_ids',
-                                            'token_ids',
-                                            self._tokenizer_path)
+        self._tokenizer = tokenize_concepts(
+            self._training_data,
+            'concept_ids',
+            'token_ids',
+            self._tokenizer_path
+        )
 
         if self._include_visit_prediction:
             self._visit_tokenizer = tokenize_concepts(self._training_data,
