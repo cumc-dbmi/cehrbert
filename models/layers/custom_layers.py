@@ -4,6 +4,7 @@ from tensorflow.keras.utils import get_custom_objects
 
 from keras_transformer.bert import MaskedPenalizedSparseCategoricalCrossentropy
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
+from keras_transformer.position import TransformerCoordinateEmbedding
 from utils.model_utils import create_concept_mask
 
 
@@ -206,8 +207,16 @@ class Encoder(tf.keras.layers.Layer):
 
 
 class GptDecoder(tf.keras.layers.Layer):
-    def __init__(self, num_layers, d_model, num_heads, dff=2148, dropout_rate=0.1, *args,
-                 **kwargs):
+    def __init__(
+            self,
+            num_layers,
+            d_model,
+            num_heads,
+            dff=2148,
+            dropout_rate=0.1,
+            *args,
+            **kwargs
+    ):
         super(GptDecoder, self).__init__(*args, **kwargs)
 
         self.d_model = d_model
@@ -231,10 +240,12 @@ class GptDecoder(tf.keras.layers.Layer):
 
     def call(self, x, mask, **kwargs):
         attention_weights = []
+        layer_contexts = []
         for i in range(self.num_layers):
-            x, attn_weights = self.decoder_layers[i](x, mask, **kwargs)
+            x, attn_weights = self.decoder_layers[i](x, x, x, mask, **kwargs)
             attention_weights.append(attn_weights)
-        return x, tf.stack(attention_weights, axis=0)  # (batch_size, input_seq_len, d_model)
+            layer_contexts.append(x)
+        return x, tf.stack(layer_contexts, axis=0), tf.stack(attention_weights, axis=0)
 
 
 class DecoderLayer(tf.keras.layers.Layer):
@@ -296,15 +307,15 @@ class GptDecoderLayer(tf.keras.layers.Layer):
         self.dff = dff
         self.rate = rate
 
-        self.mha1 = MultiHeadAttention(d_model, num_heads)
+        self.mha = MultiHeadAttention(d_model, num_heads)
 
         self.ffn = point_wise_feed_forward_network(d_model, dff)
 
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
-        self.layernorm3 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
 
         self.dropout1 = tf.keras.layers.Dropout(rate)
-        self.dropout3 = tf.keras.layers.Dropout(rate)
+        self.dropout2 = tf.keras.layers.Dropout(rate)
 
     def get_config(self):
         config = super().get_config()
@@ -314,19 +325,50 @@ class GptDecoderLayer(tf.keras.layers.Layer):
         config['rate'] = self.rate
         return config
 
-    def call(self, x, decoder_mask, **kwargs):
-        # enc_output.shape == (batch_size, input_seq_len, d_model)
+    def call(self, query, key, value, decoder_mask, **kwargs):
+        # (batch_size, target_seq_len, d_model)
+        attn, attn_weights_block = self.mha(
+            v=value,
+            k=key,
+            q=query,
+            mask=decoder_mask,
+            **kwargs
+        )
+        attn = self.dropout1(attn)
+        out = self.layernorm1(attn + query)
 
-        attn1, attn_weights_block1 = self.mha1(x, x, x,
-                                               decoder_mask)  # (batch_size, target_seq_len, d_model)
-        attn1 = self.dropout1(attn1)
-        out1 = self.layernorm1(attn1 + x)
+        ffn_output = self.ffn(out)  # (batch_size, target_seq_len, d_model)
+        ffn_output = self.dropout2(ffn_output, **kwargs)
+        out2 = self.layernorm2(ffn_output + out)  # (batch_size, target_seq_len, d_model)
 
-        ffn_output = self.ffn(out1)  # (batch_size, target_seq_len, d_model)
-        ffn_output = self.dropout3(ffn_output, **kwargs)
-        out3 = self.layernorm3(ffn_output + out1)  # (batch_size, target_seq_len, d_model)
+        return out2, attn_weights_block
 
-        return out3, attn_weights_block1
+
+class TrainablePositionEmbedding(tf.keras.layers.Layer):
+    def __init__(
+            self,
+            maxlen,
+            embed_dim,
+            *args,
+            **kwargs
+    ):
+        super().__init__(*args, **kwargs)
+        self.pos_emb = tf.keras.layers.Embedding(input_dim=maxlen, output_dim=embed_dim)
+        self._maxlen = maxlen
+        self._embed_dim = embed_dim
+
+    def get_config(self):
+        config = super().get_config()
+        config['maxlen'] = self._maxlen
+        config['embed_dim'] = self._embed_dim
+        return config
+
+    def call(self, x, **kwargs):
+        # kwargs is needed for backward compatability
+        maxlen = tf.shape(x)[1]
+        positions = tf.range(start=0, limit=maxlen, delta=1)
+        positions = self.pos_emb(positions)
+        return positions
 
 
 class SimpleDecoderLayer(tf.keras.layers.Layer):
@@ -392,7 +434,13 @@ class SimpleDecoderLayer(tf.keras.layers.Layer):
 
 
 class PositionalEncodingLayer(tf.keras.layers.Layer):
-    def __init__(self, embedding_size, max_sequence_length=512, *args, **kwargs):
+    def __init__(
+            self,
+            embedding_size,
+            max_sequence_length=512,
+            *args,
+            **kwargs
+    ):
         super(PositionalEncodingLayer, self).__init__(*args, **kwargs)
         self.embedding_size = embedding_size
         self.max_sequence_length = max_sequence_length
@@ -414,37 +462,6 @@ class PositionalEncodingLayer(tf.keras.layers.Layer):
         # Get the same positional encodings for the concepts with the same visit_order
         positional_embeddings = tf.gather(self.pos_encoding, visit_concept_orders, axis=0)
         return positional_embeddings
-
-
-class TokenAndPositionEmbedding(tf.keras.layers.Layer):
-    def __init__(
-            self,
-            maxlen,
-            vocab_size,
-            embed_dim,
-            *args,
-            **kwargs
-    ):
-        super().__init__(*args, **kwargs)
-        self.token_emb = tf.keras.layers.Embedding(input_dim=vocab_size, output_dim=embed_dim)
-        self.pos_emb = tf.keras.layers.Embedding(input_dim=maxlen, output_dim=embed_dim)
-        self._maxlen = maxlen
-        self._vocab_size = vocab_size
-        self._embed_dim = embed_dim
-
-    def get_config(self):
-        config = super().get_config()
-        config['maxlen'] = self._maxlen
-        config['vocab_size'] = self._vocab_size
-        config['embed_dim'] = self._embed_dim
-        return config
-
-    def call(self, x):
-        maxlen = tf.shape(x)[-1]
-        positions = tf.range(start=0, limit=maxlen, delta=1)
-        positions = self.pos_emb(positions)
-        x = self.token_emb(x)
-        return x + positions
 
 
 class TimeEmbeddingLayer(tf.keras.layers.Layer):
@@ -1004,10 +1021,8 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             embedding_size: int,
             transformer_dropout: float,
             dff: int = 2148,
-            phenotype_entropy_weight: float = 2e-05,
-            phenotype_euclidean_weight: float = 2e-05,
-            phenotype_concept_distance_weight: float = 1e-04,
-            *args, **kwargs
+            *args,
+            **kwargs
     ):
         super(VisitPhenotypeLayer, self).__init__(*args, **kwargs)
         self.num_of_phenotypes = num_of_phenotypes
@@ -1016,15 +1031,12 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         self.dff = dff
         self.num_of_concept_neighbors = num_of_concept_neighbors
         self.num_of_phenotype_neighbors = num_of_phenotype_neighbors
-        self.phenotype_entropy_weight = phenotype_entropy_weight
-        self.phenotype_euclidean_weight = phenotype_euclidean_weight
-        self.phenotype_concept_distance_weight = phenotype_concept_distance_weight
 
         # We assume there exists hidden phenotype embeddings
         # (num_of_phenotypes, embedding_size)
         self.phenotype_embeddings = self.add_weight(
             shape=(num_of_phenotypes, embedding_size),
-            initializer=tf.keras.initializers.GlorotNormal(seed=0),
+            initializer=tf.keras.initializers.GlorotUniform(seed=0),
             trainable=True,
             name='phenotype_embeddings_matrix'
         )
@@ -1047,9 +1059,6 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         config['dff'] = self.dff
         config['num_of_concept_neighbors'] = self.num_of_concept_neighbors
         config['num_of_phenotype_neighbors'] = self.num_of_phenotype_neighbors
-        config['phenotype_entropy_weight'] = self.phenotype_entropy_weight
-        config['phenotype_euclidean_weight'] = self.phenotype_euclidean_weight
-        config['phenotype_concept_distance_weight'] = self.phenotype_concept_distance_weight
         return config
 
     def call(self, inputs, **kwargs):
@@ -1101,17 +1110,8 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
             name='phenotype_probability_entropy'
         )
 
-        # Add the entropy as a loss to encourage the model to focus on a subset of phenotypes
-        # self.add_loss(
-        #     tf.reduce_mean(phenotype_prob_entropy) * self.phenotype_entropy_weight,
-        # )
-
         # Get phenotype pairwise distance metrics
         phe_inv_loss, phe_dist_metric, phe_dist_var = self.get_inverse_phenotype_dist_loss_metric()
-        #
-        # self.add_loss(
-        #     phe_inv_loss * self.phenotype_euclidean_weight
-        # )
 
         self.add_metric(
             phe_dist_metric,
@@ -1186,10 +1186,11 @@ get_custom_objects().update({
     'MultiHeadAttention': MultiHeadAttention,
     'Encoder': Encoder,
     'GptDecoder': GptDecoder,
+    'TrainablePositionEmbedding': TrainablePositionEmbedding,
+    'TransformerCoordinateEmbedding': TransformerCoordinateEmbedding,
     'EncoderLayer': EncoderLayer,
     'DecoderLayer': DecoderLayer,
     'GptDecoderLayer': GptDecoderLayer,
-    'TokenAndPositionEmbedding': TokenAndPositionEmbedding,
     'SimpleDecoderLayer': SimpleDecoderLayer,
     'TimeAttention': TimeAttention,
     'TimeSelfAttention': TimeSelfAttention,
@@ -1205,6 +1206,5 @@ get_custom_objects().update({
     'BertLayer': BertLayer,
     'ConvolutionBertLayer': ConvolutionBertLayer,
     'HiddenPhenotypeLayer': HiddenPhenotypeLayer,
-    'VisitPhenotypeLayer': VisitPhenotypeLayer,
-    'ConvolutionBertLayer': ConvolutionBertLayer
+    'VisitPhenotypeLayer': VisitPhenotypeLayer
 })

@@ -1,31 +1,29 @@
-import os
-import re
 import datetime
 import inspect
-import pathlib
 import logging
+import os
+import pathlib
 import pickle
 import random
+import re
 from collections import Counter
-
 from itertools import chain
-import pandas as pd
-import numpy as np
-from pandas import DataFrame as pd_dataframe
-from dask.dataframe import DataFrame as dd_dataframe
-import tensorflow as tf
-from sklearn import metrics
 from typing import Dict, Union, Tuple, List
 
-from tensorflow.data import Dataset
-from tensorflow.keras.models import Model
-
+import numpy as np
+import pandas as pd
+import tensorflow as tf
+from dask.dataframe import DataFrame as dd_dataframe
+from pandas import DataFrame as pd_dataframe
+from sklearn import metrics
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GridSearchCV
+from tensorflow.data import Dataset
+from tensorflow.keras.models import Model
 from xgboost import XGBClassifier
 
-from data_generators.tokenizer import ConceptTokenizer
 from data_generators.data_classes import TokenizeFieldInfo
+from data_generators.tokenizer import ConceptTokenizer
 
 DECIMAL_PLACE = 4
 LOGGER = logging.getLogger(__name__)
@@ -107,14 +105,12 @@ def tokenize_multiple_fields(training_data: Union[pd_dataframe, dd_dataframe],
             training_data[_tokenize_field_info.tokenized_column_name] = training_data[
                 _tokenize_field_info.column_name].map_partitions(
                 lambda ds: pd.Series(
-                    tokenizer.encode(map(lambda t: t[1].tolist(), ds.iteritems()),
+                    tokenizer.encode(map(lambda t: list(t[1]), ds.iteritems()),
                                      is_generator=True),
                     name=_tokenize_field_info.tokenized_column_name), meta='iterable')
         else:
             training_data[_tokenize_field_info.column_name] = training_data[
-                _tokenize_field_info.column_name].apply(
-                lambda concept_ids: concept_ids.tolist() if not isinstance(concept_ids,
-                                                                           list) else concept_ids)
+                _tokenize_field_info.column_name].apply(list)
             training_data[_tokenize_field_info.tokenized_column_name] = tokenizer.encode(
                 training_data[_tokenize_field_info.column_name])
 

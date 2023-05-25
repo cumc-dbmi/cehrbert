@@ -1,15 +1,173 @@
 import copy
+import random
 
 import numpy as np
-import random
 import tensorflow as tf
-
-from models.layers.custom_layers import (
-    GptDecoder,
-    TokenAndPositionEmbedding
-)
+from keras import backend as K
 
 from data_generators.tokenizer import ConceptTokenizer
+from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
+from keras_transformer.position import TransformerCoordinateEmbedding
+from models.layers.custom_layers import GptDecoder, TrainablePositionEmbedding
+
+
+class GptInferenceModel(tf.keras.Model):
+    def __init__(
+            self,
+            gpt_model: tf.keras.Model,
+            tokenizer: ConceptTokenizer,
+            context_window: int,
+            top_k: int,
+            *args,
+            **kwargs
+    ):
+        super(GptInferenceModel, self).__init__(*args, **kwargs)
+
+        self.context_window = context_window
+        self.tokenizer = tokenizer
+        self.top_k = top_k
+        self.concept_embedding_layer = self._get_concept_embedding(gpt_model)
+        self.positional_encoding_layer = self._get_positional_encoding_layer(gpt_model)
+        self.output_layer = self._get_output_layer(gpt_model)
+        self.gpt_decoder = self._get_gpt_decoder(gpt_model)
+
+    def _generate_next_token(
+            self,
+            generated_tokens,
+            cached_contexts
+    ):
+        current_length = tf.shape(generated_tokens)[-1]
+        previous_length = tf.shape(cached_contexts)[2] if cached_contexts is not None else 0
+
+        first_layer_context, concept_embedding_matrix = self.concept_embedding_layer(
+            generated_tokens,
+            training=False
+        )
+        # Add the positional embeddings
+        first_layer_context += self.positional_encoding_layer(
+            first_layer_context
+        )
+
+        look_ahead_mask_base = tf.cast(
+            1 - tf.linalg.band_part(
+                tf.ones((current_length, current_length)), -1, 0
+            ),
+            dtype=tf.int32
+        )[tf.newaxis, tf.newaxis, previous_length:current_length, :]
+
+        if cached_contexts is not None:
+            # Slice out the new token representations
+            x = first_layer_context[:, previous_length: current_length]
+        else:
+            x = first_layer_context
+
+        layer_contexts = []
+        for i in range(self.gpt_decoder.num_layers):
+            if i == 0:
+                value = first_layer_context
+            elif cached_contexts is not None:
+                # Concat the previous context with the x representation
+                value = tf.concat([cached_contexts[i - 1], x], axis=1)
+            else:
+                value = x
+
+            x, attn_weights = self.gpt_decoder.decoder_layers[i](
+                query=x,
+                key=value,
+                value=value,
+                decoder_mask=look_ahead_mask_base,
+                training=False
+            )
+            layer_contexts.append(x)
+
+        layer_contexts = tf.stack(layer_contexts, axis=0)
+
+        if cached_contexts is not None:
+            new_cached_contexts = tf.concat([cached_contexts, layer_contexts], axis=2)
+        else:
+            new_cached_contexts = layer_contexts
+
+        logtis = self.output_layer([x, concept_embedding_matrix])
+
+        return logtis, new_cached_contexts
+
+    def call(
+            self,
+            inputs
+    ):
+
+        # Get the current sequence length
+        length = tf.shape(
+            inputs
+        )[1]
+        #  Create a cache contexts to store the previous states
+        cached_contexts = None
+
+        while length < self.context_window:
+            # Generate the next batch of tokens and update the contexts
+            outputs, cached_contexts = self._generate_next_token(
+                inputs,
+                cached_contexts
+            )
+            # Randomly sample a batch of tokens
+            pred_logits, indices = tf.math.top_k(outputs, k=self.top_k, sorted=True)
+            indices = np.asarray(indices).astype("int32")
+
+            next_token_indices = indices[:, -1, :]
+            next_token_logits = pred_logits[:, -1, :]
+
+            next_tokens = tf.gather(
+                next_token_indices,
+                tf.random.categorical(next_token_logits, 1),
+                axis=1,
+                batch_dims=1
+            ).numpy()
+
+            # Stitch up the new tokens and previously generated tokens
+            inputs = np.hstack(
+                [inputs, next_tokens]
+            )
+
+            # Get the new length of the sequence
+            _, length = np.shape(
+                inputs
+            )
+
+            # This indicates all the sequences have ended
+            if np.all(np.any(inputs == self.tokenizer.get_end_token_id(), axis=-1)):
+                break
+
+        return inputs
+
+    @staticmethod
+    def _get_concept_embedding(gpt_model):
+        layers = [layer for layer in gpt_model.layers if isinstance(layer, ReusableEmbedding)]
+        if len(layers) == 0:
+            raise RuntimeError(f'Could not find ReusableEmbedding')
+        return layers[0]
+
+    @staticmethod
+    def _get_output_layer(gpt_model):
+        layers = [layer for layer in gpt_model.layers if isinstance(layer, TiedOutputEmbedding)]
+        if len(layers) == 0:
+            raise RuntimeError(f'Could not find TiedOutputEmbedding')
+        return layers[0]
+
+    @staticmethod
+    def _get_positional_encoding_layer(gpt_model):
+        gpt_model.get_layer('positional_encoding_layer')
+        layers = [layer for layer in gpt_model.layers if
+                  isinstance(layer, TrainablePositionEmbedding)]
+        if len(layers) == 0:
+            raise RuntimeError(f'Could not find GptPositionEmbedding')
+        return layers[0]
+
+    @staticmethod
+    def _get_gpt_decoder(gpt_model):
+        layers = [layer for layer in gpt_model.layers if isinstance(layer, GptDecoder)]
+        if len(layers) == 0:
+            raise RuntimeError(f'Could not find GPT Decoder')
+        return layers[0]
 
 
 def create_model(
@@ -17,7 +175,9 @@ def create_model(
         vocab_size,
         embedding_size,
         num_heads,
-        depth
+        depth,
+        embedding_dropout: float = 0.6,
+        confidence_penalty_weight: float = 0.1
 ):
     """
     model = create_model(
@@ -32,6 +192,8 @@ def create_model(
     :param embedding_size:
     :param num_heads:
     :param depth:
+    :param confidence_penalty_weight:
+    :param embedding_dropout:
     :return:
     """
     concept_inputs = tf.keras.layers.Input(
@@ -45,21 +207,65 @@ def create_model(
         dtype=tf.int32
     )[tf.newaxis, tf.newaxis, :, :]
 
-    embedding_layer = TokenAndPositionEmbedding(context_window_size, vocab_size, embedding_size)
-    x = embedding_layer(concept_inputs)
+    concept_embedding_layer = ReusableEmbedding(
+        vocab_size, embedding_size,
+        input_length=context_window_size,
+        name='concept_embeddings',
+        # Regularization is based on paper "A Comparative Study on
+        # Regularization Strategies for Embedding-based Neural Networks"
+        # https://arxiv.org/pdf/1508.03721.pdf
+        embeddings_regularizer=tf.keras.regularizers.l2(1e-4)
+    )
+    positional_encoding_layer = TrainablePositionEmbedding(
+        maxlen=context_window_size,
+        embed_dim=embedding_size,
+        name='positional_encoding_layer'
+    )
 
-    transformer_block = GptDecoder(depth, embedding_size, num_heads)
-    x, _ = transformer_block(x, look_ahead_mask_base)
+    output_layer = TiedOutputEmbedding(
+        projection_regularizer=tf.keras.regularizers.l2(1e-4),
+        projection_dropout=embedding_dropout,
+        name='concept_prediction_logits'
+    )
+
+    # embeddings for encoder input
+    x, concept_embedding_matrix = concept_embedding_layer(concept_inputs)
+
+    x += positional_encoding_layer(
+        x
+    )
+
+    transformer_block = GptDecoder(
+        depth,
+        embedding_size,
+        num_heads,
+        name='decoder'
+    )
+    contextualized_embeddings, _, _ = transformer_block(
+        x,
+        look_ahead_mask_base
+    )
 
     concept_prediction_layer = tf.keras.layers.Softmax(
         name='concept_predictions'
     )
 
-    outputs = tf.keras.layers.Dense(vocab_size)(x)
+    outputs = concept_prediction_layer(
+        output_layer([contextualized_embeddings, concept_embedding_matrix])
+    )
 
-    outputs = concept_prediction_layer(outputs)
+    model = tf.keras.Model(inputs=[concept_inputs], outputs=[outputs])
 
-    return tf.keras.Model(inputs=[concept_inputs], outputs=[outputs])
+    # Penalty for confidence of the output distribution, as described in
+    # "Regularizing Neural Networks by Penalizing Confident
+    # Output Distributions" (https://arxiv.org/abs/1701.06548)
+    # confidence_penalty = K.mean(
+    #     confidence_penalty_weight * K.sum(outputs * K.log(outputs), axis=-1)
+    # )
+    #
+    # model.add_loss(confidence_penalty)
+
+    return model
 
 
 def sample_predicted_probabibility(

@@ -296,6 +296,15 @@ def create_parse_args_hierarchical_bert():
         default=SimilarityType.NONE.value,
         required=False
     )
+    parser.add_argument(
+        '--secondary_learning_warmup_step',
+        dest='warmup_step',
+        action='store',
+        type=int,
+        help='The number steps before secondary learning objectives start',
+        default=-1,
+        required=False
+    )
     return parser
 
 
@@ -327,33 +336,6 @@ def create_parse_args_hierarchical_bert_phenotype():
         type=int,
         help='Num of concept neighbors to consider when minimizing the phenotype-concept distances',
         default=10,
-        required=False
-    )
-    parser.add_argument(
-        '--phenotype_euclidean_weight',
-        dest='phenotype_euclidean_weight',
-        action='store',
-        type=float,
-        help='Weight to control the phenotype euclidean distance loss',
-        default=2e-05,
-        required=False
-    )
-    parser.add_argument(
-        '--phenotype_entropy_weight',
-        dest='phenotype_entropy_weight',
-        action='store',
-        type=float,
-        help='Weight to control the phenotype entropy weight loss',
-        default=2e-05,
-        required=False
-    )
-    parser.add_argument(
-        '--phenotype_concept_distance_weight',
-        dest='phenotype_concept_distance_weight',
-        action='store',
-        type=float,
-        help='Weight to control the phenotype concept distance loss',
-        default=1e-04,
         required=False
     )
     return parser

@@ -2,7 +2,6 @@ import logging
 from typing import Set
 import inspect
 
-import math
 from collections import ChainMap
 from pandas import DataFrame
 from itertools import chain
@@ -296,7 +295,6 @@ class GptDataGenerator(BertDataGenerator):
             max_num_of_visits: int,
             *args,
             **kwargs):
-
         self._min_num_of_visits = min_num_of_visits
         self._max_num_of_visits = max_num_of_visits
 
@@ -454,56 +452,11 @@ class HierarchicalBertMultiTaskDataGenerator(HierarchicalBertDataGenerator):
         return learning_objectives
 
 
-class ProbabilisticPhenotypeDataGenerator(HierarchicalBertDataGenerator):
-    def _get_learning_objective_classes(self):
-        return [
-            HierarchicalMaskedLanguageModelLearningObjective
-        ]
-
-
 class MedBertDataGenerator(BertDataGenerator):
     def _get_learning_objective_classes(self):
         return [
             MaskedLanguageModelLearningObjective,
             ProlongedLengthStayLearningObjective
-        ]
-
-
-class TemporalBertDataGenerator(BertDataGenerator):
-    def __init__(self, time_window_size, *args, **kwargs):
-        super(TemporalBertDataGenerator, self).__init__(*args, **kwargs)
-        self._time_window_size = time_window_size
-
-    def _create_iterator(self):
-        """
-        Create an iterator that will iterate forever
-        :return:
-        """
-        while True:
-            for row in self._training_data.itertuples():
-                seq_length = len(row.token_ids)
-                if self._is_pretraining:
-                    cursor = random.randint(0, seq_length -
-                                            1) if self._is_random_cursor & (
-                            seq_length > self._max_seq_len
-                    ) else seq_length // 2
-
-                    # Only include the concepts whose time stamps are within -half_time_window and
-                    # half_time_window from the target time stamp
-                    start_index, end_index = create_indexes_by_time_window(
-                        row.dates, cursor, self._max_seq_len,
-                        self._time_window_size)
-                    if start_index < end_index:
-                        yield RowSlicer(row, start_index, end_index)
-                else:
-                    yield RowSlicer(row, 0, seq_length)
-
-
-class TemporalVisitPredictionBertDataGenerator(TemporalBertDataGenerator):
-    def _get_learning_objective_classes(self):
-        return [
-            MaskedLanguageModelLearningObjective,
-            VisitPredictionLearningObjective
         ]
 
 

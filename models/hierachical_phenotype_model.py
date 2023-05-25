@@ -20,10 +20,7 @@ def create_probabilistic_phenotype_model(
         visit_vocab_size: int = None,
         num_of_phenotypes: int = 20,
         num_of_phenotype_neighbors: int = 3,
-        num_of_concept_neighbors: int = 10,
-        phenotype_entropy_weight: float = 2e-05,
-        phenotype_euclidean_weight: float = 2e-05,
-        phenotype_concept_distance_weight: float = 1e-04,
+        num_of_concept_neighbors: int = 10
 ):
     """
     Create a hierarchical bert model
@@ -47,9 +44,6 @@ def create_probabilistic_phenotype_model(
     :param num_of_phenotypes:
     :param num_of_phenotype_neighbors:
     :param num_of_concept_neighbors:
-    :param phenotype_concept_distance_weight:
-    :param phenotype_euclidean_weight:
-    :param phenotype_entropy_weight:
     :return:
     """
     # If the second tiered learning objectives are enabled, visit_vocab_size needs to be provided
@@ -319,9 +313,6 @@ def create_probabilistic_phenotype_model(
         num_of_concept_neighbors=num_of_concept_neighbors,
         embedding_size=embedding_size,
         transformer_dropout=transformer_dropout,
-        phenotype_entropy_weight=phenotype_entropy_weight,
-        phenotype_euclidean_weight=phenotype_euclidean_weight,
-        phenotype_concept_distance_weight=phenotype_concept_distance_weight,
         name='hidden_visit_embeddings'
     )
 
