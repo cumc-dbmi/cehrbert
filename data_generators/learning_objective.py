@@ -285,8 +285,8 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
         time_stamps = post_pad_pre_truncate(time_stamps, 0, self._max_seq_len)
         ages = post_pad_pre_truncate(ages, 0, self._max_seq_len)
         visit_concept_orders = post_pad_pre_truncate(visit_concept_orders,
-                                                     self._max_seq_len,
-                                                     self._max_seq_len)
+                                                     pad_value=self._max_seq_len-1,
+                                                     max_seq_len=self._max_seq_len)
 
         input_dict = {'masked_concept_ids': masked_concepts,
                       'concept_ids': concepts,
@@ -322,6 +322,9 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
             *list(islice(sorted_list, left_index, right_index)))
 
         masked_concepts, output_mask = self._mask_concepts(concepts)
+
+        # Normalize the visit_orders using the smallest visit_concept_orders
+        visit_concept_orders = visit_concept_orders - min(visit_concept_orders)
 
         return output_mask, masked_concepts, concepts, dates, segments, ages, visit_concept_orders
 
