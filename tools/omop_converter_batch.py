@@ -98,7 +98,7 @@ def export_and_clear_parquet(output_folder, export_dict, export_error, id_mappin
                 records_in_json.append(record.export_as_json())
             except AttributeError:
                 # append patient sequence to export error list using pt_seq_dict.
-                export_error[table_name].append(pt_seq_dict[person_id_mapping[np.where(omop_id_mapping == idx)]])
+                export_error[table_name].append(pt_seq_dict[person_id_mapping[np.where(omop_id_mapping == idx)][0]])
                 continue
         schema = next(iter(records_to_export.items()))[1].get_schema()
         output_folder_path = Path(output_folder)
