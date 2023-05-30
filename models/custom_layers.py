@@ -459,47 +459,6 @@ class TimeAttention(tf.keras.layers.Layer):
         return next_input if self.return_logits else self.softmax_layer(next_input)
 
 
-class TimeSelfAttention(TimeAttention):
-
-    def __init__(self,
-                 target_seq_len: int,
-                 context_seq_len: int,
-                 self_attention_return_logits: bool,
-                 *args, **kwargs):
-        assert target_seq_len == context_seq_len
-        super(TimeSelfAttention, self).__init__(target_seq_len=target_seq_len,
-                                                context_seq_len=context_seq_len,
-                                                *args, **kwargs)
-        self.self_attention_return_logits = self_attention_return_logits
-
-    def get_config(self):
-        config = super().get_config()
-        config['self_attention_return_logits'] = self.self_attention_return_logits
-        return config
-
-    def call(self, inputs, **kwargs):
-        """
-
-        :param inputs:
-        :param kwargs:
-        :return:
-        """
-        concept_ids = inputs[0]
-        time_stamps = inputs[1]
-        time_mask = inputs[2]
-
-        # shape = (batch_size, seq_len, seq_len)
-        self_attention_logits = super().call([concept_ids, time_stamps, time_stamps, time_mask])
-
-        # add the mask to the scaled tensor.
-        if time_mask is not None:
-            self_attention_logits += (
-                    tf.cast(tf.expand_dims(time_mask, axis=1), dtype='float32') * -1e9)
-
-        return self_attention_logits if self.self_attention_return_logits else self.softmax_layer(
-            self_attention_logits)
-
-
 class BertLayer(tf.keras.layers.Layer):
 
     def __init__(self, model_path: str, *args, **kwargs):
@@ -550,12 +509,6 @@ class BertLayer(tf.keras.layers.Layer):
                                       + (tf.cast(tf.expand_dims(local_mask, axis=-1),
                                                  dtype='float32') * -1e9), axis=1)
         context_representation = tf.reduce_sum(multi_dim_att * contextualized_embeddings, axis=1)
-
-        #         conv_output = self.conv_1d(contextualized_embeddings)
-        #         conv_output += (tf.cast(tf.expand_dims(local_mask, axis=-1), dtype='float32') * -1e9)
-        #         context_representation = tf.reshape(
-        #             tf.transpose(tf.nn.softmax(conv_output, axis=1), [0, 2, 1]) @ contextualized_embeddings,
-        #             (-1, self.conv_1d.filters * embedding_size))
 
         return self.dense(context_representation)
 
@@ -632,10 +585,6 @@ class ConvolutionBertLayer(tf.keras.layers.Layer):
         context_representation = tf.reduce_sum(tf.nn.softmax(attn, axis=1) * bert_output_tensor,
                                                axis=1)
 
-        #         context_representation = tf.reshape(
-        #             tf.transpose(tf.nn.softmax(conv_output, axis=1), [0, 2, 1]) @ bert_output_tensor,
-        #             (-1, self.conv_1d.filters * embedding_size))
-
         return context_representation
 
 
@@ -646,8 +595,6 @@ get_custom_objects().update({
     'DecoderLayer': DecoderLayer,
     'TemporalEncoder': TemporalEncoder,
     'TimeAttention': TimeAttention,
-    'TimeSelfAttention': TimeSelfAttention,
-    'PairwiseTimeAttention': TimeSelfAttention,
     'VisitEmbeddingLayer': VisitEmbeddingLayer,
     'PositionalEncodingLayer': PositionalEncodingLayer,
     'TimeEmbeddingLayer': TimeEmbeddingLayer,
