@@ -12,9 +12,8 @@ LSTM = 'lstm'
 VANILLA_BERT_LSTM = 'vanilla_bert_lstm'
 VANILLA_BERT_FEED_FORWARD = 'vanilla_bert_feed_forward'
 SLIDING_BERT = 'sliding_bert'
-TEMPORAL_BERT_LSTM = 'temporal_bert_lstm'
 RANDOM_VANILLA_BERT_LSTM = 'random_vanilla_bert_lstm'
-SEQUENCE_MODEL_EVALUATORS = [LSTM, VANILLA_BERT_LSTM, VANILLA_BERT_FEED_FORWARD, TEMPORAL_BERT_LSTM,
+SEQUENCE_MODEL_EVALUATORS = [LSTM, VANILLA_BERT_LSTM, VANILLA_BERT_FEED_FORWARD,
                              SLIDING_BERT, RANDOM_VANILLA_BERT_LSTM]
 
 
@@ -58,8 +57,8 @@ def evaluate_sequence_models(args):
             epochs=args.epochs,
             bert_model_path=bert_model_path,
             tokenizer_path=bert_tokenizer_path,
-            is_temporal=False,
-            sequence_model_name=args.sequence_model_name).eval_model()
+            sequence_model_name=args.sequence_model_name
+        ).eval_model()
 
     if SLIDING_BERT in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
@@ -97,28 +96,8 @@ def evaluate_sequence_models(args):
             epochs=args.epochs,
             bert_model_path=bert_model_path,
             tokenizer_path=bert_tokenizer_path,
-            is_temporal=False,
-            sequence_model_name=args.sequence_model_name).eval_model()
-
-    if TEMPORAL_BERT_LSTM in args.model_evaluators:
-        validate_folder(args.temporal_bert_model_folder)
-        temporal_bert_tokenizer_path = os.path.join(args.temporal_bert_model_folder,
-                                                    p.tokenizer_path)
-        temporal_bert_model_path = os.path.join(args.temporal_bert_model_folder,
-                                                p.temporal_bert_validation_model_path)
-        BertLstmModelEvaluator(
-            dataset=dataset,
-            evaluation_folder=args.evaluation_folder,
-            num_of_folds=args.num_of_folds,
-            is_transfer_learning=args.is_transfer_learning,
-            training_percentage=args.training_percentage,
-            max_seq_length=args.max_seq_length,
-            batch_size=args.batch_size,
-            epochs=args.epochs,
-            bert_model_path=temporal_bert_model_path,
-            tokenizer_path=temporal_bert_tokenizer_path,
-            is_temporal=True,
-            sequence_model_name=args.sequence_model_name).eval_model()
+            sequence_model_name=args.sequence_model_name
+        ).eval_model()
 
     if RANDOM_VANILLA_BERT_LSTM in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
@@ -140,7 +119,6 @@ def evaluate_sequence_models(args):
             bert_model_path=bert_model_path,
             tokenizer_path=bert_tokenizer_path,
             visit_tokenizer_path=visit_tokenizer_path,
-            is_temporal=False,
             sequence_model_name=args.sequence_model_name,
             embedding_size=args.embedding_size,
             depth=args.depth,
@@ -174,7 +152,6 @@ def create_evaluation_args():
     baseline_model_required = SEQUENCE_MODEL not in argv
     lstm_model_required = LSTM in argv
     vanilla_bert_lstm = VANILLA_BERT_LSTM in argv
-    temporal_bert_lstm = TEMPORAL_BERT_LSTM in argv
     sliding_bert = SLIDING_BERT in argv
 
     main_parser.add_argument('-a',
@@ -259,11 +236,6 @@ def create_evaluation_args():
                        dest='vanilla_bert_model_folder',
                        action='store',
                        required=vanilla_bert_lstm)
-    group.add_argument('-tb',
-                       '--temporal_bert_model_folder',
-                       dest='temporal_bert_model_folder',
-                       action='store',
-                       required=temporal_bert_lstm)
     group.add_argument('--stride',
                        dest='stride',
                        action='store',

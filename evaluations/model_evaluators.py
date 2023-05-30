@@ -221,21 +221,20 @@ class BiLstmModelEvaluator(SequenceModelEvaluator):
 
 class BertLstmModelEvaluator(SequenceModelEvaluator):
 
-    def __init__(self,
-                 max_seq_length: str,
-                 bert_model_path: str,
-                 tokenizer_path: str,
-                 is_temporal: bool = True,
-                 *args, **kwargs):
+    def __init__(
+            self,
+            max_seq_length: str,
+            bert_model_path: str,
+            tokenizer_path: str,
+            *args, **kwargs
+    ):
         self._max_seq_length = max_seq_length
         self._bert_model_path = bert_model_path
         self._tokenizer = pickle.load(open(tokenizer_path, 'rb'))
-        self._is_temporal = is_temporal
 
         self.get_logger().info(f'max_seq_length: {max_seq_length}\n'
                                f'vanilla_bert_model_path: {bert_model_path}\n'
-                               f'tokenizer_path: {tokenizer_path}\n'
-                               f'is_temporal: {is_temporal}\n')
+                               f'tokenizer_path: {tokenizer_path}')
 
         super(BertLstmModelEvaluator, self).__init__(*args, **kwargs)
 
@@ -243,13 +242,11 @@ class BertLstmModelEvaluator(SequenceModelEvaluator):
         strategy = tf.distribute.MirroredStrategy()
         self.get_logger().info('Number of devices: {}'.format(strategy.num_replicas_in_sync))
         with strategy.scope():
-            create_model_fn = (create_temporal_bert_bi_lstm_model if self._is_temporal
-                               else create_vanilla_bert_bi_lstm_model)
             try:
-                model = create_model_fn(self._max_seq_length, self._bert_model_path)
+                model = create_vanilla_bert_bi_lstm_model(self._max_seq_length, self._bert_model_path)
             except ValueError as e:
                 self.get_logger().exception(e)
-                model = create_model_fn(self._max_seq_length, self._bert_model_path)
+                model = create_vanilla_bert_bi_lstm_model(self._max_seq_length, self._bert_model_path)
 
             model.compile(loss='binary_crossentropy',
                           optimizer=tf.keras.optimizers.Adam(self._learning_rate),
@@ -343,14 +340,17 @@ class SlidingBertModelEvaluator(BertLstmModelEvaluator):
 
 class RandomVanillaLstmBertModelEvaluator(BertLstmModelEvaluator):
 
-    def __init__(self,
-                 embedding_size,
-                 depth,
-                 num_heads,
-                 use_time_embedding,
-                 time_embeddings_size,
-                 visit_tokenizer_path,
-                 *args, **kwargs):
+    def __init__(
+            self,
+            embedding_size,
+            depth,
+            num_heads,
+            use_time_embedding,
+            time_embeddings_size,
+            visit_tokenizer_path,
+            *args,
+            **kwargs
+    ):
         self._embedding_size = embedding_size
         self._depth = depth
         self._num_heads = num_heads
