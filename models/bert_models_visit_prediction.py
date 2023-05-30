@@ -3,9 +3,9 @@ import tensorflow as tf
 
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 
-from models.custom_layers import (VisitEmbeddingLayer, TimeSelfAttention, Encoder, DecoderLayer,
-                                  TemporalEncoder, PositionalEncodingLayer,
-                                  TimeEmbeddingLayer)
+from models.custom_layers import (
+    VisitEmbeddingLayer, Encoder, DecoderLayer, PositionalEncodingLayer, TimeEmbeddingLayer
+)
 from utils.model_utils import create_concept_mask
 
 
