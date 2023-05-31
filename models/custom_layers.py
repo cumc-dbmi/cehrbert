@@ -443,6 +443,31 @@ class PositionalEncodingLayer(tf.keras.layers.Layer):
 
 
 class TimeEmbeddingLayer(tf.keras.layers.Layer):
+    """Layer for time embedding.
+
+    This layer applies time embedding to input time stamps, which can be either absolute time
+    values or time deltas.
+
+    Args:
+        embedding_size (int): The size of the embedding vectors.
+        is_time_delta (bool): Whether the input time stamps represent time deltas. If True,
+            the input time stamps are treated as differences between consecutive time values.
+            If False, the input time stamps are treated as absolute time values. Default is False.
+
+    Attributes:
+        embedding_size (int): The size of the embedding vectors.
+        is_time_delta (bool): Whether the input time stamps represent time deltas.
+
+    Methods:
+        get_config(): Returns the configuration of the layer.
+
+    Example:
+        layer = TimeEmbeddingLayer(embedding_size=32, is_time_delta=True)
+        time_stamps = tf.constant([[0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0]])
+        output = layer(time_stamps)
+
+    """
+
     def __init__(self, embedding_size, is_time_delta=False, *args, **kwargs):
         super(TimeEmbeddingLayer, self).__init__(*args, **kwargs)
         self.embedding_size = embedding_size
@@ -457,12 +482,28 @@ class TimeEmbeddingLayer(tf.keras.layers.Layer):
                                    name=f'time_embedding_phi_{self.name}')
 
     def get_config(self):
+        """Returns the configuration of the layer.
+
+        Returns:
+            dict: The layer configuration.
+
+        """
         config = super().get_config()
         config['embedding_size'] = self.embedding_size
         config['is_time_delta'] = self.is_time_delta
         return config
 
     def call(self, time_stamps):
+        """Applies time embedding to the input time stamps.
+
+        Args:
+            time_stamps (tf.Tensor): The input time stamps. Can be either absolute time values
+                or time deltas.
+
+        Returns:
+            tf.Tensor: The embedded representation of the input time stamps.
+
+        """
         time_stamps = tf.cast(time_stamps, tf.float32)
         if self.is_time_delta:
             time_stamps = tf.concat(
