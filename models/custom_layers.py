@@ -513,9 +513,22 @@ class TimeEmbeddingLayer(tf.keras.layers.Layer):
 
 
 class VisitEmbeddingLayer(tf.keras.layers.Layer):
+    """Layer for embedding visit orders.
 
-    def __init__(self, visit_order_size: int,
-                 embedding_size: int, *args, **kwargs):
+    This layer takes visit orders and concept embeddings as input and applies
+    embedding to the visit orders. It then adds the concept embeddings to the
+    visit embeddings.
+
+    Args:
+        visit_order_size (int): The size of the visit order vocabulary.
+        embedding_size (int): The size of the embedding vectors.
+
+    Attributes:
+        visit_embedding_layer (tf.keras.layers.Embedding): Embedding layer
+            for visit orders.
+    """
+
+    def __init__(self, visit_order_size: int, embedding_size: int, *args, **kwargs):
         super(VisitEmbeddingLayer, self).__init__(*args, **kwargs)
         self.visit_order_size = visit_order_size
         self.embedding_size = embedding_size
@@ -530,6 +543,16 @@ class VisitEmbeddingLayer(tf.keras.layers.Layer):
         return config
 
     def call(self, inputs, **kwargs):
+        """Applies embedding to visit orders and adds concept embeddings.
+
+        Args:
+            inputs (list): List of input tensors containing visit orders and
+                concept embeddings.
+
+        Returns:
+            tf.Tensor: Tensor resulting from adding visit embeddings and concept
+                embeddings.
+        """
         visit_orders, concept_embeddings = inputs
         return self.visit_embedding_layer(visit_orders) + concept_embeddings
 
