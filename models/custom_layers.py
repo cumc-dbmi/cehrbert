@@ -235,6 +235,7 @@ class Encoder(tf.keras.layers.Layer):
         tuple: Tuple containing the output tensor and stacked attention weights.
 
     """
+
     def __init__(self, num_layers, d_model, num_heads, dff=2148, dropout_rate=0.1, *args,
                  **kwargs):
         super(Encoder, self).__init__(*args, **kwargs)
@@ -278,6 +279,41 @@ class Encoder(tf.keras.layers.Layer):
 
 
 class DecoderLayer(tf.keras.layers.Layer):
+    """A single layer of the decoder in a transformer model.
+
+        This layer consists of multi-head self-attention mechanism, followed by another
+        multi-head attention mechanism that attends over the encoder output. The attention
+        mechanisms are then followed by a point-wise feed-forward neural network.
+
+        Args:
+            d_model (int): The dimensionality of the model.
+            num_heads (int): The number of attention heads.
+            dff (int): The dimensionality of the feed-forward network.
+            rate (float, optional): Dropout rate to apply within the layer. Defaults to 0.1.
+            *args: Variable length argument list.
+            **kwargs: Arbitrary keyword arguments.
+
+        Attributes:
+            d_model (int): The dimensionality of the model.
+            num_heads (int): The number of attention heads.
+            dff (int): The dimensionality of the feed-forward network.
+            rate (float): Dropout rate to apply within the layer.
+            mha1 (MultiHeadAttention): The first multi-head attention layer.
+            mha2 (MultiHeadAttention): The second multi-head attention layer.
+            ffn (tf.keras.Sequential): The feed-forward neural network.
+            layernorm1 (tf.keras.layers.LayerNormalization): Layer normalization after the first attention layer.
+            layernorm2 (tf.keras.layers.LayerNormalization): Layer normalization after the second attention layer.
+            layernorm3 (tf.keras.layers.LayerNormalization): Layer normalization after the feed-forward network.
+            dropout1 (tf.keras.layers.Dropout): Dropout layer for the first attention layer.
+            dropout2 (tf.keras.layers.Dropout): Dropout layer for the second attention layer.
+            dropout3 (tf.keras.layers.Dropout): Dropout layer for the feed-forward network.
+
+        Methods:
+            get_config(): Returns the configuration of the layer.
+            call(inputs, training=None, mask=None): Performs the forward pass of the layer.
+
+        """
+
     def __init__(self, d_model, num_heads, dff, rate=0.1, *args, **kwargs):
         super(DecoderLayer, self).__init__(*args, **kwargs)
 
@@ -300,6 +336,12 @@ class DecoderLayer(tf.keras.layers.Layer):
         self.dropout3 = tf.keras.layers.Dropout(rate)
 
     def get_config(self):
+        """Returns the configuration of the layer.
+
+        Returns:
+            dict: The layer configuration.
+
+        """
         config = super().get_config()
         config['d_model'] = self.d_model
         config['num_heads'] = self.num_heads
@@ -308,19 +350,34 @@ class DecoderLayer(tf.keras.layers.Layer):
         return config
 
     def call(self, x, enc_output, decoder_mask, encoder_mask, **kwargs):
-        # enc_output.shape == (batch_size, input_seq_len, d_model)
+        """Performs the forward pass of the layer.
 
-        attn1, attn_weights_block1 = self.mha1(x, x, x, decoder_mask)  # (batch_size, target_seq_len, d_model)
+        Args:
+            x (tf.Tensor): The input tensor of shape `(batch_size, target_seq_len, d_model)`.
+            enc_output (tf.Tensor): The encoder output tensor of shape `(batch_size, input_seq_len, d_model)`.
+            decoder_mask (tf.Tensor): The decoder mask tensor of shape `(batch_size, target_seq_len)`.
+            encoder_mask (tf.Tensor): The encoder mask tensor of shape `(batch_size, input_seq_len)`.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            tuple: A tuple containing the output tensor, and attention weights from both attention mechanisms.
+
+        """
+        # enc_output.shape == (batch_size, input_seq_len, d_model)
+        # (batch_size, target_seq_len, d_model)
+        attn1, attn_weights_block1 = self.mha1(x, x, x, decoder_mask)
         attn1 = self.dropout1(attn1)
         out1 = self.layernorm1(attn1 + x)
 
-        attn2, attn_weights_block2 = self.mha2(enc_output, enc_output, out1, encoder_mask)  # (batch_size, target_seq_len, d_model)
+        # (batch_size, target_seq_len, d_model)
+        attn2, attn_weights_block2 = self.mha2(enc_output, enc_output, out1, encoder_mask)
         attn2 = self.dropout2(attn2, **kwargs)
-        out2 = self.layernorm2(attn2 + out1)  # (batch_size, target_seq_len, d_model)
+        out2 = self.layernorm2(attn2 + out1)
 
-        ffn_output = self.ffn(out2)  # (batch_size, target_seq_len, d_model)
+        # (batch_size, target_seq_len, d_model)
+        ffn_output = self.ffn(out2)
         ffn_output = self.dropout3(ffn_output, **kwargs)
-        out3 = self.layernorm3(ffn_output + out2)  # (batch_size, target_seq_len, d_model)
+        out3 = self.layernorm3(ffn_output + out2)
 
         return out3, attn_weights_block1, attn_weights_block2
 
