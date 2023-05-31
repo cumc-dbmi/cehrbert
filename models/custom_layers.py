@@ -383,6 +383,29 @@ class DecoderLayer(tf.keras.layers.Layer):
 
 
 class PositionalEncodingLayer(tf.keras.layers.Layer):
+    """Positional encoding layer for adding positional information to input sequences.
+
+    This layer applies positional encodings to input sequences based on their visit concept orders.
+    It normalizes the visit concept orders using the corresponding first visit order and retrieves
+    positional embeddings for the concepts with the same visit order.
+
+    Args:
+        max_sequence_length (int): The maximum sequence length.
+        embedding_size (int): The dimensionality of the positional embeddings.
+        *args: Variable length argument list.
+        **kwargs: Arbitrary keyword arguments.
+
+    Attributes:
+        max_sequence_length (int): The maximum sequence length.
+        embedding_size (int): The dimensionality of the positional embeddings.
+        pos_encoding (tf.Tensor): The positional encodings.
+
+    Methods:
+        get_config(): Returns the configuration of the layer.
+        call(visit_concept_orders): Performs the forward pass of the layer.
+
+    """
+
     def __init__(self, max_sequence_length, embedding_size, *args, **kwargs):
         super(PositionalEncodingLayer, self).__init__(*args, **kwargs)
         self.max_sequence_length = max_sequence_length
@@ -390,12 +413,27 @@ class PositionalEncodingLayer(tf.keras.layers.Layer):
         self.pos_encoding = tf.squeeze(positional_encoding(max_sequence_length, embedding_size))
 
     def get_config(self):
+        """Returns the configuration of the layer.
+
+        Returns:
+            dict: The layer configuration.
+
+        """
         config = super().get_config()
         config['max_sequence_length'] = self.max_sequence_length
         config['embedding_size'] = self.embedding_size
         return config
 
     def call(self, visit_concept_orders):
+        """Performs the forward pass of the layer.
+
+        Args:
+            visit_concept_orders (tf.Tensor): The visit concept orders tensor.
+
+        Returns:
+            tf.Tensor: The positional embeddings tensor.
+
+        """
         # normalize the visit concept order using the corresponding first visit order
         first_visit_concept_orders = visit_concept_orders[:, 0:1]
         visit_concept_orders = tf.maximum(visit_concept_orders - first_visit_concept_orders, 0)
