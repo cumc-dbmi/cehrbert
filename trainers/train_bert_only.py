@@ -17,22 +17,54 @@ from tensorflow.keras import optimizers
 
 
 class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
+    """
+    A trainer class for training Vanilla BERT models.
+
+    Attributes:
+        confidence_penalty (float): The confidence penalty for masked penalized sparse categorical crossentropy.
+
+    Methods:
+        __init__: Initialize the VanillaBertTrainer instance.
+        _load_dependencies: Load dependencies required for training.
+        create_data_generator: Create a data generator for the model.
+        _create_model: Create the Vanilla BERT model.
+        eval_model: Evaluate the trained model.
+    """
     confidence_penalty = 0.1
 
-    def __init__(self,
-                 tokenizer_path: str,
-                 visit_tokenizer_path: str,
-                 embedding_size: int,
-                 context_window_size: int,
-                 depth: int,
-                 num_heads: int,
-                 include_visit_prediction: bool,
-                 include_prolonged_length_stay: bool,
-                 use_time_embedding: bool,
-                 use_behrt: bool,
-                 time_embeddings_size: int,
-                 *args, **kwargs):
+    def __init__(
+            self,
+            tokenizer_path: str,
+            visit_tokenizer_path: str,
+            embedding_size: int,
+            context_window_size: int,
+            depth: int,
+            num_heads: int,
+            include_visit_prediction: bool,
+            include_prolonged_length_stay: bool,
+            use_time_embedding: bool,
+            use_behrt: bool,
+            time_embeddings_size: int,
+            *args,
+            **kwargs
+    ):
+        """
+        Initialize the VanillaBertTrainer instance.
 
+        Args:
+            tokenizer_path (str): The path to the tokenizer.
+            visit_tokenizer_path (str): The path to the visit tokenizer.
+            embedding_size (int): The size of the concept embedding.
+            context_window_size (int): The size of the context window.
+            depth (int): The depth of the model.
+            num_heads (int): The number of attention heads.
+            include_visit_prediction (bool): Whether to include visit prediction.
+            include_prolonged_length_stay (bool): Whether to include prolonged length stay.
+            use_time_embedding (bool): Whether to use time embedding.
+            use_behrt (bool): Whether to use BERT.
+            time_embeddings_size (int): The size of time embeddings.
+            *args, **kwargs: Additional arguments.
+        """
         self._tokenizer_path = tokenizer_path
         self._visit_tokenizer_path = visit_tokenizer_path
         self._embedding_size = embedding_size
