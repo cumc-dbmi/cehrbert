@@ -36,7 +36,7 @@ def point_wise_feed_forward_network(d_model, dff):
     ])
 
 
-def scaled_dot_product_attention(q, k, v, mask, time_attention_logits):
+def scaled_dot_product_attention(q, k, v, mask):
     """Calculate the attention weights.
     q, k, v must have matching leading dimensions.
     k, v must have matching penultimate dimension, i.e.: seq_len_k = seq_len_v.
@@ -63,10 +63,6 @@ def scaled_dot_product_attention(q, k, v, mask, time_attention_logits):
     # add the mask to the scaled tensor.
     if mask is not None:
         scaled_attention_logits += (tf.cast(mask, dtype='float32') * -1e9)
-
-    if time_attention_logits is not None:
-        scaled_attention_logits = tf.concat([scaled_attention_logits, time_attention_logits],
-                                            axis=1)
 
     # softmax is normalized on the last axis (seq_len_k) so that the scores
     # add up to 1.
@@ -114,7 +110,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         v = self.split_heads(v, batch_size)  # (batch_size, num_heads, seq_len_v, depth)
         return k, q, v
 
-    def call(self, v, k, q, mask, time_attention_logits):
+    def call(self, v, k, q, mask):
         batch_size = tf.shape(q)[0]
 
         q = self.wq(q)  # (batch_size, seq_len, d_model)
@@ -125,8 +121,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
         # scaled_attention.shape == (batch_size, num_heads, seq_len_q, depth)
         # attention_weights.shape == (batch_size, num_heads, seq_len_q, seq_len_k)
-        scaled_attention, attention_weights = scaled_dot_product_attention(q, k, v, mask,
-                                                                           time_attention_logits)
+        scaled_attention, attention_weights = scaled_dot_product_attention(q, k, v, mask)
 
         scaled_attention = tf.transpose(scaled_attention,
                                         perm=[0, 2, 1,
@@ -142,6 +137,34 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
 
 class EncoderLayer(tf.keras.layers.Layer):
+    """Encoder layer for a transformer model.
+
+    Args:
+        d_model (int): The dimensionality of the model.
+        num_heads (int): The number of attention heads.
+        dff (int): The dimensionality of the feed-forward network.
+        rate (float, optional): Dropout rate. Defaults to 0.1.
+        *args: Variable length argument list.
+        **kwargs: Arbitrary keyword arguments.
+
+    Attributes:
+        d_model (int): The dimensionality of the model.
+        num_heads (int): The number of attention heads.
+        dff (int): The dimensionality of the feed-forward network.
+        rate (float): Dropout rate.
+        mha (MultiHeadAttention): Multi-head attention layer.
+        ffn (point_wise_feed_forward_network): Feed-forward network layer.
+        layernorm1 (tf.keras.layers.LayerNormalization): Layer normalization for the first sub-layer.
+        layernorm2 (tf.keras.layers.LayerNormalization): Layer normalization for the second sub-layer.
+        dropout1 (tf.keras.layers.Dropout): Dropout layer for the first sub-layer.
+        dropout2 (tf.keras.layers.Dropout): Dropout layer for the second sub-layer.
+
+    Methods:
+        get_config(): Returns the configuration dictionary for the layer.
+        call(x, mask, **kwargs): Forward pass of the encoder layer.
+
+    """
+
     def __init__(self, d_model, num_heads, dff, rate=0.1, *args, **kwargs):
         super(EncoderLayer, self).__init__(*args, **kwargs)
 
@@ -160,6 +183,12 @@ class EncoderLayer(tf.keras.layers.Layer):
         self.dropout2 = tf.keras.layers.Dropout(rate)
 
     def get_config(self):
+        """Returns the configuration dictionary for the layer.
+
+        Returns:
+            dict: Configuration dictionary.
+
+        """
         config = super().get_config()
         config['d_model'] = self.d_model
         config['num_heads'] = self.num_heads
@@ -167,9 +196,20 @@ class EncoderLayer(tf.keras.layers.Layer):
         config['rate'] = self.rate
         return config
 
-    def call(self, x, mask, time_attention_logits, **kwargs):
-        attn_output, attn_weights = self.mha(x, x, x, mask,
-                                             time_attention_logits)  # (batch_size, input_seq_len, d_model)
+    def call(self, x, mask, **kwargs):
+        """Forward pass of the encoder layer.
+
+        Args:
+            x (tf.Tensor): Input tensor of shape (batch_size, input_seq_len, d_model).
+            mask (tf.Tensor): Mask tensor of shape (batch_size, 1, 1, input_seq_len).
+            **kwargs: Arbitrary keyword arguments.
+
+        Returns:
+            tf.Tensor: Output tensor of shape (batch_size, input_seq_len, d_model).
+            tf.Tensor: Attention weights tensor of shape (batch_size, num_heads, input_seq_len, input_seq_len).
+
+        """
+        attn_output, attn_weights = self.mha(x, x, x, mask)  # (batch_size, input_seq_len, d_model)
         attn_output = self.dropout1(attn_output, training=kwargs.get('training'))
         out1 = self.layernorm1(x + attn_output)  # (batch_size, input_seq_len, d_model)
 
@@ -245,13 +285,11 @@ class DecoderLayer(tf.keras.layers.Layer):
     def call(self, x, enc_output, decoder_mask, encoder_mask, **kwargs):
         # enc_output.shape == (batch_size, input_seq_len, d_model)
 
-        attn1, attn_weights_block1 = self.mha1(x, x, x, decoder_mask,
-                                               None)  # (batch_size, target_seq_len, d_model)
+        attn1, attn_weights_block1 = self.mha1(x, x, x, decoder_mask)  # (batch_size, target_seq_len, d_model)
         attn1 = self.dropout1(attn1)
         out1 = self.layernorm1(attn1 + x)
 
-        attn2, attn_weights_block2 = self.mha2(enc_output, enc_output, out1, encoder_mask,
-                                               None)  # (batch_size, target_seq_len, d_model)
+        attn2, attn_weights_block2 = self.mha2(enc_output, enc_output, out1, encoder_mask)  # (batch_size, target_seq_len, d_model)
         attn2 = self.dropout2(attn2, **kwargs)
         out2 = self.layernorm2(attn2 + out1)  # (batch_size, target_seq_len, d_model)
 
