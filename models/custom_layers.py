@@ -321,6 +321,9 @@ class PositionalEncodingLayer(tf.keras.layers.Layer):
         return config
 
     def call(self, visit_concept_orders):
+        # normalize the visit concept order using the corresponding first visit order
+        first_visit_concept_orders = visit_concept_orders[:, 0:1]
+        visit_concept_orders = tf.maximum(visit_concept_orders - first_visit_concept_orders, 0)
         # Get the same positional encodings for the concepts with the same visit_order
         positional_embeddings = tf.gather(self.pos_encoding, visit_concept_orders, axis=0)
         return positional_embeddings
