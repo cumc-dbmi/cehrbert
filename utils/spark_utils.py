@@ -781,10 +781,11 @@ def create_visits(patient_event, link_events_visits, gap):
         patient_event = patient_event.withColumn("_max", F.max(F.col("visit_occurrence_id")).over(whole_window))
 
         patient_event = patient_event.withColumn("visit_occurrence_id",
-                                                 F. coalesce(F.col("visit_occurrence_id"), F.col("_max") + F.sum("_flg").over(window))
+                                                 F.coalesce(F.col("visit_occurrence_id"),
+                                                            F.col("_max") + F.sum("_flg").over(window)))
         patient_event = patient_event.drop("_max")
         # add visit_concept_id=0 for the artificially constructed visits
-        patient_event = patient_event.withColumn('visit_concept_id', F. coalesce('visit_concept_id', F.lit(0)))
+        patient_event = patient_event.withColumn('visit_concept_id', F.coalesce('visit_concept_id', F.lit(0)))
     else:
         # create visit_occurrence_ids
         patient_event = patient_event.withColumn("_flg", F.coalesce(F.when(F.col("date_difference") > gap, 1),
