@@ -221,6 +221,20 @@ class EncoderLayer(tf.keras.layers.Layer):
 
 
 class Encoder(tf.keras.layers.Layer):
+    """
+    Transformer Encoder module composed of multiple EncoderLayers.
+
+    Args:
+        num_layers (int): Number of encoder layers.
+        d_model (int): Dimensionality of the input and output vectors.
+        num_heads (int): Number of attention heads.
+        dff (int, optional): Dimensionality of the feed-forward layer. Defaults to 2048.
+        dropout_rate (float, optional): Dropout rate. Defaults to 0.1.
+
+    Returns:
+        tuple: Tuple containing the output tensor and stacked attention weights.
+
+    """
     def __init__(self, num_layers, d_model, num_heads, dff=2148, dropout_rate=0.1, *args,
                  **kwargs):
         super(Encoder, self).__init__(*args, **kwargs)
@@ -245,9 +259,20 @@ class Encoder(tf.keras.layers.Layer):
         return config
 
     def call(self, x, mask, **kwargs):
+        """
+        Forward pass of the encoder module.
+
+        Args:
+            x (tf.Tensor): Input tensor of shape `(batch_size, input_seq_len, d_model)`.
+            mask (tf.Tensor): Mask tensor of shape `(batch_size, 1, 1, input_seq_len)`.
+
+        Returns:
+            tuple: Tuple containing the output tensor and stacked attention weights.
+
+        """
         attention_weights = []
         for i in range(self.num_layers):
-            x, attn_weights = self.enc_layers[i](x, mask, None, **kwargs)
+            x, attn_weights = self.enc_layers[i](x, mask, **kwargs)
             attention_weights.append(attn_weights)
         return x, tf.stack(attention_weights, axis=0)  # (batch_size, input_seq_len, d_model)
 
