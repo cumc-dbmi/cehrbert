@@ -36,7 +36,7 @@ def point_wise_feed_forward_network(d_model, dff):
     ])
 
 
-def scaled_dot_product_attention(q, k, v, mask, time_attention_logits):
+def scaled_dot_product_attention(q, k, v, mask):
     """Calculate the attention weights.
     q, k, v must have matching leading dimensions.
     k, v must have matching penultimate dimension, i.e.: seq_len_k = seq_len_v.
@@ -63,10 +63,6 @@ def scaled_dot_product_attention(q, k, v, mask, time_attention_logits):
     # add the mask to the scaled tensor.
     if mask is not None:
         scaled_attention_logits += (tf.cast(mask, dtype='float32') * -1e9)
-
-    if time_attention_logits is not None:
-        scaled_attention_logits = tf.concat([scaled_attention_logits, time_attention_logits],
-                                            axis=1)
 
     # softmax is normalized on the last axis (seq_len_k) so that the scores
     # add up to 1.
@@ -114,7 +110,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         v = self.split_heads(v, batch_size)  # (batch_size, num_heads, seq_len_v, depth)
         return k, q, v
 
-    def call(self, v, k, q, mask, time_attention_logits):
+    def call(self, v, k, q, mask):
         batch_size = tf.shape(q)[0]
 
         q = self.wq(q)  # (batch_size, seq_len, d_model)
@@ -125,8 +121,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
         # scaled_attention.shape == (batch_size, num_heads, seq_len_q, depth)
         # attention_weights.shape == (batch_size, num_heads, seq_len_q, seq_len_k)
-        scaled_attention, attention_weights = scaled_dot_product_attention(q, k, v, mask,
-                                                                           time_attention_logits)
+        scaled_attention, attention_weights = scaled_dot_product_attention(q, k, v, mask)
 
         scaled_attention = tf.transpose(scaled_attention,
                                         perm=[0, 2, 1,
@@ -142,6 +137,34 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
 
 class EncoderLayer(tf.keras.layers.Layer):
+    """Encoder layer for a transformer model.
+
+    Args:
+        d_model (int): The dimensionality of the model.
+        num_heads (int): The number of attention heads.
+        dff (int): The dimensionality of the feed-forward network.
+        rate (float, optional): Dropout rate. Defaults to 0.1.
+        *args: Variable length argument list.
+        **kwargs: Arbitrary keyword arguments.
+
+    Attributes:
+        d_model (int): The dimensionality of the model.
+        num_heads (int): The number of attention heads.
+        dff (int): The dimensionality of the feed-forward network.
+        rate (float): Dropout rate.
+        mha (MultiHeadAttention): Multi-head attention layer.
+        ffn (point_wise_feed_forward_network): Feed-forward network layer.
+        layernorm1 (tf.keras.layers.LayerNormalization): Layer normalization for the first sub-layer.
+        layernorm2 (tf.keras.layers.LayerNormalization): Layer normalization for the second sub-layer.
+        dropout1 (tf.keras.layers.Dropout): Dropout layer for the first sub-layer.
+        dropout2 (tf.keras.layers.Dropout): Dropout layer for the second sub-layer.
+
+    Methods:
+        get_config(): Returns the configuration dictionary for the layer.
+        call(x, mask, **kwargs): Forward pass of the encoder layer.
+
+    """
+
     def __init__(self, d_model, num_heads, dff, rate=0.1, *args, **kwargs):
         super(EncoderLayer, self).__init__(*args, **kwargs)
 
@@ -160,6 +183,12 @@ class EncoderLayer(tf.keras.layers.Layer):
         self.dropout2 = tf.keras.layers.Dropout(rate)
 
     def get_config(self):
+        """Returns the configuration dictionary for the layer.
+
+        Returns:
+            dict: Configuration dictionary.
+
+        """
         config = super().get_config()
         config['d_model'] = self.d_model
         config['num_heads'] = self.num_heads
@@ -167,9 +196,20 @@ class EncoderLayer(tf.keras.layers.Layer):
         config['rate'] = self.rate
         return config
 
-    def call(self, x, mask, time_attention_logits, **kwargs):
-        attn_output, attn_weights = self.mha(x, x, x, mask,
-                                             time_attention_logits)  # (batch_size, input_seq_len, d_model)
+    def call(self, x, mask, **kwargs):
+        """Forward pass of the encoder layer.
+
+        Args:
+            x (tf.Tensor): Input tensor of shape (batch_size, input_seq_len, d_model).
+            mask (tf.Tensor): Mask tensor of shape (batch_size, 1, 1, input_seq_len).
+            **kwargs: Arbitrary keyword arguments.
+
+        Returns:
+            tf.Tensor: Output tensor of shape (batch_size, input_seq_len, d_model).
+            tf.Tensor: Attention weights tensor of shape (batch_size, num_heads, input_seq_len, input_seq_len).
+
+        """
+        attn_output, attn_weights = self.mha(x, x, x, mask)  # (batch_size, input_seq_len, d_model)
         attn_output = self.dropout1(attn_output, training=kwargs.get('training'))
         out1 = self.layernorm1(x + attn_output)  # (batch_size, input_seq_len, d_model)
 
@@ -181,6 +221,21 @@ class EncoderLayer(tf.keras.layers.Layer):
 
 
 class Encoder(tf.keras.layers.Layer):
+    """
+    Transformer Encoder module composed of multiple EncoderLayers.
+
+    Args:
+        num_layers (int): Number of encoder layers.
+        d_model (int): Dimensionality of the input and output vectors.
+        num_heads (int): Number of attention heads.
+        dff (int, optional): Dimensionality of the feed-forward layer. Defaults to 2048.
+        dropout_rate (float, optional): Dropout rate. Defaults to 0.1.
+
+    Returns:
+        tuple: Tuple containing the output tensor and stacked attention weights.
+
+    """
+
     def __init__(self, num_layers, d_model, num_heads, dff=2148, dropout_rate=0.1, *args,
                  **kwargs):
         super(Encoder, self).__init__(*args, **kwargs)
@@ -205,14 +260,60 @@ class Encoder(tf.keras.layers.Layer):
         return config
 
     def call(self, x, mask, **kwargs):
+        """
+        Forward pass of the encoder module.
+
+        Args:
+            x (tf.Tensor): Input tensor of shape `(batch_size, input_seq_len, d_model)`.
+            mask (tf.Tensor): Mask tensor of shape `(batch_size, 1, 1, input_seq_len)`.
+
+        Returns:
+            tuple: Tuple containing the output tensor and stacked attention weights.
+
+        """
         attention_weights = []
         for i in range(self.num_layers):
-            x, attn_weights = self.enc_layers[i](x, mask, None, **kwargs)
+            x, attn_weights = self.enc_layers[i](x, mask, **kwargs)
             attention_weights.append(attn_weights)
         return x, tf.stack(attention_weights, axis=0)  # (batch_size, input_seq_len, d_model)
 
 
 class DecoderLayer(tf.keras.layers.Layer):
+    """A single layer of the decoder in a transformer model.
+
+        This layer consists of multi-head self-attention mechanism, followed by another
+        multi-head attention mechanism that attends over the encoder output. The attention
+        mechanisms are then followed by a point-wise feed-forward neural network.
+
+        Args:
+            d_model (int): The dimensionality of the model.
+            num_heads (int): The number of attention heads.
+            dff (int): The dimensionality of the feed-forward network.
+            rate (float, optional): Dropout rate to apply within the layer. Defaults to 0.1.
+            *args: Variable length argument list.
+            **kwargs: Arbitrary keyword arguments.
+
+        Attributes:
+            d_model (int): The dimensionality of the model.
+            num_heads (int): The number of attention heads.
+            dff (int): The dimensionality of the feed-forward network.
+            rate (float): Dropout rate to apply within the layer.
+            mha1 (MultiHeadAttention): The first multi-head attention layer.
+            mha2 (MultiHeadAttention): The second multi-head attention layer.
+            ffn (tf.keras.Sequential): The feed-forward neural network.
+            layernorm1 (tf.keras.layers.LayerNormalization): Layer normalization after the first attention layer.
+            layernorm2 (tf.keras.layers.LayerNormalization): Layer normalization after the second attention layer.
+            layernorm3 (tf.keras.layers.LayerNormalization): Layer normalization after the feed-forward network.
+            dropout1 (tf.keras.layers.Dropout): Dropout layer for the first attention layer.
+            dropout2 (tf.keras.layers.Dropout): Dropout layer for the second attention layer.
+            dropout3 (tf.keras.layers.Dropout): Dropout layer for the feed-forward network.
+
+        Methods:
+            get_config(): Returns the configuration of the layer.
+            call(inputs, training=None, mask=None): Performs the forward pass of the layer.
+
+        """
+
     def __init__(self, d_model, num_heads, dff, rate=0.1, *args, **kwargs):
         super(DecoderLayer, self).__init__(*args, **kwargs)
 
@@ -235,6 +336,12 @@ class DecoderLayer(tf.keras.layers.Layer):
         self.dropout3 = tf.keras.layers.Dropout(rate)
 
     def get_config(self):
+        """Returns the configuration of the layer.
+
+        Returns:
+            dict: The layer configuration.
+
+        """
         config = super().get_config()
         config['d_model'] = self.d_model
         config['num_heads'] = self.num_heads
@@ -243,26 +350,62 @@ class DecoderLayer(tf.keras.layers.Layer):
         return config
 
     def call(self, x, enc_output, decoder_mask, encoder_mask, **kwargs):
-        # enc_output.shape == (batch_size, input_seq_len, d_model)
+        """Performs the forward pass of the layer.
 
-        attn1, attn_weights_block1 = self.mha1(x, x, x, decoder_mask,
-                                               None)  # (batch_size, target_seq_len, d_model)
+        Args:
+            x (tf.Tensor): The input tensor of shape `(batch_size, target_seq_len, d_model)`.
+            enc_output (tf.Tensor): The encoder output tensor of shape `(batch_size, input_seq_len, d_model)`.
+            decoder_mask (tf.Tensor): The decoder mask tensor of shape `(batch_size, target_seq_len)`.
+            encoder_mask (tf.Tensor): The encoder mask tensor of shape `(batch_size, input_seq_len)`.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            tuple: A tuple containing the output tensor, and attention weights from both attention mechanisms.
+
+        """
+        # enc_output.shape == (batch_size, input_seq_len, d_model)
+        # (batch_size, target_seq_len, d_model)
+        attn1, attn_weights_block1 = self.mha1(x, x, x, decoder_mask)
         attn1 = self.dropout1(attn1)
         out1 = self.layernorm1(attn1 + x)
 
-        attn2, attn_weights_block2 = self.mha2(enc_output, enc_output, out1, encoder_mask,
-                                               None)  # (batch_size, target_seq_len, d_model)
+        # (batch_size, target_seq_len, d_model)
+        attn2, attn_weights_block2 = self.mha2(enc_output, enc_output, out1, encoder_mask)
         attn2 = self.dropout2(attn2, **kwargs)
-        out2 = self.layernorm2(attn2 + out1)  # (batch_size, target_seq_len, d_model)
+        out2 = self.layernorm2(attn2 + out1)
 
-        ffn_output = self.ffn(out2)  # (batch_size, target_seq_len, d_model)
+        # (batch_size, target_seq_len, d_model)
+        ffn_output = self.ffn(out2)
         ffn_output = self.dropout3(ffn_output, **kwargs)
-        out3 = self.layernorm3(ffn_output + out2)  # (batch_size, target_seq_len, d_model)
+        out3 = self.layernorm3(ffn_output + out2)
 
         return out3, attn_weights_block1, attn_weights_block2
 
 
 class PositionalEncodingLayer(tf.keras.layers.Layer):
+    """Positional encoding layer for adding positional information to input sequences.
+
+    This layer applies positional encodings to input sequences based on their visit concept orders.
+    It normalizes the visit concept orders using the corresponding first visit order and retrieves
+    positional embeddings for the concepts with the same visit order.
+
+    Args:
+        max_sequence_length (int): The maximum sequence length.
+        embedding_size (int): The dimensionality of the positional embeddings.
+        *args: Variable length argument list.
+        **kwargs: Arbitrary keyword arguments.
+
+    Attributes:
+        max_sequence_length (int): The maximum sequence length.
+        embedding_size (int): The dimensionality of the positional embeddings.
+        pos_encoding (tf.Tensor): The positional encodings.
+
+    Methods:
+        get_config(): Returns the configuration of the layer.
+        call(visit_concept_orders): Performs the forward pass of the layer.
+
+    """
+
     def __init__(self, max_sequence_length, embedding_size, *args, **kwargs):
         super(PositionalEncodingLayer, self).__init__(*args, **kwargs)
         self.max_sequence_length = max_sequence_length
@@ -270,12 +413,27 @@ class PositionalEncodingLayer(tf.keras.layers.Layer):
         self.pos_encoding = tf.squeeze(positional_encoding(max_sequence_length, embedding_size))
 
     def get_config(self):
+        """Returns the configuration of the layer.
+
+        Returns:
+            dict: The layer configuration.
+
+        """
         config = super().get_config()
         config['max_sequence_length'] = self.max_sequence_length
         config['embedding_size'] = self.embedding_size
         return config
 
     def call(self, visit_concept_orders):
+        """Performs the forward pass of the layer.
+
+        Args:
+            visit_concept_orders (tf.Tensor): The visit concept orders tensor.
+
+        Returns:
+            tf.Tensor: The positional embeddings tensor.
+
+        """
         # normalize the visit concept order using the corresponding first visit order
         first_visit_concept_orders = visit_concept_orders[:, 0:1]
         visit_concept_orders = tf.maximum(visit_concept_orders - first_visit_concept_orders, 0)
@@ -285,6 +443,31 @@ class PositionalEncodingLayer(tf.keras.layers.Layer):
 
 
 class TimeEmbeddingLayer(tf.keras.layers.Layer):
+    """Layer for time embedding.
+
+    This layer applies time embedding to input time stamps, which can be either absolute time
+    values or time deltas.
+
+    Args:
+        embedding_size (int): The size of the embedding vectors.
+        is_time_delta (bool): Whether the input time stamps represent time deltas. If True,
+            the input time stamps are treated as differences between consecutive time values.
+            If False, the input time stamps are treated as absolute time values. Default is False.
+
+    Attributes:
+        embedding_size (int): The size of the embedding vectors.
+        is_time_delta (bool): Whether the input time stamps represent time deltas.
+
+    Methods:
+        get_config(): Returns the configuration of the layer.
+
+    Example:
+        layer = TimeEmbeddingLayer(embedding_size=32, is_time_delta=True)
+        time_stamps = tf.constant([[0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0]])
+        output = layer(time_stamps)
+
+    """
+
     def __init__(self, embedding_size, is_time_delta=False, *args, **kwargs):
         super(TimeEmbeddingLayer, self).__init__(*args, **kwargs)
         self.embedding_size = embedding_size
@@ -299,12 +482,28 @@ class TimeEmbeddingLayer(tf.keras.layers.Layer):
                                    name=f'time_embedding_phi_{self.name}')
 
     def get_config(self):
+        """Returns the configuration of the layer.
+
+        Returns:
+            dict: The layer configuration.
+
+        """
         config = super().get_config()
         config['embedding_size'] = self.embedding_size
         config['is_time_delta'] = self.is_time_delta
         return config
 
     def call(self, time_stamps):
+        """Applies time embedding to the input time stamps.
+
+        Args:
+            time_stamps (tf.Tensor): The input time stamps. Can be either absolute time values
+                or time deltas.
+
+        Returns:
+            tf.Tensor: The embedded representation of the input time stamps.
+
+        """
         time_stamps = tf.cast(time_stamps, tf.float32)
         if self.is_time_delta:
             time_stamps = tf.concat(
@@ -314,9 +513,22 @@ class TimeEmbeddingLayer(tf.keras.layers.Layer):
 
 
 class VisitEmbeddingLayer(tf.keras.layers.Layer):
+    """Layer for embedding visit orders.
 
-    def __init__(self, visit_order_size: int,
-                 embedding_size: int, *args, **kwargs):
+    This layer takes visit orders and concept embeddings as input and applies
+    embedding to the visit orders. It then adds the concept embeddings to the
+    visit embeddings.
+
+    Args:
+        visit_order_size (int): The size of the visit order vocabulary.
+        embedding_size (int): The size of the embedding vectors.
+
+    Attributes:
+        visit_embedding_layer (tf.keras.layers.Embedding): Embedding layer
+            for visit orders.
+    """
+
+    def __init__(self, visit_order_size: int, embedding_size: int, *args, **kwargs):
         super(VisitEmbeddingLayer, self).__init__(*args, **kwargs)
         self.visit_order_size = visit_order_size
         self.embedding_size = embedding_size
@@ -331,6 +543,16 @@ class VisitEmbeddingLayer(tf.keras.layers.Layer):
         return config
 
     def call(self, inputs, **kwargs):
+        """Applies embedding to visit orders and adds concept embeddings.
+
+        Args:
+            inputs (list): List of input tensors containing visit orders and
+                concept embeddings.
+
+        Returns:
+            tf.Tensor: Tensor resulting from adding visit embeddings and concept
+                embeddings.
+        """
         visit_orders, concept_embeddings = inputs
         return self.visit_embedding_layer(visit_orders) + concept_embeddings
 
