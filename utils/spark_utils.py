@@ -12,7 +12,7 @@ from config.parameters import qualified_concept_list_path
 from const.common import PERSON, VISIT_OCCURRENCE, UNKNOWN_CONCEPT, MEASUREMENT, \
     CATEGORICAL_MEASUREMENT, REQUIRED_MEASUREMENT, CDM_TABLES
 from spark_apps.decorators.patient_event_decorator import (
-    DemographicPromptDecorator, PatientEventAttDecorator, PatientEventBaseDecorator, time_token_func
+    DemographicPromptDecorator, PatientEventAttDecorator, PatientEventBaseDecorator, time_token_func, AttType
 )
 from spark_apps.sql_templates import measurement_unit_stats_query
 from utils.logging_utils import *
@@ -432,7 +432,8 @@ def create_sequence_data_with_att(
         date_filter=None,
         include_visit_type=False,
         exclude_visit_tokens=False,
-        patient_demographic=None
+        patient_demographic=None,
+        att_type: AttType = AttType.CEHR_BERT
 ):
     """
     Create a sequence of the events associated with one patient in a chronological order
@@ -442,6 +443,7 @@ def create_sequence_data_with_att(
     :param include_visit_type:
     :param exclude_visit_tokens:
     :param patient_demographic:
+    :param att_type:
     :return:
     """
     if date_filter:
@@ -449,7 +451,7 @@ def create_sequence_data_with_att(
 
     decorators = [
         PatientEventBaseDecorator(),
-        PatientEventAttDecorator(include_visit_type, exclude_visit_tokens),
+        PatientEventAttDecorator(include_visit_type, exclude_visit_tokens, att_type),
         DemographicPromptDecorator(patient_demographic)
     ]
 

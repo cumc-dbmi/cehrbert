@@ -2,14 +2,14 @@ import os
 import re
 from abc import ABC
 from typing import List
-from pandas import to_datetime
 
+from pandas import to_datetime
 from pyspark.sql import DataFrame
 from pyspark.sql import SparkSession
 
-from utils.spark_utils import *
-from utils.logging_utils import *
 from spark_apps.cohorts.query_builder import QueryBuilder, ENTRY_COHORT, NEGATIVE_COHORT
+from utils.logging_utils import *
+from utils.spark_utils import *
 
 COHORT_TABLE_NAME = 'cohort'
 PERSON = 'person'
@@ -254,7 +254,8 @@ class NestedCohortBuilder:
             is_remove_index_prediction_starts: bool = False,
             is_prediction_window_unbounded: bool = False,
             is_observation_window_unbounded: bool = False,
-            is_population_estimation: bool = False
+            is_population_estimation: bool = False,
+            att_type: AttType = AttType.CEHR_BERT
     ):
         self._cohort_name = cohort_name
         self._input_folder = input_folder
@@ -288,6 +289,7 @@ class NestedCohortBuilder:
                                                 re.sub('[^a-z0-9]+', '_',
                                                        self._cohort_name.lower()))
         self._is_population_estimation = is_population_estimation
+        self._att_type = att_type
 
         self.get_logger().info(
             f'cohort_name: {cohort_name}\n'
@@ -315,7 +317,8 @@ class NestedCohortBuilder:
             f'is_prediction_window_unbounded: {is_prediction_window_unbounded}\n'
             f'include_concept_list: {include_concept_list}\n'
             f'is_observation_window_unbounded: {is_observation_window_unbounded}\n'
-            f'is_population_estimation: {is_population_estimation}'
+            f'is_population_estimation: {is_population_estimation}\n'
+            f'att_type: {att_type}'
         )
 
         self.spark = SparkSession.builder.appName(f'Generate {self._cohort_name}').getOrCreate()
@@ -494,7 +497,8 @@ class NestedCohortBuilder:
                 cohort_ehr_records,
                 include_visit_type=self._include_visit_type,
                 exclude_visit_tokens=self._exclude_visit_tokens,
-                patient_demographic=patient_demographic if self._gpt_patient_sequence else None
+                patient_demographic=patient_demographic if self._gpt_patient_sequence else None,
+                att_type=self._att_type
             )
 
         return create_sequence_data(
@@ -613,5 +617,6 @@ def create_prediction_cohort(
         is_prediction_window_unbounded=is_prediction_window_unbounded,
         is_remove_index_prediction_starts=is_remove_index_prediction_starts,
         is_observation_window_unbounded=is_observation_window_unbounded,
-        is_population_estimation=spark_args.is_population_estimation
+        is_population_estimation=spark_args.is_population_estimation,
+        att_type=AttType(spark_args.att_type)
     ).build()

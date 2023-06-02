@@ -1,6 +1,8 @@
 import argparse
 import datetime
 
+from spark_apps.decorators.patient_event_decorator import AttType
+
 
 def valid_date(s):
     try:
@@ -192,4 +194,8 @@ def create_spark_args():
                         action='store_true',
                         help='Indicate whether the cohort is constructed for population level '
                              'estimation')
+    parser.add_argument('--att_type',
+                        dest='att_type',
+                        action='store',
+                        choices=[e.value for e in AttType])
     return parser.parse_args()

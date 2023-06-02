@@ -4,6 +4,7 @@ import os
 from pyspark.sql import SparkSession
 
 import config.parameters
+from spark_apps.decorators.patient_event_decorator import AttType
 from utils.spark_utils import *
 
 VISIT_OCCURRENCE = 'visit_occurrence'
@@ -22,7 +23,8 @@ def main(
         include_prolonged_stay,
         include_concept_list: bool,
         gpt_patient_sequence: bool,
-        apply_age_filter: bool
+        apply_age_filter: bool,
+        att_type: AttType
 ):
     spark = SparkSession.builder.appName('Generate CEHR-BERT Training Data').getOrCreate()
 
@@ -39,7 +41,8 @@ def main(
         f'include_prolonged_stay: {include_prolonged_stay}\n'
         f'include_concept_list: {include_concept_list}\n'
         f'gpt_patient_sequence: {gpt_patient_sequence}\n'
-        f'apply_age_filter: {apply_age_filter}'
+        f'apply_age_filter: {apply_age_filter}\n'
+        f'att_type: {att_type}'
     )
 
     domain_tables = []
@@ -122,7 +125,8 @@ def main(
             date_filter=date_filter,
             include_visit_type=include_visit_type,
             exclude_visit_tokens=exclude_visit_tokens,
-            patient_demographic=person if gpt_patient_sequence else None
+            patient_demographic=person if gpt_patient_sequence else None,
+            att_type=att_type
         )
     else:
         sequence_data = create_sequence_data(
@@ -236,6 +240,13 @@ if __name__ == '__main__':
         dest='apply_age_filter',
         action='store_true'
     )
+    parser.add_argument(
+        '--att_type',
+        dest='att_type',
+        action='store',
+        choices=[e.value for e in AttType],
+    )
+
     ARGS = parser.parse_args()
 
     main(
@@ -243,5 +254,6 @@ if __name__ == '__main__':
         ARGS.include_visit_type, ARGS.is_new_patient_representation, ARGS.exclude_visit_tokens,
         ARGS.is_classic_bert_sequence, ARGS.include_prolonged_stay, ARGS.include_concept_list,
         ARGS.gpt_patient_sequence,
-        ARGS.apply_age_filter
+        ARGS.apply_age_filter,
+        AttType(ARGS.att_type)
     )

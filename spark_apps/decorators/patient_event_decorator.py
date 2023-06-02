@@ -1,5 +1,6 @@
 import math
 from abc import ABC, abstractmethod
+from enum import Enum
 
 import numpy as np
 from pyspark.sql import DataFrame
@@ -8,14 +9,15 @@ from pyspark.sql import functions as F, Window as W, types as T
 from const.common import MEASUREMENT, CATEGORICAL_MEASUREMENT
 
 
-class PatientEventDecorator(ABC):
-    def __init__(
-            self,
-            *args,
-            **kwargs
-    ):
-        pass
+class AttType(Enum):
+    DAY = 'day'
+    WEEK = 'week'
+    MONTH = 'month'
+    CEHR_BERT = 'cehr_bert'
+    MIX = 'mix'
 
+
+class PatientEventDecorator(ABC):
     @abstractmethod
     def decorate(self, patient_event):
         pass
@@ -59,10 +61,12 @@ class PatientEventAttDecorator(PatientEventDecorator):
     def __init__(
             self,
             include_visit_type,
-            exclude_visit_tokens
+            exclude_visit_tokens,
+            att_type: AttType
     ):
         self._include_visit_type = include_visit_type
         self._exclude_visit_tokens = exclude_visit_tokens
+        self._att_type = att_type
 
     def decorate(
             self,
@@ -117,7 +121,18 @@ class PatientEventAttDecorator(PatientEventDecorator):
             F.col('days_since_epoch') - F.col('prev_days_since_epoch'))
 
         # Udf for calculating the time token
-        time_token_udf = F.udf(time_token_func, T.StringType())
+        if self._att_type == AttType.DAY:
+            att_func = time_day_token
+        elif self._att_type == AttType.WEEK:
+            att_func = time_week_token
+        elif self._att_type == AttType.MONTH:
+            att_func = time_month_token
+        elif self._att_type == AttType.MIX:
+            raise NotImplementedError(f'Time Token function is not implemented for MIX')
+        else:
+            att_func = time_token_func
+
+        time_token_udf = F.udf(att_func, T.StringType())
 
         patient_event = patient_event.union(visit_start_events).union(visit_end_events) \
             .withColumn('days_since_epoch', days_since_epoch_udf) \
@@ -246,5 +261,29 @@ def time_token_func(time_delta):
     if time_delta < 28:
         return f'W{str(math.floor(time_delta / 7))}'
     if time_delta < 360:
+        return f'M{str(math.floor(time_delta / 30))}'
+    return 'LT'
+
+
+def time_day_token(time_delta):
+    if np.isnan(time_delta):
+        return None
+    if time_delta < 1080:
+        return f'D{str(time_delta)}'
+    return 'LT'
+
+
+def time_week_token(time_delta):
+    if np.isnan(time_delta):
+        return None
+    if time_delta < 1080:
+        return f'W{str(math.floor(time_delta / 7))}'
+    return 'LT'
+
+
+def time_month_token(time_delta):
+    if np.isnan(time_delta):
+        return None
+    if time_delta < 1080:
         return f'M{str(math.floor(time_delta / 30))}'
     return 'LT'
