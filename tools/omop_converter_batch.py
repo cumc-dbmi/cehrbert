@@ -6,7 +6,6 @@ from models.gpt_model import generate_artificial_time_tokens
 from tqdm import tqdm
 import pandas as pd
 import os
-import pickle
 import argparse
 import uuid
 from pathlib import Path
@@ -180,7 +179,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                 elif x[0] == 'M':
                     ATT_DATE_DELTA = int(x[1:]) * 30
                 elif x == 'LT':
-                    ATT_DATE_DELTA = 365 * 2
+                    ATT_DATE_DELTA = 365 * 3
             elif x == 'VE':
                 # If it's a VE token, nothing needs to be updated because it just means the visit ended
                 pass
@@ -266,11 +265,16 @@ def main(args):
     # tokenizer_path = os.path.join(args.model_folder, 'tokenizer.pickle')
     # tokenizer = pickle.load(open(tokenizer_path, 'rb'))
     concept_parquet_file = pd.read_parquet(os.path.join(args.concept_path))
-    patient_sequences_concept_ids = pd.read_parquet(os.path.join(args.patient_sequence_path),
-                                                    columns=['person_id', 'concept_ids'])
-    patient_sequences_concept_ids['concept_ids'] = patient_sequences_concept_ids. \
-        apply(lambda row: np.append(row.person_id, row.concept_ids),  axis=1)
-    patient_sequences_concept_ids.drop(columns=['person_id'], inplace=True)
+    if args.original_person_id:
+
+        patient_sequences_concept_ids = pd.read_parquet(os.path.join(args.patient_sequence_path),
+                                                        columns=['person_id', 'concept_ids'])
+        patient_sequences_concept_ids['concept_ids'] = patient_sequences_concept_ids. \
+            apply(lambda row: np.append(row.person_id, row.concept_ids),  axis=1)
+        patient_sequences_concept_ids.drop(columns=['person_id'], inplace=True)
+    else:
+        patient_sequences_concept_ids = pd.read_parquet(os.path.join(args.patient_sequence_path),
+                                                        columns=['concept_ids'])
     gpt_to_omop_converter_parallel(args.output_folder, concept_parquet_file,
                                    patient_sequences_concept_ids,
                                    args.buffer_size, args.cpu_cores, args.original_person_id)
