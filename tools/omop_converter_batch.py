@@ -113,13 +113,7 @@ def export_and_clear_parquet(output_folder, export_dict, export_error, id_mappin
     return export_dict, export_error
 
 
-def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder, buffer_size):
-    person_id: int = const + 1
-    visit_occurrence_id: int = const + 1
-    condition_occurrence_id: int = const + 1
-    procedure_occurrence_id: int = const + 1
-    drug_exposure_id: int = const + 1
-
+def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder, buffer_size, original_person_id):
     omop_export_dict = {}
     error_dict = {}
     export_error = {}
@@ -131,14 +125,23 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
         id_mappings_dict[tb] = {}
     pat_seq_len = pat_seq_split.shape[0]
 
+    visit_occurrence_id: int = const + 1
+    condition_occurrence_id: int = const + 1
+    procedure_occurrence_id: int = const + 1
+    drug_exposure_id: int = const + 1
+
+    person_id: int = const + 1
+
     for index, row in tqdm(pat_seq_split.iteritems(), total=pat_seq_len):
         bad_sequence = False
         # ignore start token
-        if 'start' in row[0].lower():
-            row = row[1:]
+        if original_person_id:
+            person_id = row[0]
+        if 'start' in row[1].lower():
+            row = row[2:]
         tokens_generated = row[start_token_size:]
         # TODO:Need to decode if the input is tokenized
-        start_tokens = row[0:start_token_size]
+        start_tokens = row[1:start_token_size]
         [start_year, start_age, start_gender, start_race] = [_ for _ in start_tokens]
         if 'year' not in start_year.lower():
             continue
@@ -168,12 +171,14 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                 id_mappings_dict['visit_occurrence'][visit_occurrence_id] = person_id
                 visit_occurrence_id += 1
             elif x in ATT_TIME_TOKENS:
+                if x[0] == 'D':
+                    ATT_DATE_DELTA = int(x[1:])
                 if x[0] == 'W':
                     ATT_DATE_DELTA = int(x[1:]) * 7
                 elif x[0] == 'M':
                     ATT_DATE_DELTA = int(x[1:]) * 30
                 elif x == 'LT':
-                    ATT_DATE_DELTA = 365
+                    ATT_DATE_DELTA = 365 * 2
             elif x == 'VE':
                 # If it's a VE token, nothing needs to be updated because it just means the visit ended
                 pass
@@ -219,7 +224,8 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
                     continue
         if bad_sequence:
             omop_export_dict = delete_bad_sequence(omop_export_dict, id_mappings_dict, person_id)
-        person_id += 1
+        if not original_person_id:
+            person_id += 1
 
         if index != 0 and (index % buffer_size == 0 or index == pat_seq_len):
             omop_export_dict, export_error = export_and_clear_parquet(output_folder,
@@ -235,7 +241,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
 
 def gpt_to_omop_converter_parallel(output_folder, concept_parquet_file,
                                    patient_sequences_concept_ids, buffer_size,
-                                   cores):
+                                   cores, original_person_id):
     patient_sequences = patient_sequences_concept_ids['concept_ids']
     domain_map = generate_omop_concept_domain(concept_parquet_file)
     pool_tuples = []
@@ -244,7 +250,7 @@ def gpt_to_omop_converter_parallel(output_folder, concept_parquet_file,
     patient_sequences_list = np.array_split(patient_sequences, cores)
     for i in range(1, cores + 1):
         pool_tuples.append(
-            (const * i, patient_sequences_list[i - 1], domain_map, output_folder, buffer_size))
+            (const * i, patient_sequences_list[i - 1], domain_map, output_folder, buffer_size, original_person_id))
 
     with Pool(processes=cores) as p:
         results = p.starmap(gpt_to_omop_converter_serial, pool_tuples)
@@ -258,11 +264,12 @@ def main(args):
     # tokenizer_path = os.path.join(args.model_folder, 'tokenizer.pickle')
     # tokenizer = pickle.load(open(tokenizer_path, 'rb'))
     concept_parquet_file = pd.read_parquet(os.path.join(args.concept_path))
-    patient_sequences_conept_ids = pd.read_parquet(os.path.join(args.patient_sequence_path),
-                                                   columns=['concept_ids'])
+    patient_sequences_concept_ids = pd.read_parquet(os.path.join(args.patient_sequence_path),
+                                                   columns=['person_id', 'concept_ids'])
+    patient_sequences_concept_ids = patient_sequences_concept_ids.apply(lambda row: row['concept_ids'].insert(0, row['person_id']))
     gpt_to_omop_converter_parallel(args.output_folder, concept_parquet_file,
-                                   patient_sequences_conept_ids,
-                                   args.buffer_size, args.cpu_cores)
+                                   patient_sequences_concept_ids,
+                                   args.buffer_size, args.cpu_cores, args.original_person_id)
 
 
 if __name__ == "__main__":
@@ -304,6 +311,15 @@ if __name__ == "__main__":
         type=int,
         action='store',
         help='The number of cpu cores to use for multiprocessing',
+        required=False
+    )
+    parser.add_argument(
+        '--original_person_id',
+        dest='original_person_id',
+        type=bool,
+        action='store',
+        help='Whether or not to use the original person id',
+        default=False,
         required=False
     )
 
