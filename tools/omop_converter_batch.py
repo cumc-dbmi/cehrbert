@@ -139,9 +139,11 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
             person_id = row[0]
         if 'start' in row[1].lower():
             row = row[2:]
+        else:
+            row = row[1:]
         tokens_generated = row[start_token_size:]
         # TODO:Need to decode if the input is tokenized
-        start_tokens = row[1:start_token_size]
+        start_tokens = row[0:start_token_size]
         [start_year, start_age, start_gender, start_race] = [_ for _ in start_tokens]
         if 'year' not in start_year.lower():
             continue
@@ -265,10 +267,10 @@ def main(args):
     # tokenizer = pickle.load(open(tokenizer_path, 'rb'))
     concept_parquet_file = pd.read_parquet(os.path.join(args.concept_path))
     patient_sequences_concept_ids = pd.read_parquet(os.path.join(args.patient_sequence_path),
-                                                   columns=['person_id', 'concept_ids'])
-    patient_sequences_concept_ids = patient_sequences_concept_ids.\
-        apply(lambda row: row['concept_ids'].insert(0, row['person_id'])). \
-        drop(columns=['person_id'])
+                                                    columns=['person_id', 'concept_ids'])
+    patient_sequences_concept_ids['concept_ids'] = patient_sequences_concept_ids. \
+        apply(lambda row: np.append(row.person_id, row.concept_ids),  axis=1)
+    patient_sequences_concept_ids.drop(columns=['person_id'], inplace=True)
     gpt_to_omop_converter_parallel(args.output_folder, concept_parquet_file,
                                    patient_sequences_concept_ids,
                                    args.buffer_size, args.cpu_cores, args.original_person_id)
