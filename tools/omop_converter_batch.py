@@ -266,7 +266,9 @@ def main(args):
     concept_parquet_file = pd.read_parquet(os.path.join(args.concept_path))
     patient_sequences_concept_ids = pd.read_parquet(os.path.join(args.patient_sequence_path),
                                                    columns=['person_id', 'concept_ids'])
-    patient_sequences_concept_ids = patient_sequences_concept_ids.apply(lambda row: row['concept_ids'].insert(0, row['person_id']))
+    patient_sequences_concept_ids = patient_sequences_concept_ids.\
+        apply(lambda row: row['concept_ids'].insert(0, row['person_id'])). \
+        drop(columns=['person_id'])
     gpt_to_omop_converter_parallel(args.output_folder, concept_parquet_file,
                                    patient_sequences_concept_ids,
                                    args.buffer_size, args.cpu_cores, args.original_person_id)
