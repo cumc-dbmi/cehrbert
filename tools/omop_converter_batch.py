@@ -136,10 +136,15 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
         # ignore start token
         if original_person_id:
             person_id = row[0]
-        if 'start' in row[1].lower():
-            row = row[2:]
+            if 'start' in row[1].lower():
+                row = row[2:]
+            else:
+                row = row[1:]
         else:
-            row = row[1:]
+            if 'start' in row[0].lower():
+                row = row[1:]
+            else:
+                row = row[0:]
         tokens_generated = row[start_token_size:]
         # TODO:Need to decode if the input is tokenized
         start_tokens = row[0:start_token_size]
@@ -174,7 +179,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
             elif x in ATT_TIME_TOKENS:
                 if x[0] == 'D':
                     ATT_DATE_DELTA = int(x[1:])
-                if x[0] == 'W':
+                elif x[0] == 'W':
                     ATT_DATE_DELTA = int(x[1:]) * 7
                 elif x[0] == 'M':
                     ATT_DATE_DELTA = int(x[1:]) * 30
@@ -266,7 +271,6 @@ def main(args):
     # tokenizer = pickle.load(open(tokenizer_path, 'rb'))
     concept_parquet_file = pd.read_parquet(os.path.join(args.concept_path))
     if args.original_person_id:
-
         patient_sequences_concept_ids = pd.read_parquet(os.path.join(args.patient_sequence_path),
                                                         columns=['person_id', 'concept_ids'])
         patient_sequences_concept_ids['concept_ids'] = patient_sequences_concept_ids. \
