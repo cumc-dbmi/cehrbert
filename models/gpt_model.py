@@ -29,6 +29,26 @@ class GptInferenceModel(tf.keras.Model):
         self.output_layer = self._get_output_layer(gpt_model)
         self.gpt_decoder = self._get_gpt_decoder(gpt_model)
         self.vocab_size = self.concept_embedding_layer.input_dim
+        self.att_token_ids = self._get_att_token_ids()
+
+    def _get_att_token_ids(self):
+        """
+        We assume we create artificial tokens before 1080 days
+        :return:
+        """
+        day_tokens = [f'D{i}' for i in range(1080)]
+        month_tokens = [f'M{i}' for i in range(40)]
+        quarter_tokens = [f'Q{i}' for i in range(12)]
+        year_tokens = [f'Y{i}' for i in range(3)]
+
+        att_tokens = day_tokens + month_tokens + quarter_tokens + year_tokens
+
+        att_token_ids = []
+        for token, token_id in self.tokenizer.tokenizer.word_index.items():
+            if token in att_tokens:
+                att_token_ids.append(token_id)
+
+        return att_token_ids
 
     def _generate_next_token(
             self,
@@ -165,7 +185,7 @@ class GptInferenceModel(tf.keras.Model):
 
             # Randomly sample a batch of tokens
             pred_logits, indices = tf.math.top_k(outputs, k=self.top_k, sorted=True)
-            indices = np.asarray(indices).astype("int32")
+            indices = np.asarray(indices).astype('int32')
 
             next_token_indices = indices[:, -1, :]
             next_token_logits = pred_logits[:, -1, :]
@@ -176,6 +196,18 @@ class GptInferenceModel(tf.keras.Model):
                 axis=1,
                 batch_dims=1
             ).numpy()
+
+            # Check if any of the current token is att tokens
+            att_token_indicators = tf.cast(
+                tf.reduce_any(inputs[:, -1:] == self.att_token_ids, axis=-1),
+                dtype=tf.int32
+            )[:, tf.newaxis]
+
+            # Replace the next tokens with VS token if the current token is an ATT token
+            next_tokens = (
+                    att_token_indicators * self.tokenizer.get_visit_start_token_id() +
+                    (1 - att_token_indicators) * next_tokens
+            )
 
             # Stitch up the new tokens and previously generated tokens
             inputs = np.hstack(

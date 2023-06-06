@@ -1,9 +1,9 @@
 import argparse
+import datetime
 import os
 import pickle
 import random
 import uuid
-import datetime
 
 import numpy as np
 import pandas as pd
@@ -31,6 +31,8 @@ def generate_single_batch(
     _, length = np.shape(
         prompt_batch
     )
+
+    prompt_batch = tf.cast(prompt_batch, dtype=tf.int32)
 
     prompt_batch = gpt_inference_model(
         prompt_batch
