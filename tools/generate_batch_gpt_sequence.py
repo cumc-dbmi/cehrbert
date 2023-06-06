@@ -7,6 +7,7 @@ import uuid
 
 import numpy as np
 import pandas as pd
+import dask.dataframe as dd
 import tensorflow as tf
 
 from models.gpt_model import GptInferenceModel
@@ -62,9 +63,11 @@ def main(
             top_k=args.top_k
         )
     print(f'{datetime.datetime.now()}: Loading demographic_info at {args.demographic_data_path}')
-    demographic_info = pd.read_parquet(
-        args.demographic_data_path
-    ).concept_ids.apply(lambda concept_list: concept_list[0:4])
+    data = dd.read_parquet(
+        args.demographic_data_path,
+        engine='pyarrow'
+    )
+    demographic_info = data.concept_ids.apply(lambda concept_list: concept_list[0:4])
     demographic_info = tokenizer.encode(map(list, demographic_info))
 
     num_of_batches = args.num_of_patients // args.batch_size + 1
