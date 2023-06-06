@@ -128,7 +128,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
         elif self._att_type == AttType.MONTH:
             att_func = time_month_token
         elif self._att_type == AttType.MIX:
-            raise NotImplementedError(f'Time Token function is not implemented for MIX')
+            att_func = time_mix_token
         else:
             att_func = time_token_func
 
@@ -286,4 +286,30 @@ def time_month_token(time_delta):
         return None
     if time_delta < 1080:
         return f'M{str(math.floor(time_delta / 30))}'
+    return 'LT'
+
+
+def time_mix_token(time_delta):
+    #        WHEN day_diff <= 7 THEN CONCAT('D', day_diff)
+    #         WHEN day_diff <= 30 THEN CONCAT('W', ceil(day_diff / 7))
+    #         WHEN day_diff <= 360 THEN CONCAT('M', ceil(day_diff / 30))
+    #         WHEN day_diff <= 720 THEN CONCAT('Q', ceil(day_diff / 90))
+    #         WHEN day_diff <= 1440 THEN CONCAT('Y', ceil(day_diff / 360))
+    #         ELSE 'LT'
+    if np.isnan(time_delta):
+        return None
+    if time_delta <= 7:
+        return f'D{str(time_delta)}'
+    if time_delta <= 30:
+        # e.g. 8 -> W2
+        return f'W{str(math.ceil(time_delta / 7))}'
+    if time_delta <= 360:
+        # e.g. 31 -> M2
+        return f'M{str(math.ceil(time_delta / 30))}'
+    if time_delta <= 720:
+        # e.g. 361 -> Q5
+        return f'Q{str(math.ceil(time_delta / 90))}'
+    if time_delta <= 1080:
+        # e.g. 1081 -> Y2
+        return f'Y{str(math.ceil(time_delta / 360))}'
     return 'LT'
