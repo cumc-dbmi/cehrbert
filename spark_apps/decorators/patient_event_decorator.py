@@ -298,8 +298,8 @@ def time_mix_token(time_delta):
     #         ELSE 'LT'
     if np.isnan(time_delta):
         return None
-    if time_delta <= 7:
-        return f'D{str(time_delta)}'
+    # if time_delta <= 7:
+    #     return f'D{str(time_delta)}'
     if time_delta <= 30:
         # e.g. 8 -> W2
         return f'W{str(math.ceil(time_delta / 7))}'
