@@ -267,7 +267,7 @@ class BertDataGenerator(AbstractDataGeneratorBase):
         Create an iterator that will iterate through all training data
         :return:
         """
-        for row in self._training_data.itertuples():
+        for row in self._training_data.sample(frac=1).itertuples():
             seq_length = len(row.token_ids)
             if self._is_pretraining:
                 cursor = random.randint(0, seq_length -
