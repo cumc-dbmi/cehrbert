@@ -311,6 +311,8 @@ class GptDataGenerator(BertDataGenerator):
             self._training_data['num_of_visits'] <= self._max_num_of_visits]
         self._training_data = self._training_data[
             self._training_data['num_of_concepts'] <= self._max_seq_len]
+        self._training_data = self._training_data[
+            self._training_data['num_of_concepts'] >= self._min_num_of_concepts]
 
     def _get_learning_objective_classes(self):
         return [SequenceGenerationLearningObjective]

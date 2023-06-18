@@ -28,6 +28,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             num_heads: int,
             min_num_of_visits: int,
             max_num_of_visits: int,
+            min_num_of_concepts: int,
             print_every: int,
             *args, **kwargs
     ):
@@ -37,6 +38,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         self._context_window_size = context_window_size
         self._depth = depth
         self._num_heads = num_heads
+        self._min_num_of_concepts = min_num_of_concepts
         self._min_num_of_visits = min_num_of_visits
         self._max_num_of_visits = max_num_of_visits
         self._print_every = print_every
@@ -54,6 +56,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             f'min_num_of_visits: {min_num_of_visits}\n'
             f'max_num_of_visits: {max_num_of_visits}\n'
             f'print_every: {print_every}\n'
+            f'min_num_of_concepts: {min_num_of_concepts}'
         )
 
     def _load_dependencies(self):
@@ -75,10 +78,10 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             'training_data': self._training_data,
             'batch_size': self._batch_size,
             'max_seq_len': self._context_window_size,
-            'min_num_of_concepts': self.min_num_of_concepts,
             'concept_tokenizer': self._tokenizer,
             'min_num_of_visits': self._min_num_of_visits,
-            'max_num_of_visits': self._max_num_of_visits
+            'max_num_of_visits': self._max_num_of_visits,
+            'min_num_of_concepts': self._min_num_of_concepts
         }
 
         return GptDataGenerator(**parameters)
@@ -146,6 +149,7 @@ def main(args):
         num_heads=args.num_heads,
         min_num_of_visits=args.min_num_of_visits,
         max_num_of_visits=args.max_num_of_visits,
+        min_num_of_concepts=args.min_num_of_concepts,
         batch_size=args.batch_size,
         epochs=args.epochs,
         learning_rate=args.learning_rate,
