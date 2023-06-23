@@ -88,13 +88,23 @@ def export_and_clear_csv(output_folder, export_dict, buffer_size):
     return export_dict
 
 
-def export_and_clear_parquet(output_folder, export_dict, export_error, id_mappings_dict,
-                             pt_seq_dict):
+def export_and_clear_parquet(
+        output_folder,
+        export_dict,
+        export_error,
+        id_mappings_dict,
+        pt_seq_dict
+):
     for table_name, records_to_export in export_dict.items():
         export_error[table_name] = []
         records_in_json = []
         omop_id_mapping = np.array(list(id_mappings_dict[table_name].keys()))
         person_id_mapping = np.array(list(id_mappings_dict[table_name].values()))
+
+        # If there is no record, we skip it
+        if len(export_dict[table_name]) == 0:
+            continue
+
         for idx, record in export_dict[table_name].items():
             try:
                 records_in_json.append(record.export_as_json())
@@ -112,7 +122,8 @@ def export_and_clear_parquet(output_folder, export_dict, export_error, id_mappin
     return export_dict, export_error
 
 
-def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder, buffer_size, original_person_id):
+def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder, buffer_size,
+                                 original_person_id):
     omop_export_dict = {}
     error_dict = {}
     export_error = {}
@@ -131,7 +142,7 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
 
     person_id: int = const + 1
 
-    for index, row in tqdm(pat_seq_split.iteritems(), total=pat_seq_len):
+    for index, row in tqdm(enumerate(pat_seq_split), total=pat_seq_len):
         bad_sequence = False
         # ignore start token
         if original_person_id:
@@ -233,11 +244,21 @@ def gpt_to_omop_converter_serial(const, pat_seq_split, domain_map, output_folder
         if not original_person_id:
             person_id += 1
 
-        if index != 0 and (index % buffer_size == 0 or index == pat_seq_len):
-            omop_export_dict, export_error = export_and_clear_parquet(output_folder,
-                                                                      omop_export_dict,
-                                                                      export_error,
-                                                                      id_mappings_dict, pt_seq_dict)
+        if index != 0 and index % buffer_size == 0:
+            omop_export_dict, export_error = export_and_clear_parquet(
+                output_folder,
+                omop_export_dict,
+                export_error,
+                id_mappings_dict, pt_seq_dict
+            )
+
+    # Final flush to the disk if there are still records in the cache
+    omop_export_dict, export_error = export_and_clear_parquet(
+        output_folder,
+        omop_export_dict,
+        export_error,
+        id_mappings_dict, pt_seq_dict
+    )
 
     with open(Path(output_folder) / "concept_errors.txt", "a") as f:
         f.write(str(error_dict))
@@ -253,10 +274,11 @@ def gpt_to_omop_converter_parallel(output_folder, concept_parquet_file,
     pool_tuples = []
     # TODO: Need to make this dynamic
     const = 10000000
-    patient_sequences_list = np.array_split(patient_sequences, cores)
+    patient_sequences_list = np.array_split(patient_sequences.tolist(), cores)
     for i in range(1, cores + 1):
         pool_tuples.append(
-            (const * i, patient_sequences_list[i - 1], domain_map, output_folder, buffer_size, original_person_id))
+            (const * i, patient_sequences_list[i - 1], domain_map, output_folder, buffer_size,
+             original_person_id))
 
     with Pool(processes=cores) as p:
         results = p.starmap(gpt_to_omop_converter_serial, pool_tuples)
@@ -270,11 +292,12 @@ def main(args):
     # tokenizer_path = os.path.join(args.model_folder, 'tokenizer.pickle')
     # tokenizer = pickle.load(open(tokenizer_path, 'rb'))
     concept_parquet_file = pd.read_parquet(os.path.join(args.concept_path))
+
     if args.original_person_id:
         patient_sequences_concept_ids = pd.read_parquet(os.path.join(args.patient_sequence_path),
                                                         columns=['person_id', 'concept_ids'])
         patient_sequences_concept_ids['concept_ids'] = patient_sequences_concept_ids. \
-            apply(lambda row: np.append(row.person_id, row.concept_ids),  axis=1)
+            apply(lambda row: np.append(row.person_id, row.concept_ids), axis=1)
         patient_sequences_concept_ids.drop(columns=['person_id'], inplace=True)
     else:
         patient_sequences_concept_ids = pd.read_parquet(os.path.join(args.patient_sequence_path),
@@ -328,11 +351,8 @@ if __name__ == "__main__":
     parser.add_argument(
         '--original_person_id',
         dest='original_person_id',
-        type=bool,
-        action='store',
-        help='Whether or not to use the original person id',
-        default=False,
-        required=False
+        action='store_true',
+        help='Whether or not to use the original person id'
     )
 
     main(parser.parse_args())
