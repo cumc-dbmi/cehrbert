@@ -262,8 +262,11 @@ def gpt_to_omop_converter_serial(
     )
 
     with open(Path(output_folder) / "concept_errors.txt", "a") as f:
+        error_dict['total'] = len(error_dict)
         f.write(str(error_dict))
     with open(Path(output_folder) / "export_errors.txt", "a") as f:
+        for k, v in export_error.items():
+            export_error[k]['total'] = len(v)
         f.write(str(export_error))
 
 
