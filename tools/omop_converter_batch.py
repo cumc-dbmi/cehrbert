@@ -98,7 +98,7 @@ def export_and_clear(
                     export_error[table_name] = []
                 person_id = id_mappings_dict[table_name][entity_id]
                 export_error[table_name].append(
-                    str(pt_seq_dict[person_id])
+                    ','.join(list(pt_seq_dict[person_id]))
                 )
                 continue
         schema = next(iter(records_to_export.items()))[1].get_schema()
@@ -180,7 +180,7 @@ def gpt_to_omop_converter_serial(
                     visit_concept_id = int(tokens_generated[idx + 1])
                 except (IndexError, ValueError):
                     error_dict[person_id] = {}
-                    error_dict[person_id]['row'] = str(row)
+                    error_dict[person_id]['row'] = ','.join(list(row))
                     error_dict[person_id]['error'] = 'Wrong visit concept id'
                     bad_sequence = True
                     continue
@@ -209,7 +209,7 @@ def gpt_to_omop_converter_serial(
                     concept_id = int(x)
                     if concept_id not in domain_map:
                         error_dict[person_id] = {}
-                        error_dict[person_id]['row'] = str(row)
+                        error_dict[person_id]['row'] = ','.join(list(row))
                         error_dict[person_id]['error'] = f'No concept id found: {concept_id}'
                         bad_sequence = True
                         continue
@@ -234,7 +234,7 @@ def gpt_to_omop_converter_serial(
                             drug_exposure_id += 1
                 except ValueError:
                     error_dict[person_id] = {}
-                    error_dict[person_id]['row'] = str(row)
+                    error_dict[person_id]['row'] = ','.join(list(row))
                     error_dict[person_id]['error'] = f'Wrong concept id: {x}'
                     bad_sequence = True
                     continue
