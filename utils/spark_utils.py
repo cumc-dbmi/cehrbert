@@ -12,7 +12,8 @@ from config.parameters import qualified_concept_list_path
 from const.common import PERSON, VISIT_OCCURRENCE, UNKNOWN_CONCEPT, MEASUREMENT, \
     CATEGORICAL_MEASUREMENT, REQUIRED_MEASUREMENT, CDM_TABLES
 from spark_apps.decorators.patient_event_decorator import (
-    DemographicPromptDecorator, PatientEventAttDecorator, PatientEventBaseDecorator, time_token_func, AttType
+    DemographicPromptDecorator, PatientEventAttDecorator, PatientEventBaseDecorator,
+    time_token_func, AttType
 )
 from spark_apps.sql_templates import measurement_unit_stats_query
 from utils.logging_utils import *
@@ -428,7 +429,8 @@ def create_sequence_data(patient_event,
 
 
 def create_sequence_data_with_att(
-        patient_event,
+        patient_events,
+        visit_occurrence,
         date_filter=None,
         include_visit_type=False,
         exclude_visit_tokens=False,
@@ -438,7 +440,8 @@ def create_sequence_data_with_att(
     """
     Create a sequence of the events associated with one patient in a chronological order
 
-    :param patient_event:
+    :param patient_events:
+    :param visit_occurrence:
     :param date_filter:
     :param include_visit_type:
     :param exclude_visit_tokens:
@@ -447,23 +450,24 @@ def create_sequence_data_with_att(
     :return:
     """
     if date_filter:
-        patient_event = patient_event.where(F.col('date').cast('date') >= date_filter)
+        patient_events = patient_events.where(F.col('date').cast('date') >= date_filter)
 
     decorators = [
-        PatientEventBaseDecorator(),
-        PatientEventAttDecorator(include_visit_type, exclude_visit_tokens, att_type),
+        PatientEventBaseDecorator(visit_occurrence),
+        PatientEventAttDecorator(visit_occurrence, include_visit_type, exclude_visit_tokens,
+                                 att_type),
         DemographicPromptDecorator(patient_demographic)
     ]
 
     for decorator in decorators:
-        patient_event = decorator.decorate(patient_event)
+        patient_events = decorator.decorate(patient_events)
 
     order_udf = F.row_number().over(
         W.partitionBy('cohort_member_id', 'person_id').orderBy(
             'visit_start_date',
             'visit_occurrence_id',
             'priority',
-            'days_since_epoch',
+            'date_in_week',
             'standard_concept_id')
     )
 
@@ -480,7 +484,7 @@ def create_sequence_data_with_att(
         'visit_concept_ids'
     ]
 
-    patient_grouped_events = patient_event \
+    patient_grouped_events = patient_events \
         .withColumn('order', order_udf) \
         .withColumn('data_for_sorting', F.struct(struct_columns)) \
         .groupBy('cohort_member_id', 'person_id') \

@@ -19,106 +19,165 @@ class AttType(Enum):
 
 class PatientEventDecorator(ABC):
     @abstractmethod
-    def decorate(self, patient_event):
+    def _decorate(self, patient_events):
         pass
+
+    def decorate(self, patient_events):
+        decorated_patient_events = self._decorate(patient_events)
+        self.validate(decorated_patient_events)
+        return decorated_patient_events
+
+    @classmethod
+    def get_required_columns(cls):
+        return set(['cohort_member_id', 'person_id', 'standard_concept_id', 'date',
+                    'visit_occurrence_id', 'domain', 'concept_value', 'visit_rank_order',
+                    'visit_segment', 'priority', 'date_in_week', 'concept_value_mask',
+                    'mlm_skip_value', 'age', 'visit_concept_id', 'visit_start_date'])
+
+    def validate(self, patient_events: DataFrame):
+        actual_column_set = set(patient_events.columns)
+        expected_column_set = set(self.get_required_columns())
+        if actual_column_set != expected_column_set:
+            diff_left = actual_column_set - expected_column_set
+            diff_right = expected_column_set - actual_column_set
+            raise RuntimeError(
+                f'{self}\n'
+                f'actual_column_set - expected_column_set: {diff_left}\n'
+                f'expected_column_set - actual_column_set: {diff_right}'
+            )
 
 
 class PatientEventBaseDecorator(
     PatientEventDecorator
 ):
-    def decorate(
+    # output_columns = [
+    #     'cohort_member_id', 'person_id', 'concept_ids', 'visit_segments', 'orders',
+    #     'dates', 'ages', 'visit_concept_orders', 'num_of_visits', 'num_of_concepts',
+    #     'concept_value_masks', 'concept_values', 'mlm_skip_values',
+    #     'visit_concept_ids'
+    # ]
+    def __init__(self, visit_occurrence):
+        self._visit_occurrence = visit_occurrence
+
+    def _decorate(
             self,
-            patient_event: DataFrame
+            patient_events: DataFrame
     ):
-        # Convert Date to days since epoch
-        days_since_epoch_udf = (F.unix_timestamp('date') / F.lit(24 * 60 * 60)).cast('int')
-        weeks_since_epoch_udf = (F.unix_timestamp('date') / F.lit(24 * 60 * 60 * 7)).cast('int')
-        visit_date_udf = F.first('days_since_epoch').over(
-            W.partitionBy('cohort_member_id', 'person_id', 'visit_occurrence_id').orderBy(
-                'days_since_epoch'))
+        """
+        patient_events contains the following columns (cohort_member_id, person_id,
+        standard_concept_id, date, visit_occurrence_id, domain, concept_value)
 
+        :param patient_events:
+        :return:
+        """
+
+        # todo: create an assertion the dataframe contains the above columns
+
+        # Add visit_start_date to the patient_events dataframe and create the visit rank
         visit_rank_udf = F.row_number().over(
-            W.partitionBy('cohort_member_id', 'person_id').orderBy('visit_start_date'))
+            W.partitionBy('person_id').orderBy('visit_start_date')
+        )
         visit_segment_udf = F.col('visit_rank_order') % F.lit(2) + 1
-
-        patient_event = patient_event \
-            .withColumn('priority', F.lit(0)) \
-            .withColumn('days_since_epoch', days_since_epoch_udf) \
-            .withColumn('date_in_week', weeks_since_epoch_udf) \
-            .withColumn('visit_start_date', visit_date_udf) \
-            .withColumn('visit_rank_order', visit_rank_udf) \
+        visits = self._visit_occurrence.select(
+            'visit_occurrence_id', 'visit_start_date', 'person_id'
+        ).withColumn('visit_rank_order', visit_rank_udf) \
             .withColumn('visit_segment', visit_segment_udf) \
+            .drop('person_id')
+
+        # Add visit_rank_order, and visit_segment to patient_events
+        patient_events = patient_events.join(visits, 'visit_occurrence_id')
+
+        # Set the priority for the events.
+        # Create the week since epoch UDF
+        weeks_since_epoch_udf = (F.unix_timestamp('date') / F.lit(24 * 60 * 60 * 7)).cast('int')
+        patient_events = patient_events \
+            .withColumn('priority', F.lit(0)) \
+            .withColumn('date_in_week', weeks_since_epoch_udf)
+
+        # Create the concept_value_mask field to indicate whether domain values should be skipped
+        # As of now only measurement has values, so other domains would be skipped.
+        patient_events = patient_events \
             .withColumn('concept_value_mask', (F.col('domain') == MEASUREMENT).cast('int')) \
             .withColumn('mlm_skip_value',
                         (F.col('domain').isin([MEASUREMENT, CATEGORICAL_MEASUREMENT])).cast('int'))
 
-        if 'concept_value' not in patient_event.schema.fieldNames():
-            patient_event = patient_event.withColumn('concept_value', F.lit(-1.0))
-        return patient_event
+        if 'concept_value' not in patient_events.schema.fieldNames():
+            patient_events = patient_events.withColumn('concept_value', F.lit(-1.0))
+
+        # (cohort_member_id, person_id, standard_concept_id, date, visit_occurrence_id, domain,
+        # concept_value, visit_rank_order, visit_segment, priority, date_in_week,
+        # concept_value_mask, mlm_skip_value, age)
+        return patient_events
 
 
 class PatientEventAttDecorator(PatientEventDecorator):
     def __init__(
             self,
+            visit_occurrence,
             include_visit_type,
             exclude_visit_tokens,
             att_type: AttType
     ):
+        self._visit_occurrence = visit_occurrence
         self._include_visit_type = include_visit_type
         self._exclude_visit_tokens = exclude_visit_tokens
         self._att_type = att_type
 
-    def decorate(
+    def _decorate(
             self,
-            patient_event: DataFrame
+            patient_events: DataFrame
     ):
-        # Udf for identifying the earliest date associated with a visit_occurrence_id
-        visit_start_date_udf = F.first('date').over(
-            W.partitionBy('cohort_member_id', 'person_id', 'visit_occurrence_id').orderBy('date'))
+        # visits should the following columns (person_id,
+        # visit_concept_id, visit_start_date, visit_occurrence_id, domain, concept_value)
+        cohort_member_person_pair = patient_events.select('person_id', 'cohort_member_id').distinct()
+        valid_visit_ids = patient_events.select('visit_occurrence_id').distinct()
+        visits = self._visit_occurrence.select(
+            'person_id',
+            F.col('visit_start_date').cast(T.DateType()).alias('date'),
+            F.col('visit_start_date').cast(T.DateType()).alias('visit_start_date'),
+            'visit_concept_id',
+            'visit_occurrence_id',
+            F.lit('visit').alias('domain'),
+            F.lit(-1).alias('concept_value'),
+            F.lit(0).alias('concept_value_mask'),
+            F.lit(0).alias('mlm_skip_value'),
+            'age'
+        ).join(cohort_member_person_pair, 'person_id') \
+            .join(valid_visit_ids, 'visit_occurrence_id')
 
-        # Udf for identifying the latest date associated with a visit_occurrence_id
-        visit_end_date_udf = F.first('date').over(
-            W.partitionBy('cohort_member_id', 'person_id', 'visit_occurrence_id').orderBy(
-                F.col('date').desc()))
-
-        # Udf for identifying the first concept
-        first_concept_rank_udf = F.row_number().over(
-            W.partitionBy('cohort_member_id', 'person_id', 'visit_occurrence_id').orderBy('date')
+        # Add visit_rank and visit_segment to the visits dataframe and create the visit rank
+        visit_rank_udf = F.row_number().over(
+            W.partitionBy('person_id').orderBy('date')
         )
+        visit_segment_udf = F.col('visit_rank_order') % F.lit(2) + 1
+        weeks_since_epoch_udf = (F.unix_timestamp('date') / F.lit(24 * 60 * 60 * 7)).cast('int')
+        visits = visits \
+            .withColumn('visit_rank_order', visit_rank_udf) \
+            .withColumn('visit_segment', visit_segment_udf) \
+            .withColumn('date_in_week', weeks_since_epoch_udf)
 
-        # Udf for identifying the last concept
-        last_concept_rank_udf = F.row_number().over(
-            W.partitionBy('cohort_member_id', 'person_id', 'visit_occurrence_id').orderBy(
-                F.desc('date'))
-        )
+        visits.cache()
 
-        visit_start_events = patient_event.withColumn('date', visit_start_date_udf) \
+        # (cohort_member_id, person_id, standard_concept_id, date, visit_occurrence_id, domain,
+        # concept_value, visit_rank_order, visit_segment, priority, date_in_week,
+        # concept_value_mask, mlm_skip_value)
+        visit_start_events = visits \
             .withColumn('standard_concept_id', F.lit('VS')) \
-            .withColumn('domain', F.lit('visit')) \
-            .withColumn('concept_value', F.lit(-1)) \
-            .withColumn('rank', first_concept_rank_udf) \
-            .withColumn('priority', F.lit(-2)) \
-            .where('rank = 1') \
-            .drop('rank').distinct()
+            .withColumn('priority', F.lit(-2))
 
-        visit_end_events = patient_event.withColumn('date', visit_end_date_udf) \
+        visit_end_events = visits \
             .withColumn('standard_concept_id', F.lit('VE')) \
-            .withColumn('domain', F.lit('visit')) \
-            .withColumn('concept_value', F.lit(-1)) \
-            .withColumn('rank', last_concept_rank_udf) \
-            .withColumn('priority', F.lit(1)) \
-            .where('rank = 1') \
-            .drop('rank').distinct()
+            .withColumn('priority', F.lit(1))
 
-        # Convert Date to days since epoch
-        days_since_epoch_udf = (F.unix_timestamp('date') / F.lit(24 * 60 * 60)).cast('int')
         # Get the prev days_since_epoch
-        prev_days_since_epoch_udf = F.lag('days_since_epoch').over(
-            W.partitionBy('cohort_member_id', 'person_id').orderBy('date', 'priority',
-                                                                   'visit_occurrence_id'))
+        prev_date_udf = F.lag('date').over(
+            W.partitionBy('person_id').orderBy('date', 'visit_occurrence_id')
+        )
+
         # Compute the time difference between the current record and the previous record
-        time_delta_udf = F.when(F.col('prev_days_since_epoch').isNull(), 0).otherwise(
-            F.col('days_since_epoch') - F.col('prev_days_since_epoch'))
+        time_delta_udf = F.when(F.col('prev_date').isNull(), 0).otherwise(
+            F.datediff('date', 'prev_date')
+        )
 
         # Udf for calculating the time token
         if self._att_type == AttType.DAY:
@@ -134,38 +193,32 @@ class PatientEventAttDecorator(PatientEventDecorator):
 
         time_token_udf = F.udf(att_func, T.StringType())
 
-        patient_event = patient_event.union(visit_start_events).union(visit_end_events) \
-            .withColumn('days_since_epoch', days_since_epoch_udf) \
-            .withColumn('prev_days_since_epoch', prev_days_since_epoch_udf) \
+        att_tokens = visits \
+            .withColumn('prev_date', prev_date_udf) \
             .withColumn('time_delta', time_delta_udf) \
-            .withColumn('time_token', time_token_udf('time_delta'))
-
-        time_token_insertions = patient_event.where('standard_concept_id = "VS"') \
-            .withColumn('standard_concept_id', F.col('time_token')) \
+            .withColumn('standard_concept_id', time_token_udf('time_delta')) \
             .withColumn('priority', F.lit(-3)) \
-            .withColumn('visit_segment', F.lit(0)) \
-            .withColumn('date_in_week', F.lit(0)) \
-            .withColumn('age', F.lit(-1)) \
-            .withColumn('visit_concept_id', F.lit(0)) \
-            .where('prev_days_since_epoch IS NOT NULL')
+            .where(F.col('prev_date').isNotNull()) \
+            .drop('prev_date', 'time_delta')
 
-        patient_event = patient_event.union(time_token_insertions).distinct() \
-            .drop('prev_days_since_epoch',
-                  'time_delta',
-                  'time_token')
+        if self._exclude_visit_tokens:
+            artificial_tokens = att_tokens
+        else:
+            artificial_tokens = visit_start_events.union(att_tokens).union(visit_end_events)
 
         if self._include_visit_type:
             # insert visit type after the VS token
-            visit_type_tokens = patient_event.where('standard_concept_id = "VS"') \
-                .withColumn('standard_concept_id', F.col('visit_concept_id').cast(T.StringType())) \
+            visit_type_tokens = visits \
+                .withColumn('standard_concept_id', F.col('visit_concept_id')) \
                 .withColumn('priority', F.lit(-1))
-            patient_event = patient_event.union(visit_type_tokens)
+            artificial_tokens = artificial_tokens.union(visit_type_tokens)
 
-        if self._exclude_visit_tokens:
-            patient_event = patient_event.filter(
-                ~F.col('standard_concept_id').isin(['VS', 'VE']))
+        self.validate(patient_events)
+        self.validate(artificial_tokens)
 
-        return patient_event
+        # artificial_tokens = artificial_tokens.select(sorted(artificial_tokens.columns))
+
+        return patient_events.unionByName(artificial_tokens)
 
 
 class DemographicPromptDecorator(
@@ -177,12 +230,17 @@ class DemographicPromptDecorator(
     ):
         self._patient_demographic = patient_demographic
 
-    def decorate(
+    def _decorate(
             self,
-            patient_event: DataFrame
+            patient_events: DataFrame
     ):
         if self._patient_demographic is None:
-            return patient_event
+            return patient_events
+
+        # set(['cohort_member_id', 'person_id', 'standard_concept_id', 'date',
+        #      'visit_occurrence_id', 'domain', 'concept_value', 'visit_rank_order',
+        #      'visit_segment', 'priority', 'date_in_week', 'concept_value_mask',
+        #      'mlm_skip_value', 'age', 'visit_concept_id'])
 
         # Get the first token of the patient history
         first_token_udf = F.row_number().over(
@@ -190,12 +248,11 @@ class DemographicPromptDecorator(
                 'visit_start_date',
                 'visit_occurrence_id',
                 'priority',
-                'days_since_epoch',
                 'standard_concept_id')
         )
 
         # Identify the first token of each patient history
-        patient_first_token = patient_event \
+        patient_first_token = patient_events \
             .withColumn('token_order', first_token_udf) \
             .where('token_order = 1') \
             .drop('token_order')
@@ -208,6 +265,8 @@ class DemographicPromptDecorator(
             .withColumn('visit_segment', F.lit(0)) \
             .withColumn('date_in_week', F.lit(0)) \
             .withColumn('age', F.lit(-1))
+
+        sequence_start_year_token.cache()
 
         age_at_first_visit_udf = F.ceil(
             F.months_between(F.col('date'), F.col('birth_datetime')) / F.lit(12)
@@ -245,12 +304,12 @@ class DemographicPromptDecorator(
             F.col('race_concept_id').cast(T.StringType())
         ).withColumn('priority', F.lit(-7)).drop('race_concept_id')
 
-        patient_event = patient_event.union(sequence_start_year_token)
-        patient_event = patient_event.union(sequence_age_token)
-        patient_event = patient_event.union(sequence_gender_token)
-        patient_event = patient_event.union(sequence_race_token)
+        patient_events = patient_events.unionByName(sequence_start_year_token)
+        patient_events = patient_events.unionByName(sequence_age_token)
+        patient_events = patient_events.unionByName(sequence_gender_token)
+        patient_events = patient_events.unionByName(sequence_race_token)
 
-        return patient_event
+        return patient_events
 
 
 def time_token_func(time_delta):

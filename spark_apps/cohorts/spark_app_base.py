@@ -484,17 +484,17 @@ class NestedCohortBuilder:
             return create_concept_frequency_data(cohort_ehr_records, None)
 
         if self._is_new_patient_representation:
-            patient_demographic = self._dependency_dict[
-                PERSON].select(
+            birthdate_udf = F.coalesce('birth_datetime', F.concat('year_of_birth', F.lit('-01-01')).cast('timestamp'))
+            patient_demographic = self._dependency_dict[PERSON].select(
                 'person_id',
-                F.coalesce('birth_datetime',
-                           F.concat('year_of_birth', F.lit('-01-01')).cast(
-                               'timestamp')).alias('birth_datetime'),
-                'race_concept_id', 'gender_concept_id'
+                birthdate_udf.alias('birth_datetime'),
+                'race_concept_id',
+                'gender_concept_id'
             )
 
             return create_sequence_data_with_att(
                 cohort_ehr_records,
+                visit_occurrence=self._dependency_dict[VISIT_OCCURRENCE],
                 include_visit_type=self._include_visit_type,
                 exclude_visit_tokens=self._exclude_visit_tokens,
                 patient_demographic=patient_demographic if self._gpt_patient_sequence else None,

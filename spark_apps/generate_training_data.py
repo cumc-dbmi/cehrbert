@@ -52,20 +52,24 @@ def main(
     visit_occurrence = preprocess_domain_table(spark, input_folder, VISIT_OCCURRENCE)
     visit_occurrence = visit_occurrence.select(
         'visit_occurrence_id',
+        'visit_start_date',
         'visit_concept_id',
         'person_id'
     )
     person = preprocess_domain_table(spark, input_folder, PERSON)
+    birth_datetime_udf = F.coalesce('birth_datetime',
+                                    F.concat('year_of_birth', F.lit('-01-01')).cast('timestamp'))
     person = person.select(
         'person_id',
-        F.coalesce('birth_datetime',
-                   F.concat('year_of_birth', F.lit('-01-01')).cast(
-                       'timestamp')).alias('birth_datetime'),
+        birth_datetime_udf.alias('birth_datetime'),
         'race_concept_id',
         'gender_concept_id'
     )
 
-    visit_occurrence_person = visit_occurrence.join(person, 'person_id')
+    visit_occurrence_person = visit_occurrence.join(person, 'person_id') \
+        .withColumn('age', F.ceil(
+        F.months_between(F.col('visit_start_date'), F.col('birth_datetime')) / F.lit(12))) \
+        .drop('birth_datetime')
 
     patient_events = join_domain_tables(domain_tables)
 
@@ -106,11 +110,8 @@ def main(
 
     patient_events = patient_events.join(visit_occurrence_person, 'visit_occurrence_id') \
         .select([patient_events[fieldName] for fieldName in patient_events.schema.fieldNames()] +
-                ['visit_concept_id', 'birth_datetime']) \
-        .withColumn('cohort_member_id', F.col('person_id')) \
-        .withColumn('age',
-                    F.ceil(F.months_between(F.col('date'), F.col('birth_datetime')) / F.lit(12))) \
-        .drop('birth_datetime')
+                ['visit_concept_id', 'age']) \
+        .withColumn('cohort_member_id', F.col('person_id'))
 
     # Apply the age security measure
     # We only keep the patient records, whose corresponding age is less than 90
@@ -122,6 +123,7 @@ def main(
     if is_new_patient_representation:
         sequence_data = create_sequence_data_with_att(
             patient_events,
+            visit_occurrence_person,
             date_filter=date_filter,
             include_visit_type=include_visit_type,
             exclude_visit_tokens=exclude_visit_tokens,
