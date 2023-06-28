@@ -1,4 +1,5 @@
 import argparse
+import datetime
 import os
 import uuid
 from datetime import date, timedelta
@@ -19,6 +20,16 @@ start_token_size = 4
 ATT_TIME_TOKENS = generate_artificial_time_tokens()
 TABLE_LIST = ['person', 'visit_occurrence', 'condition_occurrence', 'procedure_occurrence',
               'drug_exposure']
+OOV_CONCEPT_MAP = {
+    1525734: 'Drug',
+    1525543: 'Drug',
+    779414: 'Drug',
+    722117: 'Drug',
+    722118: 'Drug',
+    722119: 'Drug',
+    905420: 'Drug',
+    1525543: 'Drug'
+}
 
 
 def create_folder_if_not_exists(output_folder, table_name):
@@ -163,6 +174,11 @@ def gpt_to_omop_converter_serial(
         start_year = start_year.split(':')[1]
         start_age = start_age.split(':')[1]
         birth_year = int(start_year) - int(start_age)
+
+        # Skip the patients whose birth year is either before 1900 or after this year
+        if int(birth_year) < 1900 or int(birth_year) > datetime.date.today().year:
+            continue
+
         p = Person(person_id, start_gender, birth_year, start_race)
         append_to_dict(omop_export_dict, p, person_id)
         id_mappings_dict['person'][person_id] = person_id
@@ -207,14 +223,21 @@ def gpt_to_omop_converter_serial(
             else:
                 try:
                     concept_id = int(x)
-                    if concept_id not in domain_map:
+                    if concept_id not in domain_map and concept_id not in OOV_CONCEPT_MAP:
                         error_dict[person_id] = {}
                         error_dict[person_id]['row'] = ','.join(list(row))
                         error_dict[person_id]['error'] = f'No concept id found: {concept_id}'
                         bad_sequence = True
                         continue
                     else:
-                        domain = domain_map[concept_id]
+
+                        if concept_id in domain_map:
+                            domain = domain_map[concept_id]
+                        elif concept_id in OOV_CONCEPT_MAP:
+                            domain = OOV_CONCEPT_MAP[concept_id]
+                        else:
+                            domain = None
+
                         if domain == 'Condition':
                             co = ConditionOccurrence(condition_occurrence_id, x, vo)
                             append_to_dict(omop_export_dict, co, condition_occurrence_id)
