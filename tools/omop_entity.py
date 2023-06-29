@@ -123,8 +123,8 @@ class VisitOccurrence(OmopEntity):
             'visit_source_concept_id': self._visit_concept_id,
             'admitting_source_concept_id': 0,
             'admitting_source_value': '',
-            'discharge_to_concept_id': 0,
-            'discharge_to_source_value': '',
+            'discharged_to_concept_id': 0,
+            'discharged_to_source_value': '',
             'preceding_visit_occurrence_id': 0
         }
 
@@ -145,8 +145,8 @@ class VisitOccurrence(OmopEntity):
             'visit_source_concept_id': int,
             'admitting_source_concept_id': int,
             'admitting_source_value': str,
-            'discharge_to_concept_id': int,
-            'discharge_to_source_value': str,
+            'discharged_to_concept_id': int,
+            'discharged_to_source_value': str,
             'preceding_visit_occurrence_id': int
         }
 
