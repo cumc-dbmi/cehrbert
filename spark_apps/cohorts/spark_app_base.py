@@ -492,9 +492,14 @@ class NestedCohortBuilder:
                 'gender_concept_id'
             )
 
+            age_udf = F.ceil(F.months_between(F.col('visit_start_date'), F.col('birth_datetime')) / F.lit(12))
+            visit_occurrence_person = self._dependency_dict[VISIT_OCCURRENCE].join(patient_demographic, 'person_id') \
+                .withColumn('age', age_udf) \
+                .drop('birth_datetime')
+
             return create_sequence_data_with_att(
                 cohort_ehr_records,
-                visit_occurrence=self._dependency_dict[VISIT_OCCURRENCE],
+                visit_occurrence=visit_occurrence_person,
                 include_visit_type=self._include_visit_type,
                 exclude_visit_tokens=self._exclude_visit_tokens,
                 patient_demographic=patient_demographic if self._gpt_patient_sequence else None,
