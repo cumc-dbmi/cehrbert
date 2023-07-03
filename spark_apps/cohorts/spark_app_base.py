@@ -6,9 +6,9 @@ from typing import List
 from pandas import to_datetime
 from pyspark.sql import DataFrame
 from pyspark.sql import SparkSession
+from pyspark.sql.window import Window
 
 from spark_apps.cohorts.query_builder import QueryBuilder, ENTRY_COHORT, NEGATIVE_COHORT
-from utils.logging_utils import *
 from utils.spark_utils import *
 
 COHORT_TABLE_NAME = 'cohort'
@@ -414,6 +414,13 @@ class NestedCohortBuilder:
         cohort = self.spark.sql(query_template.format(prediction_start_days=prediction_start_days,
                                                       prediction_window=prediction_window)) \
             .withColumn('cohort_member_id', cohort_member_id_udf)
+
+        # Keep the
+        row_rank = F.row_number().over(
+            Window.partitionBy('person_id', 'cohort_member_id', 'index_date').orderBy(F.desc('label')))
+        cohort = cohort.withColumn('row_rank', row_rank) \
+            .where('row_rank == 1') \
+            .drop('row_rank')
 
         ehr_records_for_cohorts = self.extract_ehr_records_for_cohort(cohort)
         # ehr_records_for_cohorts.show()
