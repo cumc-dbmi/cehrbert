@@ -315,7 +315,8 @@ def evaluate_baseline_models(args):
         evaluation_folder=args.evaluation_folder,
         num_of_folds=args.num_of_folds,
         is_transfer_learning=args.is_transfer_learning,
-        training_percentage=args.training_percentage
+        training_percentage=args.training_percentage,
+        k_fold_test=args.k_fold_test,
     ).eval_model()
 
     XGBClassifierEvaluator(
@@ -323,7 +324,8 @@ def evaluate_baseline_models(args):
         evaluation_folder=args.evaluation_folder,
         num_of_folds=args.num_of_folds,
         is_transfer_learning=args.is_transfer_learning,
-        training_percentage=args.training_percentage
+        training_percentage=args.training_percentage,
+        k_fold_test=args.k_fold_test,
     ).eval_model()
 
 
