@@ -114,46 +114,23 @@ class GptInferenceModel(tf.keras.Model):
             self,
             inputs,
             outputs,
-            vs_token_id,
-            unknown_token_id
+            disallowed_token_ids,
+            vs_token_id
     ):
         batch, length = tf.shape(inputs)
         # Get the index of the last occurrence of VS token in the sequence
-        last_token_index = self._find_last_index_of_token(
+        last_vs_token_index = self._find_last_index_of_token(
             sequence_in_batch=inputs,
             token_id=vs_token_id
         )
-        # Create the sequence index
-        sequence_index = tf.tile(tf.range(0, length)[tf.newaxis, :], (batch, 1))
-        # Detect current visit boundary in the patient sequence
-        current_visit_boundary = tf.cast(
-            sequence_index <= last_token_index,
-            dtype=tf.int32
-        )
 
-        # Extract disallowed token ids from the current visits. We don't want to create the same
-        # tokens that have been created in the same visit. We explicitly change all the tokens that
-        # come before the current visit to vs_token_id so the operation could be done on the
-        # entire tensor
-        disallowed_token_ids = current_visit_boundary * unknown_token_id
-        disallowed_token_ids += (1 - current_visit_boundary) * inputs
+        # If this is a new visit, indicated by last_vs_token_index == length - 1, we will clear out the memory
+        new_visit_indicator = tf.cast(last_vs_token_index == length - 1, dtype=tf.float32)
+        disallowed_token_ids = (1 - new_visit_indicator) * disallowed_token_ids
 
-        # Create the logit index (batch, vocab_size)
-        logit_index = tf.tile(tf.range(self.vocab_size)[tf.newaxis, :], (batch, 1))
-        # Find the token ids that already appeared in the same visit and mask them in the logits
-        mask_token_ids = tf.math.equal(
-            logit_index[:, :, tf.newaxis],
-            disallowed_token_ids[:, tf.newaxis, :]
-        )
-        # If any of the disallowed tokens are present, we block the sampling of those tokens
-        mask_token_ids = tf.cast(
-            tf.reduce_any(
-                mask_token_ids, axis=-1
-            ),
-            dtype=tf.float32
-        )[:, tf.newaxis, :]
         # Mask token ids by adding -1e9 to their corresponding logits
-        return mask_token_ids * -1e9 + outputs
+        masked_outputs = (disallowed_token_ids * -1e9)[:, tf.newaxis, :] + outputs
+        return masked_outputs, disallowed_token_ids
 
     def call(
             self,
@@ -161,11 +138,15 @@ class GptInferenceModel(tf.keras.Model):
     ):
 
         # Get the current sequence length
-        length = tf.shape(
+        batch, length = tf.shape(
             inputs
-        )[1]
+        )
         #  Create a cache contexts to store the previous states
         cached_contexts = None
+        disallowed_token_ids = tf.zeros((
+            batch,
+            self.tokenizer.get_vocab_size()
+        ))
 
         while length < self.context_window:
             # Generate the next batch of tokens and update the contexts
@@ -173,29 +154,29 @@ class GptInferenceModel(tf.keras.Model):
                 inputs,
                 cached_contexts
             )
-
             # Block the sampling of the tokens that already appear within the same visit (defined
             # as the tokens that appear since the last VS)
-            outputs = self._block_recurring_tokens(
+            outputs, disallowed_token_ids = self._block_recurring_tokens(
                 inputs,
                 outputs,
-                self.tokenizer.get_visit_start_token_id(),
-                unknown_token_id=0  # 0 is the placeholder for unknown
+                disallowed_token_ids,
+                self.tokenizer.get_visit_start_token_id()
             )
-
             # Randomly sample a batch of tokens
-            pred_logits, indices = tf.math.top_k(outputs, k=self.top_k, sorted=True)
+            pred_logits, indices = tf.math.top_k(outputs[:, -1, :], k=self.top_k, sorted=True)
             indices = np.asarray(indices).astype('int32')
 
-            next_token_indices = indices[:, -1, :]
-            next_token_logits = pred_logits[:, -1, :]
-
             next_tokens = tf.gather(
-                next_token_indices,
-                tf.random.categorical(next_token_logits, 1),
+                indices,
+                tf.random.categorical(pred_logits, 1),
                 axis=1,
                 batch_dims=1
             ).numpy()
+
+            disallowed_token_ids += tf.one_hot(
+                tf.squeeze(next_tokens),
+                self.tokenizer.get_vocab_size()
+            )
 
             # Check if any of the current token is att tokens
             att_token_indicators = tf.cast(
