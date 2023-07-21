@@ -143,10 +143,10 @@ class GptInferenceModel(tf.keras.Model):
         )
         #  Create a cache contexts to store the previous states
         cached_contexts = None
-        disallowed_token_ids = tf.zeros((
-            batch,
-            self.tokenizer.get_vocab_size()
-        ))
+        # disallowed_token_ids = tf.zeros((
+        #     batch,
+        #     self.tokenizer.get_vocab_size()
+        # ))
 
         while length < self.context_window:
             # Generate the next batch of tokens and update the contexts
@@ -154,14 +154,14 @@ class GptInferenceModel(tf.keras.Model):
                 inputs,
                 cached_contexts
             )
-            # Block the sampling of the tokens that already appear within the same visit (defined
-            # as the tokens that appear since the last VS)
-            outputs, disallowed_token_ids = self._block_recurring_tokens(
-                inputs,
-                outputs,
-                disallowed_token_ids,
-                self.tokenizer.get_visit_start_token_id()
-            )
+            # # Block the sampling of the tokens that already appear within the same visit (defined
+            # # as the tokens that appear since the last VS)
+            # outputs, disallowed_token_ids = self._block_recurring_tokens(
+            #     inputs,
+            #     outputs,
+            #     disallowed_token_ids,
+            #     self.tokenizer.get_visit_start_token_id()
+            # )
             # Randomly sample a batch of tokens
             pred_logits, indices = tf.math.top_k(outputs[:, -1, :], k=self.top_k, sorted=True)
             indices = np.asarray(indices).astype('int32')
@@ -172,11 +172,11 @@ class GptInferenceModel(tf.keras.Model):
                 axis=1,
                 batch_dims=1
             ).numpy()
-
-            disallowed_token_ids += tf.one_hot(
-                tf.squeeze(next_tokens),
-                self.tokenizer.get_vocab_size()
-            )
+            #
+            # disallowed_token_ids += tf.one_hot(
+            #     tf.squeeze(next_tokens),
+            #     self.tokenizer.get_vocab_size()
+            # )
 
             # Check if any of the current token is att tokens
             att_token_indicators = tf.cast(
