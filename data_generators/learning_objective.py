@@ -264,7 +264,8 @@ class VisitPredictionLearningObjective(LearningObjective):
 
 class SequenceGenerationLearningObjective(LearningObjective):
     required_columns = [
-        'token_ids'
+        'token_ids',
+        'visit_concept_orders'
     ]
 
     def __init__(
@@ -277,7 +278,8 @@ class SequenceGenerationLearningObjective(LearningObjective):
 
     def get_tf_dataset_schema(self):
         input_dict_schema = {
-            'concept_ids': int32
+            'concept_ids': int32,
+            'visit_concept_orders': int32,
         }
         output_dict_schema = {'concept_predictions': int32}
         return input_dict_schema, output_dict_schema
@@ -285,7 +287,7 @@ class SequenceGenerationLearningObjective(LearningObjective):
     @validate_columns_decorator
     def process_batch(self, rows: List[RowSlicer]):
         (
-            concepts, shifted_concepts
+            concepts, visit_concept_orders, shifted_concepts
         ) = zip(*list(map(self._make_record, rows)))
 
         unused_token_id = self._concept_tokenizer.get_unused_token_id()
@@ -306,8 +308,15 @@ class SequenceGenerationLearningObjective(LearningObjective):
 
         mask = (concepts != unused_token_id).astype(int)
 
+        visit_concept_orders = post_pad_pre_truncate(
+            visit_concept_orders,
+            self._max_seq_len,
+            self._max_seq_len
+        )
+
         input_dict = {
-            'concept_ids': concepts
+            'concept_ids': concepts,
+            'visit_concept_orders': visit_concept_orders
         }
 
         output_dict = {
@@ -330,17 +339,17 @@ class SequenceGenerationLearningObjective(LearningObjective):
         sorting_columns = getattr(row, 'orders') if hasattr(row, 'orders') else row.dates
 
         iterator = zip(
-            map(int, sorting_columns), row.token_ids
+            map(int, sorting_columns), row.token_ids, row.visit_concept_orders
         )
         sorted_list = sorted(iterator, key=lambda tup2: (tup2[0], tup2[1]))
 
-        _, concept_list = zip(*list(islice(sorted_list, left_index, right_index)))
+        _, concept_list, visit_concept_orders = zip(*list(islice(sorted_list, left_index, right_index)))
 
         concept_list = [self._concept_tokenizer.get_start_token_id()] + list(concept_list)
         shifted_concept_list = copy.deepcopy(list(concept_list)[1:]) + [
             self._concept_tokenizer.get_end_token_id()]
 
-        return concept_list, shifted_concept_list
+        return concept_list, visit_concept_orders, shifted_concept_list
 
 
 class MaskedLanguageModelLearningObjective(LearningObjective):

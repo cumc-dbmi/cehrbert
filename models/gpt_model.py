@@ -6,7 +6,7 @@ import tensorflow as tf
 
 from data_generators.tokenizer import ConceptTokenizer
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
-from models.layers.custom_layers import GptDecoder, TrainablePositionEmbedding
+from models.layers.custom_layers import GptDecoder, PositionalEncodingLayer
 
 
 class GptInferenceModel(tf.keras.Model):
@@ -53,6 +53,7 @@ class GptInferenceModel(tf.keras.Model):
     def _generate_next_token(
             self,
             generated_tokens,
+            visit_concept_orders,
             cached_contexts
     ):
         current_length = tf.shape(generated_tokens)[-1]
@@ -64,7 +65,7 @@ class GptInferenceModel(tf.keras.Model):
         )
         # Add the positional embeddings
         first_layer_context += self.positional_encoding_layer(
-            first_layer_context
+            visit_concept_orders
         )
 
         look_ahead_mask_base = tf.cast(
@@ -147,11 +148,15 @@ class GptInferenceModel(tf.keras.Model):
         #     batch,
         #     self.tokenizer.get_vocab_size()
         # ))
+        visit_concept_orders = tf.zeros_like(
+            inputs
+        )
 
         while length < self.context_window:
             # Generate the next batch of tokens and update the contexts
             outputs, cached_contexts = self._generate_next_token(
                 inputs,
+                visit_concept_orders,
                 cached_contexts
             )
             # # Block the sampling of the tokens that already appear within the same visit (defined
@@ -188,6 +193,16 @@ class GptInferenceModel(tf.keras.Model):
             next_tokens = (
                     att_token_indicators * self.tokenizer.get_visit_start_token_id() +
                     (1 - att_token_indicators) * next_tokens
+            )
+
+            new_visit_indicator = tf.cast(
+                next_tokens == self.tokenizer.get_visit_start_token_id(),
+                dtype=tf.int32
+            )
+
+            visit_concept_orders = np.hstack([
+                visit_concept_orders,
+                visit_concept_orders[:, -1:] + new_visit_indicator]
             )
 
             # Stitch up the new tokens and previously generated tokens
@@ -234,7 +249,7 @@ class GptInferenceModel(tf.keras.Model):
     def _get_positional_encoding_layer(gpt_model):
         gpt_model.get_layer('positional_encoding_layer')
         layers = [layer for layer in gpt_model.layers if
-                  isinstance(layer, TrainablePositionEmbedding)]
+                  isinstance(layer, PositionalEncodingLayer)]
         if len(layers) == 0:
             raise RuntimeError(f'Could not find GptPositionEmbedding')
         return layers[0]
@@ -279,6 +294,12 @@ def create_model(
         name='concept_ids'
     )
 
+    visit_concept_orders = tf.keras.layers.Input(
+        shape=(context_window_size,),
+        dtype='int32',
+        name='visit_concept_orders'
+    )
+
     look_ahead_mask_base = tf.cast(
         1 - tf.linalg.band_part(tf.ones((context_window_size, context_window_size)), -1, 0),
         dtype=tf.int32
@@ -293,9 +314,9 @@ def create_model(
         # https://arxiv.org/pdf/1508.03721.pdf
         embeddings_regularizer=tf.keras.regularizers.l2(1e-4)
     )
-    positional_encoding_layer = TrainablePositionEmbedding(
-        maxlen=context_window_size,
-        embed_dim=embedding_size,
+    positional_encoding_layer = PositionalEncodingLayer(
+        embedding_size=embedding_size,
+        max_sequence_length=context_window_size,
         name='positional_encoding_layer'
     )
 
@@ -309,7 +330,7 @@ def create_model(
     x, concept_embedding_matrix = concept_embedding_layer(concept_inputs)
 
     x += positional_encoding_layer(
-        x
+        visit_concept_orders
     )
 
     transformer_block = GptDecoder(
@@ -331,7 +352,7 @@ def create_model(
         output_layer([contextualized_embeddings, concept_embedding_matrix])
     )
 
-    model = tf.keras.Model(inputs=[concept_inputs], outputs=[outputs])
+    model = tf.keras.Model(inputs=[concept_inputs, visit_concept_orders], outputs=[outputs])
 
     # Penalty for confidence of the output distribution, as described in
     # "Regularizing Neural Networks by Penalizing Confident
