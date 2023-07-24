@@ -73,13 +73,17 @@ class PatientEventBaseDecorator(
 
         # todo: create an assertion the dataframe contains the above columns
 
+        valid_visit_ids = patient_events.select('visit_occurrence_id').distinct()
+
         # Add visit_start_date to the patient_events dataframe and create the visit rank
         visit_rank_udf = F.row_number().over(
             W.partitionBy('person_id').orderBy('visit_start_date')
         )
         visit_segment_udf = F.col('visit_rank_order') % F.lit(2) + 1
-        visits = self._visit_occurrence.select(
-            'visit_occurrence_id', 'visit_start_date', 'person_id'
+        visits = self._visit_occurrence.join(valid_visit_ids, 'visit_occurrence_id').select(
+            'visit_occurrence_id',
+            F.col('visit_start_date').cast(T.DateType()).alias('visit_start_date'),
+            'person_id'
         ).withColumn('visit_rank_order', visit_rank_udf) \
             .withColumn('visit_segment', visit_segment_udf) \
             .drop('person_id')
@@ -131,6 +135,12 @@ class PatientEventAttDecorator(PatientEventDecorator):
         # visit_concept_id, visit_start_date, visit_occurrence_id, domain, concept_value)
         cohort_member_person_pair = patient_events.select('person_id', 'cohort_member_id').distinct()
         valid_visit_ids = patient_events.select('visit_occurrence_id').distinct()
+
+        # Add visit_rank and visit_segment to the visits dataframe and create the visit rank
+        visit_rank_udf = F.row_number().over(
+            W.partitionBy('person_id').orderBy('visit_start_date')
+        )
+        visit_segment_udf = F.col('visit_rank_order') % F.lit(2) + 1
         visits = self._visit_occurrence.select(
             'person_id',
             F.col('visit_start_date').cast(T.DateType()).alias('date'),
@@ -142,14 +152,11 @@ class PatientEventAttDecorator(PatientEventDecorator):
             F.lit(0).alias('concept_value_mask'),
             F.lit(0).alias('mlm_skip_value'),
             'age'
-        ).join(cohort_member_person_pair, 'person_id') \
-            .join(valid_visit_ids, 'visit_occurrence_id')
+        ).withColumn('visit_rank_order', visit_rank_udf) \
+            .withColumn('visit_segment', visit_segment_udf) \
+            .join(valid_visit_ids, 'visit_occurrence_id') \
+            .join(cohort_member_person_pair, 'person_id')
 
-        # Add visit_rank and visit_segment to the visits dataframe and create the visit rank
-        visit_rank_udf = F.row_number().over(
-            W.partitionBy('person_id').orderBy('date')
-        )
-        visit_segment_udf = F.col('visit_rank_order') % F.lit(2) + 1
         weeks_since_epoch_udf = (F.unix_timestamp('date') / F.lit(24 * 60 * 60 * 7)).cast('int')
         visits = visits \
             .withColumn('visit_rank_order', visit_rank_udf) \
@@ -198,6 +205,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
             .withColumn('time_delta', time_delta_udf) \
             .withColumn('standard_concept_id', time_token_udf('time_delta')) \
             .withColumn('priority', F.lit(-3)) \
+            .withColumn('visit_rank_order', F.col('visit_rank_order') - 1) \
             .where(F.col('prev_date').isNotNull()) \
             .drop('prev_date', 'time_delta')
 
@@ -264,7 +272,8 @@ class DemographicPromptDecorator(
             .withColumn('priority', F.lit(-10)) \
             .withColumn('visit_segment', F.lit(0)) \
             .withColumn('date_in_week', F.lit(0)) \
-            .withColumn('age', F.lit(-1))
+            .withColumn('age', F.lit(-1)) \
+            .withColumn('visit_rank_order', F.lit(0))
 
         sequence_start_year_token.cache()
 
