@@ -107,7 +107,10 @@ class GptInferenceModel(tf.keras.Model):
         else:
             new_cached_contexts = layer_contexts
 
-        logtis = self.output_layer([x, concept_embedding_matrix])
+        logtis = self.output_layer(
+            [x, concept_embedding_matrix],
+            training=False
+        )
 
         return logtis, new_cached_contexts
 
