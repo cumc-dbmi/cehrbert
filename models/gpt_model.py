@@ -389,133 +389,6 @@ def generate_artificial_time_tokens():
     return day_tokens + week_tokens + month_tokens + long_term_tokens
 
 
-def generate_visit_boundary_tokens():
-    return ['VS', 'VE']
-
-
-def finding_patterns(
-        sample_token,
-        tokens_generated,
-        visit_boundary_tokens,
-        artificial_time_tokens
-):
-    visit_start_token, visit_end_token, = visit_boundary_tokens
-    cursor = len(tokens_generated) - 1
-    while cursor >= 0:
-        prev_token = tokens_generated[cursor]
-
-        # The pattern restriction is enforced
-        # VE -> ATT
-        if sample_token in artificial_time_tokens:
-            if prev_token == visit_end_token:
-                return True
-            return False
-
-        # Multiple occurrences of the same concept within the same visit restriction is prohibited
-        # Not allowed C1->C1
-        if sample_token not in visit_boundary_tokens and sample_token not in artificial_time_tokens:
-            if sample_token == prev_token:
-                return False
-
-        # The pattern restriction is enforced
-        # ATT -> VS
-        if prev_token in artificial_time_tokens:
-            if sample_token == visit_end_token:
-                return True
-            return False
-
-        # The pattern restriction is allowed
-        # Concept -> VS
-        if visit_start_token == prev_token and visit_start_token != sample_token:
-            return True
-
-        # The pattern restriction is prohibited
-        # VS -> VS
-        if visit_start_token == prev_token and visit_start_token == sample_token:
-            return False
-
-        # The pattern restriction is prohibited
-        # VE -> VE
-        if visit_end_token == prev_token and visit_end_token == sample_token:
-            return False
-        cursor -= 1
-
-    return True
-
-
-def generate_patient_history(
-        model,
-        start_tokens,
-        concept_tokenizer,
-        max_seq,
-        top_k,
-        prohibited_tokens=None
-):
-    visit_boundary_tokens = np.squeeze(
-        concept_tokenizer.encode(generate_visit_boundary_tokens())
-    ).tolist()
-
-    artificial_time_tokens = np.squeeze(
-        concept_tokenizer.encode(generate_artificial_time_tokens())
-    ).tolist()
-
-    tokens_generated = []
-    while len(tokens_generated) <= max_seq:
-        sample_token = None
-        # The pattern restriction is enforced ATT -> VS.
-        # We manually set the next token to be VS if the previous one is an ATT
-        if len(tokens_generated) > 0:
-            prev_token = tokens_generated[-1]
-            if prev_token in artificial_time_tokens:
-                sample_token = visit_boundary_tokens[0]
-        else:
-            sample_token = visit_boundary_tokens[0]
-
-        # We randomly sample a token from the predicted distribution
-        if not sample_token:
-            pad_len = max_seq - len(start_tokens)
-            sample_index = len(start_tokens) - 1
-            if pad_len < 0:
-                x = start_tokens[:max_seq]
-                sample_index = max_seq - 1
-            elif pad_len > 0:
-                x = start_tokens + [0] * pad_len
-            else:
-                x = start_tokens
-
-            x = np.array([x])
-            y = model.predict(x)
-
-            max_num_iter = 10
-            # If the generated token is the same as the previous one, skip it
-            while max_num_iter > 0:
-                sample_token = sample_predicted_probabibility(
-                    y[0][sample_index],
-                    top_k
-                )
-                if len(tokens_generated) == 0 or tokens_generated[-1] != sample_token:
-                    break
-                # if finding_patterns(
-                #         sample_token,
-                #         tokens_generated,
-                #         visit_boundary_tokens,
-                #         artificial_time_tokens
-                # ):
-                max_num_iter = max_num_iter - 1
-
-        # # Prohibit the tokens from being generated
-        if prohibited_tokens and sample_token in prohibited_tokens:
-            continue
-
-        if sample_token == concept_tokenizer.get_end_token_id():
-            break
-
-        tokens_generated.append(sample_token)
-        start_tokens.append(sample_token)
-
-    return tokens_generated
-
-
 class PatientHistoryGenerator(tf.keras.callbacks.Callback):
     def __init__(
             self,
@@ -530,7 +403,6 @@ class PatientHistoryGenerator(tf.keras.callbacks.Callback):
         self.concept_map = concept_map
         self.print_every = print_every
         self.k = top_k
-
         self.genders = np.squeeze(concept_tokenizer.encode([
             '8532',  # FEMALE,
             '8507'  # MALE
@@ -564,6 +436,12 @@ class PatientHistoryGenerator(tf.keras.callbacks.Callback):
         if batch == 0 or batch % self.print_every != 0:
             return
         print(f'Generating text for {batch}\n')
+        inference_model = GptInferenceModel(
+            self.model,
+            tokenizer=self.concept_tokenizer,
+            context_window=self.max_seq,
+            top_k=self.k
+        )
         start_tokens = [
             self.concept_tokenizer.get_start_token_id(),
             random.sample(self.starting_years, 1)[0],
@@ -571,23 +449,16 @@ class PatientHistoryGenerator(tf.keras.callbacks.Callback):
             random.sample(self.genders, 1)[0],
             random.sample(self.races, 1)[0]
         ]
-
-        prohibited_tokens = [
-            t for t in self.genders + self.races + self.starting_ages + self.starting_years
-            if t != self.concept_tokenizer.tokenizer.word_index['0']
-        ]
-
-        tokens_generated = generate_patient_history(
-            model=self.model,
-            start_tokens=copy.deepcopy(start_tokens),
-            concept_tokenizer=self.concept_tokenizer,
-            max_seq=self.max_seq,
-            top_k=self.k,
-            prohibited_tokens=prohibited_tokens
+        start_tokens = tf.reshape(
+            start_tokens,
+            (1, -1)
+        )
+        prompt_batch = inference_model(
+            start_tokens
         )
 
         txt = '\n'.join(
-            [self.detokenize(_) for _ in start_tokens + tokens_generated]
+            [self.detokenize(_) for _ in prompt_batch[0]]
         )
 
         print(f"generated text:\n{txt}\n")
