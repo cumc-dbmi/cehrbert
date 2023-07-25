@@ -344,6 +344,33 @@ class GptDecoderLayer(tf.keras.layers.Layer):
         return out2, attn_weights_block
 
 
+class NonTrainablePositionEmbedding(tf.keras.layers.Layer):
+    def __init__(
+            self,
+            maxlen,
+            embed_dim,
+            *args,
+            **kwargs
+    ):
+        super().__init__(*args, **kwargs)
+        self._maxlen = maxlen
+        self._embed_dim = embed_dim
+        self.pos_emb = tf.squeeze(positional_encoding(maxlen, embed_dim))
+
+    def get_config(self):
+        config = super().get_config()
+        config['maxlen'] = self._maxlen
+        config['embed_dim'] = self._embed_dim
+        return config
+
+    def call(self, x, **kwargs):
+        # kwargs is needed for backward compatability
+        maxlen = tf.shape(x)[1]
+        positions = tf.range(start=0, limit=maxlen, delta=1)
+        position_embeddings = tf.gather(self.pos_emb, positions, axis=0)
+        return position_embeddings
+
+
 class TrainablePositionEmbedding(tf.keras.layers.Layer):
     def __init__(
             self,
@@ -367,7 +394,7 @@ class TrainablePositionEmbedding(tf.keras.layers.Layer):
         # kwargs is needed for backward compatability
         maxlen = tf.shape(x)[1]
         positions = tf.range(start=0, limit=maxlen, delta=1)
-        positions = self.pos_emb(positions)
+        positions = self.pos_emb(positions, **kwargs)
         return positions
 
 
@@ -1197,6 +1224,7 @@ get_custom_objects().update({
     'PairwiseTimeAttention': TimeSelfAttention,
     'VisitEmbeddingLayer': VisitEmbeddingLayer,
     'PositionalEncodingLayer': PositionalEncodingLayer,
+    'NonTrainablePositionEmbedding': NonTrainablePositionEmbedding,
     'TimeEmbeddingLayer': TimeEmbeddingLayer,
     'TemporalTransformationLayer': TemporalTransformationLayer,
     'ConceptValueTransformationLayer': ConceptValueTransformationLayer,
