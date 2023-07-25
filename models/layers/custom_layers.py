@@ -248,6 +248,44 @@ class GptDecoder(tf.keras.layers.Layer):
         return x, tf.stack(layer_contexts, axis=0), tf.stack(attention_weights, axis=0)
 
 
+class AdaptiveLogitLayer(tf.keras.layers.Layer):
+    def __init__(
+            self,
+            vocab_size,
+            empirical_dist,
+            generated_dist,
+            *args,
+            **kwargs
+    ):
+        super(AdaptiveLogitLayer, self).__init__(*args, **kwargs)
+        self.vocab_size = vocab_size
+        self.empirical_dist = np.asarray(empirical_dist)
+        self.generated_dist = np.asarray(generated_dist)
+        self.dense_layer = tf.keras.layers.Dense(vocab_size, activation='relu')
+
+    def get_config(self):
+        config = super().get_config()
+        config['empirical_dist'] = self.empirical_dist
+        config['generated_dist'] = self.generated_dist
+        config['vocab_size'] = self.vocab_size
+        return config
+
+    def call(self, x, **kwargs):
+        batch = tf.shape(x)[0]
+        # (batch, 1, vocab_size)
+        importance_score = tf.tile(
+            tf.reshape(
+                self.empirical_dist - self.generated_dist,
+                (1, 1, self.vocab_size)
+            ), (batch, 1, 1)
+        )
+
+        importance_score = tf.cast(importance_score, dtype=tf.float32)
+        # (batch, length, vocab_size)
+        adaptive_logits = self.dense_layer(x, **kwargs) * importance_score
+        return tf.exp(-adaptive_logits)
+
+
 class DecoderLayer(tf.keras.layers.Layer):
     def __init__(self, d_model, num_heads, dff, rate=0.1, *args, **kwargs):
         super(DecoderLayer, self).__init__(*args, **kwargs)
@@ -1213,6 +1251,7 @@ get_custom_objects().update({
     'MultiHeadAttention': MultiHeadAttention,
     'Encoder': Encoder,
     'GptDecoder': GptDecoder,
+    'AdaptiveLogitLayer': AdaptiveLogitLayer,
     'TrainablePositionEmbedding': TrainablePositionEmbedding,
     'TransformerCoordinateEmbedding': TransformerCoordinateEmbedding,
     'EncoderLayer': EncoderLayer,

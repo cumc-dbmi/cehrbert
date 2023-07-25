@@ -1,12 +1,13 @@
+import datetime
 import random
 
 import numpy as np
+import pandas as pd
 import tensorflow as tf
-from keras import backend as K
 
 from data_generators.tokenizer import ConceptTokenizer
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
-from models.layers.custom_layers import GptDecoder, NonTrainablePositionEmbedding
+from models.layers.custom_layers import GptDecoder, TrainablePositionEmbedding, AdaptiveLogitLayer
 
 
 class GptInferenceModel(tf.keras.Model):
@@ -242,7 +243,7 @@ class GptInferenceModel(tf.keras.Model):
     def _get_positional_encoding_layer(gpt_model):
         gpt_model.get_layer('positional_encoding_layer')
         layers = [layer for layer in gpt_model.layers if
-                  isinstance(layer, NonTrainablePositionEmbedding)]
+                  isinstance(layer, TrainablePositionEmbedding)]
         if len(layers) == 0:
             raise RuntimeError(f'Could not find GptPositionEmbedding')
         return layers[0]
@@ -261,6 +262,7 @@ def create_model(
         embedding_size,
         num_heads,
         depth,
+        empirical_dist,
         embedding_dropout: float = 0.6,
         confidence_penalty_weight: float = 0.1
 ):
@@ -277,6 +279,7 @@ def create_model(
     :param embedding_size:
     :param num_heads:
     :param depth:
+    :param empirical_dist:
     :param confidence_penalty_weight:
     :param embedding_dropout:
     :return:
@@ -301,7 +304,7 @@ def create_model(
         # https://arxiv.org/pdf/1508.03721.pdf
         embeddings_regularizer=tf.keras.regularizers.l2(1e-4)
     )
-    positional_encoding_layer = NonTrainablePositionEmbedding(
+    positional_encoding_layer = TrainablePositionEmbedding(
         embed_dim=embedding_size,
         maxlen=context_window_size,
         name='positional_encoding_layer'
@@ -311,6 +314,13 @@ def create_model(
         projection_regularizer=tf.keras.regularizers.l2(1e-4),
         projection_dropout=embedding_dropout,
         name='concept_prediction_logits'
+    )
+
+    adaptive_logit_layer = AdaptiveLogitLayer(
+        empirical_dist=empirical_dist,
+        generated_dist=empirical_dist,
+        vocab_size=vocab_size,
+        name='adaptive_logit_layer'
     )
 
     # embeddings for encoder input
@@ -334,21 +344,22 @@ def create_model(
     concept_prediction_layer = tf.keras.layers.Softmax(
         name='concept_predictions'
     )
-
+    main_logits = output_layer([contextualized_embeddings, concept_embedding_matrix])
+    adaptive_logits = adaptive_logit_layer(contextualized_embeddings)
     outputs = concept_prediction_layer(
-        output_layer([contextualized_embeddings, concept_embedding_matrix])
+        main_logits + adaptive_logits
     )
 
     model = tf.keras.Model(inputs=[concept_inputs], outputs=[outputs])
 
-    # Penalty for confidence of the output distribution, as described in
-    # "Regularizing Neural Networks by Penalizing Confident
-    # Output Distributions" (https://arxiv.org/abs/1701.06548)
-    confidence_penalty = K.mean(
-        confidence_penalty_weight * K.sum(outputs * K.log(outputs), axis=-1)
-    )
-
-    model.add_loss(confidence_penalty)
+    # # Penalty for confidence of the output distribution, as described in
+    # # "Regularizing Neural Networks by Penalizing Confident
+    # # Output Distributions" (https://arxiv.org/abs/1701.06548)
+    # confidence_penalty = K.mean(
+    #     confidence_penalty_weight * K.sum(outputs * K.log(outputs), axis=-1)
+    # )
+    #
+    # model.add_loss(confidence_penalty)
 
     return model
 
@@ -374,6 +385,18 @@ def generate_artificial_time_tokens():
     month_tokens = [f'M{i}' for i in range(12)]
     long_term_tokens = ['LT']
     return day_tokens + week_tokens + month_tokens + long_term_tokens
+
+
+def calculate_token_dist(
+        training_data,
+        tokenizer,
+        token_id_column_name: str = 'token_ids'
+):
+    empirical_dist_series = training_data[token_id_column_name].explode().value_counts() / len(training_data)
+    empirical_dist = np.zeros(tokenizer.get_vocab_size())
+    for index, val in empirical_dist_series.iteritems():
+        empirical_dist[index] = val
+    return empirical_dist
 
 
 class PatientHistoryGenerator(tf.keras.callbacks.Callback):
@@ -422,7 +445,7 @@ class PatientHistoryGenerator(tf.keras.callbacks.Callback):
     def on_batch_end(self, batch, logs=None):
         if batch == 0 or batch % self.print_every != 0:
             return
-        print(f'Generating text for {batch}\n')
+        print(f'\nGenerating text for {batch}\n')
         inference_model = GptInferenceModel(
             self.model,
             tokenizer=self.concept_tokenizer,
@@ -449,3 +472,94 @@ class PatientHistoryGenerator(tf.keras.callbacks.Callback):
         )
 
         print(f"generated text:\n{txt}\n")
+
+
+class AdaptRegularizationCallback(tf.keras.callbacks.Callback):
+
+    def __init__(
+            self,
+            demographic_info,
+            max_seq,
+            concept_tokenizer: ConceptTokenizer,
+            concept_map: dict,
+            batch_size,
+            num_of_patients=1024,
+            top_k=10,
+            print_every=1
+    ):
+        self.demographic_info = demographic_info
+        self.max_seq = max_seq
+        self.concept_tokenizer = concept_tokenizer
+        self.concept_map = concept_map
+        self.print_every = print_every
+        self.k = top_k
+        self.batch_size = batch_size
+        self.num_of_patients = num_of_patients
+
+    def detokenize(self, number):
+        concept_id = self.concept_tokenizer.decode([[number]])[0]
+        if concept_id in self.concept_map:
+            return self.concept_map[concept_id]
+        return concept_id
+
+    def on_batch_end(self, batch, logs=None):
+        if batch == 0 or batch % self.print_every != 0:
+            return
+        inference_model = GptInferenceModel(
+            self.model,
+            tokenizer=self.concept_tokenizer,
+            context_window=self.max_seq,
+            top_k=self.k
+        )
+
+        num_of_batches = self.num_of_patients // self.batch_size + 1
+        sequence_to_flush = []
+        for i in range(num_of_batches):
+
+            print(f'{datetime.datetime.now()}: Patient generation batch {i} started')
+
+            start_tokens = np.tile(
+                np.asarray([[self.concept_tokenizer.get_start_token_id()]]),
+                [self.batch_size, 1]
+            )
+            random_prompts = random.sample(
+                self.demographic_info,
+                self.batch_size
+            )
+            prompt_batch = np.hstack([start_tokens, random_prompts])
+            _, length = np.shape(
+                prompt_batch
+            )
+
+            prompt_batch = tf.cast(prompt_batch, dtype=tf.int32)
+
+            prompt_batch = inference_model(
+                prompt_batch
+            )
+            for seq in prompt_batch.tolist():
+                seq_copy = []
+                for token in seq:
+                    if token == self.concept_tokenizer.get_end_token_id():
+                        break
+                    seq_copy.append(token)
+                sequence_to_flush.append({'token_ids': seq_copy})
+
+        generated_patient_sequences = pd.DataFrame(
+            sequence_to_flush,
+            columns=['token_ids']
+        )
+
+        generated_dist = calculate_token_dist(
+            generated_patient_sequences,
+            self.concept_tokenizer,
+            token_id_column_name='token_ids'
+        )
+        adaptive_logit_layer = self.model.get_layer('adaptive_logit_layer')
+        adaptive_logit_layer.generated_dist = generated_dist
+        print(f'Empirical Distribution: {adaptive_logit_layer.empirical_dist[0:100]}')
+        print(f'After updating Generated Distribution: {adaptive_logit_layer.generated_dist[0:100]}\n')
+        kl_term = tf.keras.metrics.kl_divergence(
+            adaptive_logit_layer.empirical_dist,
+            adaptive_logit_layer.generated_dist
+        )
+        print(f'KL divergence between Empirical and Generated Distributions is {kl_term}\n')

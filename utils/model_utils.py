@@ -65,7 +65,7 @@ def log_function_decorator(function):
 @log_function_decorator
 def tokenize_one_field(training_data: Union[pd_dataframe, dd_dataframe],
                        column_name, tokenized_column_name, tokenizer_path,
-                       oov_token='0', encode=True, recreate=False):
+                       oov_token='-1', encode=True, recreate=False):
     """
     Tokenize the concept sequence and save the tokenizer as a pickle file
     :return:
@@ -83,7 +83,7 @@ def tokenize_one_field(training_data: Union[pd_dataframe, dd_dataframe],
 @log_function_decorator
 def tokenize_multiple_fields(training_data: Union[pd_dataframe, dd_dataframe],
                              tokenize_fields_info: List[TokenizeFieldInfo], tokenizer_path,
-                             oov_token='0', encode=True, recreate=False):
+                             oov_token='-1', encode=True, recreate=False):
     """
     Tokenize a list of fields
     :param training_data:
