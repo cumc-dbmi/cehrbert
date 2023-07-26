@@ -217,22 +217,6 @@ def create_parse_args_gpt():
         default=500,
         required=False
     )
-    parser.add_argument(
-        '--num_of_patients',
-        dest='num_of_patients',
-        action='store',
-        type=int,
-        default=1024,
-        required=False
-    )
-    parser.add_argument(
-        '--sampling_batch_size',
-        dest='sampling_batch_size',
-        action='store',
-        type=int,
-        default=256,
-        required=False
-    )
     return parser
 
 
