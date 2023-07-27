@@ -524,7 +524,7 @@ class ComputeMarginalDistribution(tf.keras.callbacks.Callback):
                 for token in seq:
                     if token == self.concept_tokenizer.get_end_token_id():
                         break
-                    seq_copy.append(token)
+                    seq_copy.append(self.detokenize(token))
                 sequence_to_flush.append({'token_ids': seq_copy})
 
         generated_patient_sequences = pd.DataFrame(
