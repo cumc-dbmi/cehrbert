@@ -343,19 +343,19 @@ def create_model(
 
     model = tf.keras.Model(inputs=[concept_inputs], outputs=[outputs])
 
-    # Penalty for confidence of the output distribution, as described in
-    # "Regularizing Neural Networks by Penalizing Confident
-    # Output Distributions" (https://arxiv.org/abs/1701.06548)
-    confidence_penalty = K.mean(
-        confidence_penalty_weight * K.sum(outputs * K.log(outputs), axis=-1)
-    )
-
-    model.add_loss(confidence_penalty)
-
-    model.add_metric(
-        confidence_penalty,
-        name='Output distribution penalty'
-    )
+    # # Penalty for confidence of the output distribution, as described in
+    # # "Regularizing Neural Networks by Penalizing Confident
+    # # Output Distributions" (https://arxiv.org/abs/1701.06548)
+    # confidence_penalty = K.mean(
+    #     confidence_penalty_weight * K.sum(outputs * K.log(outputs), axis=-1)
+    # )
+    #
+    # model.add_loss(confidence_penalty)
+    #
+    # model.add_metric(
+    #     confidence_penalty,
+    #     name='Output distribution penalty'
+    # )
 
     return model
 
