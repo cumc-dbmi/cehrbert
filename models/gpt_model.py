@@ -531,5 +531,5 @@ class ComputeMarginalDistribution(tf.keras.callbacks.Callback):
             sequence_to_flush,
             columns=['token_ids']
         )
-        dist = generated_patient_sequences.concept_ids.explode().value_counts() / len(generated_patient_sequences)
+        dist = generated_patient_sequences.token_ids.explode().value_counts() / len(generated_patient_sequences)
         print(f'The marginal distribution is below:\n {dist.head(60)}')
