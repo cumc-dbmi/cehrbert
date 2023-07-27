@@ -5,7 +5,7 @@ from models.model_parameters import ModelPathConfig
 from models.parse_args import create_parse_args_gpt
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
 from utils.model_utils import tokenize_one_field
-from models.gpt_model import create_model, PatientHistoryGenerator
+from models.gpt_model import create_model, PatientHistoryGenerator, ComputeMarginalDistribution
 from models.layers.custom_layers import get_custom_objects
 from data_generators.data_generator_base import *
 
@@ -30,6 +30,8 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             max_num_of_visits: int,
             min_num_of_concepts: int,
             print_every: int,
+            num_of_patients: int,
+            sampling_batch_size: int,
             *args, **kwargs
     ):
         self._tokenizer_path = tokenizer_path
@@ -42,6 +44,8 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         self._min_num_of_visits = min_num_of_visits
         self._max_num_of_visits = max_num_of_visits
         self._print_every = print_every
+        self._num_of_patients = num_of_patients
+        self._sampling_batch_size = sampling_batch_size
 
         super(GptModelTrainer, self).__init__(*args, **kwargs)
 
@@ -56,7 +60,9 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             f'min_num_of_visits: {min_num_of_visits}\n'
             f'max_num_of_visits: {max_num_of_visits}\n'
             f'print_every: {print_every}\n'
-            f'min_num_of_concepts: {min_num_of_concepts}'
+            f'min_num_of_concepts: {min_num_of_concepts}\n'
+            f'num_of_patients:{num_of_patients}\n'
+            f'sampling_batch_size: {sampling_batch_size}'
         )
 
     def _load_dependencies(self):
@@ -72,6 +78,10 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         for t in concept.itertuples():
             if str(t.concept_id) in concept_ids:
                 self._concept_map[str(t.concept_id)] = t.concept_name
+
+        print(f'Extracting demographic prompts from the training data')
+        demographic_info = self._training_data.concept_ids.apply(lambda concept_list: concept_list[0:4])
+        self._demographic_info = self._tokenizer.encode(map(list, demographic_info))
 
     def create_data_generator(self) -> GptDataGenerator:
         parameters = {
@@ -133,6 +143,17 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
                 print_every=self._print_every
             )
         )
+        call_backs.append(
+            ComputeMarginalDistribution(
+                demographic_info=self._demographic_info,
+                max_seq=self._context_window_size,
+                concept_tokenizer=self._tokenizer,
+                concept_map=self._concept_map,
+                print_every=self._print_every,
+                batch_size=self._sampling_batch_size,
+                num_of_patients=self._num_of_patients
+            )
+        )
         return call_backs
 
 
@@ -155,7 +176,9 @@ def main(args):
         learning_rate=args.learning_rate,
         use_dask=args.use_dask,
         tf_board_log_path=args.tf_board_log_path,
-        print_every=args.print_every
+        print_every=args.print_every,
+        num_of_patients=args.num_of_patients,
+        sampling_batch_size=args.sampling_batch_size
     ).train_model()
 
 

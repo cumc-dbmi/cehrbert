@@ -456,3 +456,80 @@ class PatientHistoryGenerator(tf.keras.callbacks.Callback):
         )
 
         print(f"generated text:\n{txt}\n")
+
+
+class ComputeMarginalDistribution(tf.keras.callbacks.Callback):
+    def __init__(
+            self,
+            demographic_info,
+            max_seq,
+            concept_tokenizer: ConceptTokenizer,
+            concept_map: dict,
+            batch_size,
+            num_of_patients=1024,
+            top_k=10,
+            print_every=1
+    ):
+        self.demographic_info = demographic_info
+        self.max_seq = max_seq
+        self.concept_tokenizer = concept_tokenizer
+        self.concept_map = concept_map
+        self.print_every = print_every
+        self.k = top_k
+        self.batch_size = batch_size
+        self.num_of_patients = num_of_patients
+
+    def detokenize(self, number):
+        concept_id = self.concept_tokenizer.decode([[number]])[0]
+        if concept_id in self.concept_map:
+            return self.concept_map[concept_id]
+        return concept_id
+
+    def on_batch_end(self, batch, logs=None):
+        if batch == 0 or batch % self.print_every != 0:
+            return
+        inference_model = GptInferenceModel(
+            self.model,
+            tokenizer=self.concept_tokenizer,
+            context_window=self.max_seq,
+            top_k=self.k
+        )
+
+        num_of_batches = self.num_of_patients // self.batch_size + 1
+        sequence_to_flush = []
+        for i in range(num_of_batches):
+
+            print(f'{datetime.datetime.now()}: Patient generation batch {i} started')
+
+            start_tokens = np.tile(
+                np.asarray([[self.concept_tokenizer.get_start_token_id()]]),
+                [self.batch_size, 1]
+            )
+            random_prompts = random.sample(
+                self.demographic_info,
+                self.batch_size
+            )
+            prompt_batch = np.hstack([start_tokens, random_prompts])
+            _, length = np.shape(
+                prompt_batch
+            )
+
+            prompt_batch = tf.cast(prompt_batch, dtype=tf.int32)
+
+            prompt_batch = inference_model(
+                prompt_batch
+            )
+            for seq in prompt_batch.tolist():
+                seq_copy = []
+                for token in seq:
+                    if token == self.concept_tokenizer.get_end_token_id():
+                        break
+                    seq_copy.append(token)
+                sequence_to_flush.append({'token_ids': seq_copy})
+
+        generated_patient_sequences = pd.DataFrame(
+            sequence_to_flush,
+            columns=['token_ids']
+        )
+        dist = generated_patient_sequences.concept_ids.explode().value_counts() / len(generated_patient_sequences)
+        print(f'The marginal distribution is below:\n {dist.head(60)}')
