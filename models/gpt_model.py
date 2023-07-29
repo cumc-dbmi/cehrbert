@@ -4,11 +4,10 @@ import random
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-from keras import backend as K
 
 from data_generators.tokenizer import ConceptTokenizer
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
-from models.layers.custom_layers import GptDecoder, TrainablePositionEmbedding, AdaptiveLogitLayer
+from models.layers.custom_layers import GptDecoder, TrainablePositionEmbedding
 
 
 class GptInferenceModel(tf.keras.Model):
@@ -386,6 +385,7 @@ def generate_artificial_time_tokens():
 class PatientHistoryGenerator(tf.keras.callbacks.Callback):
     def __init__(
             self,
+            demographic_info,
             max_seq,
             concept_tokenizer: ConceptTokenizer,
             concept_map: dict,
@@ -532,4 +532,6 @@ class ComputeMarginalDistribution(tf.keras.callbacks.Callback):
             columns=['token_ids']
         )
         dist = generated_patient_sequences.token_ids.explode().value_counts() / len(generated_patient_sequences)
-        print(f'The marginal distribution is below:\n {dist.head(60)}')
+        print(f'{datetime.datetime.now()}: The marginal distribution is below:\n {dist.head(60)}\n')
+        txt = '\n'.join(sequence_to_flush[0]['token_ids'])
+        print(f'{datetime.datetime.now()}: The generated patient sequence:\n{txt}\n')

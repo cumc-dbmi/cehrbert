@@ -5,7 +5,7 @@ from models.model_parameters import ModelPathConfig
 from models.parse_args import create_parse_args_gpt
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
 from utils.model_utils import tokenize_one_field
-from models.gpt_model import create_model, PatientHistoryGenerator, ComputeMarginalDistribution
+from models.gpt_model import create_model, ComputeMarginalDistribution
 from models.layers.custom_layers import get_custom_objects
 from data_generators.data_generator_base import *
 
@@ -135,14 +135,6 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
 
     def _get_callbacks(self):
         call_backs = super()._get_callbacks()
-        call_backs.append(
-            PatientHistoryGenerator(
-                max_seq=self._context_window_size,
-                concept_tokenizer=self._tokenizer,
-                concept_map=self._concept_map,
-                print_every=self._print_every
-            )
-        )
         call_backs.append(
             ComputeMarginalDistribution(
                 demographic_info=self._demographic_info,
