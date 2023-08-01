@@ -225,7 +225,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
             artificial_tokens = artificial_tokens.union(visit_type_tokens)
 
         # Retrieving the events that are ONLY linked to inpatient visits
-        inpatient_visits = visit_occurrence.where(F.col('visit_concept_id').isin([9201, 262])).select(
+        inpatient_visits = visit_occurrence.where(F.col('visit_concept_id').isin([9201, 262, 8971, 8920])).select(
             'visit_occurrence_id',
             'visit_end_date'
         )
@@ -258,8 +258,8 @@ class PatientEventAttDecorator(PatientEventDecorator):
         )
 
         discharge_events = visit_occurrence \
-            .where(F.col('visit_concept_id').isin([9201, 262])) \
-            .withColumn('standard_concept_id', F.col('discharged_to_concept_id')) \
+            .where(F.col('visit_concept_id').isin([9201, 262, 8971, 8920])) \
+            .withColumn('standard_concept_id', F.coalesce(F.col('discharged_to_concept_id'), F.lit(0))) \
             .withColumn('date', F.col('visit_end_date')) \
             .withColumn('priority', F.lit(1)) \
             .drop('discharged_to_concept_id', 'visit_end_date')
