@@ -53,8 +53,10 @@ def main(
     visit_occurrence = visit_occurrence.select(
         'visit_occurrence_id',
         'visit_start_date',
+        'visit_end_date',
         'visit_concept_id',
-        'person_id'
+        'person_id',
+        'discharged_to_concept_id'
     )
     person = preprocess_domain_table(spark, input_folder, PERSON)
     birth_datetime_udf = F.coalesce('birth_datetime',

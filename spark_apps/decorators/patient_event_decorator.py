@@ -141,28 +141,31 @@ class PatientEventAttDecorator(PatientEventDecorator):
             W.partitionBy('person_id').orderBy('visit_start_date')
         )
         visit_segment_udf = F.col('visit_rank_order') % F.lit(2) + 1
-        visits = self._visit_occurrence.select(
+        visit_occurrence = self._visit_occurrence.select(
             'person_id',
             F.col('visit_start_date').cast(T.DateType()).alias('date'),
             F.col('visit_start_date').cast(T.DateType()).alias('visit_start_date'),
+            F.col('visit_end_date').cast(T.DateType()).alias('visit_end_date'),
             'visit_concept_id',
             'visit_occurrence_id',
             F.lit('visit').alias('domain'),
             F.lit(-1).alias('concept_value'),
             F.lit(0).alias('concept_value_mask'),
             F.lit(0).alias('mlm_skip_value'),
-            'age'
+            'age',
+            'discharged_to_concept_id'
         ).withColumn('visit_rank_order', visit_rank_udf) \
             .withColumn('visit_segment', visit_segment_udf) \
             .join(valid_visit_ids, 'visit_occurrence_id') \
             .join(cohort_member_person_pair, 'person_id')
 
         weeks_since_epoch_udf = (F.unix_timestamp('date') / F.lit(24 * 60 * 60 * 7)).cast('int')
-        visits = visits \
+        visit_occurrence = visit_occurrence \
             .withColumn('visit_rank_order', visit_rank_udf) \
             .withColumn('visit_segment', visit_segment_udf) \
             .withColumn('date_in_week', weeks_since_epoch_udf)
 
+        visits = visit_occurrence.drop('discharged_to_concept_id', 'visit_end_date')
         visits.cache()
 
         # (cohort_member_id, person_id, standard_concept_id, date, visit_occurrence_id, domain,
@@ -174,7 +177,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
 
         visit_end_events = visits \
             .withColumn('standard_concept_id', F.lit('VE')) \
-            .withColumn('priority', F.lit(1))
+            .withColumn('priority', F.lit(2))
 
         # Get the prev days_since_epoch
         prev_date_udf = F.lag('date').over(
@@ -203,10 +206,10 @@ class PatientEventAttDecorator(PatientEventDecorator):
         att_tokens = visits \
             .withColumn('prev_date', prev_date_udf) \
             .withColumn('time_delta', time_delta_udf) \
+            .where(F.col('prev_date').isNotNull()) \
             .withColumn('standard_concept_id', time_token_udf('time_delta')) \
             .withColumn('priority', F.lit(-3)) \
             .withColumn('visit_rank_order', F.col('visit_rank_order') - 1) \
-            .where(F.col('prev_date').isNotNull()) \
             .drop('prev_date', 'time_delta')
 
         if self._exclude_visit_tokens:
@@ -221,11 +224,78 @@ class PatientEventAttDecorator(PatientEventDecorator):
                 .withColumn('priority', F.lit(-1))
             artificial_tokens = artificial_tokens.union(visit_type_tokens)
 
+        # Retrieving the events that are ONLY linked to inpatient visits
+        inpatient_visits = visit_occurrence.where(F.col('visit_concept_id').isin([9201, 262])).select(
+            'visit_occurrence_id',
+            'visit_end_date'
+        )
+        inpatient_events = patient_events.join(inpatient_visits, 'visit_occurrence_id')
+
+        # Fill in the visit_end_date if null (because some visits are still ongoing at the time of data extraction)
+        # Bound the event dates within visit_start_date and visit_end_date
+        # Generate a span rank to indicate the position of the group of events
+        # Update the priority for each span
+        inpatient_events = inpatient_events.withColumn(
+            'visit_end_date',
+            F.coalesce('visit_end_date', F.max('date').over(W.partitionBy('visit_occurrence_id')))
+        ).withColumn(
+            'date',
+            F.when(F.col('date') < F.col('visit_start_date'), F.col('visit_start_date')).otherwise(
+                F.when(F.col('date') > F.col('visit_end_date'), F.col('visit_end_date')).otherwise(
+                    F.col('date')
+                )
+            )
+        ).withColumn(
+            'span_rank',
+            F.dense_rank().over(W.partitionBy('visit_occurrence_id').orderBy('date'))
+        ).withColumn(
+            'priority', F.col('priority') + F.col('span_rank') * 0.1
+        ).drop('span_rank', 'visit_end_date')
+
+        # Get the prev days_since_epoch
+        inpatient_prev_date_udf = F.lag('date').over(
+            W.partitionBy('visit_occurrence_id').orderBy('date')
+        )
+
+        discharge_events = visit_occurrence \
+            .where(F.col('visit_concept_id').isin([9201, 262])) \
+            .withColumn('standard_concept_id', F.col('discharged_to_concept_id')) \
+            .withColumn('date', F.col('visit_end_date')) \
+            .withColumn('priority', F.lit(1)) \
+            .drop('discharged_to_concept_id', 'visit_end_date')
+
+        # Add discharge events to the inpatient visits
+        inpatient_events = inpatient_events.unionByName(discharge_events)
+
+        # Create ATT tokens within the inpatient visits
+        inpatient_att_events = inpatient_events \
+            .withColumn('is_span_boundary', F.row_number().over(
+            W.partitionBy('visit_occurrence_id', 'date').orderBy('standard_concept_id'))) \
+            .where(F.col('is_span_boundary') == 1) \
+            .withColumn('prev_date', inpatient_prev_date_udf) \
+            .withColumn('time_delta', time_delta_udf) \
+            .where(F.col('time_delta') != 0) \
+            .where(F.col('prev_date').isNotNull()) \
+            .withColumn('standard_concept_id', time_token_udf('time_delta')) \
+            .withColumn('priority', F.col('priority') - 0.01) \
+            .drop('prev_date', 'time_delta', 'is_span_boundary')
+
+        self.validate(inpatient_events)
+        self.validate(inpatient_att_events)
+
+        # Retrieving the events that are NOT linked to inpatient visits
+        other_events = patient_events.join(
+            inpatient_visits.select('visit_occurrence_id'), 'visit_occurrence_id', 'left_outer'
+        ).where(
+            inpatient_visits['visit_occurrence_id'].isNull()
+        )
+
+        patient_events = inpatient_events.unionByName(inpatient_att_events).unionByName(other_events)
+
         self.validate(patient_events)
         self.validate(artificial_tokens)
 
         # artificial_tokens = artificial_tokens.select(sorted(artificial_tokens.columns))
-
         return patient_events.unionByName(artificial_tokens)
 
 
