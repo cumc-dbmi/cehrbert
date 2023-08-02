@@ -180,6 +180,7 @@ def gpt_to_omop_converter_serial(
             continue
 
         p = Person(person_id, start_gender, birth_year, start_race)
+        vo = None
         append_to_dict(omop_export_dict, p, person_id)
         id_mappings_dict['person'][person_id] = person_id
         pt_seq_dict[person_id] = ' '.join(row)
@@ -220,11 +221,15 @@ def gpt_to_omop_converter_serial(
                 # VS\-D\d+\-VE\
                 DATE_CURSOR = DATE_CURSOR + timedelta(days=int(x.split('-')[1][1:]))
             elif x == 'VE':
+                if vo is None:
+                    bad_sequence = True
+                    break
                 # If it's a VE token, nothing needs to be updated because it just means the visit ended
                 if inpatient_visit_indicator:
                     vo.set_discharged_to_concept_id(discharged_to_concept_id)
                     vo.set_visit_end_date(DATE_CURSOR)
-                pass
+                else:
+                    pass
             elif x in ['START', start_year, start_age, start_gender, start_race]:
                 # If it's a start token, skip it
                 pass
