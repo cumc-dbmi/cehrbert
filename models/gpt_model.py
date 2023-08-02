@@ -31,6 +31,7 @@ class GptInferenceModel(tf.keras.Model):
         self.gpt_decoder = self._get_gpt_decoder(gpt_model)
         self.vocab_size = self.concept_embedding_layer.input_dim
         self.att_token_ids = self._get_att_token_ids()
+        self.span_separators = self._get_span_separators()
 
     def _get_att_token_ids(self):
         """
@@ -114,18 +115,24 @@ class GptInferenceModel(tf.keras.Model):
 
         return logtis, new_cached_contexts
 
+    def _get_span_separators(self):
+        separator_indexes = []
+        for w, i in self.tokenizer.tokenizer.word_index.items():
+            if 'VS' in w:
+                separator_indexes.append(i)
+        return separator_indexes
+
     def _block_recurring_tokens(
             self,
             inputs,
             outputs,
-            disallowed_token_ids,
-            vs_token_id
+            disallowed_token_ids
     ):
         batch, length = tf.shape(inputs)
         # Get the index of the last occurrence of VS token in the sequence
         last_vs_token_index = self._find_last_index_of_token(
             sequence_in_batch=inputs,
-            token_id=vs_token_id
+            token_ids=self.span_separators
         )
 
         # If this is a new visit, indicated by last_vs_token_index == length - 1, we will clear out the memory
@@ -147,10 +154,10 @@ class GptInferenceModel(tf.keras.Model):
         )
         #  Create a cache contexts to store the previous states
         cached_contexts = None
-        # disallowed_token_ids = tf.zeros((
-        #     batch,
-        #     self.tokenizer.get_vocab_size()
-        # ))
+        disallowed_token_ids = tf.zeros((
+            batch,
+            self.tokenizer.get_vocab_size()
+        ))
 
         while length < self.context_window:
             # Generate the next batch of tokens and update the contexts
@@ -158,14 +165,13 @@ class GptInferenceModel(tf.keras.Model):
                 inputs,
                 cached_contexts
             )
-            # # Block the sampling of the tokens that already appear within the same visit (defined
-            # # as the tokens that appear since the last VS)
-            # outputs, disallowed_token_ids = self._block_recurring_tokens(
-            #     inputs,
-            #     outputs,
-            #     disallowed_token_ids,
-            #     self.tokenizer.get_visit_start_token_id()
-            # )
+            # Block the sampling of the tokens that already appear within the same visit (defined
+            # as the tokens that appear since the last VS)
+            outputs, disallowed_token_ids = self._block_recurring_tokens(
+                inputs,
+                outputs,
+                disallowed_token_ids
+            )
             # Randomly sample a batch of tokens
             pred_logits, indices = tf.math.top_k(outputs[:, -1, :], k=self.top_k, sorted=True)
             indices = np.asarray(indices).astype('int32')
@@ -176,11 +182,11 @@ class GptInferenceModel(tf.keras.Model):
                 axis=1,
                 batch_dims=1
             ).numpy()
-            #
-            # disallowed_token_ids += tf.one_hot(
-            #     tf.squeeze(next_tokens),
-            #     self.tokenizer.get_vocab_size()
-            # )
+
+            disallowed_token_ids += tf.one_hot(
+                tf.squeeze(next_tokens),
+                self.tokenizer.get_vocab_size()
+            )
 
             # Check if any of the current token is att tokens
             att_token_indicators = tf.cast(
@@ -193,11 +199,6 @@ class GptInferenceModel(tf.keras.Model):
                     att_token_indicators * self.tokenizer.get_visit_start_token_id() +
                     (1 - att_token_indicators) * next_tokens
             )
-            #
-            # new_visit_indicator = tf.cast(
-            #     next_tokens == self.tokenizer.get_visit_start_token_id(),
-            #     dtype=tf.int32
-            # )
 
             # Stitch up the new tokens and previously generated tokens
             inputs = np.hstack(
@@ -218,10 +219,11 @@ class GptInferenceModel(tf.keras.Model):
     @staticmethod
     def _find_last_index_of_token(
             sequence_in_batch,
-            token_id
+            token_ids
     ):
         length = tf.shape(sequence_in_batch)[1].numpy()
-        argmax_in_reverse = tf.argmax(tf.reverse(sequence_in_batch == token_id, [-1]), axis=-1)
+        first_token_index = tf.reduce_any(sequence_in_batch[:, :, tf.newaxis] == token_ids, axis=-1)
+        argmax_in_reverse = tf.argmax(tf.reverse(first_token_index, [-1]), axis=-1)
         last_token_index = length - argmax_in_reverse[:, tf.newaxis] - 1
         return tf.cast(last_token_index, dtype=tf.int32)
 
