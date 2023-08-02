@@ -180,7 +180,6 @@ def gpt_to_omop_converter_serial(
             continue
 
         p = Person(person_id, start_gender, birth_year, start_race)
-        vo = None
         append_to_dict(omop_export_dict, p, person_id)
         id_mappings_dict['person'][person_id] = person_id
         pt_seq_dict[person_id] = ' '.join(row)
