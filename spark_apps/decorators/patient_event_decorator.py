@@ -164,9 +164,9 @@ class PatientEventAttDecorator(PatientEventDecorator):
             .withColumn('visit_rank_order', visit_rank_udf) \
             .withColumn('visit_segment', visit_segment_udf) \
             .withColumn('date_in_week', weeks_since_epoch_udf)
+        visit_occurrence.cache()
 
         visits = visit_occurrence.drop('discharged_to_concept_id', 'visit_end_date')
-        visits.cache()
 
         # (cohort_member_id, person_id, standard_concept_id, date, visit_occurrence_id, domain,
         # concept_value, visit_rank_order, visit_segment, priority, date_in_week,
@@ -276,7 +276,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
             .withColumn('time_delta', time_delta_udf) \
             .where(F.col('time_delta') != 0) \
             .where(F.col('prev_date').isNotNull()) \
-            .withColumn('standard_concept_id', time_token_udf('time_delta')) \
+            .withColumn('standard_concept_id', F.concat(F.lit('VS-'), time_token_udf('time_delta'), F.lit('-VE'))) \
             .withColumn('priority', F.col('priority') - 0.01) \
             .drop('prev_date', 'time_delta', 'is_span_boundary')
 
