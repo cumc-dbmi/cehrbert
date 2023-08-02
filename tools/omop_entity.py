@@ -1,5 +1,5 @@
-from datetime import datetime, date
 from abc import ABC, abstractmethod
+from datetime import datetime, date
 
 
 def fill_datetime(year: int):
@@ -97,7 +97,8 @@ class VisitOccurrence(OmopEntity):
             visit_occurrence_id: int,
             visit_concept_id: int,
             visit_start_date: date,
-            person: Person
+            person: Person,
+            discharged_to_concept_id: int = 0
     ):
         self._visit_occurrence_id = visit_occurrence_id
         self._visit_concept_id = visit_concept_id
@@ -106,6 +107,7 @@ class VisitOccurrence(OmopEntity):
         self._visit_end_date = visit_start_date
         self._visit_end_datetime = fill_end_datetime(self._visit_end_date)
         self._person = person
+        self._discharged_to_concept_id = discharged_to_concept_id
 
     def export_as_json(self):
         return {
@@ -123,7 +125,7 @@ class VisitOccurrence(OmopEntity):
             'visit_source_concept_id': self._visit_concept_id,
             'admitting_source_concept_id': 0,
             'admitting_source_value': '',
-            'discharged_to_concept_id': 0,
+            'discharged_to_concept_id': self._discharged_to_concept_id,
             'discharged_to_source_value': '',
             'preceding_visit_occurrence_id': 0
         }
@@ -157,6 +159,17 @@ class VisitOccurrence(OmopEntity):
     def person(self):
         return self._person
 
+    @property
+    def discharged_to_concept_id(self):
+        return self._discharged_to_concept_id
+
+    # a setter function
+    def set_discharged_to_concept_id(self, discharged_to_concept_id):
+        self._discharged_to_concept_id = discharged_to_concept_id
+
+    def set_visit_end_date(self, visit_end_date):
+        self._visit_end_date = visit_end_date
+
 
 class ConditionOccurrence(OmopEntity):
 
@@ -164,21 +177,26 @@ class ConditionOccurrence(OmopEntity):
             self,
             condition_occurrence_id,
             condition_concept_id,
-            visit_occurrence: VisitOccurrence
+            visit_occurrence: VisitOccurrence,
+            condition_date: date,
     ):
         self._condition_occurrence_id = condition_occurrence_id
         self._condition_concept_id = condition_concept_id
         self._visit_occurrence = visit_occurrence
+        self._condition_start_date = condition_date
+        self._condition_start_datetime = fill_start_datetime(condition_date)
+        self._condition_end_date = condition_date
+        self._condition_end_datetime = fill_end_datetime(condition_date)
 
     def export_as_json(self):
         return {
             'condition_occurrence_id': self._condition_occurrence_id,
             'person_id': self._visit_occurrence._person._person_id,
             'condition_concept_id': self._condition_concept_id,
-            'condition_start_date': self._visit_occurrence._visit_start_date,
-            'condition_start_datetime': self._visit_occurrence._visit_start_datetime,
-            'condition_end_date': self._visit_occurrence._visit_end_date,
-            'condition_end_datetime': self._visit_occurrence._visit_end_datetime,
+            'condition_start_date': self._condition_start_date,
+            'condition_start_datetime': self._condition_start_datetime,
+            'condition_end_date': self._condition_end_date,
+            'condition_end_datetime': self._condition_end_datetime,
             'condition_type_concept_id': 32817,
             'stop_reason': '',
             'provider_id': 0,
@@ -221,22 +239,27 @@ class DrugExposure(OmopEntity):
             self,
             drug_exposure_id,
             drug_concept_id,
-            visit_occurrence: VisitOccurrence
+            visit_occurrence: VisitOccurrence,
+            drug_date: date
     ):
         self._drug_exposure_id = drug_exposure_id
         self._drug_concept_id = drug_concept_id
         self._visit_occurrence = visit_occurrence
+        self._drug_exposure_start_date = drug_date
+        self._drug_exposure_start_datetime = fill_start_datetime(drug_date)
+        self._drug_exposure_end_date = drug_date
+        self._drug_exposure_end_datetime = fill_end_datetime(drug_date)
 
     def export_as_json(self):
         return {
             'drug_exposure_id': self._drug_exposure_id,
             'person_id': self._visit_occurrence._person._person_id,
             'drug_concept_id': self._drug_concept_id,
-            'drug_exposure_start_date': self._visit_occurrence._visit_start_date,
-            'drug_exposure_start_datetime': self._visit_occurrence._visit_start_datetime,
-            'drug_exposure_end_date': self._visit_occurrence._visit_end_date,
-            'drug_exposure_end_datetime': self._visit_occurrence._visit_end_datetime,
-            'verbatim_end_date': self._visit_occurrence._visit_end_date,
+            'drug_exposure_start_date': self._drug_exposure_start_date,
+            'drug_exposure_start_datetime': self._drug_exposure_start_datetime,
+            'drug_exposure_end_date': self._drug_exposure_end_date,
+            'drug_exposure_end_datetime': self._drug_exposure_end_datetime,
+            'verbatim_end_date': self._drug_exposure_end_date,
             'drug_type_concept_id': 38000177,
             'stop_reason': '',
             'refills': None,
@@ -292,19 +315,22 @@ class ProcedureOccurrence(OmopEntity):
             self,
             procedure_occurrence_id,
             procedure_concept_id,
-            visit_occurrence: VisitOccurrence
+            visit_occurrence: VisitOccurrence,
+            procedure_date: date
     ):
         self._procedure_occurrence_id = procedure_occurrence_id
         self._procedure_concept_id = procedure_concept_id
         self._visit_occurrence = visit_occurrence
+        self._procedure_date = procedure_date
+        self._procedure_datetime = fill_start_datetime(procedure_date)
 
     def export_as_json(self):
         return {
             'procedure_occurrence_id': self._procedure_occurrence_id,
             'person_id': self._visit_occurrence._person._person_id,
             'procedure_concept_id': self._procedure_concept_id,
-            'procedure_date': self._visit_occurrence._visit_start_date,
-            'procedure_datetime': self._visit_occurrence._visit_start_datetime,
+            'procedure_date': self._procedure_date,
+            'procedure_datetime': self._procedure_datetime,
             'procedure_type_concept_id': 38000178,
             'modifier_concept_id': 0,
             'quantity': 1,

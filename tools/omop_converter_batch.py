@@ -1,6 +1,7 @@
 import argparse
 import datetime
 import os
+import re
 import uuid
 from datetime import date, timedelta
 from multiprocessing import Pool
@@ -30,6 +31,7 @@ OOV_CONCEPT_MAP = {
     905420: 'Drug',
     1525543: 'Drug'
 }
+span_att_expr = re.compile('VS\-D\d+\-VE', re.IGNORECASE)
 
 
 def create_folder_if_not_exists(output_folder, table_name):
@@ -181,7 +183,8 @@ def gpt_to_omop_converter_serial(
         append_to_dict(omop_export_dict, p, person_id)
         id_mappings_dict['person'][person_id] = person_id
         pt_seq_dict[person_id] = ' '.join(row)
-        VS_DATE = date(int(start_year), 1, 1)
+        discharged_to_concept_id = 0
+        DATE_CURSOR = date(int(start_year), 1, 1)
         ATT_DATE_DELTA = 0
         vo = None
         for idx, x in enumerate(tokens_generated, 0):
@@ -192,14 +195,15 @@ def gpt_to_omop_converter_serial(
             if x == 'VS':
                 try:
                     visit_concept_id = int(tokens_generated[idx + 1])
+                    inpatient_visit_indicator = visit_concept_id in [9201, 262, 8971, 8920]
                 except (IndexError, ValueError):
                     error_dict[person_id] = {}
                     error_dict[person_id]['row'] = ','.join(list(row))
                     error_dict[person_id]['error'] = 'Wrong visit concept id'
                     bad_sequence = True
                     continue
-                VS_DATE = VS_DATE + timedelta(days=ATT_DATE_DELTA)
-                vo = VisitOccurrence(visit_occurrence_id, visit_concept_id, VS_DATE, p)
+                DATE_CURSOR = DATE_CURSOR + timedelta(days=ATT_DATE_DELTA)
+                vo = VisitOccurrence(visit_occurrence_id, visit_concept_id, DATE_CURSOR, p)
                 append_to_dict(omop_export_dict, vo, visit_occurrence_id)
                 id_mappings_dict['visit_occurrence'][visit_occurrence_id] = person_id
                 visit_occurrence_id += 1
@@ -212,8 +216,14 @@ def gpt_to_omop_converter_serial(
                     ATT_DATE_DELTA = int(x[1:]) * 30
                 elif x == 'LT':
                     ATT_DATE_DELTA = 365 * 3
+            elif inpatient_visit_indicator and span_att_expr.match(x):
+                # VS\-D\d+\-VE\
+                DATE_CURSOR = DATE_CURSOR + timedelta(days=int(x.split('-')[1][1:]))
             elif x == 'VE':
                 # If it's a VE token, nothing needs to be updated because it just means the visit ended
+                if inpatient_visit_indicator:
+                    vo.set_discharged_to_concept_id(discharged_to_concept_id)
+                    vo.set_visit_end_date(DATE_CURSOR)
                 pass
             elif x in ['START', start_year, start_age, start_gender, start_race]:
                 # If it's a start token, skip it
@@ -228,7 +238,6 @@ def gpt_to_omop_converter_serial(
                         bad_sequence = True
                         continue
                     else:
-
                         if concept_id in domain_map:
                             domain = domain_map[concept_id]
                         elif concept_id in OOV_CONCEPT_MAP:
@@ -237,22 +246,25 @@ def gpt_to_omop_converter_serial(
                             domain = None
 
                         if domain == 'Condition':
-                            co = ConditionOccurrence(condition_occurrence_id, x, vo)
+                            co = ConditionOccurrence(condition_occurrence_id, x, vo, DATE_CURSOR)
                             append_to_dict(omop_export_dict, co, condition_occurrence_id)
                             id_mappings_dict['condition_occurrence'][
                                 condition_occurrence_id] = person_id
                             condition_occurrence_id += 1
                         elif domain == 'Procedure':
-                            po = ProcedureOccurrence(procedure_occurrence_id, x, vo)
+                            po = ProcedureOccurrence(procedure_occurrence_id, x, vo, DATE_CURSOR)
                             append_to_dict(omop_export_dict, po, procedure_occurrence_id)
                             id_mappings_dict['procedure_occurrence'][
                                 procedure_occurrence_id] = person_id
                             procedure_occurrence_id += 1
                         elif domain == 'Drug':
-                            de = DrugExposure(drug_exposure_id, x, vo)
+                            de = DrugExposure(drug_exposure_id, x, vo, DATE_CURSOR)
                             append_to_dict(omop_export_dict, de, drug_exposure_id)
                             id_mappings_dict['drug_exposure'][drug_exposure_id] = person_id
                             drug_exposure_id += 1
+                        elif domain == 'Visit':
+                            discharged_to_concept_id = concept_id
+
                 except ValueError:
                     error_dict[person_id] = {}
                     error_dict[person_id]['row'] = ' '.join(row)
