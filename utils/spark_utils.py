@@ -22,7 +22,8 @@ DOMAIN_KEY_FIELDS = {
     'condition_occurrence_id': ('condition_concept_id', 'condition_start_date', 'condition'),
     'procedure_occurrence_id': ('procedure_concept_id', 'procedure_date', 'procedure'),
     'drug_exposure_id': ('drug_concept_id', 'drug_exposure_start_date', 'drug'),
-    'measurement_id': ('measurement_concept_id', 'measurement_date', 'measurement')
+    'measurement_id': ('measurement_concept_id', 'measurement_date', 'measurement'),
+    'person_id': ('person_id', 'death_date', 'death')
 }
 
 LOGGER = logging.getLogger(__name__)
@@ -108,6 +109,9 @@ def preprocess_domain_table(spark, input_folder, domain_table_name, with_rollup=
     # lowercase the schema fields
     domain_table = domain_table.select(
         [F.col(f_n).alias(f_n.lower()) for f_n in domain_table.schema.fieldNames()])
+
+    if domain_table_name == 'death':
+        domain_table = domain_table.withColumn('visit_occurrence_id', F.lit(0))
 
     # Always roll up the drug concepts to the ingredient level
     if domain_table_name == 'drug_exposure' \

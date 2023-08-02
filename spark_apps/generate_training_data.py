@@ -4,11 +4,11 @@ import os
 from pyspark.sql import SparkSession
 
 import config.parameters
-from spark_apps.decorators.patient_event_decorator import AttType
 from utils.spark_utils import *
 
 VISIT_OCCURRENCE = 'visit_occurrence'
 PERSON = 'person'
+DEATH = 'death'
 
 
 def main(
@@ -24,6 +24,7 @@ def main(
         include_concept_list: bool,
         gpt_patient_sequence: bool,
         apply_age_filter: bool,
+        include_death: bool,
         att_type: AttType
 ):
     spark = SparkSession.builder.appName('Generate CEHR-BERT Training Data').getOrCreate()
@@ -42,6 +43,7 @@ def main(
         f'include_concept_list: {include_concept_list}\n'
         f'gpt_patient_sequence: {gpt_patient_sequence}\n'
         f'apply_age_filter: {apply_age_filter}\n'
+        f'include_death: {include_death}\n'
         f'att_type: {att_type}'
     )
 
@@ -70,8 +72,26 @@ def main(
 
     visit_occurrence_person = visit_occurrence.join(person, 'person_id') \
         .withColumn('age', F.ceil(
-        F.months_between(F.col('visit_start_date'), F.col('birth_datetime')) / F.lit(12))) \
-        .drop('birth_datetime')
+        F.months_between(F.col('visit_start_date'), F.col('birth_datetime')) / F.lit(12)))
+    visit_occurrence_person = visit_occurrence_person.drop('birth_datetime')
+
+    if include_death:
+        death = preprocess_domain_table(spark, input_folder, DEATH)
+        max_visit_occurrence_id = visit_occurrence_person.select(
+            F.max('visit_occurrence_id').alias('max_visit_occurrence_id'),
+            F.max('visit_start_date').alias('max_visit_start_date')
+        )
+        last_visits_for_deceased = visit_occurrence_person \
+            .join(death.select('person_id'), 'person_id') \
+            .crossJoin(max_visit_occurrence_id) \
+            .withColumn('visit_occurrence_id',
+                        F.row_number().over(W.orderBy('person_id')) + F.col('max_visit_occurrence_id')) \
+            .withColumn('visit_start_date', F.date_add(F.col('max_visit_start_date'), 1)) \
+            .withColumn('visit_concept_id', F.lit(1147312)) \
+            .drop('max_visit_occurrence_id', 'max_visit_start_date')
+
+        # Create artificial visits for death records
+        visit_occurrence_person = visit_occurrence_person.unionByName(last_visits_for_deceased)
 
     patient_events = join_domain_tables(domain_tables)
 
@@ -245,6 +265,11 @@ if __name__ == '__main__':
         action='store_true'
     )
     parser.add_argument(
+        '--include_death',
+        dest='include_death',
+        action='store_true'
+    )
+    parser.add_argument(
         '--att_type',
         dest='att_type',
         action='store',
@@ -259,5 +284,6 @@ if __name__ == '__main__':
         ARGS.is_classic_bert_sequence, ARGS.include_prolonged_stay, ARGS.include_concept_list,
         ARGS.gpt_patient_sequence,
         ARGS.apply_age_filter,
+        ARGS.include_death,
         AttType(ARGS.att_type)
     )
