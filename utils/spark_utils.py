@@ -12,7 +12,7 @@ from config.parameters import qualified_concept_list_path
 from const.common import PERSON, VISIT_OCCURRENCE, UNKNOWN_CONCEPT, MEASUREMENT, \
     CATEGORICAL_MEASUREMENT, REQUIRED_MEASUREMENT, CDM_TABLES
 from spark_apps.decorators.patient_event_decorator import (
-    DemographicPromptDecorator, PatientEventAttDecorator, PatientEventBaseDecorator,
+    DemographicPromptDecorator, PatientEventAttDecorator, PatientEventBaseDecorator, DeathEventDecorator,
     time_token_func, AttType
 )
 from spark_apps.sql_templates import measurement_unit_stats_query
@@ -109,9 +109,6 @@ def preprocess_domain_table(spark, input_folder, domain_table_name, with_rollup=
     # lowercase the schema fields
     domain_table = domain_table.select(
         [F.col(f_n).alias(f_n.lower()) for f_n in domain_table.schema.fieldNames()])
-
-    if domain_table_name == 'death':
-        domain_table = domain_table.withColumn('visit_occurrence_id', F.lit(0))
 
     # Always roll up the drug concepts to the ingredient level
     if domain_table_name == 'drug_exposure' \
@@ -439,6 +436,7 @@ def create_sequence_data_with_att(
         include_visit_type=False,
         exclude_visit_tokens=False,
         patient_demographic=None,
+        death=None,
         att_type: AttType = AttType.CEHR_BERT
 ):
     """
@@ -450,6 +448,7 @@ def create_sequence_data_with_att(
     :param include_visit_type:
     :param exclude_visit_tokens:
     :param patient_demographic:
+    :param death:
     :param att_type:
     :return:
     """
@@ -460,7 +459,8 @@ def create_sequence_data_with_att(
         PatientEventBaseDecorator(visit_occurrence),
         PatientEventAttDecorator(visit_occurrence, include_visit_type, exclude_visit_tokens,
                                  att_type),
-        DemographicPromptDecorator(patient_demographic)
+        DemographicPromptDecorator(patient_demographic),
+        DeathEventDecorator(death, att_type)
     ]
 
     for decorator in decorators:

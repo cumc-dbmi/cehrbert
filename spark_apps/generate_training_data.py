@@ -75,23 +75,7 @@ def main(
         F.months_between(F.col('visit_start_date'), F.col('birth_datetime')) / F.lit(12)))
     visit_occurrence_person = visit_occurrence_person.drop('birth_datetime')
 
-    if include_death:
-        death = preprocess_domain_table(spark, input_folder, DEATH)
-        max_visit_occurrence_id = visit_occurrence_person.select(
-            F.max('visit_occurrence_id').alias('max_visit_occurrence_id'),
-            F.max('visit_start_date').alias('max_visit_start_date')
-        )
-        last_visits_for_deceased = visit_occurrence_person \
-            .join(death.select('person_id'), 'person_id') \
-            .crossJoin(max_visit_occurrence_id) \
-            .withColumn('visit_occurrence_id',
-                        F.row_number().over(W.orderBy('person_id')) + F.col('max_visit_occurrence_id')) \
-            .withColumn('visit_start_date', F.date_add(F.col('max_visit_start_date'), 1)) \
-            .withColumn('visit_concept_id', F.lit(1147312)) \
-            .drop('max_visit_occurrence_id', 'max_visit_start_date')
-
-        # Create artificial visits for death records
-        visit_occurrence_person = visit_occurrence_person.unionByName(last_visits_for_deceased)
+    death = preprocess_domain_table(spark, input_folder, DEATH) if include_death else None
 
     patient_events = join_domain_tables(domain_tables)
 
@@ -150,6 +134,7 @@ def main(
             include_visit_type=include_visit_type,
             exclude_visit_tokens=exclude_visit_tokens,
             patient_demographic=person if gpt_patient_sequence else None,
+            death=death,
             att_type=att_type
         )
     else:
