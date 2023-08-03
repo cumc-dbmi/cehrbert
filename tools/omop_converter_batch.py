@@ -187,6 +187,7 @@ def gpt_to_omop_converter_serial(
         DATE_CURSOR = date(int(start_year), 1, 1)
         ATT_DATE_DELTA = 0
         vo = None
+        inpatient_visit_indicator = False
         for idx, x in enumerate(tokens_generated, 0):
             # For bad sequences, we don't proceed further and break from the for loop
             if bad_sequence:
