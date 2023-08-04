@@ -21,7 +21,7 @@ JOIN global_temp.condition_occurrence AS co
 JOIN copd_conditions AS copd
     ON co.condition_concept_id = copd.concept_id
 WHERE v.visit_concept_id IN (9201, 262) --inpatient, er-inpatient
-    AND v.discharge_to_concept_id = 8536 --discharge to home
+    AND v.discharged_to_concept_id = 8536 --discharge to home
     AND v.visit_start_date <= co.condition_start_date
 """
 
