@@ -419,7 +419,6 @@ class DeathEventDecorator(PatientEventDecorator):
 
         last_ve_record.cache()
         last_ve_record.show()
-
         # set(['cohort_member_id', 'person_id', 'standard_concept_id', 'date',
         #      'visit_occurrence_id', 'domain', 'concept_value', 'visit_rank_order',
         #      'visit_segment', 'priority', 'date_in_week', 'concept_value_mask',
@@ -431,7 +430,6 @@ class DeathEventDecorator(PatientEventDecorator):
                         F.row_number().over(W.partitionBy(F.lit(0)).orderBy('person_id')) + F.col(
                             'max_visit_occurrence_id')) \
             .withColumn('standard_concept_id', F.lit('[DEATH]')) \
-            .withColumn('date', F.current_date()) \
             .withColumn('domain', F.lit('death')) \
             .withColumn('visit_rank_order', F.lit(1) + F.col('visit_rank_order')) \
             .withColumn('priority', F.lit(20)) \
