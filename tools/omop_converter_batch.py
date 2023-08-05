@@ -14,13 +14,13 @@ from tqdm import tqdm
 
 from models.gpt_model import generate_artificial_time_tokens
 from omop_entity import Person, VisitOccurrence, ConditionOccurrence, ProcedureOccurrence, \
-    DrugExposure, OmopEntity
+    DrugExposure, Death, OmopEntity
 
 CURRENT_PATH = Path(__file__).parent
 start_token_size = 4
 ATT_TIME_TOKENS = generate_artificial_time_tokens()
 TABLE_LIST = ['person', 'visit_occurrence', 'condition_occurrence', 'procedure_occurrence',
-              'drug_exposure']
+              'drug_exposure', 'death']
 OOV_CONCEPT_MAP = {
     1525734: 'Drug',
     1525543: 'Drug',
@@ -194,20 +194,24 @@ def gpt_to_omop_converter_serial(
                 break
 
             if x == 'VS':
-                try:
-                    visit_concept_id = int(tokens_generated[idx + 1])
-                    inpatient_visit_indicator = visit_concept_id in [9201, 262, 8971, 8920]
-                except (IndexError, ValueError):
-                    error_dict[person_id] = {}
-                    error_dict[person_id]['row'] = ','.join(list(row))
-                    error_dict[person_id]['error'] = 'Wrong visit concept id'
-                    bad_sequence = True
-                    continue
-                DATE_CURSOR = DATE_CURSOR + timedelta(days=ATT_DATE_DELTA)
-                vo = VisitOccurrence(visit_occurrence_id, visit_concept_id, DATE_CURSOR, p)
-                append_to_dict(omop_export_dict, vo, visit_occurrence_id)
-                id_mappings_dict['visit_occurrence'][visit_occurrence_id] = person_id
-                visit_occurrence_id += 1
+                if tokens_generated[idx + 1] == '[DEATH]':
+                    death = Death(person_id, DATE_CURSOR)
+                    append_to_dict(omop_export_dict, death, person_id)
+                else:
+                    try:
+                        visit_concept_id = int(tokens_generated[idx + 1])
+                        inpatient_visit_indicator = visit_concept_id in [9201, 262, 8971, 8920]
+                    except (IndexError, ValueError):
+                        error_dict[person_id] = {}
+                        error_dict[person_id]['row'] = ','.join(list(row))
+                        error_dict[person_id]['error'] = 'Wrong visit concept id'
+                        bad_sequence = True
+                        continue
+                    DATE_CURSOR = DATE_CURSOR + timedelta(days=ATT_DATE_DELTA)
+                    vo = VisitOccurrence(visit_occurrence_id, visit_concept_id, DATE_CURSOR, p)
+                    append_to_dict(omop_export_dict, vo, visit_occurrence_id)
+                    id_mappings_dict['visit_occurrence'][visit_occurrence_id] = person_id
+                    visit_occurrence_id += 1
             elif x in ATT_TIME_TOKENS:
                 if x[0] == 'D':
                     ATT_DATE_DELTA = int(x[1:])

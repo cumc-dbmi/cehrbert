@@ -363,3 +363,40 @@ class ProcedureOccurrence(OmopEntity):
 
     def get_table_name(self):
         return 'procedure_occurrence'
+
+
+class Death(OmopEntity):
+    def __init__(
+            self,
+            person_id,
+            death_date: date
+    ):
+        self._person_id = person_id
+        self._death_date = death_date
+        self._death_datetime = fill_end_datetime(death_date)
+
+    def export_as_json(self):
+        return {
+            'person_id': self._person_id,
+            'death_date': self._death_date,
+            'death_datetime': self._death_datetime,
+            'death_type_concept_id': 0,
+            'cause_concept_id': 0,
+            'cause_source_value': '',
+            'cause_source_concept_id': 0
+        }
+
+    @classmethod
+    def get_schema(cls):
+        return {
+            'person_id': int,
+            'death_date': date,
+            'death_datetime': datetime,
+            'death_type_concept_id': int,
+            'cause_concept_id': int,
+            'cause_source_value': str,
+            'cause_source_concept_id': int
+        }
+
+    def get_table_name(self):
+        return 'death'
