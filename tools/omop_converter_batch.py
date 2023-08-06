@@ -194,7 +194,9 @@ def gpt_to_omop_converter_serial(
                 break
 
             if x == 'VS':
-                if tokens_generated[idx + 1] == '[DEATH]':
+                if idx == len(tokens_generated) - 1:
+                    break
+                elif tokens_generated[idx + 1] == '[DEATH]':
                     death = Death(person_id, DATE_CURSOR)
                     append_to_dict(omop_export_dict, death, person_id)
                 else:
