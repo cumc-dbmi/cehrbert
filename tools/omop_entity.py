@@ -368,16 +368,16 @@ class ProcedureOccurrence(OmopEntity):
 class Death(OmopEntity):
     def __init__(
             self,
-            person_id,
+            person,
             death_date: date
     ):
-        self._person_id = person_id
+        self._person = person
         self._death_date = death_date
         self._death_datetime = fill_end_datetime(death_date)
 
     def export_as_json(self):
         return {
-            'person_id': self._person_id,
+            'person_id': self._person._person_id,
             'death_date': self._death_date,
             'death_datetime': self._death_datetime,
             'death_type_concept_id': 0,
