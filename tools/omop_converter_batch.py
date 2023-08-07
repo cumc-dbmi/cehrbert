@@ -202,8 +202,13 @@ def gpt_to_omop_converter_serial(
                 if idx == len(tokens_generated) - 1:
                     break
                 elif tokens_generated[idx + 1] == '[DEATH]':
+                    # If the [DEATH] token is not placed at the end of the sequence, this is a bad sequence
+                    if idx + 2 != len(tokens_generated) - 1:
+                        bad_sequence = True
+                        break
                     death = Death(p, DATE_CURSOR)
                     append_to_dict(omop_export_dict, death, person_id)
+                    id_mappings_dict['death'][person_id] = person_id
                 else:
                     try:
                         visit_concept_id = int(tokens_generated[idx + 1])
