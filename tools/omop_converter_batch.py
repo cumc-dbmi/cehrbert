@@ -241,7 +241,7 @@ def gpt_to_omop_converter_serial(
                     vo.set_visit_end_date(DATE_CURSOR)
                 else:
                     pass
-            elif x in ['START', start_year, start_age, start_gender, start_race]:
+            elif x in ['START', start_year, start_age, start_gender, start_race, '[DEATH]']:
                 # If it's a start token, skip it
                 pass
             else:
