@@ -11,12 +11,12 @@ FROM
         v.person_id,
         v.visit_occurrence_id,
         v.visit_end_date AS index_date,
-        v.discharge_to_concept_id,
+        v.discharged_to_concept_id,
         ROW_NUMBER() OVER(PARTITION BY v.person_id ORDER BY DATE(v.visit_end_date) DESC) AS rn
     FROM global_temp.visit_occurrence AS v
     WHERE v.visit_concept_id IN (9201, 262) --inpatient, er-inpatient
         AND v.visit_end_date IS NOT NULL
-        AND v.discharge_to_concept_id = 8536 --discharge to home
+        AND v.discharged_to_concept_id = 8536 --discharge to home
 ) AS v
     WHERE v.rn = 1 AND v.index_date >= '{date_lower_bound}'
 """
