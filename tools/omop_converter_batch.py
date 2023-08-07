@@ -13,6 +13,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from models.gpt_model import generate_artificial_time_tokens
+from data_generators.tokenizer import ConceptTokenizer
 from omop_entity import Person, VisitOccurrence, ConditionOccurrence, ProcedureOccurrence, \
     DrugExposure, Death, OmopEntity
 
@@ -188,11 +189,15 @@ def gpt_to_omop_converter_serial(
         ATT_DATE_DELTA = 0
         vo = None
         inpatient_visit_indicator = False
+
+        # Skip the patients whose last token is not a valid end token
+        if tokens_generated[-1] not in [ConceptTokenizer.end_token, ConceptTokenizer.visit_end_token]:
+            continue
+
         for idx, x in enumerate(tokens_generated, 0):
             # For bad sequences, we don't proceed further and break from the for loop
             if bad_sequence:
                 break
-
             if x == 'VS':
                 if idx == len(tokens_generated) - 1:
                     break
