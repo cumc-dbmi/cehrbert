@@ -19,7 +19,7 @@ from omop_entity import Person, VisitOccurrence, ConditionOccurrence, ProcedureO
     DrugExposure, Death, OmopEntity
 
 CURRENT_PATH = Path(__file__).parent
-start_token_size = 5
+START_TOKEN_SIZE = 5
 ATT_TIME_TOKENS = generate_artificial_time_tokens()
 TABLE_LIST = ['person', 'visit_occurrence', 'condition_occurrence', 'procedure_occurrence',
               'drug_exposure', 'death']
@@ -33,7 +33,7 @@ OOV_CONCEPT_MAP = {
     905420: 'Drug',
     1525543: 'Drug'
 }
-span_att_expr = re.compile('VS\-D\d+\-VE', re.IGNORECASE)
+SPAN_ATT_EXPR = re.compile('VS\-D\d+\-VE', re.IGNORECASE)
 
 
 def create_folder_if_not_exists(output_folder, table_name):
@@ -167,9 +167,9 @@ def gpt_to_omop_converter_serial(
                 row = row[1:]
             else:
                 row = row[0:]
-        tokens_generated = row[start_token_size:]
+        tokens_generated = row[START_TOKEN_SIZE:]
         # TODO:Need to decode if the input is tokenized
-        start_tokens = row[0:start_token_size]
+        start_tokens = row[0:START_TOKEN_SIZE]
         [start_year, start_month, start_age, start_gender, start_race] = [_ for _ in start_tokens]
         if 'year' not in start_year.lower():
             continue
@@ -184,10 +184,10 @@ def gpt_to_omop_converter_serial(
 
         pt_seq_dict[person_id] = ' '.join(row)
         discharged_to_concept_id = 0
-        DATE_CURSOR = date(int(start_year), int(start_month), 1) + timedelta(days=random.randint(0, 30))
+        data_cursor = date(int(start_year), int(start_month), 1) + timedelta(days=random.randint(0, 29))
         birth_date = date(int(start_year), int(start_month), 1) - timedelta(
             days=int(start_age) * 365 + random.randint(0, 365))
-        ATT_DATE_DELTA = 0
+        att_date_delta = 0
         vo = None
         inpatient_visit_indicator = False
 
@@ -211,7 +211,7 @@ def gpt_to_omop_converter_serial(
                     if idx + 2 != len(tokens_generated) - 1:
                         bad_sequence = True
                         break
-                    death = Death(p, DATE_CURSOR)
+                    death = Death(p, data_cursor)
                     append_to_dict(omop_export_dict, death, person_id)
                     id_mappings_dict['death'][person_id] = person_id
                 else:
@@ -224,23 +224,23 @@ def gpt_to_omop_converter_serial(
                         error_dict[person_id]['error'] = 'Wrong visit concept id'
                         bad_sequence = True
                         continue
-                    DATE_CURSOR = DATE_CURSOR + timedelta(days=ATT_DATE_DELTA)
-                    vo = VisitOccurrence(visit_occurrence_id, visit_concept_id, DATE_CURSOR, p)
+                    data_cursor = data_cursor + timedelta(days=att_date_delta)
+                    vo = VisitOccurrence(visit_occurrence_id, visit_concept_id, data_cursor, p)
                     append_to_dict(omop_export_dict, vo, visit_occurrence_id)
                     id_mappings_dict['visit_occurrence'][visit_occurrence_id] = person_id
                     visit_occurrence_id += 1
             elif x in ATT_TIME_TOKENS:
                 if x[0] == 'D':
-                    ATT_DATE_DELTA = int(x[1:])
+                    att_date_delta = int(x[1:])
                 elif x[0] == 'W':
-                    ATT_DATE_DELTA = int(x[1:]) * 7
+                    att_date_delta = int(x[1:]) * 7
                 elif x[0] == 'M':
-                    ATT_DATE_DELTA = int(x[1:]) * 30
+                    att_date_delta = int(x[1:]) * 30
                 elif x == 'LT':
-                    ATT_DATE_DELTA = 365 * 3
-            elif inpatient_visit_indicator and span_att_expr.match(x):
+                    att_date_delta = 365 * 3
+            elif inpatient_visit_indicator and SPAN_ATT_EXPR.match(x):
                 # VS\-D\d+\-VE\
-                DATE_CURSOR = DATE_CURSOR + timedelta(days=int(x.split('-')[1][1:]))
+                data_cursor = data_cursor + timedelta(days=int(x.split('-')[1][1:]))
             elif x == 'VE':
                 if vo is None:
                     bad_sequence = True
@@ -248,7 +248,7 @@ def gpt_to_omop_converter_serial(
                 # If it's a VE token, nothing needs to be updated because it just means the visit ended
                 if inpatient_visit_indicator:
                     vo.set_discharged_to_concept_id(discharged_to_concept_id)
-                    vo.set_visit_end_date(DATE_CURSOR)
+                    vo.set_visit_end_date(data_cursor)
                 else:
                     pass
             elif x in ['START', start_year, start_age, start_gender, start_race, '[DEATH]']:
@@ -272,19 +272,19 @@ def gpt_to_omop_converter_serial(
                             domain = None
 
                         if domain == 'Condition':
-                            co = ConditionOccurrence(condition_occurrence_id, x, vo, DATE_CURSOR)
+                            co = ConditionOccurrence(condition_occurrence_id, x, vo, data_cursor)
                             append_to_dict(omop_export_dict, co, condition_occurrence_id)
                             id_mappings_dict['condition_occurrence'][
                                 condition_occurrence_id] = person_id
                             condition_occurrence_id += 1
                         elif domain == 'Procedure':
-                            po = ProcedureOccurrence(procedure_occurrence_id, x, vo, DATE_CURSOR)
+                            po = ProcedureOccurrence(procedure_occurrence_id, x, vo, data_cursor)
                             append_to_dict(omop_export_dict, po, procedure_occurrence_id)
                             id_mappings_dict['procedure_occurrence'][
                                 procedure_occurrence_id] = person_id
                             procedure_occurrence_id += 1
                         elif domain == 'Drug':
-                            de = DrugExposure(drug_exposure_id, x, vo, DATE_CURSOR)
+                            de = DrugExposure(drug_exposure_id, x, vo, data_cursor)
                             append_to_dict(omop_export_dict, de, drug_exposure_id)
                             id_mappings_dict['drug_exposure'][drug_exposure_id] = person_id
                             drug_exposure_id += 1
