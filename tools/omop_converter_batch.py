@@ -1,6 +1,7 @@
 import argparse
 import datetime
 import os
+import random
 import re
 import uuid
 from datetime import date, timedelta
@@ -181,15 +182,17 @@ def gpt_to_omop_converter_serial(
         if int(birth_year) < 1900 or int(birth_year) > datetime.date.today().year:
             continue
 
-        p = Person(person_id, start_gender, birth_year, start_race)
-        append_to_dict(omop_export_dict, p, person_id)
-        id_mappings_dict['person'][person_id] = person_id
         pt_seq_dict[person_id] = ' '.join(row)
         discharged_to_concept_id = 0
         DATE_CURSOR = date(int(start_year), int(start_month), 1)
+        birth_date = DATE_CURSOR - timedelta(days=int(start_age) * 365 + random.randint(0, 365))
         ATT_DATE_DELTA = 0
         vo = None
         inpatient_visit_indicator = False
+
+        p = Person(person_id, start_gender, birth_date, start_race)
+        append_to_dict(omop_export_dict, p, person_id)
+        id_mappings_dict['person'][person_id] = person_id
 
         # Skip the patients whose last token is not a valid end token
         if tokens_generated[-1] not in [ConceptTokenizer.end_token, ConceptTokenizer.visit_end_token]:
