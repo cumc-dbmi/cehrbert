@@ -184,8 +184,9 @@ def gpt_to_omop_converter_serial(
 
         pt_seq_dict[person_id] = ' '.join(row)
         discharged_to_concept_id = 0
-        DATE_CURSOR = date(int(start_year), int(start_month), 1)
-        birth_date = DATE_CURSOR - timedelta(days=int(start_age) * 365 + random.randint(0, 365))
+        DATE_CURSOR = date(int(start_year), int(start_month), 1) + timedelta(days=random.randint(0, 30))
+        birth_date = date(int(start_year), int(start_month), 1) - timedelta(
+            days=int(start_age) * 365 + random.randint(0, 365))
         ATT_DATE_DELTA = 0
         vo = None
         inpatient_visit_indicator = False
