@@ -339,13 +339,17 @@ class DemographicPromptDecorator(
         sequence_start_year_token = patient_first_token \
             .withColumn('standard_concept_id',
                         F.concat(F.lit('year:'), F.year('date').cast(T.StringType()))) \
-            .withColumn('priority', F.lit(-10)) \
+            .withColumn('priority', F.lit(-11)) \
             .withColumn('visit_segment', F.lit(0)) \
             .withColumn('date_in_week', F.lit(0)) \
             .withColumn('age', F.lit(-1)) \
             .withColumn('visit_rank_order', F.lit(0))
 
         sequence_start_year_token.cache()
+
+        sequence_start_month_token = sequence_start_year_token \
+            .withColumn('standard_concept_id', F.concat(F.lit('month:'), F.month('date').cast(T.StringType()))) \
+            .withColumn('priority', F.lit(-10))
 
         age_at_first_visit_udf = F.ceil(
             F.months_between(F.col('date'), F.col('birth_datetime')) / F.lit(12)
@@ -384,6 +388,7 @@ class DemographicPromptDecorator(
         ).withColumn('priority', F.lit(-7)).drop('race_concept_id')
 
         patient_events = patient_events.unionByName(sequence_start_year_token)
+        patient_events = patient_events.unionByName(sequence_start_month_token)
         patient_events = patient_events.unionByName(sequence_age_token)
         patient_events = patient_events.unionByName(sequence_gender_token)
         patient_events = patient_events.unionByName(sequence_race_token)

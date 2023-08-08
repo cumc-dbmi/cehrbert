@@ -18,7 +18,7 @@ from omop_entity import Person, VisitOccurrence, ConditionOccurrence, ProcedureO
     DrugExposure, Death, OmopEntity
 
 CURRENT_PATH = Path(__file__).parent
-start_token_size = 4
+start_token_size = 5
 ATT_TIME_TOKENS = generate_artificial_time_tokens()
 TABLE_LIST = ['person', 'visit_occurrence', 'condition_occurrence', 'procedure_occurrence',
               'drug_exposure', 'death']
@@ -169,10 +169,11 @@ def gpt_to_omop_converter_serial(
         tokens_generated = row[start_token_size:]
         # TODO:Need to decode if the input is tokenized
         start_tokens = row[0:start_token_size]
-        [start_year, start_age, start_gender, start_race] = [_ for _ in start_tokens]
+        [start_year, start_month, start_age, start_gender, start_race] = [_ for _ in start_tokens]
         if 'year' not in start_year.lower():
             continue
         start_year = start_year.split(':')[1]
+        start_month = start_month.split(':')[1]
         start_age = start_age.split(':')[1]
         birth_year = int(start_year) - int(start_age)
 
@@ -185,7 +186,7 @@ def gpt_to_omop_converter_serial(
         id_mappings_dict['person'][person_id] = person_id
         pt_seq_dict[person_id] = ' '.join(row)
         discharged_to_concept_id = 0
-        DATE_CURSOR = date(int(start_year), 1, 1)
+        DATE_CURSOR = date(int(start_year), int(start_month), 1)
         ATT_DATE_DELTA = 0
         vo = None
         inpatient_visit_indicator = False
