@@ -466,12 +466,14 @@ def create_sequence_data_with_att(
     for decorator in decorators:
         patient_events = decorator.decorate(patient_events)
 
+    # add randomness to the order of the concepts that have the same time stamp
     order_udf = F.row_number().over(
         W.partitionBy('cohort_member_id', 'person_id').orderBy(
             'visit_start_date',
             'visit_occurrence_id',
             'priority',
-            'date_in_week',
+            'date',
+            F.rand(),
             'standard_concept_id')
     )
 
