@@ -473,7 +473,6 @@ def create_sequence_data_with_att(
             'visit_occurrence_id',
             'priority',
             'date',
-            F.rand(),
             'standard_concept_id')
     )
 
