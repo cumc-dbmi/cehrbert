@@ -23,6 +23,7 @@ START_TOKEN_SIZE = 5
 ATT_TIME_TOKENS = generate_artificial_time_tokens()
 TABLE_LIST = ['person', 'visit_occurrence', 'condition_occurrence', 'procedure_occurrence',
               'drug_exposure', 'death']
+DISCHARGE_CONCEPT_LIST = [4216643, 4021968, 4146681]
 OOV_CONCEPT_MAP = {
     1525734: 'Drug',
     1525543: 'Drug',
@@ -183,12 +184,12 @@ def gpt_to_omop_converter_serial(
             continue
 
         pt_seq_dict[person_id] = ' '.join(row)
-        discharged_to_concept_id = 0
         data_cursor = date(int(start_year), int(start_month), 1) + timedelta(days=random.randint(0, 29))
         birth_date = date(int(start_year), int(start_month), 1) - timedelta(
             days=int(start_age) * 365 + random.randint(0, 365))
         att_date_delta = 0
         vo = None
+        discharged_to_concept_id = 0
         inpatient_visit_indicator = False
 
         p = Person(person_id, start_gender, birth_date, start_race)
@@ -246,9 +247,17 @@ def gpt_to_omop_converter_serial(
                     bad_sequence = True
                     break
                 # If it's a VE token, nothing needs to be updated because it just means the visit ended
-                if inpatient_visit_indicator:
+                if discharged_to_concept_id:
                     vo.set_discharged_to_concept_id(discharged_to_concept_id)
                     vo.set_visit_end_date(data_cursor)
+
+                    # if the discharged_to_concept_id patient had died, the death record is created
+                    if discharged_to_concept_id == 4216643:
+                        death = Death(p, data_cursor, death_type_concept_id=32823)
+                        append_to_dict(omop_export_dict, death, person_id)
+                        id_mappings_dict['death'][person_id] = person_id
+                        # If death record is generated, we need to stop the sequence conversion
+                        break
                 else:
                     pass
             elif x in ['START', start_year, start_age, start_gender, start_race, '[DEATH]']:
@@ -288,7 +297,7 @@ def gpt_to_omop_converter_serial(
                             append_to_dict(omop_export_dict, de, drug_exposure_id)
                             id_mappings_dict['drug_exposure'][drug_exposure_id] = person_id
                             drug_exposure_id += 1
-                        elif domain == 'Visit':
+                        elif domain == 'Visit' or concept_id in DISCHARGE_CONCEPT_LIST:
                             discharged_to_concept_id = concept_id
 
                 except ValueError:

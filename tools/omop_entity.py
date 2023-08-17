@@ -369,18 +369,20 @@ class Death(OmopEntity):
     def __init__(
             self,
             person,
-            death_date: date
+            death_date: date,
+            death_type_concept_id=0,
     ):
         self._person = person
         self._death_date = death_date
         self._death_datetime = fill_end_datetime(death_date)
+        self._death_type_concept_id = death_type_concept_id
 
     def export_as_json(self):
         return {
             'person_id': self._person._person_id,
             'death_date': self._death_date,
             'death_datetime': self._death_datetime,
-            'death_type_concept_id': 0,
+            'death_type_concept_id': self._death_type_concept_id,
             'cause_concept_id': 0,
             'cause_source_value': '',
             'cause_source_concept_id': 0
