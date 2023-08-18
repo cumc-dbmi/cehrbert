@@ -44,8 +44,16 @@ def upload_omop_tables(
     df = sqlContext.read.format('parquet').load(str(domain_table_folder)+'/')
     df = df.filter(f.col(omop_timestamp_dict[domain_table_folder.name]) > f.unix_timestamp(f.lit('1900-01-01 00:00:00')).cast('timestamp'))
     df = df.filter(f.col(omop_timestamp_dict[domain_table_folder.name]) < f.unix_timestamp(f.lit('9999-01-01 00:00:00')).cast('timestamp'))
-    if domain_table_folder.name == 'person':
-        df = df.withColumn("birth_datetime", df["birth_datetime"].cast("string"))
+    
+    # cast the concept id columns to integer type
+    for column in df.columns:
+        if 'concept_id' in column:
+            df = df.withColumn(column, f.col(column).cast('integer'))
+        if 'date' in column:
+            df = df.withColumn(column, f.col(column).cast('date'))
+
+    #if domain_table_folder.name == 'person':
+    #    df = df.withColumn("birth_datetime", df["birth_datetime"].cast("string"))
     df.repartition(10).write.format('jdbc').options(
       url=db_properties['base_url'],
       dbtable=f"{domain_table_folder.name}",
