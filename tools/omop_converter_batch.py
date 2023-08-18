@@ -1,7 +1,6 @@
 import argparse
 import datetime
 import os
-import random
 import re
 import uuid
 from datetime import date, timedelta
@@ -19,7 +18,7 @@ from omop_entity import Person, VisitOccurrence, ConditionOccurrence, ProcedureO
     DrugExposure, Death, OmopEntity
 
 CURRENT_PATH = Path(__file__).parent
-START_TOKEN_SIZE = 5
+START_TOKEN_SIZE = 4
 ATT_TIME_TOKENS = generate_artificial_time_tokens()
 TABLE_LIST = ['person', 'visit_occurrence', 'condition_occurrence', 'procedure_occurrence',
               'drug_exposure', 'death']
@@ -171,11 +170,10 @@ def gpt_to_omop_converter_serial(
         tokens_generated = row[START_TOKEN_SIZE:]
         # TODO:Need to decode if the input is tokenized
         start_tokens = row[0:START_TOKEN_SIZE]
-        [start_year, start_month, start_age, start_gender, start_race] = [_ for _ in start_tokens]
+        [start_year, start_age, start_gender, start_race] = [_ for _ in start_tokens]
         if 'year' not in start_year.lower():
             continue
         start_year = start_year.split(':')[1]
-        start_month = start_month.split(':')[1]
         start_age = start_age.split(':')[1]
         birth_year = int(start_year) - int(start_age)
 
@@ -183,18 +181,15 @@ def gpt_to_omop_converter_serial(
         if int(birth_year) < 1900 or int(birth_year) > datetime.date.today().year:
             continue
 
-        pt_seq_dict[person_id] = ' '.join(row)
-        data_cursor = date(int(start_year), int(start_month), 1) + timedelta(days=random.randint(0, 29))
-        birth_date = date(int(start_year), int(start_month), 1) - timedelta(
-            days=int(start_age) * 365 + random.randint(0, 365))
-        att_date_delta = 0
-        vo = None
-        discharged_to_concept_id = 0
-        inpatient_visit_indicator = False
-
-        p = Person(person_id, start_gender, birth_date, start_race)
+        p = Person(person_id, start_gender, birth_year, start_race)
         append_to_dict(omop_export_dict, p, person_id)
         id_mappings_dict['person'][person_id] = person_id
+        pt_seq_dict[person_id] = ' '.join(row)
+        discharged_to_concept_id = 0
+        data_cursor = date(int(start_year), 1, 1)
+        att_date_delta = 0
+        vo = None
+        inpatient_visit_indicator = False
 
         # Skip the patients whose last token is not a valid end token
         if tokens_generated[-1] not in [ConceptTokenizer.end_token, ConceptTokenizer.visit_end_token]:

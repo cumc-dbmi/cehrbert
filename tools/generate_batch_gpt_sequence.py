@@ -69,8 +69,7 @@ def main(
     data = pd.read_parquet(
         args.demographic_data_path
     )
-    # Demographic prompt ['year:2008', 'month:5', 'age:38', '8532', '8527']
-    demographic_info = data.concept_ids.apply(lambda concept_list: concept_list[0:5])
+    demographic_info = data.concept_ids.apply(lambda concept_list: concept_list[0:4])
     demographic_info = tokenizer.encode(map(list, demographic_info))
 
     num_of_batches = args.num_of_patients // args.batch_size + 1

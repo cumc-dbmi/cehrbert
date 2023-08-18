@@ -80,8 +80,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
                 self._concept_map[str(t.concept_id)] = t.concept_name
 
         print(f'Extracting demographic prompts from the training data')
-        # Demographic prompt ['year:2008', 'month:5', 'age:38', '8532', '8527']
-        demographic_info = self._training_data.concept_ids.apply(lambda concept_list: concept_list[0:5])
+        demographic_info = self._training_data.concept_ids.apply(lambda concept_list: concept_list[0:4])
         self._demographic_info = self._tokenizer.encode(map(list, demographic_info))
 
     def create_data_generator(self) -> GptDataGenerator:
