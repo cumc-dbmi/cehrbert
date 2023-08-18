@@ -168,6 +168,15 @@ def gpt_to_omop_converter_serial(
             else:
                 row = row[0:]
         tokens_generated = row[START_TOKEN_SIZE:]
+
+        # Skip the sequences whose sequence length is 0
+        if len(tokens_generated) == 0:
+            continue
+
+        # Skip the patients whose last token is not a valid end token
+        if tokens_generated[-1] not in [ConceptTokenizer.end_token, ConceptTokenizer.visit_end_token]:
+            continue
+
         # TODO:Need to decode if the input is tokenized
         start_tokens = row[0:START_TOKEN_SIZE]
         [start_year, start_age, start_gender, start_race] = [_ for _ in start_tokens]
@@ -191,10 +200,6 @@ def gpt_to_omop_converter_serial(
         vo = None
         inpatient_visit_indicator = False
 
-        # Skip the patients whose last token is not a valid end token
-        if tokens_generated[-1] not in [ConceptTokenizer.end_token, ConceptTokenizer.visit_end_token]:
-            continue
-
         for idx, x in enumerate(tokens_generated, 0):
             # For bad sequences, we don't proceed further and break from the for loop
             if bad_sequence:
@@ -214,6 +219,14 @@ def gpt_to_omop_converter_serial(
                     try:
                         visit_concept_id = int(tokens_generated[idx + 1])
                         inpatient_visit_indicator = visit_concept_id in [9201, 262, 8971, 8920]
+                        if visit_concept_id in domain_map:
+                            if domain_map[visit_concept_id] != 'Visit':
+                                bad_sequence = True
+                                break
+                        else:
+                            bad_sequence = True
+                            break
+
                     except (IndexError, ValueError):
                         error_dict[person_id] = {}
                         error_dict[person_id]['row'] = ','.join(list(row))

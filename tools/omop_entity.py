@@ -34,22 +34,22 @@ class Person(OmopEntity):
             self,
             person_id,
             gender_concept_id,
-            birth_date,
+            year_of_birth,
             race_concept_id
     ):
         self._person_id = person_id
         self._gender_concept_id = gender_concept_id
+        self._year_of_birth = year_of_birth
         self._race_concept_id = race_concept_id
-        self._birth_date = birth_date
 
     def export_as_json(self):
         return {
             'person_id': self._person_id,
             'gender_concept_id': self._gender_concept_id,
-            'year_of_birth': self._birth_date.year,
-            'month_of_birth': self._birth_date.month,
-            'day_of_birth': self._birth_date.day,
-            'birth_datetime': fill_start_datetime(self._birth_date),
+            'year_of_birth': self._year_of_birth,
+            'month_of_birth': 1,
+            'day_of_birth': 1,
+            'birth_datetime': fill_datetime(self._year_of_birth),
             'race_concept_id': self._race_concept_id,
             'ethnicity_concept_id': 0,
             'location_id': 0,
