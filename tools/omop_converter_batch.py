@@ -220,7 +220,7 @@ def gpt_to_omop_converter_serial(
                         visit_concept_id = int(tokens_generated[idx + 1])
                         inpatient_visit_indicator = visit_concept_id in [9201, 262, 8971, 8920]
                         if visit_concept_id in domain_map:
-                            if domain_map[visit_concept_id] != 'Visit':
+                            if domain_map[visit_concept_id] != 'Visit' and visit_concept_id != 0:
                                 bad_sequence = True
                                 break
                         else:
