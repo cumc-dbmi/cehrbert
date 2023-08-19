@@ -233,6 +233,11 @@ def create_parse_args_gpt():
         default=256,
         required=False
     )
+    parser.add_argument(
+        '--including_long_sequence',
+        dest='including_long_sequence',
+        action='store_true'
+    )
     return parser
 
 
