@@ -281,6 +281,24 @@ def gpt_to_omop_converter_serial(
                         bad_sequence = True
                         continue
                     else:
+                        # If the current concept_id is 'Patient Died', this means it can only occur in the
+                        # discharged_to_concept_id field, which indicates the current visit has to be an inpatient
+                        # visit, this concept_id can only appear at the second last position
+                        if concept_id == 4216643:
+                            # If the current visit is not inpatient, reject the sequence
+                            if not inpatient_visit_indicator:
+                                bad_sequence = True
+                                continue
+                            # If the current token is not the second last one of the sequence, reject because
+                            # death can only appear at the end of the sequence
+                            if idx + 1 != len(tokens_generated) - 1:
+                                bad_sequence = True
+                                continue
+                            # we also enforce the rule where the sequence has to end on a VE token
+                            elif tokens_generated[idx + 1] != 'VE':
+                                bad_sequence = True
+                                continue
+
                         if concept_id in domain_map:
                             domain = domain_map[concept_id]
                         elif concept_id in OOV_CONCEPT_MAP:
@@ -288,7 +306,9 @@ def gpt_to_omop_converter_serial(
                         else:
                             domain = None
 
-                        if domain == 'Condition':
+                        if domain == 'Visit' or concept_id in DISCHARGE_CONCEPT_LIST:
+                            discharged_to_concept_id = concept_id
+                        elif domain == 'Condition':
                             co = ConditionOccurrence(condition_occurrence_id, x, vo, data_cursor)
                             append_to_dict(omop_export_dict, co, condition_occurrence_id)
                             id_mappings_dict['condition_occurrence'][
@@ -305,8 +325,6 @@ def gpt_to_omop_converter_serial(
                             append_to_dict(omop_export_dict, de, drug_exposure_id)
                             id_mappings_dict['drug_exposure'][drug_exposure_id] = person_id
                             drug_exposure_id += 1
-                        elif domain == 'Visit' or concept_id in DISCHARGE_CONCEPT_LIST:
-                            discharged_to_concept_id = concept_id
 
                 except ValueError:
                     error_dict[person_id] = {}
