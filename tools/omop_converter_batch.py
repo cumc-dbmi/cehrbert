@@ -264,8 +264,6 @@ def gpt_to_omop_converter_serial(
                         death = Death(p, data_cursor, death_type_concept_id=32823)
                         append_to_dict(omop_export_dict, death, person_id)
                         id_mappings_dict['death'][person_id] = person_id
-                        # If death record is generated, we need to stop the sequence conversion
-                        break
                 else:
                     pass
             elif x in ['START', start_year, start_age, start_gender, start_race, '[DEATH]']:
@@ -281,20 +279,6 @@ def gpt_to_omop_converter_serial(
                         bad_sequence = True
                         continue
                     else:
-                        # If the current concept_id is 'Patient Died', this means it can only occur in the
-                        # discharged_to_concept_id field, which indicates the current visit has to be an inpatient
-                        # visit, this concept_id can only appear at the second last position
-                        if concept_id == 4216643:
-                            # If the current visit is not inpatient, reject the sequence
-                            if not inpatient_visit_indicator:
-                                bad_sequence = True
-                                continue
-
-                            # If 'Patient Died' appeared in the middle of the sequence, then this is a bad sequence
-                            if idx + 1 < len(tokens_generated) and tokens_generated[idx + 1] != 'VE':
-                                bad_sequence = True
-                                continue
-
                         if concept_id in domain_map:
                             domain = domain_map[concept_id]
                         elif concept_id in OOV_CONCEPT_MAP:
@@ -302,9 +286,17 @@ def gpt_to_omop_converter_serial(
                         else:
                             domain = None
 
-                        if domain == 'Visit' or concept_id in DISCHARGE_CONCEPT_LIST:
+                        if domain == 'Visit':
                             discharged_to_concept_id = concept_id
-                        elif domain == 'Condition':
+                            continue
+                        # If the current concept_id is 'Patient Died', this means it can only occur in the
+                        # discharged_to_concept_id field, which indicates the current visit has to be an inpatient
+                        # visit, this concept_id can only appear at the second last position
+                        if concept_id == 4216643 and inpatient_visit_indicator:
+                            discharged_to_concept_id = concept_id
+                            continue
+
+                        if domain == 'Condition':
                             co = ConditionOccurrence(condition_occurrence_id, x, vo, data_cursor)
                             append_to_dict(omop_export_dict, co, condition_occurrence_id)
                             id_mappings_dict['condition_occurrence'][
