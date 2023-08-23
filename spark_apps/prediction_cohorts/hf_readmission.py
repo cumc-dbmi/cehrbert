@@ -1,6 +1,6 @@
-from spark_apps.spark_parse_args import create_spark_args
-from spark_apps.cohorts.spark_app_base import create_prediction_cohort
 from spark_apps.cohorts.query_builder import QueryBuilder, QuerySpec
+from spark_apps.cohorts.spark_app_base import create_prediction_cohort
+from spark_apps.spark_parse_args import create_spark_args
 
 HEART_FAILURE_HOSPITALIZATION_QUERY = """
 WITH hf_concepts AS (
@@ -19,7 +19,7 @@ JOIN global_temp.condition_occurrence AS co
     ON v.visit_occurrence_id = co.visit_occurrence_id
 JOIN hf_concepts AS hf
     ON co.condition_concept_id = hf.concept_id
-WHERE v.visit_concept_id IN (9201, 262) --inpatient, er-inpatient
+WHERE v.visit_concept_id IN (9201, 262, 8971, 8920) --inpatient, er-inpatient
     AND v.discharged_to_concept_id NOT IN (4216643, 44814650, 8717, 8970, 8971) -- TBD
     --AND v.discharge_to_concept_id IN (8536, 8863, 4161979) -- Home, Skilled Nursing Facility, and Patient discharged alive
     AND v.visit_start_date <= co.condition_start_date
@@ -32,7 +32,7 @@ SELECT DISTINCT
     v.visit_occurrence_id,
     v.visit_start_date AS index_date
 FROM global_temp.visit_occurrence AS v
-WHERE v.visit_concept_id IN (9201, 262) --inpatient, er-inpatient
+WHERE v.visit_concept_id IN (9201, 262, 8971, 8920) --inpatient, er-inpatient
 """
 
 HF_HOSPITALIZATION_COHORT = 'hf_hospitalization'

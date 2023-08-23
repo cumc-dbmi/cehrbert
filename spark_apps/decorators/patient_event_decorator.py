@@ -77,16 +77,21 @@ class PatientEventBaseDecorator(
 
         # Add visit_start_date to the patient_events dataframe and create the visit rank
         visit_rank_udf = F.row_number().over(
-            W.partitionBy('person_id').orderBy('visit_start_date', 'visit_occurrence_id')
+            W.partitionBy('person_id').orderBy(
+                'visit_start_date', 'is_inpatient', 'expired', 'visit_occurrence_id'
+            )
         )
         visit_segment_udf = F.col('visit_rank_order') % F.lit(2) + 1
         visits = self._visit_occurrence.join(valid_visit_ids, 'visit_occurrence_id').select(
             'visit_occurrence_id',
             F.col('visit_start_date').cast(T.DateType()).alias('visit_start_date'),
-            'person_id'
+            'person_id',
+            F.col('visit_concept_id').cast('int').isin([9201, 262, 8971, 8920]).cast('int').alias('is_inpatient'),
+            F.when(F.col('discharged_to_concept_id').cast('int') == 4216643, F.lit(1)).otherwise(F.lit(0)).alias(
+                'expired')
         ).withColumn('visit_rank_order', visit_rank_udf) \
             .withColumn('visit_segment', visit_segment_udf) \
-            .drop('person_id')
+            .drop('person_id', 'is_inpatient', 'expired')
 
         # Add visit_rank_order, and visit_segment to patient_events
         patient_events = patient_events.join(visits, 'visit_occurrence_id')
@@ -138,7 +143,9 @@ class PatientEventAttDecorator(PatientEventDecorator):
 
         # Add visit_rank and visit_segment to the visits dataframe and create the visit rank
         visit_rank_udf = F.row_number().over(
-            W.partitionBy('person_id').orderBy('visit_start_date', 'visit_occurrence_id')
+            W.partitionBy('person_id').orderBy(
+                'visit_start_date', 'is_inpatient', 'expired', 'visit_occurrence_id'
+            )
         )
         visit_segment_udf = F.col('visit_rank_order') % F.lit(2) + 1
         visit_occurrence = self._visit_occurrence.select(
@@ -153,7 +160,10 @@ class PatientEventAttDecorator(PatientEventDecorator):
             F.lit(0).alias('concept_value_mask'),
             F.lit(0).alias('mlm_skip_value'),
             'age',
-            'discharged_to_concept_id'
+            'discharged_to_concept_id',
+            F.col('visit_concept_id').cast('int').isin([9201, 262, 8971, 8920]).cast('int').alias('is_inpatient'),
+            F.when(F.col('discharged_to_concept_id').cast('int') == 4216643, F.lit(1)).otherwise(F.lit(0)).alias(
+                'expired')
         ).join(valid_visit_ids, 'visit_occurrence_id') \
             .join(cohort_member_person_pair, 'person_id')
 
@@ -161,7 +171,8 @@ class PatientEventAttDecorator(PatientEventDecorator):
         visit_occurrence = visit_occurrence \
             .withColumn('visit_rank_order', visit_rank_udf) \
             .withColumn('visit_segment', visit_segment_udf) \
-            .withColumn('date_in_week', weeks_since_epoch_udf)
+            .withColumn('date_in_week', weeks_since_epoch_udf) \
+            .drop('is_inpatient', 'expired')
         visit_occurrence.cache()
 
         visits = visit_occurrence.drop('discharged_to_concept_id', 'visit_end_date')
