@@ -201,7 +201,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
         visit_end_events = visits \
             .withColumn('date', F.col('visit_end_date')) \
             .withColumn('standard_concept_id', F.lit('VE')) \
-            .withColumn('priority', F.lit(2))
+            .withColumn('priority', F.lit(10))
 
         # Get the prev days_since_epoch
         prev_visit_end_date_udf = F.lag('visit_end_date').over(
