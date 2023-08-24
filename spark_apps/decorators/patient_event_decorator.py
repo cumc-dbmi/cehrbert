@@ -78,20 +78,21 @@ class PatientEventBaseDecorator(
         # Add visit_start_date to the patient_events dataframe and create the visit rank
         visit_rank_udf = F.row_number().over(
             W.partitionBy('person_id').orderBy(
-                'visit_start_date', 'is_inpatient', 'expired', 'visit_occurrence_id'
+                'visit_start_datetime', 'is_inpatient', 'expired', 'visit_occurrence_id'
             )
         )
         visit_segment_udf = F.col('visit_rank_order') % F.lit(2) + 1
         visits = self._visit_occurrence.join(valid_visit_ids, 'visit_occurrence_id').select(
             'visit_occurrence_id',
             F.col('visit_start_date').cast(T.DateType()).alias('visit_start_date'),
+            F.col('visit_start_datetime').cast(T.TimestampType()).alias('visit_start_datetime'),
             'person_id',
             F.col('visit_concept_id').cast('int').isin([9201, 262, 8971, 8920]).cast('int').alias('is_inpatient'),
             F.when(F.col('discharged_to_concept_id').cast('int') == 4216643, F.lit(1)).otherwise(F.lit(0)).alias(
                 'expired')
         ).withColumn('visit_rank_order', visit_rank_udf) \
             .withColumn('visit_segment', visit_segment_udf) \
-            .drop('person_id', 'is_inpatient', 'expired')
+            .drop('person_id', 'is_inpatient', 'expired', 'visit_start_datetime')
 
         # Add visit_rank_order, and visit_segment to patient_events
         patient_events = patient_events.join(visits, 'visit_occurrence_id')
@@ -144,7 +145,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
         # Add visit_rank and visit_segment to the visits dataframe and create the visit rank
         visit_rank_udf = F.row_number().over(
             W.partitionBy('person_id').orderBy(
-                'visit_start_date', 'is_inpatient', 'expired', 'visit_occurrence_id'
+                'visit_start_datetime', 'is_inpatient', 'expired', 'visit_occurrence_id'
             )
         )
         visit_segment_udf = F.col('visit_rank_order') % F.lit(2) + 1
@@ -152,7 +153,8 @@ class PatientEventAttDecorator(PatientEventDecorator):
             'person_id',
             F.col('visit_start_date').cast(T.DateType()).alias('date'),
             F.col('visit_start_date').cast(T.DateType()).alias('visit_start_date'),
-            F.col('visit_end_date').cast(T.DateType()).alias('visit_end_date'),
+            F.col('visit_start_datetime').cast(T.TimestampType()).alias('visit_start_datetime'),
+            F.coalesce('visit_end_date', 'visit_start_date').cast(T.DateType()).alias('visit_end_date'),
             'visit_concept_id',
             'visit_occurrence_id',
             F.lit('visit').alias('domain'),
@@ -173,29 +175,33 @@ class PatientEventAttDecorator(PatientEventDecorator):
             .withColumn('visit_segment', visit_segment_udf) \
             .withColumn('date_in_week', weeks_since_epoch_udf) \
             .drop('is_inpatient', 'expired')
+
+        # Cache visit for faster processing
         visit_occurrence.cache()
 
-        visits = visit_occurrence.drop('discharged_to_concept_id', 'visit_end_date')
+        visits = visit_occurrence.drop('discharged_to_concept_id')
 
         # (cohort_member_id, person_id, standard_concept_id, date, visit_occurrence_id, domain,
         # concept_value, visit_rank_order, visit_segment, priority, date_in_week,
-        # concept_value_mask, mlm_skip_value)
+        # concept_value_mask, mlm_skip_value, visit_end_date)
         visit_start_events = visits \
+            .withColumn('date', F.col('visit_start_date')) \
             .withColumn('standard_concept_id', F.lit('VS')) \
             .withColumn('priority', F.lit(-2))
 
         visit_end_events = visits \
+            .withColumn('date', F.col('visit_end_date')) \
             .withColumn('standard_concept_id', F.lit('VE')) \
             .withColumn('priority', F.lit(2))
 
         # Get the prev days_since_epoch
-        prev_date_udf = F.lag('date').over(
-            W.partitionBy('person_id').orderBy('date', 'visit_occurrence_id')
+        prev_visit_end_date_udf = F.lag('visit_end_date').over(
+            W.partitionBy('person_id').orderBy('visit_start_datetime')
         )
 
         # Compute the time difference between the current record and the previous record
-        time_delta_udf = F.when(F.col('prev_date').isNull(), 0).otherwise(
-            F.datediff('date', 'prev_date')
+        time_delta_udf = F.when(F.col('prev_visit_end_date').isNull(), 0).otherwise(
+            F.datediff('visit_start_date', 'prev_visit_end_date')
         )
 
         # Udf for calculating the time token
@@ -213,25 +219,28 @@ class PatientEventAttDecorator(PatientEventDecorator):
         time_token_udf = F.udf(att_func, T.StringType())
 
         att_tokens = visits \
-            .withColumn('prev_date', prev_date_udf) \
+            .withColumn('prev_visit_end_date', prev_visit_end_date_udf) \
+            .where(F.col('prev_visit_end_date').isNotNull()) \
             .withColumn('time_delta', time_delta_udf) \
-            .where(F.col('prev_date').isNotNull()) \
+            .withColumn('time_delta', F.when(F.col('time_delta') < 0, F.lit(0)).otherwise(F.col('time_delta'))) \
             .withColumn('standard_concept_id', time_token_udf('time_delta')) \
             .withColumn('priority', F.lit(-3)) \
             .withColumn('visit_rank_order', F.col('visit_rank_order') - 1) \
-            .drop('prev_date', 'time_delta')
+            .drop('prev_visit_end_date', 'time_delta')
 
         if self._exclude_visit_tokens:
             artificial_tokens = att_tokens
         else:
-            artificial_tokens = visit_start_events.union(att_tokens).union(visit_end_events)
+            artificial_tokens = visit_start_events.unionByName(att_tokens).unionByName(visit_end_events)
 
         if self._include_visit_type:
             # insert visit type after the VS token
             visit_type_tokens = visits \
                 .withColumn('standard_concept_id', F.col('visit_concept_id')) \
                 .withColumn('priority', F.lit(-1))
-            artificial_tokens = artificial_tokens.union(visit_type_tokens)
+            artificial_tokens = artificial_tokens.unionByName(visit_type_tokens)
+
+        artificial_tokens = artificial_tokens.drop('visit_end_date', 'visit_start_datetime')
 
         # Retrieving the events that are ONLY linked to inpatient visits
         inpatient_visits = visit_occurrence.where(F.col('visit_concept_id').isin([9201, 262, 8971, 8920])).select(
@@ -266,12 +275,17 @@ class PatientEventAttDecorator(PatientEventDecorator):
             W.partitionBy('visit_occurrence_id').orderBy('date')
         )
 
+        # Compute the time difference between the current record and the previous record
+        inpatient_time_delta_udf = F.when(F.col('prev_date').isNull(), 0).otherwise(
+            F.datediff('date', 'prev_date')
+        )
+
         discharge_events = visit_occurrence \
             .where(F.col('visit_concept_id').isin([9201, 262, 8971, 8920])) \
             .withColumn('standard_concept_id', F.coalesce(F.col('discharged_to_concept_id'), F.lit(0))) \
             .withColumn('date', F.col('visit_end_date')) \
             .withColumn('priority', F.lit(1)) \
-            .drop('discharged_to_concept_id', 'visit_end_date')
+            .drop('discharged_to_concept_id', 'visit_end_date', 'visit_start_datetime')
 
         # Add discharge events to the inpatient visits
         inpatient_events = inpatient_events.unionByName(discharge_events)
@@ -282,7 +296,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
             W.partitionBy('visit_occurrence_id', 'date').orderBy('standard_concept_id'))) \
             .where(F.col('is_span_boundary') == 1) \
             .withColumn('prev_date', inpatient_prev_date_udf) \
-            .withColumn('time_delta', time_delta_udf) \
+            .withColumn('time_delta', inpatient_time_delta_udf) \
             .where(F.col('time_delta') != 0) \
             .where(F.col('prev_date').isNotNull()) \
             .withColumn('standard_concept_id', F.concat(F.lit('VS-'), time_token_udf('time_delta'), F.lit('-VE'))) \
