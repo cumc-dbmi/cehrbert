@@ -92,6 +92,10 @@ def join_domain_tables(domain_tables):
             F.lit(-1).alias('concept_value')
         ).distinct()
 
+        # Remove "Patient Died" from condition_occurrence
+        if domain_table == 'condition_occurrence':
+            domain_table = domain_table.where('condition_concept_id != 4216643')
+
         if patient_event is None:
             patient_event = domain_table
         else:
