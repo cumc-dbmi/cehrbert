@@ -201,7 +201,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
         visit_end_events = visits \
             .withColumn('date', F.col('visit_end_date')) \
             .withColumn('standard_concept_id', F.lit('VE')) \
-            .withColumn('priority', F.lit(10))
+            .withColumn('priority', F.lit(20))
 
         # Get the prev days_since_epoch
         prev_visit_end_date_udf = F.lag('visit_end_date').over(
@@ -293,7 +293,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
             .where(F.col('visit_concept_id').isin([9201, 262, 8971, 8920])) \
             .withColumn('standard_concept_id', F.coalesce(F.col('discharged_to_concept_id'), F.lit(0))) \
             .withColumn('date', F.col('visit_end_date')) \
-            .withColumn('priority', F.lit(1)) \
+            .withColumn('priority', F.lit(10)) \
             .drop('discharged_to_concept_id', 'visit_end_date')
 
         # Add discharge events to the inpatient visits
