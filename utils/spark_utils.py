@@ -469,7 +469,7 @@ def create_sequence_data_with_att(
     # add randomness to the order of the concepts that have the same time stamp
     order_udf = F.row_number().over(
         W.partitionBy('cohort_member_id', 'person_id').orderBy(
-            'visit_start_date',
+            'visit_start_datetime',
             'visit_occurrence_id',
             'priority',
             'date',

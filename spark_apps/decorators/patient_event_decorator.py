@@ -32,7 +32,8 @@ class PatientEventDecorator(ABC):
         return set(['cohort_member_id', 'person_id', 'standard_concept_id', 'date',
                     'visit_occurrence_id', 'domain', 'concept_value', 'visit_rank_order',
                     'visit_segment', 'priority', 'date_in_week', 'concept_value_mask',
-                    'mlm_skip_value', 'age', 'visit_concept_id', 'visit_start_date'])
+                    'mlm_skip_value', 'age', 'visit_concept_id', 'visit_start_date',
+                    'visit_start_datetime'])
 
     def validate(self, patient_events: DataFrame):
         actual_column_set = set(patient_events.columns)
@@ -92,7 +93,7 @@ class PatientEventBaseDecorator(
                 'expired')
         ).withColumn('visit_rank_order', visit_rank_udf) \
             .withColumn('visit_segment', visit_segment_udf) \
-            .drop('person_id', 'is_inpatient', 'expired', 'visit_start_datetime')
+            .drop('person_id', 'is_inpatient', 'expired')
 
         # Add visit_rank_order, and visit_segment to patient_events
         patient_events = patient_events.join(visits, 'visit_occurrence_id')
@@ -240,7 +241,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
                 .withColumn('priority', F.lit(-1))
             artificial_tokens = artificial_tokens.unionByName(visit_type_tokens)
 
-        artificial_tokens = artificial_tokens.drop('visit_end_date', 'visit_start_datetime')
+        artificial_tokens = artificial_tokens.drop('visit_end_date')
 
         # Retrieving the events that are ONLY linked to inpatient visits
         inpatient_visits = visit_occurrence.where(F.col('visit_concept_id').isin([9201, 262, 8971, 8920])).select(
@@ -285,7 +286,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
             .withColumn('standard_concept_id', F.coalesce(F.col('discharged_to_concept_id'), F.lit(0))) \
             .withColumn('date', F.col('visit_end_date')) \
             .withColumn('priority', F.lit(1)) \
-            .drop('discharged_to_concept_id', 'visit_end_date', 'visit_start_datetime')
+            .drop('discharged_to_concept_id', 'visit_end_date')
 
         # Add discharge events to the inpatient visits
         inpatient_events = inpatient_events.unionByName(discharge_events)
@@ -346,7 +347,7 @@ class DemographicPromptDecorator(
         # Get the first token of the patient history
         first_token_udf = F.row_number().over(
             W.partitionBy('cohort_member_id', 'person_id').orderBy(
-                'visit_start_date',
+                'visit_start_datetime',
                 'visit_occurrence_id',
                 'priority',
                 'standard_concept_id')
