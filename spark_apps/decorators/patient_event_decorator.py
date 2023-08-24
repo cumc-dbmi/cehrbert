@@ -170,6 +170,14 @@ class PatientEventAttDecorator(PatientEventDecorator):
         ).join(valid_visit_ids, 'visit_occurrence_id') \
             .join(cohort_member_person_pair, 'person_id')
 
+        # We assume outpatient visits end on the same day, therefore we start visit_end_date to visit_start_date due
+        # to bad date
+        visit_occurrence = visit_occurrence \
+            .withColumn('visit_end_date',
+                        F.when(F.col('visit_concept_id').isin([9201, 262, 8971, 8920]),
+                               F.col('visit_end_date')).otherwise(F.col('visit_start_date'))
+                        )
+
         weeks_since_epoch_udf = (F.unix_timestamp('date') / F.lit(24 * 60 * 60 * 7)).cast('int')
         visit_occurrence = visit_occurrence \
             .withColumn('visit_rank_order', visit_rank_udf) \
