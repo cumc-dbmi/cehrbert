@@ -255,7 +255,7 @@ def gpt_to_omop_converter_serial(
                     bad_sequence = True
                     break
                 # If it's a VE token, nothing needs to be updated because it just means the visit ended
-                if discharged_to_concept_id:
+                if inpatient_visit_indicator:
                     vo.set_discharged_to_concept_id(discharged_to_concept_id)
                     vo.set_visit_end_date(data_cursor)
 
