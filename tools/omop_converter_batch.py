@@ -221,9 +221,11 @@ def gpt_to_omop_converter_serial(
                         inpatient_visit_indicator = visit_concept_id in [9201, 262, 8971, 8920]
                         if visit_concept_id in domain_map:
                             if domain_map[visit_concept_id] != 'Visit' and visit_concept_id != 0:
-                                visit_concept_id = 0
+                                bad_sequence = True
+                                break
                         else:
-                            visit_concept_id = 0
+                            bad_sequence = True
+                            break
 
                     except (IndexError, ValueError):
                         error_dict[person_id] = {}
@@ -253,7 +255,7 @@ def gpt_to_omop_converter_serial(
                     bad_sequence = True
                     break
                 # If it's a VE token, nothing needs to be updated because it just means the visit ended
-                if inpatient_visit_indicator:
+                if discharged_to_concept_id:
                     vo.set_discharged_to_concept_id(discharged_to_concept_id)
                     vo.set_visit_end_date(data_cursor)
 
@@ -287,8 +289,10 @@ def gpt_to_omop_converter_serial(
                         if domain == 'Visit':
                             discharged_to_concept_id = concept_id
                             continue
-
-                        if concept_id in DISCHARGE_CONCEPT_LIST and inpatient_visit_indicator:
+                        # If the current concept_id is 'Patient Died', this means it can only occur in the
+                        # discharged_to_concept_id field, which indicates the current visit has to be an inpatient
+                        # visit, this concept_id can only appear at the second last position
+                        if concept_id == 4216643 and inpatient_visit_indicator:
                             discharged_to_concept_id = concept_id
                             continue
 
