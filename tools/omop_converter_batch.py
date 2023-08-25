@@ -289,9 +289,13 @@ def gpt_to_omop_converter_serial(
                             if not inpatient_visit_indicator:
                                 bad_sequence = True
                                 continue
-
-                            # If 'Patient Died' appeared in the middle of the sequence, then this is a bad sequence
-                            if idx + 1 < len(tokens_generated) and tokens_generated[idx + 1] != 'VE':
+                            # If the current token is not the second last one of the sequence, reject because
+                            # death can only appear at the end of the sequence
+                            if idx + 1 != len(tokens_generated) - 1:
+                                bad_sequence = True
+                                continue
+                            # we also enforce the rule where the sequence has to end on a VE token
+                            elif tokens_generated[idx + 1] != 'VE':
                                 bad_sequence = True
                                 continue
 
