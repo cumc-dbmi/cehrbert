@@ -291,20 +291,15 @@ class BertDataGenerator(AbstractDataGeneratorBase):
 class GptDataGenerator(BertDataGenerator):
     def __init__(
             self,
-            concept_tokenizer: ConceptTokenizer,
             min_num_of_visits: int,
             max_num_of_visits: int,
-            including_long_sequence: bool = False,
             *args,
             **kwargs):
         self._min_num_of_visits = min_num_of_visits
         self._max_num_of_visits = max_num_of_visits
-        self._including_long_sequence = including_long_sequence
-        self._concept_tokenizer = concept_tokenizer
 
         super(BertDataGenerator,
               self).__init__(
-            concept_tokenizer=concept_tokenizer,
             *args,
             **kwargs
         )
@@ -314,6 +309,8 @@ class GptDataGenerator(BertDataGenerator):
             self._training_data['num_of_visits'] >= self._min_num_of_visits]
         self._training_data = self._training_data[
             self._training_data['num_of_visits'] <= self._max_num_of_visits]
+        self._training_data = self._training_data[
+            self._training_data['num_of_concepts'] <= self._max_seq_len]
         self._training_data = self._training_data[
             self._training_data['num_of_concepts'] >= self._min_num_of_concepts]
 
@@ -327,19 +324,7 @@ class GptDataGenerator(BertDataGenerator):
         """
         for row in self._training_data.itertuples():
             seq_length = len(row.token_ids)
-            if seq_length <= self._max_seq_len:
-                yield RowSlicer(row, 0, seq_length)
-            elif self._including_long_sequence:
-                # Because the sequence is longer than the context window, we identify the last VE token in the
-                # sequence and take the patient history before that point
-                last_ve_token_index = 0
-                for i, token in enumerate(row.token_ids):
-                    # When the index exceeds the context window, we break out of the loop
-                    if i >= self._max_seq_len:
-                        break
-                    if token == self._concept_tokenizer.get_visit_end_token_id():
-                        last_ve_token_index = i
-                yield RowSlicer(row, 0, last_ve_token_index + 1)
+            yield RowSlicer(row, 0, seq_length)
 
 
 class BertVisitPredictionDataGenerator(BertDataGenerator):
