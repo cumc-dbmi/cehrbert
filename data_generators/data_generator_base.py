@@ -158,15 +158,18 @@ class AbstractDataGeneratorBase(ABC):
             # Get a new iterator
             iterator = self._create_iterator()
             # Slice out a batch of data for every step
-            for _ in range(self.get_steps_per_epoch()):
-                rows = list(islice(iterator, self._batch_size))
-                input_dicts = []
-                output_dicts = []
-                for learning_objective in self._learning_objectives:
-                    input_dict, output_dict = learning_objective.process_batch(list(rows))
-                    input_dicts.append(input_dict)
-                    output_dicts.append(output_dict)
-                yield dict(ChainMap(*input_dicts)), dict(ChainMap(*output_dicts))
+            try:
+                for _ in range(self.get_steps_per_epoch()):
+                    rows = list(islice(iterator, self._batch_size))
+                    input_dicts = []
+                    output_dicts = []
+                    for learning_objective in self._learning_objectives:
+                        input_dict, output_dict = learning_objective.process_batch(list(rows))
+                        input_dicts.append(input_dict)
+                        output_dicts.append(output_dict)
+                    yield dict(ChainMap(*input_dicts)), dict(ChainMap(*output_dicts))
+            except (RuntimeError, ValueError) as e:
+                print(f'Error caught: {e}')
 
             # Break out of the infinite loop in the non pretraining mode
             if not self._is_pretraining:
