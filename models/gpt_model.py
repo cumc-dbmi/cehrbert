@@ -17,6 +17,7 @@ class GptInferenceModel(tf.keras.Model):
             tokenizer: ConceptTokenizer,
             context_window: int,
             top_k: int,
+            temperature: float,
             *args,
             **kwargs
     ):
@@ -25,6 +26,7 @@ class GptInferenceModel(tf.keras.Model):
         self.context_window = context_window
         self.tokenizer = tokenizer
         self.top_k = top_k
+        self.temperature = temperature
         self.concept_embedding_layer = self._get_concept_embedding(gpt_model)
         self.positional_encoding_layer = self._get_positional_encoding_layer(gpt_model)
         self.output_layer = self._get_output_layer(gpt_model)
@@ -173,7 +175,7 @@ class GptInferenceModel(tf.keras.Model):
                 disallowed_token_ids
             )
             # Randomly sample a batch of tokens
-            pred_logits, indices = tf.math.top_k(outputs[:, -1, :], k=self.top_k, sorted=True)
+            pred_logits, indices = tf.math.top_k(outputs[:, -1, :]/self.temperature, k=self.top_k, sorted=True)
             indices = np.asarray(indices).astype('int32')
 
             next_tokens = tf.gather(
@@ -363,9 +365,10 @@ def create_model(
 
 def sample_predicted_probabibility(
         pred_logits,
-        top_k
+        top_k,
+        temperature
 ):
-    pred_logits, indices = tf.math.top_k(pred_logits, k=top_k, sorted=True)
+    pred_logits, indices = tf.math.top_k(pred_logits/temperature, k=top_k, sorted=True)
     indices = np.asarray(indices).astype("int32")
     preds = tf.keras.activations.softmax(tf.expand_dims(pred_logits, 0))[0]
     preds = np.asarray(preds).astype("float32")
@@ -392,6 +395,7 @@ class PatientHistoryGenerator(tf.keras.callbacks.Callback):
             concept_tokenizer: ConceptTokenizer,
             concept_map: dict,
             top_k=10,
+            temperature=1.0,
             print_every=1
     ):
         self.max_seq = max_seq
@@ -436,7 +440,8 @@ class PatientHistoryGenerator(tf.keras.callbacks.Callback):
             self.model,
             tokenizer=self.concept_tokenizer,
             context_window=self.max_seq,
-            top_k=self.k
+            top_k=self.k,
+            temperature=self.temperature
         )
         start_tokens = [
             self.concept_tokenizer.get_start_token_id(),

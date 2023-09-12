@@ -59,7 +59,8 @@ def main(
             gpt_model=model,
             tokenizer=tokenizer,
             context_window=args.context_window,
-            top_k=args.top_k
+            top_k=args.top_k,
+            temperature=args.temperature
         )
     print(f'{datetime.datetime.now()}: Loading demographic_info at {args.demographic_data_path}')
     # data = dd.read_parquet(
@@ -99,7 +100,6 @@ def main(
             sequence_to_flush.clear()
 
     if len(sequence_to_flush) > 0:
-        print(f'"Sequence length is {sequence_to_flush}')
         print(f'{datetime.datetime.now()}: Flushing to the Disk at Final Batch')
         pd.DataFrame(
             sequence_to_flush,
@@ -172,6 +172,15 @@ if __name__ == "__main__":
         action='store',
         help='The path for your concept_path',
         required=True
+    )
+    parser.add_argument(
+        '--temperature',
+        dest='temperature',
+        action='store',
+        default=1.0,
+        type=float,
+        help='The temperature parameter for softmax',
+        required=False
     )
 
     main(parser.parse_args())
