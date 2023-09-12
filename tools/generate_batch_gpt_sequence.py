@@ -53,6 +53,10 @@ def main(
     # atexit.register(strategy._extended._host_cross_device_ops._pool.close) #type: ignore
     print(f'{datetime.datetime.now()}: Loading tokenizer at {tokenizer_path}')
     print(f'{datetime.datetime.now()}: Loading model at {model_path}')
+    print(f'{datetime.datetime.now()}: Write sequences to {args.output_folder}')
+    print(f'{datetime.datetime.now()}: Context window {args.context_window}')
+    print(f'{datetime.datetime.now()}: Temperature {args.temperature}')
+    print(f'{datetime.datetime.now()}: Top K {args.top_k}')
     with strategy.scope():
         model = tf.keras.models.load_model(model_path, custom_objects=get_custom_objects())
         gpt_inference_model = GptInferenceModel(
