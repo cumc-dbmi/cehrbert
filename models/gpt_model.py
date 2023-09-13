@@ -17,7 +17,7 @@ class GptInferenceModel(tf.keras.Model):
             tokenizer: ConceptTokenizer,
             context_window: int,
             top_k: int,
-            temperature: float,
+            temperature: float = 1.0,
             *args,
             **kwargs
     ):
