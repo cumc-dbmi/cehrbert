@@ -57,7 +57,7 @@ def main(
             start_tokens,
             tokenizer,
             args.context_window,
-            args.top_k
+            args.top_p
         )
         [visit_occurrence_id, condition_occurrence_id, procedure_occurrence_id, drug_exposure_id] = gpt_to_omop_converter(concept,
                                                                                                      person_id,

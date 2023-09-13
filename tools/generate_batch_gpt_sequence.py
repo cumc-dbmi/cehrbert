@@ -56,14 +56,14 @@ def main(
     print(f'{datetime.datetime.now()}: Write sequences to {args.output_folder}')
     print(f'{datetime.datetime.now()}: Context window {args.context_window}')
     print(f'{datetime.datetime.now()}: Temperature {args.temperature}')
-    print(f'{datetime.datetime.now()}: Top K {args.top_k}')
+    print(f'{datetime.datetime.now()}: Top K {args.top_p}')
     with strategy.scope():
         model = tf.keras.models.load_model(model_path, custom_objects=get_custom_objects())
         gpt_inference_model = GptInferenceModel(
             gpt_model=model,
             tokenizer=tokenizer,
             context_window=args.context_window,
-            top_k=args.top_k,
+            top_p=args.top_p,
             temperature=args.temperature
         )
     print(f'{datetime.datetime.now()}: Loading demographic_info at {args.demographic_data_path}')
@@ -162,11 +162,11 @@ if __name__ == "__main__":
         required=True
     )
     parser.add_argument(
-        '--top_k',
-        dest='top_k',
+        '--top_p',
+        dest='top_p',
         action='store',
-        default=10,
-        type=int,
+        default=1.0,
+        type=float,
         help='The number of top concepts to sample',
         required=False
     )
