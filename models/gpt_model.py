@@ -4,7 +4,6 @@ import random
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-from scipy.special import softmax
 
 from data_generators.tokenizer import ConceptTokenizer
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
@@ -17,7 +16,7 @@ class GptInferenceModel(tf.keras.Model):
             gpt_model: tf.keras.Model,
             tokenizer: ConceptTokenizer,
             context_window: int,
-            top_p: float,
+            top_k: int,
             temperature: float = 1.0,
             *args,
             **kwargs
@@ -26,7 +25,7 @@ class GptInferenceModel(tf.keras.Model):
 
         self.context_window = context_window
         self.tokenizer = tokenizer
-        self.top_p = top_p
+        self.top_k = top_k
         self.temperature = temperature
         self.concept_embedding_layer = self._get_concept_embedding(gpt_model)
         self.positional_encoding_layer = self._get_positional_encoding_layer(gpt_model)
@@ -175,20 +174,8 @@ class GptInferenceModel(tf.keras.Model):
                 outputs,
                 disallowed_token_ids
             )
-
-            # Top P strategy
-            indices = tf.argsort(outputs[:, -1, :], direction='DESCENDING')
-            probs = tf.nn.softmax(outputs[:, -1, :] / self.temperature)
-            sorted_probs = tf.gather(probs, indices, axis=1, batch_dims=1)
-            cumsum_probs = tf.math.cumsum(sorted_probs, axis=-1)
-
-            included_top_probs = tf.cast(cumsum_probs >= self.top_p, dtype=tf.float32)
-            prob_mask = tf.concat([tf.zeros_like(included_top_probs[:, :1]), included_top_probs[:, :-1]], axis=-1)
-
-            pred_logits = tf.math.log(sorted_probs) + prob_mask * (-1e10)
-
             # Randomly sample a batch of tokens
-            # pred_logits, indices = tf.math.top_k(outputs[:, -1, :] / self.temperature, k=self.top_p, sorted=True)
+            pred_logits, indices = tf.math.top_k(outputs[:, -1, :]/self.temperature, k=self.top_k, sorted=True)
             indices = np.asarray(indices).astype('int32')
 
             next_tokens = tf.gather(
@@ -381,7 +368,7 @@ def sample_predicted_probabibility(
         top_k,
         temperature
 ):
-    pred_logits, indices = tf.math.top_k(pred_logits / temperature, k=top_k, sorted=True)
+    pred_logits, indices = tf.math.top_k(pred_logits/temperature, k=top_k, sorted=True)
     indices = np.asarray(indices).astype("int32")
     preds = tf.keras.activations.softmax(tf.expand_dims(pred_logits, 0))[0]
     preds = np.asarray(preds).astype("float32")
@@ -453,7 +440,7 @@ class PatientHistoryGenerator(tf.keras.callbacks.Callback):
             self.model,
             tokenizer=self.concept_tokenizer,
             context_window=self.max_seq,
-            top_p=self.k,
+            top_k=self.k,
             temperature=self.temperature
         )
         start_tokens = [
@@ -487,7 +474,7 @@ class ComputeMarginalDistribution(tf.keras.callbacks.Callback):
             concept_map: dict,
             batch_size,
             num_of_patients=1024,
-            top_p=1.0,
+            top_k=10,
             print_every=1
     ):
         self.demographic_info = demographic_info
@@ -495,7 +482,7 @@ class ComputeMarginalDistribution(tf.keras.callbacks.Callback):
         self.concept_tokenizer = concept_tokenizer
         self.concept_map = concept_map
         self.print_every = print_every
-        self.top_p = top_p
+        self.k = top_k
         self.batch_size = batch_size
         self.num_of_patients = num_of_patients
 
@@ -512,7 +499,7 @@ class ComputeMarginalDistribution(tf.keras.callbacks.Callback):
             self.model,
             tokenizer=self.concept_tokenizer,
             context_window=self.max_seq,
-            top_p=self.top_p
+            top_k=self.k
         )
 
         num_of_batches = self.num_of_patients // self.batch_size + 1
