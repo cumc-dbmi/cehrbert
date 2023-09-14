@@ -1,18 +1,17 @@
 import os
 
 import tensorflow as tf
+from tensorflow.keras import optimizers
+
+from data_generators.data_generator_base import *
+from keras_transformer.bert import (masked_perplexity,
+                                    MaskedPenalizedSparseCategoricalCrossentropy)
+from models.gpt_model import create_model, ComputeMarginalDistribution
+from models.layers.custom_layers import get_custom_objects
 from models.model_parameters import ModelPathConfig
 from models.parse_args import create_parse_args_gpt
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
 from utils.model_utils import tokenize_one_field
-from models.gpt_model import create_model, ComputeMarginalDistribution
-from models.layers.custom_layers import get_custom_objects
-from data_generators.data_generator_base import *
-
-from keras_transformer.bert import (masked_perplexity,
-                                    MaskedPenalizedSparseCategoricalCrossentropy)
-
-from tensorflow.keras import optimizers
 
 
 class GptModelTrainer(AbstractConceptEmbeddingTrainer):
@@ -32,6 +31,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             print_every: int,
             num_of_patients: int,
             sampling_batch_size: int,
+            including_long_sequence: bool,
             *args, **kwargs
     ):
         self._tokenizer_path = tokenizer_path
@@ -46,6 +46,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         self._print_every = print_every
         self._num_of_patients = num_of_patients
         self._sampling_batch_size = sampling_batch_size
+        self._including_long_sequence = including_long_sequence
 
         super(GptModelTrainer, self).__init__(*args, **kwargs)
 
@@ -62,7 +63,8 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             f'print_every: {print_every}\n'
             f'min_num_of_concepts: {min_num_of_concepts}\n'
             f'num_of_patients:{num_of_patients}\n'
-            f'sampling_batch_size: {sampling_batch_size}'
+            f'sampling_batch_size: {sampling_batch_size}\n'
+            f'including_long_sequence: {including_long_sequence}'
         )
 
     def _load_dependencies(self):
@@ -91,7 +93,8 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             'concept_tokenizer': self._tokenizer,
             'min_num_of_visits': self._min_num_of_visits,
             'max_num_of_visits': self._max_num_of_visits,
-            'min_num_of_concepts': self._min_num_of_concepts
+            'min_num_of_concepts': self._min_num_of_concepts,
+            'including_long_sequence': self._including_long_sequence
         }
 
         return GptDataGenerator(**parameters)
@@ -170,7 +173,8 @@ def main(args):
         tf_board_log_path=args.tf_board_log_path,
         print_every=args.print_every,
         num_of_patients=args.num_of_patients,
-        sampling_batch_size=args.sampling_batch_size
+        sampling_batch_size=args.sampling_batch_size,
+        including_long_sequence=args.including_long_sequence
     ).train_model()
 
 
