@@ -1,3 +1,4 @@
+from abc import abstractmethod, ABC
 import datetime
 import random
 
@@ -10,14 +11,67 @@ from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 from models.layers.custom_layers import GptDecoder, TrainablePositionEmbedding
 
 
+class SamplingStrategy(ABC):
+    @abstractmethod
+    def process_logit(self, outputs):
+        pass
+
+    @abstractmethod
+    def get_name(self):
+        pass
+
+
+class TopKStrategy(SamplingStrategy):
+    def __init__(
+            self,
+            top_k,
+            temperature: float = 1.0
+    ):
+        self._top_k = top_k
+        self._temperature = temperature
+
+    def process_logit(self, outputs):
+        # Randomly sample a batch of tokens
+        pred_logits, indices = tf.math.top_k(outputs[:, -1, :] / self._temperature, k=self._top_k, sorted=True)
+        return pred_logits, indices
+
+    def get_name(self):
+        return 'top_k_strategy'
+
+
+class TopPStrategy(SamplingStrategy):
+    def __init__(
+            self,
+            top_p,
+            temperature: float = 1.0
+    ):
+        self._top_p = top_p
+        self._temperature = temperature
+
+    def process_logit(self, outputs):
+        # Top P strategy
+        indices = tf.argsort(outputs[:, -1, :], direction='DESCENDING')
+        probs = tf.nn.softmax(outputs[:, -1, :] / self._temperature)
+        sorted_probs = tf.gather(probs, indices, axis=1, batch_dims=1)
+        cum_sum_probs = tf.math.cumsum(sorted_probs, axis=-1)
+
+        included_top_probs = tf.cast(cum_sum_probs >= self._top_p, dtype=tf.float32)
+        prob_mask = tf.concat([tf.zeros_like(included_top_probs[:, :1]), included_top_probs[:, :-1]], axis=-1)
+        pred_logit = tf.math.log(sorted_probs) + prob_mask * (-1e10)
+
+        return pred_logit, indices
+
+    def get_name(self):
+        return 'top_p_strategy'
+
+
 class GptInferenceModel(tf.keras.Model):
     def __init__(
             self,
             gpt_model: tf.keras.Model,
             tokenizer: ConceptTokenizer,
             context_window: int,
-            top_k: int,
-            temperature: float = 1.0,
+            sampling_strategy: SamplingStrategy,
             *args,
             **kwargs
     ):
@@ -25,8 +79,7 @@ class GptInferenceModel(tf.keras.Model):
 
         self.context_window = context_window
         self.tokenizer = tokenizer
-        self.top_k = top_k
-        self.temperature = temperature
+        self.sampling_strategy = sampling_strategy
         self.concept_embedding_layer = self._get_concept_embedding(gpt_model)
         self.positional_encoding_layer = self._get_positional_encoding_layer(gpt_model)
         self.output_layer = self._get_output_layer(gpt_model)
@@ -175,9 +228,8 @@ class GptInferenceModel(tf.keras.Model):
                 disallowed_token_ids
             )
             # Randomly sample a batch of tokens
-            pred_logits, indices = tf.math.top_k(outputs[:, -1, :]/self.temperature, k=self.top_k, sorted=True)
+            pred_logits, indices = self.sampling_strategy.process_logit(outputs)
             indices = np.asarray(indices).astype('int32')
-
             next_tokens = tf.gather(
                 indices,
                 tf.random.categorical(pred_logits, 1),
@@ -368,7 +420,7 @@ def sample_predicted_probabibility(
         top_k,
         temperature
 ):
-    pred_logits, indices = tf.math.top_k(pred_logits/temperature, k=top_k, sorted=True)
+    pred_logits, indices = tf.math.top_k(pred_logits / temperature, k=top_k, sorted=True)
     indices = np.asarray(indices).astype("int32")
     preds = tf.keras.activations.softmax(tf.expand_dims(pred_logits, 0))[0]
     preds = np.asarray(preds).astype("float32")
@@ -403,6 +455,7 @@ class PatientHistoryGenerator(tf.keras.callbacks.Callback):
         self.concept_map = concept_map
         self.print_every = print_every
         self.k = top_k
+        self.temperature = temperature
         self.genders = np.squeeze(concept_tokenizer.encode([
             '8532',  # FEMALE,
             '8507'  # MALE
@@ -436,12 +489,12 @@ class PatientHistoryGenerator(tf.keras.callbacks.Callback):
         if batch == 0 or batch % self.print_every != 0:
             return
         print(f'\nGenerating text for {batch}\n')
+
         inference_model = GptInferenceModel(
             self.model,
             tokenizer=self.concept_tokenizer,
             context_window=self.max_seq,
-            top_k=self.k,
-            temperature=self.temperature
+            sampling_strategy=TopKStrategy(top_k=self.k, temperature=self.temperature)
         )
         start_tokens = [
             self.concept_tokenizer.get_start_token_id(),
@@ -499,7 +552,7 @@ class ComputeMarginalDistribution(tf.keras.callbacks.Callback):
             self.model,
             tokenizer=self.concept_tokenizer,
             context_window=self.max_seq,
-            top_k=self.k
+            sampling_strategy=TopKStrategy(top_k=self.k, temperature=self.temperature)
         )
 
         num_of_batches = self.num_of_patients // self.batch_size + 1

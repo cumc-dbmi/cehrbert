@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
-from models.gpt_model import GptInferenceModel
+from models.gpt_model import GptInferenceModel, TopKStrategy, TopPStrategy
 from models.layers.custom_layers import get_custom_objects
 
 
@@ -56,16 +56,29 @@ def main(
     print(f'{datetime.datetime.now()}: Write sequences to {args.output_folder}')
     print(f'{datetime.datetime.now()}: Context window {args.context_window}')
     print(f'{datetime.datetime.now()}: Temperature {args.temperature}')
+    print(f'{datetime.datetime.now()}: Sampling Strategy {args.sampling_strategy}')
+    print(f'{datetime.datetime.now()}: Top P {args.top_p}')
     print(f'{datetime.datetime.now()}: Top K {args.top_k}')
     with strategy.scope():
         model = tf.keras.models.load_model(model_path, custom_objects=get_custom_objects())
+
+        sampling_strategy = None
+        if args.sampling_strategy == TopKStrategy.__name__:
+            sampling_strategy = TopKStrategy(top_k=args.top_k, temperature=args.temperature)
+        if args.sampling_strategy == TopPStrategy.__name__:
+            sampling_strategy = TopPStrategy(top_p=args.top_p, temperature=args.temperature)
+        if not sampling_strategy:
+            raise RuntimeError(
+                'sampling_strategy has to be one of the following two options TopKStrategy or TopPStrategy'
+            )
+
         gpt_inference_model = GptInferenceModel(
             gpt_model=model,
             tokenizer=tokenizer,
             context_window=args.context_window,
-            top_k=args.top_k,
-            temperature=args.temperature
+            sampling_strategy=sampling_strategy
         )
+
     print(f'{datetime.datetime.now()}: Loading demographic_info at {args.demographic_data_path}')
     # data = dd.read_parquet(
     #     args.demographic_data_path,
@@ -162,12 +175,29 @@ if __name__ == "__main__":
         required=True
     )
     parser.add_argument(
+        '--sampling_strategy',
+        dest='sampling_strategy',
+        action='store',
+        choices=[TopPStrategy.__name__, TopKStrategy.__name__],
+        help='Pick the sampling strategy between top_k and top_p',
+        required=True
+    )
+    parser.add_argument(
         '--top_k',
         dest='top_k',
         action='store',
-        default=10,
+        default=100,
         type=int,
         help='The number of top concepts to sample',
+        required=False
+    )
+    parser.add_argument(
+        '--top_p',
+        dest='top_p',
+        action='store',
+        default=1.0,
+        type=float,
+        help='The accumulative probability of top concepts to sample',
         required=False
     )
     parser.add_argument(
