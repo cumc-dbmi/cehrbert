@@ -174,7 +174,9 @@ def main(args):
         print_every=args.print_every,
         num_of_patients=args.num_of_patients,
         sampling_batch_size=args.sampling_batch_size,
-        including_long_sequence=args.including_long_sequence
+        including_long_sequence=args.including_long_sequence,
+        save_checkpoint=args.save_checkpoint,
+        save_freq=args.save_freq
     ).train_model()
 
 

@@ -68,6 +68,8 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             shuffle_training_data: bool = True,
             cache_dataset: bool = False,
             use_dask: bool = False,
+            save_checkpoint: bool = False,
+            save_freq: int = 0,
             *args, **kwargs
     ):
 
@@ -80,6 +82,8 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         self._shuffle_training_data = shuffle_training_data
         self._cache_dataset = cache_dataset
         self._use_dask = use_dask
+        self._save_checkpoint = save_checkpoint
+        self._save_freq = save_freq
         self._training_data = self._load_training_data()
 
         # shuffle the training data
@@ -99,7 +103,10 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             f'tf_board_log_path: {tf_board_log_path}\n'
             f'shuffle_training_data: {shuffle_training_data}\n'
             f'cache_dataset: {cache_dataset}\n'
-            f'use_dask: {use_dask}\n')
+            f'use_dask: {use_dask}\n'
+            f'save_checkpoint: {save_checkpoint}\n'
+            f'save_freq: {save_freq}\n'
+        )
 
     @abstractmethod
     def _load_dependencies(self):
@@ -150,11 +157,17 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
 
     def _get_callbacks(self):
         tensor_board_callback = tf.keras.callbacks.TensorBoard(log_dir=self._tf_board_log_path)
+        model_checkpoint_args = {
+            'filepath': self._model_path,
+            'save_best_only': True,
+            'monitor': 'loss',
+            'verbose': 1
+        }
+        if self._save_checkpoint:
+            model_checkpoint_args['save_freq'] = self._save_freq
+
         model_checkpoint = tf.keras.callbacks.ModelCheckpoint(
-            filepath=self._model_path,
-            save_best_only=True,
-            monitor='loss',
-            verbose=1
+            **model_checkpoint_args
         )
         learning_rate_scheduler = tf.keras.callbacks.LearningRateScheduler(
             CosineLRSchedule(lr_high=self._learning_rate, lr_low=1e-8, initial_period=10),

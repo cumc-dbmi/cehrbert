@@ -238,6 +238,19 @@ def create_parse_args_gpt():
         dest='including_long_sequence',
         action='store_true'
     )
+    parser.add_argument(
+        '--save_checkpoint',
+        dest='save_checkpoint',
+        action='store_true'
+    )
+    parser.add_argument(
+        '--save_freq',
+        dest='save_freq',
+        action='store',
+        type=int,
+        default=0,
+        required='--save_checkpoint' in argv
+    )
     return parser
 
 
