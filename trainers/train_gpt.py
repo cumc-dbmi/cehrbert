@@ -32,6 +32,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             num_of_patients: int,
             sampling_batch_size: int,
             including_long_sequence: bool,
+            sampling_dataset_enabled: bool = False,
             *args, **kwargs
     ):
         self._tokenizer_path = tokenizer_path
@@ -47,6 +48,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         self._num_of_patients = num_of_patients
         self._sampling_batch_size = sampling_batch_size
         self._including_long_sequence = including_long_sequence
+        self._sampling_dataset_enabled = sampling_dataset_enabled
 
         super(GptModelTrainer, self).__init__(*args, **kwargs)
 
@@ -64,7 +66,8 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             f'min_num_of_concepts: {min_num_of_concepts}\n'
             f'num_of_patients:{num_of_patients}\n'
             f'sampling_batch_size: {sampling_batch_size}\n'
-            f'including_long_sequence: {including_long_sequence}'
+            f'including_long_sequence: {including_long_sequence}\n'
+            f'sampling_dataset_enabled: {sampling_dataset_enabled}\n'
         )
 
     def _load_dependencies(self):
@@ -94,7 +97,8 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             'min_num_of_visits': self._min_num_of_visits,
             'max_num_of_visits': self._max_num_of_visits,
             'min_num_of_concepts': self._min_num_of_concepts,
-            'including_long_sequence': self._including_long_sequence
+            'including_long_sequence': self._including_long_sequence,
+            'sampling_dataset_enabled': self._sampling_dataset_enabled
         }
 
         return GptDataGenerator(**parameters)
@@ -176,7 +180,8 @@ def main(args):
         sampling_batch_size=args.sampling_batch_size,
         including_long_sequence=args.including_long_sequence,
         save_checkpoint=args.save_checkpoint,
-        save_freq=args.save_freq
+        save_freq=args.save_freq,
+        sampling_dataset_enabled=args.sampling_dataset_enabled
     ).train_model()
 
 

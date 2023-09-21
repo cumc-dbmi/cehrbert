@@ -251,6 +251,11 @@ def create_parse_args_gpt():
         default=0,
         required='--save_checkpoint' in argv
     )
+    parser.add_argument(
+        '--sampling_dataset_enabled',
+        dest='sampling_dataset_enabled',
+        action='store_true'
+    )
     return parser
 
 

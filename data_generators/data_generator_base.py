@@ -1,10 +1,10 @@
-import logging
-from typing import Set
 import inspect
-
+import logging
 from collections import ChainMap
-from pandas import DataFrame
 from itertools import chain
+from typing import Set
+
+from pandas import DataFrame
 
 from data_generators.learning_objective import *
 from data_generators.tokenizer import ConceptTokenizer
@@ -298,12 +298,14 @@ class GptDataGenerator(BertDataGenerator):
             min_num_of_visits: int,
             max_num_of_visits: int,
             including_long_sequence: bool = False,
+            sampling_dataset_enabled: bool = False,
             *args,
             **kwargs):
         self._min_num_of_visits = min_num_of_visits
         self._max_num_of_visits = max_num_of_visits
         self._including_long_sequence = including_long_sequence
         self._concept_tokenizer = concept_tokenizer
+        self._sampling_dataset_enabled = sampling_dataset_enabled
 
         super(BertDataGenerator,
               self).__init__(
@@ -319,6 +321,8 @@ class GptDataGenerator(BertDataGenerator):
             self._training_data['num_of_visits'] <= self._max_num_of_visits]
         self._training_data = self._training_data[
             self._training_data['num_of_concepts'] >= self._min_num_of_concepts]
+        # This is important so that the iloc works correctly when retrieving records from the dataframe
+        self._training_data = self._training_data.reset_index()
 
     def _get_learning_objective_classes(self):
         return [SequenceGenerationLearningObjective]
@@ -328,7 +332,13 @@ class GptDataGenerator(BertDataGenerator):
         Create an iterator that will iterate through all training data
         :return:
         """
-        for row in self._training_data.itertuples():
+        randomized_indices = self._training_data.sample(frac=1.0).index
+        for row_index in randomized_indices:
+            # If the sampling strategy is enabled, we will randomly sample a record every time
+            if self._sampling_dataset_enabled:
+                # Overwrite row_index with a random index sampled from randomized_indices
+                row_index = random.choice(randomized_indices)
+            row = self._training_data.iloc[row_index]
             seq_length = len(row.token_ids)
             if seq_length <= self._max_seq_len:
                 yield RowSlicer(row, 0, seq_length)
