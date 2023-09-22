@@ -552,7 +552,7 @@ class ComputeMarginalDistribution(tf.keras.callbacks.Callback):
             self.model,
             tokenizer=self.concept_tokenizer,
             context_window=self.max_seq,
-            sampling_strategy=TopKStrategy(top_k=self.k, temperature=self.temperature)
+            sampling_strategy=TopKStrategy(top_k=self.k)
         )
 
         num_of_batches = self.num_of_patients // self.batch_size + 1
