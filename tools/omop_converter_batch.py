@@ -233,7 +233,6 @@ def gpt_to_omop_converter_serial(
                         error_dict[person_id]['error'] = 'Wrong visit concept id'
                         bad_sequence = True
                         continue
-                    data_cursor = data_cursor + timedelta(days=att_date_delta)
                     vo = VisitOccurrence(visit_occurrence_id, visit_concept_id, data_cursor, p)
                     append_to_dict(omop_export_dict, vo, visit_occurrence_id)
                     id_mappings_dict['visit_occurrence'][visit_occurrence_id] = person_id
@@ -247,6 +246,7 @@ def gpt_to_omop_converter_serial(
                     att_date_delta = int(x[1:]) * 30
                 elif x == 'LT':
                     att_date_delta = 365 * 3
+                data_cursor = data_cursor + timedelta(days=att_date_delta)
             elif inpatient_visit_indicator and SPAN_ATT_EXPR.match(x):
                 # VS\-D\d+\-VE\
                 data_cursor = data_cursor + timedelta(days=int(x.split('-')[1][1:]))
