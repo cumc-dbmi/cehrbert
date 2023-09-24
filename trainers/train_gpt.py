@@ -33,6 +33,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             sampling_batch_size: int,
             including_long_sequence: bool,
             sampling_dataset_enabled: bool = False,
+            is_random_cursor_long_sequence: bool = False,
             *args, **kwargs
     ):
         self._tokenizer_path = tokenizer_path
@@ -49,6 +50,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         self._sampling_batch_size = sampling_batch_size
         self._including_long_sequence = including_long_sequence
         self._sampling_dataset_enabled = sampling_dataset_enabled
+        self._is_random_cursor_long_sequence = is_random_cursor_long_sequence
 
         super(GptModelTrainer, self).__init__(*args, **kwargs)
 
@@ -68,6 +70,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             f'sampling_batch_size: {sampling_batch_size}\n'
             f'including_long_sequence: {including_long_sequence}\n'
             f'sampling_dataset_enabled: {sampling_dataset_enabled}\n'
+            f'is_random_cursor_long_sequence: {is_random_cursor_long_sequence}\n'
         )
 
     def _load_dependencies(self):
@@ -98,7 +101,8 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             'max_num_of_visits': self._max_num_of_visits,
             'min_num_of_concepts': self._min_num_of_concepts,
             'including_long_sequence': self._including_long_sequence,
-            'sampling_dataset_enabled': self._sampling_dataset_enabled
+            'sampling_dataset_enabled': self._sampling_dataset_enabled,
+            'is_random_cursor': self._is_random_cursor_long_sequence
         }
 
         return GptDataGenerator(**parameters)
@@ -181,7 +185,8 @@ def main(args):
         including_long_sequence=args.including_long_sequence,
         save_checkpoint=args.save_checkpoint,
         save_freq=args.save_freq,
-        sampling_dataset_enabled=args.sampling_dataset_enabled
+        sampling_dataset_enabled=args.sampling_dataset_enabled,
+        is_random_cursor_long_sequence=args.is_random_cursor_long_sequence
     ).train_model()
 
 

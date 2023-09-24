@@ -6,6 +6,7 @@ from typing import Set
 
 from pandas import DataFrame
 
+from data_generators.gpt_utils import random_slice_gpt_sequence
 from data_generators.learning_objective import *
 from data_generators.tokenizer import ConceptTokenizer
 
@@ -342,6 +343,30 @@ class GptDataGenerator(BertDataGenerator):
             seq_length = len(row.token_ids)
             if seq_length <= self._max_seq_len:
                 yield RowSlicer(row, 0, seq_length)
+            elif self._is_random_cursor:
+                try:
+                    starting_index, end_index, demographic_tokens = random_slice_gpt_sequence(
+                        row.concept_ids,
+                        self._max_seq_len
+                    )
+                    # This indicates the VE token is not found
+                    if starting_index == end_index:
+                        continue
+
+                    concept_ids = demographic_tokens + row.concept_ids[starting_index:end_index + 1]
+                    token_ids = self._concept_tokenizer.encode([concept_ids])[0]
+                    visit_concept_orders = np.concatenate(
+                        [row.visit_concept_orders[:len(demographic_tokens)],
+                         row.visit_concept_orders[starting_index:end_index + 1]]
+                    )
+                    new_row = copy.deepcopy(row)
+                    new_row.token_ids = token_ids
+                    new_row.concept_ids = concept_ids
+                    new_row.visit_concept_orders = visit_concept_orders
+                    assert len(new_row.token_ids) <= self._max_seq_len
+                    yield RowSlicer(new_row, 0, len(new_row.token_ids))
+                except RuntimeError as e:
+                    print(e)
             elif self._including_long_sequence:
                 # Because the sequence is longer than the context window, we identify the last VE token in the
                 # sequence and take the patient history before that point

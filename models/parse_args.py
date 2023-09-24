@@ -256,6 +256,11 @@ def create_parse_args_gpt():
         dest='sampling_dataset_enabled',
         action='store_true'
     )
+    parser.add_argument(
+        '--is_random_cursor_long_sequence',
+        dest='is_random_cursor_long_sequence',
+        action='store_true'
+    )
     return parser
 
 
