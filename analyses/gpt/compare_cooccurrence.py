@@ -44,8 +44,8 @@ def main(args):
     if args.stratify_by_partition:
         columns += [reference_cooccurrence.concept_partition]
 
-    joined_results = comparison_cooccurrence.join(
-        reference_cooccurrence,
+    joined_results = reference_cooccurrence.join(
+        comparison_cooccurrence,
         join_conditions,
         'left_outer'
     ).select(
