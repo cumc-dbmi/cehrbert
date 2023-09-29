@@ -52,16 +52,16 @@ def main(args):
         columns
     ).withColumn(
         'kl',
-        f.bround(f.col('reference_prob') * f.log(f.col('reference_prob') / (f.col('prob') + f.lit(1e-10))), 4)
+        f.col('reference_prob') * f.log(f.col('reference_prob') / f.col('prob'))
     )
 
     if args.stratify_by_partition:
         joined_results \
             .groupby('concept_partition') \
-            .agg(f.sum('kl').alias('kl')) \
+            .agg(f.bround(f.sum('kl'), 4).alias('kl')) \
             .orderBy('concept_partition').show()
     else:
-        joined_results.select(f.sum('kl')).show()
+        joined_results.select(f.bround(f.sum('kl'), 4)).show()
 
 
 if __name__ == "__main__":
