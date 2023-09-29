@@ -102,7 +102,8 @@ def main(
         .getOrCreate()
 
     source_data = spark.read.parquet(args.sequence_data_path)
-    source_data = source_data.where(f'num_of_concepts <= {args.num_of_concepts}')
+    if 'num_of_concepts' in source_data.columns:
+        source_data = source_data.where(f'num_of_concepts <= {args.num_of_concepts}')
     if args.use_sample:
         source_data = source_data.sample(args.sample_frac)
 
