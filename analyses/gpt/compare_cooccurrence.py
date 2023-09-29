@@ -42,10 +42,6 @@ def main(args):
         f.coalesce(comparison_cooccurrence.prob, f.lit(1e-10)).alias('prob')
     ]
     if args.stratify_by_partition:
-        join_conditions = (
-                join_conditions
-                & (comparison_cooccurrence.concept_partition == reference_cooccurrence.concept_partition)
-        )
         columns += [reference_cooccurrence.concept_partition]
 
     joined_results = comparison_cooccurrence.join(
