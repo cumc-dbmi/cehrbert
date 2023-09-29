@@ -67,12 +67,16 @@ def generate_cooccurrence(
         .withColumn('prob', f.col('count') / f.lit(num_of_concept_pairs))
 
     if stratify_by_frequency:
-        marginal_dist = compute_marginal(dataframe, num_of_partitions).select('concept_id', 'concept_partition')
-        cooccurrence = cooccurrence.join(
-            marginal_dist,
-            concept_pair_dataframe.concept_id_1 == marginal_dist.concept_id
-        ).drop('concept_id')
-
+        # marginal_dist = compute_marginal(dataframe, num_of_partitions).select('concept_id', 'concept_partition')
+        unique_num_of_concept_pairs = cooccurrence.count()
+        partition_size = unique_num_of_concept_pairs // num_of_partitions
+        cooccurrence = cooccurrence \
+            .withColumn('concept_order', f.row_number().over(Window.orderBy(f.desc('count')))) \
+            .withColumn('concept_partition',
+                        f.floor(f.col('concept_order') / f.lit(partition_size)).cast('int') + f.lit(1)) \
+            .withColumn('concept_partition',
+                        f.when(f.col('concept_partition') > num_of_partitions, f.lit(num_of_partitions)).otherwise(
+                            f.col('concept_partition'))).drop('concept_order')
     return cooccurrence
 
 
