@@ -7,9 +7,21 @@ from itertools import combinations
 
 
 @udf(ArrayType(ArrayType(StringType())))
-def concept_pair(sequence):
+def life_time_concept_pair(sequence):
     all_combinations = combinations(set([concept for concept in sequence if concept.isnumeric()]), 2)
     return list(all_combinations)
+
+
+@udf(ArrayType(ArrayType(StringType())))
+def temporal_concept_pair(sequence):
+    concepts = [concept for concept in sequence if concept.isnumeric()]
+    all_combinations = []
+    for i in range(len(concepts)):
+        current_concept = concepts[i]
+        for future_concept in concepts[i:]:
+            if current_concept != future_concept:
+                all_combinations.append((current_concept, future_concept))
+    return all_combinations
 
 
 @udf(ArrayType(StringType()))
@@ -45,12 +57,17 @@ def compute_marginal(
 def generate_cooccurrence(
         dataframe,
         stratify_by_frequency=False,
-        num_of_partitions=3
+        num_of_partitions=3,
+        is_temporal_cooccurrence=False
 ):
     num_of_patients = dataframe.count()
+
+    # Determine what strategy to use to construct the co-occurrence matrix
+    concept_pair_udf = temporal_concept_pair if is_temporal_cooccurrence else life_time_concept_pair
+
     concept_pair_dataframe = dataframe.withColumn(
         'concept_pair',
-        concept_pair('concept_ids')
+        concept_pair_udf('concept_ids')
     ).select(f.explode('concept_pair').alias('concept_pair')) \
         .select(f.sort_array('concept_pair').alias('concept_pair')) \
         .withColumn('concept_id_1', f.col('concept_pair').getItem(0)) \
@@ -116,9 +133,10 @@ def main(
     concept = spark.read.parquet(args.concept_path)
 
     source_data_cooccurrence = generate_cooccurrence(
-        source_data,
-        args.stratify_by_frequency,
-        args.num_of_partitions
+        dataframe=source_data,
+        stratify_by_frequency=args.stratify_by_frequency,
+        num_of_partitions=args.num_of_partitions,
+        is_temporal_cooccurrence=args.is_temporal_cooccurrence
     )
     source_data_cooccurrence = get_domain(
         source_data_cooccurrence,
@@ -185,5 +203,10 @@ if __name__ == "__main__":
         type=int,
         default=3,
         required=False
+    )
+    parser.add_argument(
+        '--is_temporal_cooccurrence',
+        dest='is_temporal_cooccurrence',
+        action='store_true'
     )
     main(parser.parse_args())
