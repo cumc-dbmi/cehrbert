@@ -18,7 +18,8 @@ def unique_concepts(sequence):
 
 
 def compute_marginal(
-        dataframe
+        dataframe,
+        num_of_partitions
 ):
     all_concepts_dataframe = dataframe.withColumn(
         'unique_concepts',
@@ -31,19 +32,20 @@ def compute_marginal(
         .withColumn('prob', f.col('count') / f.lit(data_size)) \
         .withColumn('concept_order', f.row_number().over(Window.orderBy(f.desc('prob'))))
     num_of_concepts = marginal_dist.count()
-    partition_size = num_of_concepts // 3
+    partition_size = num_of_concepts // num_of_partitions
     marginal_dist = marginal_dist \
         .withColumn('concept_partition',
-                    f.floor(f.col('concept_order') / f.lit(partition_size)).cast('int')) \
+                    f.floor(f.col('concept_order') / f.lit(partition_size)).cast('int') + f.lit(1)) \
         .withColumn('concept_partition',
-                    f.when(f.col('concept_partition') >= 3, 2).otherwise(f.col('concept_partition'))) \
-        .drop('concept_order')
+                    f.when(f.col('concept_partition') > num_of_partitions, num_of_partitions).otherwise(
+                        f.col('concept_partition'))).drop('concept_order')
     return marginal_dist
 
 
 def generate_cooccurrence(
         dataframe,
-        stratify_by_frequency=False
+        stratify_by_frequency=False,
+        num_of_partitions=3
 ):
     num_of_patients = dataframe.count()
     concept_pair_dataframe = dataframe.withColumn(
@@ -65,7 +67,7 @@ def generate_cooccurrence(
         .withColumn('prob', f.col('count') / f.lit(num_of_concept_pairs))
 
     if stratify_by_frequency:
-        marginal_dist = compute_marginal(dataframe).select('concept_id', 'concept_partition')
+        marginal_dist = compute_marginal(dataframe, num_of_partitions).select('concept_id', 'concept_partition')
         cooccurrence = cooccurrence.join(
             marginal_dist,
             concept_pair_dataframe.concept_id_1 == marginal_dist.concept_id
@@ -111,7 +113,8 @@ def main(
 
     source_data_cooccurrence = generate_cooccurrence(
         source_data,
-        args.stratify_by_frequency
+        args.stratify_by_frequency,
+        args.num_of_partitions
     )
     source_data_cooccurrence = get_domain(
         source_data_cooccurrence,
@@ -170,5 +173,13 @@ if __name__ == "__main__":
         '--stratify_by_frequency',
         dest='stratify_by_frequency',
         action='store_true'
+    )
+    parser.add_argument(
+        '--num_of_partitions',
+        dest='num_of_partitions',
+        action='store',
+        type=int,
+        default=3,
+        required=False
     )
     main(parser.parse_args())

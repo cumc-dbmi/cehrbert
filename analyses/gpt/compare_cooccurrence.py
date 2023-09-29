@@ -52,7 +52,7 @@ def main(args):
         columns
     ).withColumn(
         'kl',
-        f.bround(f.col('reference_prob') * f.log(f.col('reference_prob') / (f.col('prob') + f.lit(1e-10))), 2)
+        f.bround(f.col('reference_prob') * f.log(f.col('reference_prob') / (f.col('prob') + f.lit(1e-10))), 4)
     )
 
     if args.stratify_by_partition:
