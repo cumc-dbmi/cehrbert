@@ -5,6 +5,17 @@ from pyspark.sql.functions import udf
 import numpy as np
 
 
+def preprocess_coocurrence(
+        cooccurrence
+):
+    cooccurrence = cooccurrence.where('concept_id_1 <> 0 AND concept_id_2 <> 0')
+    cooccurrence = cooccurrence.where(
+        'concept_id_1_domain_id NOT IN ("Metadata", "Gender", "Visit") '
+        'AND concept_id_2_domain_id NOT IN ("Metadata", "Gender", "Visit")'
+    )
+    return cooccurrence
+
+
 @udf(t.FloatType())
 def kl_divergence_udf(prob1, prob2):
     return prob1 * np.log(prob1 / (prob2 + 1e-10))
@@ -19,16 +30,39 @@ def main(args):
     reference_cooccurrence = spark.read.parquet(args.reference_cooccurrence_path)
     comparison_cooccurrence = spark.read.parquet(args.comparison_cooccurrence_path)
 
-    comparison_cooccurrence.join(
+    reference_cooccurrence = preprocess_coocurrence(reference_cooccurrence)
+    comparison_cooccurrence = preprocess_coocurrence(comparison_cooccurrence)
+
+    join_conditions = (
+            (comparison_cooccurrence.concept_id_1 == reference_cooccurrence.concept_id_1)
+            & (comparison_cooccurrence.concept_id_2 == reference_cooccurrence.concept_id_2)
+    )
+    columns = [
+        reference_cooccurrence.prob.alias('reference_prob'),
+        f.coalesce(comparison_cooccurrence.prob, f.lit(1e-10)).alias('prob')
+    ]
+    if args.stratify_by_partition:
+        join_conditions = (
+                join_conditions
+                & (comparison_cooccurrence.concept_partition == reference_cooccurrence.concept_partition)
+        )
+        columns += [reference_cooccurrence.concept_partition]
+
+    joined_results = comparison_cooccurrence.join(
         reference_cooccurrence,
-        (comparison_cooccurrence.concept_id_1 == reference_cooccurrence.concept_id_1) &
-        (comparison_cooccurrence.concept_id_2 == reference_cooccurrence.concept_id_2),
+        join_conditions,
         'left_outer'
     ).select(
-        reference_cooccurrence.prob.alias('reference_prob'),
-        f.coalesce(comparison_cooccurrence.prob, f.lit(1e-10)).alias('prob'),
-    ).withColumn('kl', f.col('reference_prob') * f.log(f.col('reference_prob') / (f.col('prob') + f.lit(1e-10)))) \
-        .select(f.sum('kl')).show()
+        columns
+    ).withColumn('kl', f.col('reference_prob') * f.log(f.col('reference_prob') / (f.col('prob') + f.lit(1e-10))))
+
+    if args.stratify_by_partition:
+        joined_results \
+            .groupby('concept_partition') \
+            .agg(f.sum('kl').alias('kl')) \
+            .orderBy('concept_partition').show()
+    else:
+        joined_results.select(f.sum('kl')).show()
 
 
 if __name__ == "__main__":
@@ -49,5 +83,10 @@ if __name__ == "__main__":
         action='store',
         help='The path for comparison data coocurrence',
         required=True
+    )
+    parser.add_argument(
+        '--stratify_by_partition',
+        dest='stratify_by_partition',
+        action='store_true'
     )
     main(parser.parse_args())

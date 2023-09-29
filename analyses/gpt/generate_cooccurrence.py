@@ -2,6 +2,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql import functions as f
 from pyspark.sql.functions import udf
 from pyspark.sql.types import ArrayType, StringType
+from pyspark.sql.window import Window
 from itertools import combinations
 
 
@@ -11,10 +12,40 @@ def concept_pair(sequence):
     return list(all_combinations)
 
 
-def generate_cooccurrence(
+@udf(ArrayType(StringType()))
+def unique_concepts(sequence):
+    return list(set([concept for concept in sequence if concept.isnumeric()]))
+
+
+def compute_marginal(
         dataframe
 ):
-    total_size = dataframe.count()
+    all_concepts_dataframe = dataframe.withColumn(
+        'unique_concepts',
+        unique_concepts('concept_ids')
+    ).select(f.explode('unique_concepts').alias('concept_id')) \
+        .drop('unique_concepts')
+    marginal_dist = all_concepts_dataframe.groupBy('concept_id').count()
+    data_size = all_concepts_dataframe.count()
+    marginal_dist = marginal_dist \
+        .withColumn('prob', f.col('count') / f.lit(data_size)) \
+        .withColumn('concept_order', f.row_number().over(Window.orderBy(f.desc('prob'))))
+    num_of_concepts = marginal_dist.count()
+    partition_size = num_of_concepts // 3
+    marginal_dist = marginal_dist \
+        .withColumn('concept_partition',
+                    f.floor(f.col('concept_order') / f.lit(partition_size)).cast('int')) \
+        .withColumn('concept_partition',
+                    f.when(f.col('concept_partition') >= 3, 2).otherwise(f.col('concept_partition'))) \
+        .drop('concept_order')
+    return marginal_dist
+
+
+def generate_cooccurrence(
+        dataframe,
+        stratify_by_frequency=False
+):
+    num_of_patients = dataframe.count()
     concept_pair_dataframe = dataframe.withColumn(
         'concept_pair',
         concept_pair('concept_ids')
@@ -23,12 +54,24 @@ def generate_cooccurrence(
         .withColumn('concept_id_1', f.col('concept_pair').getItem(0)) \
         .withColumn('concept_id_2', f.col('concept_pair').getItem(1)) \
         .drop('concept_pair')
-    dataframe_cooccurrence = concept_pair_dataframe \
+
+    # Compute the co-occurrence matrix and calculate prevalence (denominator: total num of patients)
+    # and prob (denominator: total num of pairs)
+    cooccurrence = concept_pair_dataframe \
         .groupBy('concept_id_1', 'concept_id_2').count() \
-        .withColumn('prevalence', f.col('count') / f.lit(total_size))
-    total = concept_pair_dataframe.count()
-    dataframe_cooccurrence = dataframe_cooccurrence.withColumn('prob', f.col('count') / f.lit(total))
-    return dataframe_cooccurrence
+        .withColumn('prevalence', f.col('count') / f.lit(num_of_patients))
+    num_of_concept_pairs = concept_pair_dataframe.count()
+    cooccurrence = cooccurrence \
+        .withColumn('prob', f.col('count') / f.lit(num_of_concept_pairs))
+
+    if stratify_by_frequency:
+        marginal_dist = compute_marginal(dataframe).select('concept_id', 'concept_partition')
+        cooccurrence = cooccurrence.join(
+            marginal_dist,
+            concept_pair_dataframe.concept_id_1 == marginal_dist.concept_id
+        ).drop('concept_id')
+
+    return cooccurrence
 
 
 def get_domain(
@@ -66,7 +109,8 @@ def main(
     concept = spark.read.parquet(args.concept_path)
 
     source_data_cooccurrence = generate_cooccurrence(
-        source_data
+        source_data,
+        args.stratify_by_frequency
     )
     source_data_cooccurrence = get_domain(
         source_data_cooccurrence,
@@ -120,5 +164,10 @@ if __name__ == "__main__":
         dest='data_cooccurrence_path',
         action='store',
         required=True
+    )
+    parser.add_argument(
+        '--stratify_by_frequency',
+        dest='stratify_by_frequency',
+        action='store_true'
     )
     main(parser.parse_args())
