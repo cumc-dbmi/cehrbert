@@ -50,7 +50,10 @@ def main(args):
         'left_outer'
     ).select(
         columns
-    ).withColumn('kl', f.col('reference_prob') * f.log(f.col('reference_prob') / (f.col('prob') + f.lit(1e-10))))
+    ).withColumn(
+        'kl',
+        f.bround(f.col('reference_prob') * f.log(f.col('reference_prob') / (f.col('prob') + f.lit(1e-10))), 2)
+    )
 
     if args.stratify_by_partition:
         joined_results \
