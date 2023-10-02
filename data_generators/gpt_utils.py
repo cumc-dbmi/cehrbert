@@ -25,6 +25,10 @@ def random_slice_gpt_sequence(
             data_cursor = data_cursor + timedelta(days=att_date_delta)
         elif current_token[:3] == 'VS-':
             data_cursor = data_cursor + timedelta(days=int(current_token.split('-')[1][1:]))
+
+    if len(starting_points) == 0:
+        return 0, 0, concept_ids[0:4]
+
     random_starting_index, random_starting_year, random_starting_age = random.choice(starting_points)
     demographic_tokens = [
         f'year:{random_starting_year}',
