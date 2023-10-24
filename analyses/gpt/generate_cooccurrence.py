@@ -15,13 +15,13 @@ def life_time_concept_pair(sequence):
 @udf(ArrayType(ArrayType(StringType())))
 def temporal_concept_pair(sequence):
     concepts = [concept for concept in sequence if concept.isnumeric()]
-    all_combinations = []
+    all_combinations = set()
     for i in range(len(concepts)):
         current_concept = concepts[i]
         for future_concept in concepts[i:]:
             if current_concept != future_concept:
                 all_combinations.append((current_concept, future_concept))
-    return all_combinations
+    return list(all_combinations)
 
 
 @udf(ArrayType(StringType()))
