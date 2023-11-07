@@ -18,7 +18,7 @@ def temporal_concept_pair(sequence):
     all_combinations = set()
     for i in range(len(concepts)):
         current_concept = concepts[i]
-        for future_concept in concepts[i:]:
+        for future_concept in set(concepts[i:]):
             if current_concept != future_concept:
                 all_combinations.append((current_concept, future_concept))
     return list(all_combinations)
