@@ -6,13 +6,11 @@ from pyspark.sql.window import Window
 from itertools import combinations
 
 
-@udf(ArrayType(ArrayType(StringType())))
 def life_time_concept_pair(sequence):
     all_combinations = combinations(set([concept for concept in sequence if concept.isnumeric()]), 2)
     return list(all_combinations)
 
 
-@udf(ArrayType(ArrayType(StringType())))
 def temporal_concept_pair(sequence):
     concepts = [concept for concept in sequence if concept.isnumeric()]
     all_combinations = set()
@@ -21,6 +19,35 @@ def temporal_concept_pair(sequence):
         for future_concept in set(concepts[i:]):
             if current_concept != future_concept:
                 all_combinations.add((current_concept, future_concept))
+    return list(all_combinations)
+
+
+def next_visit_concept_pair(sequence):
+    visits = []
+    current_visit = []
+    for concept in sequence:
+        # This marks the start of a visit
+        if concept in ['VS', 'VE']:
+            if len(current_visit) > 0:
+                visits.append(list(current_visit))
+            current_visit.clear()
+        elif concept.isnumeric():
+            if concept not in current_visit:
+                current_visit.append(concept)
+
+    all_combinations = set()
+    for i in range(len(visits)):
+        current_visit = visits[i]
+        if i + 1 == len(visits):
+            next_visit = set()
+        else:
+            next_visit = set(visits[i + 1])
+        for j in range(len(current_visit)):
+            current_concept = current_visit[j]
+            two_visits = set(current_visit[j + 1:]) | next_visit
+            for future_concept in two_visits:
+                if current_concept != future_concept:
+                    all_combinations.add((current_concept, future_concept))
     return list(all_combinations)
 
 
@@ -58,12 +85,20 @@ def generate_cooccurrence(
         dataframe,
         stratify_by_frequency=False,
         num_of_partitions=3,
-        is_temporal_cooccurrence=False
+        is_temporal_cooccurrence=False,
+        use_next_visit_concept_pair=False
 ):
     num_of_patients = dataframe.count()
 
     # Determine what strategy to use to construct the co-occurrence matrix
-    concept_pair_udf = temporal_concept_pair if is_temporal_cooccurrence else life_time_concept_pair
+    concept_pair_func = life_time_concept_pair
+    if is_temporal_cooccurrence:
+        if use_next_visit_concept_pair:
+            concept_pair_func = next_visit_concept_pair
+        else:
+            concept_pair_func = temporal_concept_pair
+
+    concept_pair_udf = udf(concept_pair_func, ArrayType(ArrayType(StringType())))
 
     concept_pair_dataframe = dataframe.withColumn(
         'concept_pair',
@@ -136,7 +171,8 @@ def main(
         dataframe=source_data,
         stratify_by_frequency=args.stratify_by_frequency,
         num_of_partitions=args.num_of_partitions,
-        is_temporal_cooccurrence=args.is_temporal_cooccurrence
+        is_temporal_cooccurrence=args.is_temporal_cooccurrence,
+        use_next_visit_concept_pair=args.use_next_visit_concept_pair
     )
     source_data_cooccurrence = get_domain(
         source_data_cooccurrence,
@@ -207,6 +243,11 @@ if __name__ == "__main__":
     parser.add_argument(
         '--is_temporal_cooccurrence',
         dest='is_temporal_cooccurrence',
+        action='store_true'
+    )
+    parser.add_argument(
+        '--use_next_visit_concept_pair',
+        dest='use_next_visit_concept_pair',
         action='store_true'
     )
     main(parser.parse_args())
