@@ -15,7 +15,7 @@ def preprocess_coocurrence(
     )
     total = cooccurrence.select(f.sum('count').alias('total'))
     # Rescale probability distribution after removing certain concepts
-    cooccurrence = cooccurrence.join(total, 'cross_join') \
+    cooccurrence = cooccurrence.crossJoin(total) \
         .withColumn('prob', f.col('count') / f.col('total')) \
         .drop('total')
     return cooccurrence
