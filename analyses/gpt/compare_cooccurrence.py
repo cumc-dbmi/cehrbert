@@ -13,6 +13,11 @@ def preprocess_coocurrence(
         'concept_id_1_domain_id NOT IN ("Metadata", "Gender", "Visit") '
         'AND concept_id_2_domain_id NOT IN ("Metadata", "Gender", "Visit")'
     )
+    total = cooccurrence.select(f.sum('count').alias('total'))
+    # Rescale probability distribution after removing certain concepts
+    cooccurrence = cooccurrence.join(total, 'cross_join') \
+        .withColumn('prob', f.col('count') / f.col('total')) \
+        .drop('total')
     return cooccurrence
 
 
