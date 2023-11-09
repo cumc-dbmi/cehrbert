@@ -461,8 +461,12 @@ def create_sequence_data_with_att(
 
     decorators = [
         PatientEventBaseDecorator(visit_occurrence),
-        PatientEventAttDecorator(visit_occurrence, include_visit_type, exclude_visit_tokens,
-                                 att_type),
+        PatientEventAttDecorator(
+            visit_occurrence,
+            include_visit_type,
+            exclude_visit_tokens,
+            att_type
+        ),
         DemographicPromptDecorator(patient_demographic),
         DeathEventDecorator(death, att_type)
     ]

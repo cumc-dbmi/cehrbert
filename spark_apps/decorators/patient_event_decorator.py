@@ -15,6 +15,7 @@ class AttType(Enum):
     MONTH = 'month'
     CEHR_BERT = 'cehr_bert'
     MIX = 'mix'
+    NONE = 'none'
 
 
 class PatientEventDecorator(ABC):
@@ -138,6 +139,9 @@ class PatientEventAttDecorator(PatientEventDecorator):
             self,
             patient_events: DataFrame
     ):
+        if self._att_type == AttType.NONE:
+            return patient_events
+
         # visits should the following columns (person_id,
         # visit_concept_id, visit_start_date, visit_occurrence_id, domain, concept_value)
         cohort_member_person_pair = patient_events.select('person_id', 'cohort_member_id').distinct()
