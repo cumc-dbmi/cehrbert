@@ -111,3 +111,4 @@ numpy~=1.21.6
 setuptools~=41.2.0
 networkx~=2.6.3
 whoosh
+pyyaml

@@ -5,7 +5,7 @@ from tqdm import tqdm
 from enum import Enum
 
 from whoosh import index
-from whoosh.fields import Schema, TEXT, NUMERIC, ID
+from whoosh.fields import Schema, TEXT, NUMERIC, ID, STORED
 from whoosh.analysis import RegexTokenizer
 
 from whoosh.qparser import QueryParser, RangePlugin
@@ -28,13 +28,19 @@ class PatientDataIndex:
     def __init__(
             self,
             index_folder: str,
-            rebuilt: bool = False
+            rebuilt: bool = False,
+            set_unique_concepts: bool = False,
+            common_attributes: List[str] = None,
+            sensitive_attributes: List[str] = None
     ):
         self.index_folder = index_folder
         self.rebuilt = rebuilt
+        self.set_unique_concepts = set_unique_concepts
+        self.common_attributes = common_attributes
+        self.sensitive_attributes = sensitive_attributes
 
         LOG.info(
-            f'The PatientDataIndex parameters\n:'
+            f'The PatientDataIndex parameters\n'
             f'\tindex_folder: {index_folder}\n'
             f'\trebuilt: {rebuilt}\n'
         )
@@ -72,18 +78,42 @@ class PatientDataIndex:
             if self.validate_demographics(t.concept_ids):
                 person_id = str(t.person_id)
                 year, age, gender, race = self.get_demographics(t.concept_ids)
-                # Concatenate all the concept ids using whitespace
-                concept_ids_str = ' '.join([_ for _ in t.concept_ids[4:] if str.isnumeric(_)])
 
-                # Add a document to the index at a time
-                writer.add_document(
-                    person_id=person_id,
-                    year=year,
-                    age=age,
-                    gender=gender,
-                    race=race,
-                    concepts=concept_ids_str
-                )
+                medical_concepts = t.concept_ids[4:]
+                if self.set_unique_concepts:
+                    medical_concepts = list(set(medical_concepts))
+
+                if self.common_attributes and self.sensitive_attributes:
+                    common_concepts = [_ for _ in medical_concepts if _ in self.common_attributes]
+                    sensitive_concepts = [_ for _ in medical_concepts if _ in self.common_attributes]
+
+                    # Concatenate all the concept ids using whitespace
+                    concept_ids_str = ' '.join([_ for _ in common_concepts if str.isnumeric(_)])
+                    sensitive_attributes_str = ' '.join([_ for _ in sensitive_concepts if str.isnumeric(_)])
+
+                    # Add a document to the index at a time
+                    writer.add_document(
+                        person_id=person_id,
+                        year=year,
+                        age=age,
+                        gender=gender,
+                        race=race,
+                        concepts=concept_ids_str,
+                        sensitive_attributes=sensitive_attributes_str
+                    )
+                else:
+                    # Concatenate all the concept ids using whitespace
+                    concept_ids_str = ' '.join([_ for _ in medical_concepts if str.isnumeric(_)])
+                    # Add a document to the index at a time
+                    writer.add_document(
+                        person_id=person_id,
+                        year=year,
+                        age=age,
+                        gender=gender,
+                        race=race,
+                        concepts=concept_ids_str,
+                        sensitive_attributes=''
+                    )
 
         LOG.info('Done adding documents.')
         LOG.info('Started committing the changes to the index.')
@@ -110,6 +140,13 @@ class PatientDataIndex:
 
         year, age, gender, race = self.get_demographics(patient_seq)
         concept_ids = [_ for _ in patient_seq[4:] if str.isnumeric(_)]
+
+        if self.set_unique_concepts:
+            concept_ids = list(set(concept_ids))
+
+        if self.common_attributes:
+            concept_ids = [_ for _ in concept_ids if _ in self.common_attributes]
+
         return [_ for _ in self.find_patients(
             year, age, gender, race, concept_ids, year_std, age_std, concepts_logic_operator, limit
         )]
@@ -163,7 +200,8 @@ class PatientDataIndex:
             age=NUMERIC(stored=True),
             race=TEXT(stored=True, analyzer=basic_analyzer),
             gender=TEXT(stored=True, analyzer=basic_analyzer),
-            concepts=TEXT(stored=True)
+            concepts=TEXT(stored=True),
+            sensitive_atributes=STORED(stored=True)
         )
         return schema
 
