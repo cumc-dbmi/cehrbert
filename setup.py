@@ -5,11 +5,11 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='concept-embeddings',
+    name='cehr-transformers',
     # This allows to use git/hg to auto-generate new versions
     use_scm_version={"root": ".", "relative_to": __file__},
     setup_requires=['setuptools_scm'],
-    python_requires='>=3.6.0',
+    python_requires='>=3.7.0',
 
     classifiers=[
         'Development Status :: 5 - Production/Stable',
@@ -23,8 +23,7 @@ setup(
     ],
     keywords='development',
     packages=find_packages(where='.'),
-    install_requires=['Keras>=2.0.8', 'numpy', 'tqdm', 'tensorflow', 'pandas', 'scikit-learn',
-                      'xgboost'],
+    install_requires=['Keras', 'numpy', 'tqdm', 'tensorflow', 'pandas', 'scikit-learn', 'xgboost'],
     tests_require=['pytest'],
     include_package_data=True,
 )
