@@ -130,11 +130,11 @@ class PatientDataIndex:
 
         if not self.search_ix:
             LOG.warning(f'The index is empty at {self.index_folder}, please build the index first!')
-            return
+            return None
 
         if not self.validate_demographics(patient_seq):
             LOG.warning(f'The first four tokens {patient_seq[0:4]} do not contain valid demographic information!')
-            return
+            return None
 
         year, age, gender, race = self.get_demographics(patient_seq)
         concept_ids = self.extract_medical_concepts(patient_seq)
@@ -188,7 +188,9 @@ class PatientDataIndex:
         with self.search_ix.searcher() as searcher:
             results = searcher.search(combined_query, limit=limit)
             for result in results:
-                yield dict(result)
+                result_dict = dict(result)
+                result_dict['concept_ids'] = result_dict['concepts'].split(' ')
+                yield result_dict
 
     @staticmethod
     def get_index_schema():
