@@ -1,5 +1,6 @@
 import os
 import logging
+import copy
 from typing import Union, List, Generator, Dict
 from tqdm import tqdm
 from enum import Enum
@@ -77,42 +78,40 @@ class PatientDataIndex:
             if self.validate_demographics(t.concept_ids):
                 person_id = str(t.person_id)
                 year, age, gender, race = self.get_demographics(t.concept_ids)
+                medical_concepts = self.extract_medical_concepts(t.concept_ids)
 
-                medical_concepts = t.concept_ids[4:]
-                if self.set_unique_concepts:
-                    medical_concepts = list(set(medical_concepts))
+                document = {
+                    'person_id': person_id,
+                    'year': year,
+                    'age': age,
+                    'gender': gender,
+                    'race': race,
+                    'num_of_visits': t.num_of_visits,
+                    'num_of_concepts': t.num_of_concepts
+                }
 
                 if self.common_attributes and self.sensitive_attributes:
                     common_concepts = [_ for _ in medical_concepts if _ in self.common_attributes]
-                    sensitive_concepts = [_ for _ in medical_concepts if _ in self.common_attributes]
+                    sensitive_concepts = [_ for _ in medical_concepts if _ in self.sensitive_attributes]
 
                     # Concatenate all the concept ids using whitespace
                     concept_ids_str = ' '.join([_ for _ in common_concepts if str.isnumeric(_)])
                     sensitive_attributes_str = ' '.join([_ for _ in sensitive_concepts if str.isnumeric(_)])
-
-                    # Add a document to the index at a time
-                    writer.add_document(
-                        person_id=person_id,
-                        year=year,
-                        age=age,
-                        gender=gender,
-                        race=race,
-                        concepts=concept_ids_str,
-                        sensitive_attributes=sensitive_attributes_str
-                    )
                 else:
                     # Concatenate all the concept ids using whitespace
                     concept_ids_str = ' '.join([_ for _ in medical_concepts if str.isnumeric(_)])
-                    # Add a document to the index at a time
-                    writer.add_document(
-                        person_id=person_id,
-                        year=year,
-                        age=age,
-                        gender=gender,
-                        race=race,
-                        concepts=concept_ids_str,
-                        sensitive_attributes=''
-                    )
+                    # Set the sensitive attribute to an empty string
+                    # when common_attributes and sensitive_attributes are empty
+                    sensitive_attributes_str = ''
+
+                document.update({
+                    'concepts': concept_ids_str,
+                    'sensitive_attributes': sensitive_attributes_str
+                })
+
+                writer.add_document(
+                    **document
+                )
 
         LOG.info('Done adding documents.')
         LOG.info('Started committing the changes to the index.')
@@ -138,10 +137,7 @@ class PatientDataIndex:
             return
 
         year, age, gender, race = self.get_demographics(patient_seq)
-        concept_ids = [_ for _ in patient_seq[4:] if str.isnumeric(_)]
-
-        if self.set_unique_concepts:
-            concept_ids = list(set(concept_ids))
+        concept_ids = self.extract_medical_concepts(patient_seq)
 
         if self.common_attributes:
             concept_ids = [_ for _ in concept_ids if _ in self.common_attributes]
@@ -149,6 +145,12 @@ class PatientDataIndex:
         return [_ for _ in self.find_patients(
             year, age, gender, race, concept_ids, year_std, age_std, concepts_logic_operator, limit
         )]
+
+    def extract_medical_concepts(self, patient_seq):
+        concept_ids = [_ for _ in patient_seq[4:] if str.isnumeric(_)]
+        if self.set_unique_concepts:
+            concept_ids = list(set(concept_ids))
+        return concept_ids
 
     def find_patients(
             self,
@@ -200,7 +202,9 @@ class PatientDataIndex:
             race=TEXT(stored=True, analyzer=basic_analyzer),
             gender=TEXT(stored=True, analyzer=basic_analyzer),
             concepts=TEXT(stored=True),
-            sensitive_attributes=STORED()
+            sensitive_attributes=STORED(),
+            num_of_visits=STORED(),
+            num_of_concepts=STORED()
         )
         return schema
 
