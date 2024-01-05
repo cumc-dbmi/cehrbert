@@ -201,7 +201,7 @@ class PatientDataIndex:
             race=TEXT(stored=True, analyzer=basic_analyzer),
             gender=TEXT(stored=True, analyzer=basic_analyzer),
             concepts=TEXT(stored=True),
-            sensitive_atributes=STORED()
+            sensitive_attributes=STORED()
         )
         return schema
 
