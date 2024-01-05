@@ -1,6 +1,6 @@
 import os
 import logging
-from typing import Union, List, Generator
+from typing import Union, List, Generator, Dict
 from tqdm import tqdm
 from enum import Enum
 
@@ -10,7 +10,6 @@ from whoosh.analysis import RegexTokenizer
 
 from whoosh.qparser import QueryParser, RangePlugin
 from whoosh.query import And
-from whoosh.searching import Hit
 
 from dask.dataframe import DataFrame as dd_dataframe
 from pandas import DataFrame as pd_dataframe
@@ -128,7 +127,7 @@ class PatientDataIndex:
             age_std: int = 1,
             concepts_logic_operator: ConceptLogicOperator = ConceptLogicOperator.OR,
             limit: int = 1
-    ) -> List[Hit]:
+    ) -> List[Dict]:
 
         if not self.search_ix:
             LOG.warning(f'The index is empty at {self.index_folder}, please build the index first!')
@@ -162,7 +161,7 @@ class PatientDataIndex:
             age_std: int,
             concepts_logic_operator: ConceptLogicOperator,
             limit: int
-    ) -> Generator[Hit, None, None]:
+    ) -> Generator[Dict, None, None]:
 
         # Create a query parser for the range field
         year_parser = QueryParser('year', self.search_ix.schema)
@@ -187,7 +186,7 @@ class PatientDataIndex:
         with self.search_ix.searcher() as searcher:
             results = searcher.search(combined_query, limit=limit)
             for result in results:
-                yield result
+                yield dict(result)
 
     @staticmethod
     def get_index_schema():
