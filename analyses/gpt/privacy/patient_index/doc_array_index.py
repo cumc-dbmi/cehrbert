@@ -109,6 +109,7 @@ class PatientDataIndex:
                     sensitive_concepts = [_ for _ in medical_concepts if _ in self.sensitive_attributes]
 
                 embeddings = self.create_binary_format(common_concepts)
+
                 document = self.doc_class(
                     id=person_id,
                     person_id=person_id,
@@ -117,9 +118,10 @@ class PatientDataIndex:
                     gender=gender,
                     race=race,
                     concept_embeddings=embeddings,
+                    sensitive_attributes=sensitive_concepts,
                     num_of_visits=t.num_of_visits,
-                    num_of_concepts=t.num_of_concepts,
-                    sensitive_concepts=sensitive_concepts
+                    num_of_concepts=t.num_of_concepts
+
                 )
                 batch_of_docs.append(document)
 
