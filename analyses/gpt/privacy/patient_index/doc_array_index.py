@@ -13,7 +13,7 @@ from dask.dataframe import DataFrame as dd_dataframe
 from pandas import DataFrame as pd_dataframe
 
 logging.basicConfig(level=logging.INFO)
-LOG = logging.getLogger("whoosh_index")
+LOG = logging.getLogger("PatientDataIndex")
 
 
 # Factory function to create a class with a dynamic embedding size
@@ -125,7 +125,7 @@ class PatientDataIndex:
                 )
                 batch_of_docs.append(document)
 
-                if batch_of_docs and len(batch_of_docs) % 1024 == 0:
+                if batch_of_docs and len(batch_of_docs) % 10240 == 0:
                     docs = DocList[self.doc_class](batch_of_docs)
                     self.doc_index.index(docs)
                     LOG.info('Done adding documents.')
