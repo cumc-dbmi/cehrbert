@@ -5,7 +5,7 @@ from datetime import datetime
 import dask.dataframe as dd
 from multiprocessing import Pool
 
-from analyses.gpt.privacy.patient_index.whoosh_index import PatientDataIndex, ConceptLogicOperator
+from analyses.gpt.privacy.patient_index.doc_array_index import PatientDataIndex
 
 
 def calculate_hamming_distance(
@@ -27,10 +27,12 @@ def match_patients(
         data_partition,
         index_folder,
         output_folder,
+        tokenizer_path,
         set_unique_concepts
 ):
     patient_indexer = PatientDataIndex(
         index_folder=index_folder,
+        tokenizer_path=tokenizer_path,
         set_unique_concepts=set_unique_concepts
     )
 
@@ -76,13 +78,15 @@ def main_parallel(
     pool_tuples = []
     for i in range(0, args.num_of_cores):
         pool_tuples.append(
-            (dataset.get_partition(i).compute(), args.index_folder, args.output_folder, args.set_unique_concepts)
+            (
+                dataset.get_partition(i).compute(), args.index_folder, args.output_folder,
+                args.tokenizer_path, args.set_unique_concepts
+            )
         )
     with Pool(processes=args.num_of_cores) as p:
         p.starmap(match_patients, pool_tuples)
         p.close()
         p.join()
-
     print('Done')
 
 
@@ -110,6 +114,13 @@ def create_argparser():
         dest='output_folder',
         action='store',
         help='The output folder that stores the metrics',
+        required=True
+    )
+    parser.add_argument(
+        '--tokenizer_path',
+        dest='tokenizer_path',
+        action='store',
+        help='The path to ConceptTokenizer',
         required=True
     )
     parser.add_argument(

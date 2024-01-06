@@ -1,8 +1,9 @@
 import argparse
+import sys
 from typing import Union
 
 import dask.dataframe as dd
-from analyses.gpt.privacy.patient_index.whoosh_index import PatientDataIndex
+from analyses.gpt.privacy.patient_index.doc_array_index import PatientDataIndex
 
 
 def create_argparser():
@@ -21,6 +22,13 @@ def create_argparser():
         dest='index_folder',
         action='store',
         help='The output folder that stores the index',
+        required=True
+    )
+    parser.add_argument(
+        '--tokenizer_path',
+        dest='tokenizer_path',
+        action='store',
+        help='The path to ConceptTokenizer',
         required=True
     )
     parser.add_argument(
@@ -47,6 +55,8 @@ def create_argparser():
 
 if __name__ == "__main__":
     import yaml
+    import pickle
+    import traceback
 
     args = create_argparser().parse_args()
 
@@ -66,9 +76,18 @@ if __name__ == "__main__":
         except Union[PermissionError, OSError] as e:
             print(e)
 
+    try:
+        concept_tokenizer = pickle.load(open(args.tokenizer_path, 'rb'))
+    except (AttributeError, EOFError, ImportError, IndexError, OSError) as e:
+        sys.exit(traceback.format_exc(e))
+    except Exception as e:
+        # everything else, possibly fatal
+        sys.exit(traceback.format_exc(e))
+
     patient_data_index = PatientDataIndex(
         index_folder=args.index_folder,
         rebuilt=args.rebuilt,
+        concept_tokenizer=concept_tokenizer,
         set_unique_concepts=args.set_unique_concepts,
         common_attributes=common_attributes,
         sensitive_attributes=sensitive_attributes
