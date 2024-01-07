@@ -3,7 +3,7 @@ import sys
 from typing import Union
 
 import dask.dataframe as dd
-from analyses.gpt.privacy.patient_index.doc_array_index import PatientDataIndex
+from analyses.gpt.privacy.patient_index.hnsw_indexer import PatientDataHnswDocumentIndex
 
 
 def create_argparser():
@@ -30,6 +30,14 @@ def create_argparser():
         action='store',
         help='The path to ConceptTokenizer',
         required=True
+    )
+    parser.add_argument(
+        '--batch_size',
+        dest='batch_size',
+        action='store',
+        type=int,
+        default=1024,
+        required=False
     )
     parser.add_argument(
         '--rebuilt',
@@ -84,13 +92,14 @@ if __name__ == "__main__":
         # everything else, possibly fatal
         sys.exit(traceback.format_exc(e))
 
-    patient_data_index = PatientDataIndex(
+    patient_data_index = PatientDataHnswDocumentIndex(
         index_folder=args.index_folder,
         rebuilt=args.rebuilt,
         concept_tokenizer=concept_tokenizer,
         set_unique_concepts=args.set_unique_concepts,
         common_attributes=common_attributes,
-        sensitive_attributes=sensitive_attributes
+        sensitive_attributes=sensitive_attributes,
+        batch_size=args.batch_size
     )
     dataset = dd.read_parquet(args.patient_sequence_folder)
     patient_data_index.build_index(dataset)

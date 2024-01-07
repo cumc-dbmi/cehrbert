@@ -1,13 +1,13 @@
+from abc import ABC, abstractmethod
 import copy
 import os
 import shutil
 import logging
-from typing import Union, List, Generator, Dict, Type
+from typing import Union, List, Dict
 from tqdm import tqdm
-from data_generators.tokenizer import ConceptTokenizer
 from docarray import BaseDoc, DocList
 from docarray.index import HnswDocumentIndex
-from docarray.typing import NdArray
+from docarray.index.abstract import BaseDocIndex
 import numpy as np
 from dask.dataframe import DataFrame as dd_dataframe
 from pandas import DataFrame as pd_dataframe
@@ -16,53 +16,58 @@ logging.basicConfig(level=logging.INFO)
 LOG = logging.getLogger("PatientDataIndex")
 
 
-# Factory function to create a class with a dynamic embedding size
-def create_doc_class(vocab_size: int) -> Type[BaseDoc]:
-    class PatientDocument(BaseDoc):
-        id: str
-        person_id: str
-        year: int
-        age: int
-        race: str
-        gender: str
-        concept_embeddings: NdArray[vocab_size]
-        sensitive_attributes: List[str]
-        num_of_visits: int
-        num_of_concepts: int
-
-    return PatientDocument
-
-
-class PatientDataIndex:
+class PatientDataIndex(ABC):
     def __init__(
             self,
-            index_folder: str,
-            concept_tokenizer: ConceptTokenizer,
+            index_folder: str = None,
             rebuilt: bool = False,
             set_unique_concepts: bool = False,
             common_attributes: List[str] = None,
-            sensitive_attributes: List[str] = None
+            sensitive_attributes: List[str] = None,
+            batch_size: int = 1023
     ):
         self.index_folder = index_folder
-        self.concept_tokenizer = concept_tokenizer
         self.rebuilt = rebuilt
         self.set_unique_concepts = set_unique_concepts
         self.common_attributes = common_attributes
         self.sensitive_attributes = sensitive_attributes
+        self.batch_size = batch_size
 
         LOG.info(
-            f'The PatientDataIndex parameters\n'
+            f'The {self.__class__.__name__} parameters\n'
             f'\tindex_folder: {index_folder}\n'
             f'\trebuilt: {rebuilt}\n'
-            f'\tconcept_tokenizer: {concept_tokenizer}\n'
             f'\tset_unique_concepts: {set_unique_concepts}\n'
             f'\tcommon_attributes: {common_attributes}\n'
             f'\tsensitive_attributes: {sensitive_attributes}\n'
+            f'\tbatch_size: {batch_size}\n'
         )
 
         # Get the index for search
-        self.doc_class = create_doc_class(self.concept_tokenizer.get_vocab_size())
-        self.doc_index = HnswDocumentIndex[self.doc_class](work_dir=self.index_folder)
+        self.doc_class = self.create_doc_class()
+        self.doc_index = self.create_index()
+
+    @abstractmethod
+    def create_doc_class(self) -> BaseDoc:
+        pass
+
+    @abstractmethod
+    def create_index(self) -> BaseDocIndex[BaseDoc]:
+        pass
+
+    @abstractmethod
+    def find_patients(
+            self,
+            year: int,
+            age: int,
+            gender: str,
+            race: str,
+            concept_ids: List[str],
+            year_std: int,
+            age_std: int,
+            limit: int
+    ) -> List[Dict]:
+        pass
 
     def is_index_empty(self):
         return self.doc_index.num_docs() == 0
@@ -125,7 +130,7 @@ class PatientDataIndex:
                 )
                 batch_of_docs.append(document)
 
-                if batch_of_docs and len(batch_of_docs) % 10240 == 0:
+                if batch_of_docs and len(batch_of_docs) % self.batch_size == 0:
                     docs = DocList[self.doc_class](batch_of_docs)
                     self.doc_index.index(docs)
                     LOG.info('Done adding documents.')
@@ -173,38 +178,6 @@ class PatientDataIndex:
         if self.set_unique_concepts:
             concept_ids = list(set(concept_ids))
         return concept_ids
-
-    def find_patients(
-            self,
-            year: int,
-            age: int,
-            gender: str,
-            race: str,
-            concept_ids: List[str],
-            year_std: int,
-            age_std: int,
-            limit: int
-    ) -> List[Dict]:
-
-        concept_embeddings = self.create_binary_format(concept_ids)
-
-        query = (
-            self.doc_index.build_query()  # get empty query object
-            .filter(filter_query={'$and': [
-                {'year': {'$gte': year - year_std}},
-                {'year': {'$lte': year + year_std}},
-                {'age': {'$gte': age - age_std}},
-                {'age': {'$lte': age + age_std}},
-                {'gender': {'$eq': gender}},
-                {'race': {'$eq': race}}]
-            })  # pre-filtering
-            .find(query=concept_embeddings, search_field='concept_embeddings')  # add vector similarity search
-            .build()
-        )
-
-        # execute the combined query and return the results
-        results = self.doc_index.execute_query(query, limit=limit)
-        return [vars(_) for _ in results.documents]
 
     @staticmethod
     def validate_demographics(
