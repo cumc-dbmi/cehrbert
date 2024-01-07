@@ -5,7 +5,7 @@ from datetime import datetime
 import dask.dataframe as dd
 from multiprocessing import Pool
 
-from analyses.gpt.privacy.patient_index.doc_array_index import PatientDataIndex
+from analyses.gpt.privacy.patient_index.base_indexer import PatientDataIndex
 
 
 def calculate_hamming_distance(

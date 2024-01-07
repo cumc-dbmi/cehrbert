@@ -4,23 +4,10 @@ from docarray import BaseDoc
 from docarray.index import HnswDocumentIndex
 from docarray.typing import NdArray
 
-from analyses.gpt.privacy.patient_index.base_indexer import PatientDataIndex, LOG
-from data_generators.tokenizer import ConceptTokenizer
+from analyses.gpt.privacy.patient_index.base_indexer import PatientDataIndex
 
 
 class PatientDataHnswDocumentIndex(PatientDataIndex):
-
-    def __init__(
-            self,
-            concept_tokenizer: ConceptTokenizer,
-            *args,
-            **kwargs
-    ):
-        self.concept_tokenizer = concept_tokenizer
-        super(PatientDataHnswDocumentIndex, self).__init__(*args, **kwargs)
-        LOG.info(
-            f'\tconcept_tokenizer: {concept_tokenizer}\n'
-        )
 
     def create_index(self) -> HnswDocumentIndex[BaseDoc]:
         return HnswDocumentIndex[self.doc_class](work_dir=self.index_folder)

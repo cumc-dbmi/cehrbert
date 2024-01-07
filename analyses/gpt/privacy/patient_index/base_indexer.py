@@ -11,6 +11,7 @@ from docarray.index.abstract import BaseDocIndex
 import numpy as np
 from dask.dataframe import DataFrame as dd_dataframe
 from pandas import DataFrame as pd_dataframe
+from data_generators.tokenizer import ConceptTokenizer
 
 logging.basicConfig(level=logging.INFO)
 LOG = logging.getLogger("PatientDataIndex")
@@ -19,6 +20,7 @@ LOG = logging.getLogger("PatientDataIndex")
 class PatientDataIndex(ABC):
     def __init__(
             self,
+            concept_tokenizer: ConceptTokenizer,
             index_folder: str = None,
             rebuilt: bool = False,
             set_unique_concepts: bool = False,
@@ -26,6 +28,7 @@ class PatientDataIndex(ABC):
             sensitive_attributes: List[str] = None,
             batch_size: int = 1023
     ):
+        self.concept_tokenizer = concept_tokenizer
         self.index_folder = index_folder
         self.rebuilt = rebuilt
         self.set_unique_concepts = set_unique_concepts
@@ -35,6 +38,7 @@ class PatientDataIndex(ABC):
 
         LOG.info(
             f'The {self.__class__.__name__} parameters\n'
+            f'\tconcept_tokenizer: {concept_tokenizer}\n'
             f'\tindex_folder: {index_folder}\n'
             f'\trebuilt: {rebuilt}\n'
             f'\tset_unique_concepts: {set_unique_concepts}\n'
@@ -46,6 +50,9 @@ class PatientDataIndex(ABC):
         # Get the index for search
         self.doc_class = self.create_doc_class()
         self.doc_index = self.create_index()
+        self.is_sensitive_attributes_str = (
+                self.doc_class.model_json_schema()['properties']['sensitive_attributes']['type'] == 'string'
+        )
 
     @abstractmethod
     def create_doc_class(self) -> BaseDoc:
@@ -78,26 +85,28 @@ class PatientDataIndex(ABC):
     ):
         LOG.info('Started adding documents to the index.')
 
-        # Create a directory to store the index
-        if not os.path.exists(self.index_folder):
-            LOG.info(f'The index folder {self.index_folder} does not exist, creating it')
-            os.mkdir(self.index_folder)
+        if self.index_folder:
+            # Create a directory to store the index
+            if not os.path.exists(self.index_folder):
+                LOG.info(f'The index folder {self.index_folder} does not exist, creating it')
+                os.mkdir(self.index_folder)
 
-        if not self.is_index_empty():
-            if self.rebuilt:
-                try:
-                    shutil.rmtree(self.index_folder)
-                    os.mkdir(self.index_folder)
-                    LOG.info(f"The directory {self.index_folder} and all its contents have been removed")
-                    self.doc_index = HnswDocumentIndex[self.doc_class](work_dir=self.index_folder)
-                except OSError as error:
-                    LOG.error(f"Error: {error}")
-                    LOG.error(f"Could not remove the directory {self.index_folder}")
-                    raise error
-            else:
-                raise RuntimeError(
-                    f'The index already exists in {self.index_folder}. If you want to recreate the index, set --rebuilt'
-                )
+            if not self.is_index_empty():
+                if self.rebuilt:
+                    try:
+                        shutil.rmtree(self.index_folder)
+                        os.mkdir(self.index_folder)
+                        LOG.info(f"The directory {self.index_folder} and all its contents have been removed")
+                        self.doc_index = HnswDocumentIndex[self.doc_class](work_dir=self.index_folder)
+                    except OSError as error:
+                        LOG.error(f"Error: {error}")
+                        LOG.error(f"Could not remove the directory {self.index_folder}")
+                        raise error
+                else:
+                    raise RuntimeError(
+                        f'The index already exists in {self.index_folder}. '
+                        f'If you want to recreate the index, set --rebuilt'
+                    )
 
         batch_of_docs = []
         for t in tqdm(dataset.itertuples(), total=len(dataset)):
@@ -112,6 +121,9 @@ class PatientDataIndex(ABC):
                 if self.common_attributes and self.sensitive_attributes:
                     common_concepts = [_ for _ in medical_concepts if _ in self.common_attributes]
                     sensitive_concepts = [_ for _ in medical_concepts if _ in self.sensitive_attributes]
+
+                if self.is_sensitive_attributes_str:
+                    sensitive_concepts = ','.join(sensitive_concepts)
 
                 embeddings = self.create_binary_format(common_concepts)
 
@@ -156,7 +168,7 @@ class PatientDataIndex(ABC):
     ) -> List[Dict]:
 
         if self.is_index_empty():
-            LOG.warning(f'The index is empty at {self.index_folder}, please build the index first!')
+            LOG.warning(f'The index is empty, please build the index first!')
             return None
 
         if not self.validate_demographics(patient_seq):
