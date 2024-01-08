@@ -1,3 +1,4 @@
+from tqdm import tqdm
 from typing import Type, List, Dict
 
 from docarray import BaseDoc
@@ -24,6 +25,43 @@ class PatientDataWeaviateDocumentIndex(PatientDataIndex):
             f'\tserver_name: {server_name}\n'
             f'\tindex_name: {index_name}\n'
         )
+
+    def get_all_person_ids(self) -> List[int]:
+        def get_batch_with_cursor():
+            # First prepare the query to run through data
+            query = (
+                self.doc_index._client.query.get(
+                    self.doc_index.index_name,
+                    ["person_id"]
+                )
+                .with_additional(["id"])
+                .with_limit(self.batch_size)
+            )
+            # Fetch the next set of results
+            if cursor is not None:
+                result = query.with_after(cursor).do()
+            # Fetch the first set of results
+            else:
+                result = query.do()
+            return result["data"]["Get"][self.doc_index.index_name]
+
+        person_ids = []
+        pbar = tqdm()
+        cursor = None
+        while True:
+            # Get the next batch of objects
+            next_batch = get_batch_with_cursor()
+            # Break the loop if empty – we are done
+            if len(next_batch) == 0:
+                break
+            # Here is your next batch of objects
+            person_ids.extend([int(d['person_id']) for d in next_batch])
+            # Move the cursor to the last returned uuid
+            cursor = next_batch[-1]["_additional"]["id"]
+            # Update the progress bard
+            pbar.update(1)
+
+        return person_ids
 
     def create_index(self) -> WeaviateDocumentIndex[BaseDoc]:
         dbconfig = WeaviateDocumentIndex.DBConfig(

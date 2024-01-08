@@ -1,13 +1,25 @@
+from tqdm import tqdm
 from typing import Type, List, Dict
 
 from docarray import BaseDoc
 from docarray.index import HnswDocumentIndex
 from docarray.typing import NdArray
+from docarray.proto import DocProto
 
 from analyses.gpt.privacy.patient_index.base_indexer import PatientDataIndex
 
 
 class PatientDataHnswDocumentIndex(PatientDataIndex):
+
+    def get_all_person_ids(self) -> List[int]:
+        person_ids = []
+        self.doc_index._sqlite_cursor.execute('SELECT * FROM docs')
+        for row in tqdm(self.doc_index._sqlite_cursor):
+            pb = DocProto.FromString(
+                row[1]
+            )
+            person_ids.append(int(pb.data.get('person_id').text))
+        return person_ids
 
     def create_index(self) -> HnswDocumentIndex[BaseDoc]:
         return HnswDocumentIndex[self.doc_class](work_dir=self.index_folder)

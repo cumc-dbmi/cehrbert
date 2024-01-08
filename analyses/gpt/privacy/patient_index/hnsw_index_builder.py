@@ -40,6 +40,12 @@ def create_argparser():
         required=False
     )
     parser.add_argument(
+        '--incremental_built',
+        dest='incremental_built',
+        action='store_true',
+        help='Indicate whether the index should be built incrementally'
+    )
+    parser.add_argument(
         '--rebuilt',
         dest='rebuilt',
         action='store_true',
@@ -95,6 +101,7 @@ if __name__ == "__main__":
     patient_data_index = PatientDataHnswDocumentIndex(
         index_folder=args.index_folder,
         rebuilt=args.rebuilt,
+        incremental_built=args.incremental_built,
         concept_tokenizer=concept_tokenizer,
         set_unique_concepts=args.set_unique_concepts,
         common_attributes=common_attributes,

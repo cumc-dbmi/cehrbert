@@ -23,14 +23,16 @@ class PatientDataIndex(ABC):
             concept_tokenizer: ConceptTokenizer,
             index_folder: str = None,
             rebuilt: bool = False,
+            incremental_built: bool = False,
             set_unique_concepts: bool = False,
             common_attributes: List[str] = None,
             sensitive_attributes: List[str] = None,
-            batch_size: int = 1023
+            batch_size: int = 1024
     ):
         self.concept_tokenizer = concept_tokenizer
         self.index_folder = index_folder
         self.rebuilt = rebuilt
+        self.incremental_built = incremental_built
         self.set_unique_concepts = set_unique_concepts
         self.common_attributes = common_attributes
         self.sensitive_attributes = sensitive_attributes
@@ -41,6 +43,7 @@ class PatientDataIndex(ABC):
             f'\tconcept_tokenizer: {concept_tokenizer}\n'
             f'\tindex_folder: {index_folder}\n'
             f'\trebuilt: {rebuilt}\n'
+            f'\tincremental_built: {incremental_built}\n'
             f'\tset_unique_concepts: {set_unique_concepts}\n'
             f'\tcommon_attributes: {common_attributes}\n'
             f'\tsensitive_attributes: {sensitive_attributes}\n'
@@ -53,6 +56,10 @@ class PatientDataIndex(ABC):
         self.is_sensitive_attributes_str = (
                 self.doc_class.model_json_schema()['properties']['sensitive_attributes']['type'] == 'string'
         )
+
+    @abstractmethod
+    def get_all_person_ids(self) -> List[int]:
+        pass
 
     @abstractmethod
     def create_doc_class(self) -> BaseDoc:
@@ -102,11 +109,16 @@ class PatientDataIndex(ABC):
                         LOG.error(f"Error: {error}")
                         LOG.error(f"Could not remove the directory {self.index_folder}")
                         raise error
-                else:
+                elif not self.incremental_built:
                     raise RuntimeError(
                         f'The index already exists in {self.index_folder}. '
                         f'If you want to recreate the index, set --rebuilt'
                     )
+
+        # incremental built and skip the person_ids that exist in the index already
+        if self.incremental_built:
+            existing_person_ids = self.get_all_person_ids()
+            dataset = dataset[~dataset.person_id.isin(existing_person_ids)]
 
         batch_of_docs = []
         for t in tqdm(dataset.itertuples(), total=len(dataset)):

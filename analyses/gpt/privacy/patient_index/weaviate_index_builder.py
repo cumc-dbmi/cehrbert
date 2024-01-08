@@ -52,6 +52,12 @@ def create_argparser():
         help='Indicate whether the index should be overwritten and rebuilt'
     )
     parser.add_argument(
+        '--incremental_built',
+        dest='incremental_built',
+        action='store_true',
+        help='Indicate whether the index should be built incrementally'
+    )
+    parser.add_argument(
         '--set_unique_concepts',
         dest='set_unique_concepts',
         action='store_true',
@@ -102,6 +108,7 @@ if __name__ == "__main__":
         index_name=args.index_name,
         server_name=args.server_name,
         rebuilt=args.rebuilt,
+        incremental_built=args.incremental_built,
         concept_tokenizer=concept_tokenizer,
         set_unique_concepts=args.set_unique_concepts,
         common_attributes=common_attributes,
