@@ -26,43 +26,6 @@ class PatientDataWeaviateDocumentIndex(PatientDataIndex):
             f'\tindex_name: {index_name}\n'
         )
 
-    def get_all_person_ids(self) -> List[int]:
-        def get_batch_with_cursor():
-            # First prepare the query to run through data
-            query = (
-                self.doc_index._client.query.get(
-                    self.doc_index.index_name,
-                    ["person_id"]
-                )
-                .with_additional(["id"])
-                .with_limit(self.batch_size)
-            )
-            # Fetch the next set of results
-            if cursor is not None:
-                result = query.with_after(cursor).do()
-            # Fetch the first set of results
-            else:
-                result = query.do()
-            return result["data"]["Get"][self.doc_index.index_name]
-
-        person_ids = []
-        pbar = tqdm()
-        cursor = None
-        while True:
-            # Get the next batch of objects
-            next_batch = get_batch_with_cursor()
-            # Break the loop if empty – we are done
-            if len(next_batch) == 0:
-                break
-            # Here is your next batch of objects
-            person_ids.extend([int(d['person_id']) for d in next_batch])
-            # Move the cursor to the last returned uuid
-            cursor = next_batch[-1]["_additional"]["id"]
-            # Update the progress bard
-            pbar.update(1)
-
-        return person_ids
-
     def create_index(self) -> WeaviateDocumentIndex[BaseDoc]:
         dbconfig = WeaviateDocumentIndex.DBConfig(
             host=self.server_name
@@ -85,11 +48,67 @@ class PatientDataWeaviateDocumentIndex(PatientDataIndex):
             race: str
             gender: str
             concept_embeddings: NdArray[vocab_size] = Field(is_embedding=True)
+            concept_ids: str
             sensitive_attributes: str
             num_of_visits: int
             num_of_concepts: int
 
         return PatientDocument
+
+    def _get_batch_with_cursor(self, cursor):
+        # First prepare the query to run through data
+        query = (
+            self.doc_index._client.query.get(
+                self.doc_index.index_name,
+                ["person_id"]
+            )
+            .with_additional(["id"])
+            .with_limit(self.batch_size)
+        )
+        # Fetch the next set of results
+        if cursor is not None:
+            result = query.with_after(cursor).do()
+        # Fetch the first set of results
+        else:
+            result = query.do()
+        return result["data"]["Get"][self.doc_index.index_name]
+
+    def delete_index(self):
+        pbar = tqdm()
+        cursor = None
+        while True:
+            # Get the next batch of objects
+            next_batch = self._get_batch_with_cursor(cursor)
+            # Break the loop if empty – we are done
+            if len(next_batch) == 0:
+                break
+            # Here is your next batch of objects
+            ids = [d['_additional']['id'] for d in next_batch]
+            self.doc_index._del_items(ids)
+            # Move the cursor to the last returned uuid
+            cursor = next_batch[-1]["_additional"]["id"]
+            # Update the progress bard
+            pbar.update(1)
+
+    def get_all_person_ids(self) -> List[int]:
+
+        person_ids = []
+        pbar = tqdm()
+        cursor = None
+        while True:
+            # Get the next batch of objects
+            next_batch = self._get_batch_with_cursor(cursor)
+            # Break the loop if empty – we are done
+            if len(next_batch) == 0:
+                break
+            # Here is your next batch of objects
+            person_ids.extend([int(d['person_id']) for d in next_batch])
+            # Move the cursor to the last returned uuid
+            cursor = next_batch[-1]["_additional"]["id"]
+            # Update the progress bard
+            pbar.update(1)
+
+        return person_ids
 
     def find_patients(
             self,
@@ -145,4 +164,5 @@ class PatientDataWeaviateDocumentIndex(PatientDataIndex):
         dicts = [vars(_) for _ in results]
         for d in dicts:
             d['sensitive_attributes'] = d['sensitive_attributes'].split(',')
+            d['concept_ids'] = d['concept_ids'].split(',')
         return dicts

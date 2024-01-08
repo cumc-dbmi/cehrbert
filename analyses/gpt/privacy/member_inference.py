@@ -5,7 +5,9 @@ from datetime import datetime
 import dask.dataframe as dd
 from multiprocessing import Pool
 
-from analyses.gpt.privacy.patient_index.base_indexer import PatientDataIndex
+from analyses.gpt.privacy.patient_index import (
+    index_options, PatientDataIndex, PatientDataWeaviateDocumentIndex, PatientDataHnswDocumentIndex
+)
 
 
 def calculate_hamming_distance(
@@ -28,12 +30,14 @@ def match_patients(
         index_folder,
         output_folder,
         tokenizer_path,
-        set_unique_concepts
+        set_unique_concepts,
+        **kwargs
 ):
     patient_indexer = PatientDataIndex(
         index_folder=index_folder,
         tokenizer_path=tokenizer_path,
-        set_unique_concepts=set_unique_concepts
+        set_unique_concepts=set_unique_concepts,
+        **kwargs
     )
 
     labels = []
@@ -92,6 +96,9 @@ def main_parallel(
 
 def create_argparser():
     import argparse
+    from sys import argv
+    weaviate_index_required = 'PatientDataWeaviateDocumentIndex' in argv
+    hnsw_index_required = 'PatientDataHnswDocumentIndex' in argv
     parser = argparse.ArgumentParser(
         description='Membership Inference Analysis Arguments'
     )
@@ -103,11 +110,25 @@ def create_argparser():
         required=True
     )
     parser.add_argument(
+        '--index_option',
+        dest='index_option',
+        action='store',
+        choices=index_options.keys(),
+        required=True
+    )
+    parser.add_argument(
         '--index_folder',
         dest='index_folder',
         action='store',
         help='The index folder',
-        required=True
+        required=hnsw_index_required
+    )
+    parser.add_argument(
+        '--server_name',
+        dest='server_name',
+        action='store',
+        help='The index folder',
+        required=weaviate_index_required
     )
     parser.add_argument(
         '--output_folder',
@@ -128,7 +149,8 @@ def create_argparser():
         dest='num_of_cores',
         type=int,
         action='store',
-        required=True
+        required=False,
+        default=1
     )
     parser.add_argument(
         '--set_unique_concepts',

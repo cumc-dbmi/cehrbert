@@ -1,12 +1,10 @@
 from abc import ABC, abstractmethod
 import copy
 import os
-import shutil
 import logging
 from typing import Union, List, Dict
 from tqdm import tqdm
 from docarray import BaseDoc, DocList
-from docarray.index import HnswDocumentIndex
 from docarray.index.abstract import BaseDocIndex
 import numpy as np
 from dask.dataframe import DataFrame as dd_dataframe
@@ -56,6 +54,13 @@ class PatientDataIndex(ABC):
         self.is_sensitive_attributes_str = (
                 self.doc_class.model_json_schema()['properties']['sensitive_attributes']['type'] == 'string'
         )
+        self.is_concepts_str = (
+                self.doc_class.model_json_schema()['properties']['concept_ids']['type'] == 'string'
+        )
+
+    @abstractmethod
+    def delete_index(self):
+        pass
 
     @abstractmethod
     def get_all_person_ids(self) -> List[int]:
@@ -92,28 +97,16 @@ class PatientDataIndex(ABC):
     ):
         LOG.info('Started adding documents to the index.')
 
-        if self.index_folder:
-            # Create a directory to store the index
-            if not os.path.exists(self.index_folder):
-                LOG.info(f'The index folder {self.index_folder} does not exist, creating it')
-                os.mkdir(self.index_folder)
-
-            if not self.is_index_empty():
-                if self.rebuilt:
-                    try:
-                        shutil.rmtree(self.index_folder)
-                        os.mkdir(self.index_folder)
-                        LOG.info(f"The directory {self.index_folder} and all its contents have been removed")
-                        self.doc_index = HnswDocumentIndex[self.doc_class](work_dir=self.index_folder)
-                    except OSError as error:
-                        LOG.error(f"Error: {error}")
-                        LOG.error(f"Could not remove the directory {self.index_folder}")
-                        raise error
-                elif not self.incremental_built:
-                    raise RuntimeError(
-                        f'The index already exists in {self.index_folder}. '
-                        f'If you want to recreate the index, set --rebuilt'
-                    )
+        if not self.is_index_empty():
+            if self.rebuilt:
+                LOG.info('Rebuilt is specified. Started deleting documents from the index.')
+                self.delete_index()
+                LOG.info('Done deleting documents from the index.')
+            elif not self.incremental_built:
+                raise RuntimeError(
+                    f'The index already exists in {self.index_folder}. '
+                    f'If you want to recreate the index, set --rebuilt'
+                )
 
         # incremental built and skip the person_ids that exist in the index already
         if self.incremental_built:
@@ -134,10 +127,13 @@ class PatientDataIndex(ABC):
                     common_concepts = [_ for _ in medical_concepts if _ in self.common_attributes]
                     sensitive_concepts = [_ for _ in medical_concepts if _ in self.sensitive_attributes]
 
+                embeddings = self.create_binary_format(common_concepts)
+
                 if self.is_sensitive_attributes_str:
                     sensitive_concepts = ','.join(sensitive_concepts)
 
-                embeddings = self.create_binary_format(common_concepts)
+                if self.is_concepts_str:
+                    common_concepts = ','.join(common_concepts)
 
                 document = self.doc_class(
                     id=person_id,
@@ -148,6 +144,7 @@ class PatientDataIndex(ABC):
                     race=race,
                     concept_embeddings=embeddings,
                     sensitive_attributes=sensitive_concepts,
+                    concept_ids=common_concepts,
                     num_of_visits=t.num_of_visits,
                     num_of_concepts=t.num_of_concepts
 
@@ -165,8 +162,8 @@ class PatientDataIndex(ABC):
             self.doc_index.index(docs)
             LOG.info('Done adding the final batch documents.')
 
-    def create_binary_format(self, concepts):
-        indices = np.array(self.concept_tokenizer.encode(concepts)).flatten()
+    def create_binary_format(self, concept_ids):
+        indices = np.array(self.concept_tokenizer.encode(concept_ids)).flatten()
         embeddings = np.zeros(self.concept_tokenizer.get_vocab_size())
         embeddings.put(indices, 1)
         return embeddings

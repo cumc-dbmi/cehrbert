@@ -1,3 +1,5 @@
+import os
+import shutil
 from tqdm import tqdm
 from typing import Type, List, Dict
 
@@ -6,7 +8,7 @@ from docarray.index import HnswDocumentIndex
 from docarray.typing import NdArray
 from docarray.proto import DocProto
 
-from analyses.gpt.privacy.patient_index.base_indexer import PatientDataIndex
+from analyses.gpt.privacy.patient_index.base_indexer import PatientDataIndex, LOG
 
 
 class PatientDataHnswDocumentIndex(PatientDataIndex):
@@ -40,11 +42,23 @@ class PatientDataHnswDocumentIndex(PatientDataIndex):
             race: str
             gender: str
             concept_embeddings: NdArray[vocab_size]
+            concept_ids: List[str]
             sensitive_attributes: List[str]
             num_of_visits: int
             num_of_concepts: int
 
         return PatientDocument
+
+    def delete_index(self):
+        try:
+            shutil.rmtree(self.index_folder)
+            os.mkdir(self.index_folder)
+            LOG.info(f"The directory {self.index_folder} and all its contents have been removed")
+            self.doc_index = HnswDocumentIndex[self.doc_class](work_dir=self.index_folder)
+        except OSError as error:
+            LOG.error(f"Error: {error}")
+            LOG.error(f"Could not remove the directory {self.index_folder}")
+            raise error
 
     def find_patients(
             self,
