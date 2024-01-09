@@ -22,7 +22,7 @@ def calculate_hamming_distance(
         synthetic_match
 ):
     dist = 0
-    dist += abs(ehr_source['year'] - synthetic_match['year'])
+    # dist += abs(ehr_source['year'] - synthetic_match['year'])
     dist += abs(ehr_source['age'] - synthetic_match['age'])
     dist += abs(ehr_source['num_of_visits'] - synthetic_match['num_of_visits'])
 
