@@ -1,8 +1,8 @@
 from tqdm import tqdm
-from typing import Type, List, Dict
+from typing import Type, List, Dict, Sequence
 
 from docarray import BaseDoc
-from docarray.index import WeaviateDocumentIndex
+from docarray.index.backends.weaviate import WeaviateDocumentIndex, DOCUMENTID
 from docarray.typing import NdArray
 from pydantic import Field
 
@@ -73,6 +73,24 @@ class PatientDataWeaviateDocumentIndex(PatientDataIndex):
             result = query.do()
         return result["data"]["Get"][self.doc_index.index_name]
 
+    def _del_items(self, doc_ids: Sequence[str]):
+        has_matches = True
+        if doc_ids:
+            where_filter = {
+                "path": [DOCUMENTID],
+                "operator": "ContainsAny",
+                "valueTextArray": doc_ids
+            }
+            # do a loop because there is a limit to how many objects can be deleted at
+            # in a single query
+            # see: https://weaviate.io/developers/weaviate/api/rest/batch#maximum-number-of-deletes-per-query
+            while has_matches:
+                results = self.doc_index._client.batch.delete_objects(
+                    class_name='PatientDocument',
+                    where=where_filter,
+                )
+                has_matches = results["results"]["matches"]
+
     def delete_index(self):
         pbar = tqdm()
         cursor = None
@@ -83,8 +101,7 @@ class PatientDataWeaviateDocumentIndex(PatientDataIndex):
             if len(next_batch) == 0:
                 break
             # Here is your next batch of objects
-            ids = [d['_additional']['id'] for d in next_batch]
-            self.doc_index._del_items(ids)
+            self._del_items([d[DOCUMENTID] for d in next_batch])
             # Move the cursor to the last returned uuid
             cursor = next_batch[-1]["_additional"]["id"]
             # Update the progress bard
