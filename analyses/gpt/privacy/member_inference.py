@@ -39,6 +39,8 @@ def match_patients(
         tokenizer_path,
         set_unique_concepts,
         batch_size,
+        year_std,
+        age_std,
         cls_args
 ):
     try:
@@ -77,7 +79,11 @@ def match_patients(
             'num_of_visits': num_of_visits,
             'num_of_concepts': num_of_concepts
         }
-        synthetic_match = patient_indexer.search(t.concept_ids)
+        synthetic_match = patient_indexer.search(
+            t.concept_ids,
+            age_std=age_std,
+            year_std=year_std
+        )
 
         if synthetic_match and len(synthetic_match) > 0:
             if synthetic_match[0]['concept_ids']:
@@ -139,7 +145,8 @@ def main_parallel(
         pool_tuples.append(
             (
                 dataset.get_partition(i).compute(), patient_data_index_class, args.output_folder,
-                args.tokenizer_path, args.set_unique_concepts, args.batch_size, cls_args
+                args.tokenizer_path, args.set_unique_concepts, args.batch_size,
+                args.year_std, args.age_std, cls_args
             )
         )
     with Pool(processes=args.num_of_cores) as p:
@@ -213,6 +220,22 @@ def create_argparser():
         action='store',
         required=False,
         default=1024
+    )
+    parser.add_argument(
+        '--age_std',
+        dest='age_std',
+        type=int,
+        action='store',
+        required=False,
+        default=1
+    )
+    parser.add_argument(
+        '--year_std',
+        dest='year_std',
+        type=int,
+        action='store',
+        required=False,
+        default=5
     )
     parser.add_argument(
         '--num_of_cores',
