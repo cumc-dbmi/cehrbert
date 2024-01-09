@@ -1,4 +1,7 @@
 import os
+import pickle
+import sys
+import traceback
 import pandas as pd
 from tqdm import tqdm
 from datetime import datetime
@@ -6,7 +9,7 @@ import dask.dataframe as dd
 from multiprocessing import Pool
 
 from analyses.gpt.privacy.patient_index import (
-    index_options, PatientDataIndex, PatientDataWeaviateDocumentIndex, PatientDataHnswDocumentIndex
+    index_options, PatientDataWeaviateDocumentIndex, PatientDataHnswDocumentIndex
 )
 
 
@@ -27,17 +30,24 @@ def calculate_hamming_distance(
 
 def match_patients(
         data_partition,
-        index_folder,
+        patient_data_index_cls,
         output_folder,
         tokenizer_path,
         set_unique_concepts,
-        **kwargs
+        cls_args
 ):
-    patient_indexer = PatientDataIndex(
-        index_folder=index_folder,
-        tokenizer_path=tokenizer_path,
+    try:
+        concept_tokenizer = pickle.load(open(tokenizer_path, 'rb'))
+    except (AttributeError, EOFError, ImportError, IndexError, OSError) as e:
+        sys.exit(traceback.format_exc(e))
+    except Exception as e:
+        # everything else, possibly fatal
+        sys.exit(traceback.format_exc(e))
+
+    patient_indexer = patient_data_index_cls(
+        concept_tokenizer=concept_tokenizer,
         set_unique_concepts=set_unique_concepts,
-        **kwargs
+        **cls_args
     )
 
     labels = []
@@ -63,10 +73,11 @@ def match_patients(
         }
         synthetic_match = patient_indexer.search(t.concept_ids)
 
-        if synthetic_match:
-            dist = calculate_hamming_distance(ehr_source, synthetic_match)
-            labels.append(t.label)
-            dists.append(dist)
+        if synthetic_match and len(synthetic_match) > 0:
+            if synthetic_match[0]['concept_ids']:
+                dist = calculate_hamming_distance(ehr_source, synthetic_match[0])
+                labels.append(t.label)
+                dists.append(dist)
 
     results_df = pd.DataFrame(zip(dists, labels), columns=['dist', 'label'])
     current_time = datetime.now().strftime("%m-%d-%Y-%H-%M-%S")
@@ -78,13 +89,25 @@ def main_parallel(
 ):
     dataset = dd.read_parquet(args.attack_data_folder)
     dataset = dataset.repartition(args.num_of_cores)
+    patient_data_index_class = index_options[args.index_option]
+    if patient_data_index_class == PatientDataHnswDocumentIndex:
+        cls_args = {
+            'index_folder': args.index_folder
+        }
+    elif patient_data_index_class == PatientDataWeaviateDocumentIndex:
+        cls_args = {
+            'index_name': args.index_name,
+            'server_name': args.server_name
+        }
+    else:
+        raise RuntimeError(f'{args.index_option} is an invalid PatientDataIndex')
 
     pool_tuples = []
     for i in range(0, args.num_of_cores):
         pool_tuples.append(
             (
-                dataset.get_partition(i).compute(), args.index_folder, args.output_folder,
-                args.tokenizer_path, args.set_unique_concepts
+                dataset.get_partition(i).compute(), patient_data_index_class, args.output_folder,
+                args.tokenizer_path, args.set_unique_concepts, cls_args
             )
         )
     with Pool(processes=args.num_of_cores) as p:
@@ -126,6 +149,13 @@ def create_argparser():
     parser.add_argument(
         '--server_name',
         dest='server_name',
+        action='store',
+        help='The index folder',
+        required=weaviate_index_required
+    )
+    parser.add_argument(
+        '--index_name',
+        dest='index_name',
         action='store',
         help='The index folder',
         required=weaviate_index_required

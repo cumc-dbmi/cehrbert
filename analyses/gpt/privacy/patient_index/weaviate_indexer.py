@@ -156,13 +156,16 @@ class PatientDataWeaviateDocumentIndex(PatientDataIndex):
             self.doc_index.build_query()  # get empty query object
             .filter(where_filter=query)  # pre-filtering
             .find(concept_embeddings)  # add vector similarity search
+            .limit(limit)
             .build()
         )
 
         # execute the combined query and return the results
-        results = self.doc_index.execute_query(query, limit=limit)
+        results = self.doc_index.execute_query(query)
         dicts = [vars(_) for _ in results]
         for d in dicts:
-            d['sensitive_attributes'] = d['sensitive_attributes'].split(',')
-            d['concept_ids'] = d['concept_ids'].split(',')
+            if d['sensitive_attributes']:
+                d['sensitive_attributes'] = d['sensitive_attributes'].split(',')
+            if d['concept_ids']:
+                d['concept_ids'] = d['concept_ids'].split(',')
         return dicts

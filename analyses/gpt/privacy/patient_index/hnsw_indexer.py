@@ -83,10 +83,10 @@ class PatientDataHnswDocumentIndex(PatientDataIndex):
                 {'gender': {'$eq': gender}},
                 {'race': {'$eq': race}}]
             })  # pre-filtering
-            .find(query=concept_embeddings, search_field='concept_embeddings')  # add vector similarity search
+            .find(query=concept_embeddings, search_field='concept_embeddings', limit=limit)
             .build()
         )
 
         # execute the combined query and return the results
-        results = self.doc_index.execute_query(query, limit=limit)
+        results = self.doc_index.execute_query(query)
         return [vars(_) for _ in results.documents]
