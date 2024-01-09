@@ -2,10 +2,10 @@ import os
 import pickle
 import sys
 import traceback
+import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from datetime import datetime
-import dask.dataframe as dd
 from multiprocessing import Pool
 import logging
 
@@ -111,7 +111,7 @@ def match_patients(
 
 def remove_processed_records(dataset, output_folder):
     try:
-        existing_results = dd.read_parquet(output_folder)
+        existing_results = pd.read_parquet(output_folder)
         existing_person_ids = existing_results.person_id.compute().tolist()
         return dataset[~dataset.person_id.isin(existing_person_ids)]
     except Exception as e:
@@ -122,10 +122,9 @@ def remove_processed_records(dataset, output_folder):
 def main_parallel(
         args
 ):
-    dataset = dd.read_parquet(args.attack_data_folder)
-    dataset = dataset.repartition(args.num_of_cores)
-
+    dataset = pd.read_parquet(args.attack_data_folder)
     dataset = remove_processed_records(dataset, args.output_folder)
+    dataset_parts = np.array_split(dataset, args.num_of_cores)
 
     patient_data_index_class = index_options[args.index_option]
     if patient_data_index_class == PatientDataHnswDocumentIndex:
@@ -144,7 +143,7 @@ def main_parallel(
     for i in range(0, args.num_of_cores):
         pool_tuples.append(
             (
-                dataset.get_partition(i).compute(), patient_data_index_class, args.output_folder,
+                dataset_parts[i], patient_data_index_class, args.output_folder,
                 args.tokenizer_path, args.set_unique_concepts, args.batch_size,
                 args.year_std, args.age_std, cls_args
             )
