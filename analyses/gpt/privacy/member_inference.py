@@ -7,10 +7,14 @@ from tqdm import tqdm
 from datetime import datetime
 import dask.dataframe as dd
 from multiprocessing import Pool
+import logging
 
 from analyses.gpt.privacy.patient_index import (
     index_options, PatientDataWeaviateDocumentIndex, PatientDataHnswDocumentIndex
 )
+
+logger = logging.getLogger('member_inference')
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 
 def calculate_hamming_distance(
@@ -34,6 +38,7 @@ def match_patients(
         output_folder,
         tokenizer_path,
         set_unique_concepts,
+        batch_size,
         cls_args
 ):
     try:
@@ -52,6 +57,7 @@ def match_patients(
 
     labels = []
     dists = []
+    attack_person_ids = []
     for t in tqdm(data_partition.itertuples(), total=len(data_partition)):
 
         if not patient_indexer.validate_demographics(t.concept_ids):
@@ -78,10 +84,33 @@ def match_patients(
                 dist = calculate_hamming_distance(ehr_source, synthetic_match[0])
                 labels.append(t.label)
                 dists.append(dist)
+                attack_person_ids.append(t.person_id)
 
-    results_df = pd.DataFrame(zip(dists, labels), columns=['dist', 'label'])
-    current_time = datetime.now().strftime("%m-%d-%Y-%H-%M-%S")
-    results_df.to_parquet(os.path.join(output_folder, f'{current_time}.parquet'))
+        if len(labels) > 0 and len(labels) % batch_size == 0:
+            results_df = pd.DataFrame(zip(attack_person_ids, dists, labels), columns=['person_id', 'dist', 'label'])
+            current_time = datetime.now().strftime("%m-%d-%Y-%H-%M-%S")
+            results_df.to_parquet(os.path.join(output_folder, f'{current_time}.parquet'))
+
+            # Clear the lists for the next batch
+            attack_person_ids.clear()
+            dists.clear()
+            labels.clear()
+
+    # Final flush to the disk in case of any leftover
+    if len(labels) > 0:
+        results_df = pd.DataFrame(zip(attack_person_ids, dists, labels), columns=['person_id', 'dist', 'label'])
+        current_time = datetime.now().strftime("%m-%d-%Y-%H-%M-%S")
+        results_df.to_parquet(os.path.join(output_folder, f'{current_time}.parquet'))
+
+
+def remove_processed_records(dataset, output_folder):
+    try:
+        existing_results = dd.read_parquet(output_folder)
+        existing_person_ids = existing_results.person_id.compute().tolist()
+        return dataset[~dataset.person_id.isin(existing_person_ids)]
+    except Exception as e:
+        logger.warning(e)
+    return dataset
 
 
 def main_parallel(
@@ -89,6 +118,9 @@ def main_parallel(
 ):
     dataset = dd.read_parquet(args.attack_data_folder)
     dataset = dataset.repartition(args.num_of_cores)
+
+    dataset = remove_processed_records(dataset, args.output_folder)
+
     patient_data_index_class = index_options[args.index_option]
     if patient_data_index_class == PatientDataHnswDocumentIndex:
         cls_args = {
@@ -107,7 +139,7 @@ def main_parallel(
         pool_tuples.append(
             (
                 dataset.get_partition(i).compute(), patient_data_index_class, args.output_folder,
-                args.tokenizer_path, args.set_unique_concepts, cls_args
+                args.tokenizer_path, args.set_unique_concepts, args.batch_size, cls_args
             )
         )
     with Pool(processes=args.num_of_cores) as p:
@@ -173,6 +205,14 @@ def create_argparser():
         action='store',
         help='The path to ConceptTokenizer',
         required=True
+    )
+    parser.add_argument(
+        '--batch_size',
+        dest='batch_size',
+        type=int,
+        action='store',
+        required=False,
+        default=1024
     )
     parser.add_argument(
         '--num_of_cores',
