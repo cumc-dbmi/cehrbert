@@ -10,10 +10,7 @@ py4j==0.10.9
 pyarrow==9.0.0
 pyspark==3.0.0
 pytest==6.1.1
-#scikit-learn==0.23.2
-Scikit-learn==1.1
-scipy==1.4.1
-#sklearn==0.0
+scikit-learn
 sortedcontainers==2.3.0
 tensorboard==2.9.0
 tensorflow==2.9.0
