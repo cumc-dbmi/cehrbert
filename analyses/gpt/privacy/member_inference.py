@@ -112,7 +112,7 @@ def match_patients(
 def remove_processed_records(dataset, output_folder):
     try:
         existing_results = pd.read_parquet(output_folder)
-        existing_person_ids = existing_results.person_id.compute().tolist()
+        existing_person_ids = existing_results.person_id.tolist()
         return dataset[~dataset.person_id.isin(existing_person_ids)]
     except Exception as e:
         logger.warning(e)
