@@ -1,11 +1,11 @@
 import random
 from abc import ABC, abstractmethod
 from itertools import islice
-from typing import List
+from typing import List, Dict
 import copy
 import numpy as np
 import pandas as pd
-from tensorflow.dtypes import int32, float32
+from tensorflow.dtypes import int32, float32, DType
 from tensorflow.keras.utils import pad_sequences
 
 from data_generators.data_classes import RowSlicer
@@ -91,6 +91,43 @@ class LearningObjective(ABC):
 
     def __str__(self):
         return str(self.__class__.__name__)
+
+
+
+class CustomLearningObjective(LearningObjective):
+    required_columns = []
+
+    def __init__(self, input_schema: Dict[str, DType], output_schema: Dict[str, DType]):
+        self.input_schema = input_schema
+        self.output_schema = output_schema
+        self.input_columns = input_schema.keys()
+        self.output_columns = output_schema.keys()
+
+    def get_tf_dataset_schema(self):
+        return self.input_schema, self.output_schema
+
+    @validate_columns_decorator
+    def process_batch(self, rows: List[RowSlicer]):
+        """
+        Process a batch of rows to generate input and output data for the learning objective
+        :param rows:
+        :return:
+        """
+        input_dict = {}
+        output_dict = {}
+        for row_slicer in rows:
+
+            for input_column in self.input_columns:
+                if input_column not in input_dict:
+                    input_dict[input_column] = []
+                input_dict[input_column].append(getattr(row_slicer.row, input_column))
+
+            for output_column in self.output_columns:
+                if output_column not in output_dict:
+                    output_dict[output_column] = []
+                output_dict[output_column].append(getattr(row_slicer.row, output_column))
+
+        return input_dict, output_dict
 
 
 class BertFineTuningLearningObjective(LearningObjective):
