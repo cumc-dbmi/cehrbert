@@ -18,8 +18,7 @@ logger = logging.getLogger('member_inference_model')
 
 def main(args):
     config = ModelPathConfig(args.attack_data_folder, args.model_folder)
-
-    attack_data = pd.read_parquet(config.parquet_data_path)
+    attack_data = pd.read_parquet(args.attack_data_folder)
     tokenizer = tokenize_one_field(
         attack_data,
         'concept_ids',
