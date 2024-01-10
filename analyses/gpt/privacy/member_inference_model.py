@@ -52,17 +52,21 @@ def main(args):
         logger.info(f'The model is loaded from {existing_model_path}')
         model = tf.keras.models.load_model(existing_model_path, custom_objects=get_custom_objects())
 
+        dataset = tf.data.Dataset.from_generator(
+            gpt_data_generator.create_batch_generator,
+            output_types=(gpt_data_generator.get_tf_dataset_schema())
+        ).prefetch(tf.data.experimental.AUTOTUNE)
+
     person_ids = []
     losses = []
     labels = []
-    iterator = gpt_data_generator.create_batch_generator()
 
-    for each_batch in tqdm(iterator, total=gpt_data_generator.get_steps_per_epoch()):
+    for each_batch in tqdm(dataset, total=gpt_data_generator.get_steps_per_epoch()):
 
         inputs, outputs = each_batch
         person_ids.extend(inputs['person_id'])
         labels.extend(outputs['label'])
-        predictions = model.predict(inputs['concept_ids'])
+        predictions = model(inputs['concept_ids'])
         y_true_val = outputs['concept_predictions'][:, :, 0]
         mask = tf.cast(outputs['concept_predictions'][:, :, 1], dtype=tf.float32)
         loss = tf.keras.losses.sparse_categorical_crossentropy(y_true_val, predictions)
