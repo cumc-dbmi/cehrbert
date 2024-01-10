@@ -49,7 +49,6 @@ def main(args):
         existing_model_path = os.path.join(args.model_folder, 'bert_model.h5')
         if not os.path.exists(existing_model_path):
             sys.exit(f'The model can not be loaded from {existing_model_path}!')
-
         logger.info(f'The model is loaded from {existing_model_path}')
         model = tf.keras.models.load_model(existing_model_path, custom_objects=get_custom_objects())
 
@@ -63,7 +62,7 @@ def main(args):
         inputs, outputs = each_batch
         person_ids.extend(inputs['person_id'])
         labels.extend(outputs['label'])
-        predictions = model(inputs['concept_ids'])
+        predictions = model.predict(inputs['concept_ids'])
         y_true_val = outputs['concept_predictions'][:, :, 0]
         mask = tf.cast(outputs['concept_predictions'][:, :, 1], dtype=tf.float32)
         loss = tf.keras.losses.sparse_categorical_crossentropy(y_true_val, predictions)
