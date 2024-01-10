@@ -17,6 +17,11 @@ logger = logging.getLogger('member_inference_model')
 
 
 def main(args):
+    @tf.function
+    def distributed_inference(dist_inputs):
+        per_replica_losses = strategy.run(model, args=(dist_inputs,))
+        return strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
+
     config = ModelPathConfig(args.attack_data_folder, args.model_folder)
     attack_data = pd.read_parquet(args.attack_data_folder)
     tokenizer = tokenize_one_field(
@@ -52,21 +57,18 @@ def main(args):
         logger.info(f'The model is loaded from {existing_model_path}')
         model = tf.keras.models.load_model(existing_model_path, custom_objects=get_custom_objects())
 
-        dataset = tf.data.Dataset.from_generator(
-            gpt_data_generator.create_batch_generator,
-            output_types=(gpt_data_generator.get_tf_dataset_schema())
-        ).prefetch(tf.data.experimental.AUTOTUNE)
-
     person_ids = []
     losses = []
     labels = []
 
-    for each_batch in tqdm(dataset, total=gpt_data_generator.get_steps_per_epoch()):
+    batch_iterator = gpt_data_generator.create_batch_generator()
+    for each_batch in tqdm(batch_iterator, total=gpt_data_generator.get_steps_per_epoch()):
 
         inputs, outputs = each_batch
         person_ids.extend(inputs['person_id'])
         labels.extend(outputs['label'])
-        predictions = model(inputs['concept_ids'])
+        # predictions = model(inputs['concept_ids'])
+        predictions = distributed_inference(inputs['concept_ids'])
         y_true_val = outputs['concept_predictions'][:, :, 0]
         mask = tf.cast(outputs['concept_predictions'][:, :, 1], dtype=tf.float32)
         loss = tf.keras.losses.sparse_categorical_crossentropy(y_true_val, predictions)
