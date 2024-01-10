@@ -49,7 +49,7 @@ def post_pad_pre_truncate(inputs, pad_value, max_seq_len, d_type='int32'):
     :return:
     """
     return pad_sequences(
-        np.asarray(inputs),
+        inputs,
         maxlen=max_seq_len,
         padding='post',
         value=pad_value,
@@ -603,7 +603,7 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
 
     def _pad(self, x, padded_token, maxlen, token_dtype='int32'):
         return pad_sequences(
-            np.asarray(x, dtype=object),
+            x,
             maxlen=maxlen,
             padding='post',
             truncating='post',
