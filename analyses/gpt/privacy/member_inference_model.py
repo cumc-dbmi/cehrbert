@@ -66,8 +66,8 @@ def main(args):
         y_true_val = outputs['concept_predictions'][:, :, 0]
         mask = tf.cast(outputs['concept_predictions'][:, :, 1], dtype=tf.float32)
         loss = tf.keras.losses.sparse_categorical_crossentropy(y_true_val, predictions)
-        masked_loss = tf.reduce_mean(loss * mask, axis=-1).numpy()
-        losses.extend(tf.reduce_mean(masked_loss, axis=-1).numpy().tolist())
+        masked_loss = tf.reduce_mean(loss * mask, axis=-1).numpy().tolist()
+        losses.extend(masked_loss)
 
         if len(labels) > 0 and len(labels) % args.buffer_size == 0:
             results_df = pd.DataFrame(zip(person_ids, losses, labels), columns=['person_id', 'loss', 'label'])
