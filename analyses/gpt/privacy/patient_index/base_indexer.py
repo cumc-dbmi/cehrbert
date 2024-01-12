@@ -127,6 +127,10 @@ class PatientDataIndex(ABC):
                     common_concepts = [_ for _ in medical_concepts if _ in self.common_attributes]
                     sensitive_concepts = [_ for _ in medical_concepts if _ in self.sensitive_attributes]
 
+                # If the common concepts is empty, we will skip this example
+                if len(common_concepts) == 0:
+                    continue
+
                 embeddings = self.create_binary_format(common_concepts)
 
                 if self.is_sensitive_attributes_str:

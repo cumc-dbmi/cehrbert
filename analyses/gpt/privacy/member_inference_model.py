@@ -95,10 +95,10 @@ def main(args):
         metrics.to_parquet(args.metrics_folder)
 
 
-def compute_metrics(output_folder):
+def compute_metrics(output_folder, metric_column):
     results_df = pd.read_parquet(output_folder)
-    threshold = results_df.loss.median()
-    predictions = (results_df.loss <= threshold).astype(int).to_numpy()
+    threshold = results_df[metric_column].median()
+    predictions = (results_df[metric_column] <= threshold).astype(int).to_numpy()
     labels = results_df.label.to_numpy()
     recall_metric = evaluate.load('recall')
     precision_metric = evaluate.load('precision')
