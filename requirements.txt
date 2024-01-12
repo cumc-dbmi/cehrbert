@@ -28,3 +28,4 @@ pyyaml
 docarray
 docarray[hnswlib]
 docarray[weaviate]
+evaluate

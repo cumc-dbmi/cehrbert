@@ -6,6 +6,7 @@ import pandas as pd
 from tqdm import tqdm
 from datetime import datetime
 import tensorflow as tf
+import evaluate
 
 from utils.model_utils import tokenize_one_field
 from models.model_parameters import ModelPathConfig
@@ -89,6 +90,31 @@ def main(args):
         current_time = datetime.now().strftime("%m-%d-%Y-%H-%M-%S")
         results_df.to_parquet(os.path.join(args.output_folder, f'{current_time}.parquet'))
 
+    if args.metrics_folder:
+        metrics = compute_metrics(args.output_folder)
+        metrics.to_parquet(args.metrics_folder)
+
+
+def compute_metrics(output_folder):
+    results_df = pd.read_parquet(output_folder)
+    threshold = results_df.loss.median()
+    predictions = (results_df.loss <= threshold).astype(int).to_numpy()
+    labels = results_df.label.to_numpy()
+    recall_metric = evaluate.load('recall')
+    precision_metric = evaluate.load('precision')
+    f1_metric = evaluate.load('f1')
+    accuracy_metric = evaluate.load('accuracy')
+    recall = recall_metric.compute(references=labels, predictions=predictions)
+    precision = precision_metric.compute(references=labels, predictions=predictions)
+    f1 = f1_metric.compute(references=labels, predictions=predictions)
+    acc = accuracy_metric.compute(references=labels, predictions=predictions)
+    metrics = dict()
+    metrics.update(recall)
+    metrics.update(precision)
+    metrics.update(f1)
+    metrics.update(acc)
+    return pd.DataFrame([metrics], columns=['recall', 'precision', 'f1', 'accuracy'])
+
 
 def create_argparser():
     import argparse
@@ -106,8 +132,15 @@ def create_argparser():
         '--output_folder',
         dest='output_folder',
         action='store',
-        help='The output folder that stores the metrics',
+        help='The output folder that stores the results',
         required=True
+    )
+    parser.add_argument(
+        '--metrics_folder',
+        dest='metrics_folder',
+        action='store',
+        help='The folder that stores the metrics',
+        required=False
     )
     parser.add_argument(
         '--model_folder',
