@@ -1,11 +1,13 @@
 import inspect
 import logging
+import copy
 from collections import ChainMap
 from itertools import chain
 from typing import Set
 
 from pandas import DataFrame
 
+from data_generators.gpt_learning_objectives import SequenceGenerationLearningObjective
 from data_generators.gpt_utils import random_slice_gpt_sequence
 from data_generators.learning_objective import *
 from data_generators.tokenizer import ConceptTokenizer
@@ -301,7 +303,8 @@ class GptDataGenerator(BertDataGenerator):
             including_long_sequence: bool = False,
             sampling_dataset_enabled: bool = False,
             *args,
-            **kwargs):
+            **kwargs
+    ):
         self._min_num_of_visits = min_num_of_visits
         self._max_num_of_visits = max_num_of_visits
         self._including_long_sequence = including_long_sequence
