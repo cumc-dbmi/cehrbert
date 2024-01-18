@@ -154,7 +154,7 @@ class PatientEventBaseDecorator(
                         (F.col('domain').isin([MEASUREMENT, CATEGORICAL_MEASUREMENT])).cast('int'))
 
         if 'concept_value' not in patient_events.schema.fieldNames():
-            patient_events = patient_events.withColumn('concept_value', F.lit(-1.0))
+            patient_events = patient_events.withColumn('concept_value', F.lit(0.0))
 
         # (cohort_member_id, person_id, standard_concept_id, date, visit_occurrence_id, domain,
         # concept_value, visit_rank_order, visit_segment, priority, date_in_week,
@@ -201,7 +201,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
             'visit_concept_id',
             'visit_occurrence_id',
             F.lit('visit').alias('domain'),
-            F.lit(-1).alias('concept_value'),
+            F.lit(0.0).alias('concept_value'),
             F.lit(0).alias('concept_value_mask'),
             F.lit(0).alias('mlm_skip_value'),
             'age',
@@ -418,6 +418,8 @@ class DemographicPromptDecorator(
         # Identify the first token of each patient history
         patient_first_token = patient_events \
             .withColumn('token_order', first_token_udf) \
+            .withColumn('concept_value_mask', F.lit(0)) \
+            .withColumn('concept_value', F.lit(0.0)) \
             .where('token_order = 1') \
             .drop('token_order')
 

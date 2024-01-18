@@ -7,7 +7,10 @@ from typing import Set
 
 from pandas import DataFrame
 
-from data_generators.gpt_learning_objectives import SequenceGenerationLearningObjective
+from data_generators.gpt_learning_objectives import (
+    SequenceGenerationLearningObjective,
+    PredictNextValueLearningObjective
+)
 from data_generators.gpt_utils import random_slice_gpt_sequence
 from data_generators.learning_objective import *
 from data_generators.tokenizer import ConceptTokenizer
@@ -302,6 +305,7 @@ class GptDataGenerator(BertDataGenerator):
             max_num_of_visits: int,
             including_long_sequence: bool = False,
             sampling_dataset_enabled: bool = False,
+            include_numeric_value: bool = False,
             *args,
             **kwargs
     ):
@@ -310,6 +314,7 @@ class GptDataGenerator(BertDataGenerator):
         self._including_long_sequence = including_long_sequence
         self._concept_tokenizer = concept_tokenizer
         self._sampling_dataset_enabled = sampling_dataset_enabled
+        self._include_numeric_value = include_numeric_value
 
         super(BertDataGenerator,
               self).__init__(
@@ -329,7 +334,10 @@ class GptDataGenerator(BertDataGenerator):
         self._training_data = self._training_data.reset_index()
 
     def _get_learning_objective_classes(self):
-        return [SequenceGenerationLearningObjective]
+        learning_objs = [SequenceGenerationLearningObjective]
+        if self._include_numeric_value:
+            learning_objs.append(PredictNextValueLearningObjective)
+        return learning_objs
 
     def _create_iterator(self):
         """

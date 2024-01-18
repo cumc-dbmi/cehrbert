@@ -261,6 +261,11 @@ def create_parse_args_gpt():
         dest='is_random_cursor_long_sequence',
         action='store_true'
     )
+    parser.add_argument(
+        '--include_numeric_value',
+        dest='include_numeric_value',
+        action='store_true'
+    )
     return parser
 
 

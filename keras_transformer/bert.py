@@ -41,6 +41,17 @@ def masked_perplexity(y_true, y_pred):
     return K.mean(batch_perplexities)
 
 
+class MaskedMeanSquaredError(object):
+    def __call__(self, y_true, y_pred):
+        y_true_val = K.cast(y_true[:, :, 0], dtype='float32')
+        mask = K.cast(y_true[:, :, 1], dtype='float32')
+
+        num_items_masked = tf.reduce_sum(mask, axis=-1) + 1e-6
+        masked_mse = tf.reduce_sum(tf.square(y_true_val - y_pred) * mask, axis=-1) / num_items_masked
+
+        return masked_mse
+
+
 class MaskedPenalizedSparseCategoricalCrossentropy(object):
     """
     Masked cross-entropy (see `masked_perplexity` for more details)
