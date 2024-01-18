@@ -47,9 +47,22 @@ class PredictNextValueLearningObjective(LearningObjective):
             d_type='float32'
         )
 
+        shifted_concept_value_masks = np.concatenate(
+            [
+                np.zeros_like(concept_value_masks[..., :1], dtype='int32'),
+                concept_value_masks[..., :-1]
+            ], axis=-1
+        )
+        shifted_concept_values = np.concatenate(
+            [
+                np.zeros_like(concept_value_masks[..., :1], dtype='float32'),
+                concept_values[..., :-1]
+            ], axis=-1
+        )
+
         input_dict = {
-            'concept_value_masks': concept_value_masks,
-            'concept_values': concept_values
+            'concept_value_masks': shifted_concept_value_masks,
+            'concept_values': shifted_concept_values
         }
 
         output_dict = {'value_predictions': np.stack([concept_values, concept_value_masks], axis=-1)}

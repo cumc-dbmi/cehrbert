@@ -37,11 +37,11 @@ class TestPredictNextValueLearningObjective(unittest.TestCase):
         self.assertEqual(output_dict['value_predictions'].shape, (5, self.max_seq_len, 2))
 
         # Add more tests here to validate the contents of input_dict and output_dict
-        self.assertTrue((input_dict['concept_values'] == output_dict['value_predictions'][..., 0]).all())
-        self.assertTrue((input_dict['concept_value_masks'] == output_dict['value_predictions'][..., 1]).all())
+        self.assertTrue((input_dict['concept_values'][:, 1:] == output_dict['value_predictions'][:, 0:-1, 0]).all())
+        self.assertTrue((input_dict['concept_value_masks'][:, 1:] == output_dict['value_predictions'][:, 0:-1, 1]).all())
 
-        self.assertTrue((input_dict['concept_values'][0, :3] == np.asarray([0.5, 0.0, 0.7], dtype='float32')).all())
-        self.assertTrue((input_dict['concept_values'][0, 3:] == np.zeros(self.max_seq_len - 3)).all())
+        self.assertTrue((input_dict['concept_values'][0, 1:4] == np.asarray([0.5, 0.0, 0.7], dtype='float32')).all())
+        self.assertTrue((input_dict['concept_values'][0, 4:] == np.zeros(self.max_seq_len - 4)).all())
 
 
 if __name__ == '__main__':
