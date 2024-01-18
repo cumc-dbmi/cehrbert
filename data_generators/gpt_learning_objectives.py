@@ -26,7 +26,7 @@ class PredictNextValueLearningObjective(LearningObjective):
             'concept_values': float32,
             'concept_value_masks': int32
         }
-        output_dict_schema = {'next_concept_values': float32}
+        output_dict_schema = {'next_value_predictions': float32}
         return input_dict_schema, output_dict_schema
 
     @validate_columns_decorator
@@ -65,7 +65,7 @@ class PredictNextValueLearningObjective(LearningObjective):
             'concept_values': shifted_concept_values
         }
 
-        output_dict = {'value_predictions': np.stack([concept_values, concept_value_masks], axis=-1)}
+        output_dict = {'next_value_predictions': np.stack([concept_values, concept_value_masks], axis=-1)}
 
         return input_dict, output_dict
 

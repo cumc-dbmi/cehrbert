@@ -596,6 +596,7 @@ class ConceptValueDecoderLayer(tf.keras.layers.Layer):
         return config
 
     def call(self, concept_val_embeddings, concept_value_masks):
+
         # (batch_size, context_window, embedding_size + 1)
         concept_embeddings_with_val = self.concept_value_decoder_layer(concept_val_embeddings)
 
