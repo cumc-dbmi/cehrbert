@@ -1002,7 +1002,12 @@ def create_visit_person_join(
     return visit_occurrence.join(person, 'person_id')
 
 
-def process_measurement(spark, measurement, required_measurement):
+def process_measurement(
+        spark,
+        measurement,
+        required_measurement,
+        output_folder: str = None
+):
     """
     Remove the measurement values that are outside the 0.01-0.99 quantiles. And scale the the
     measurement value by substracting the mean and dividing by the standard deivation :param
@@ -1019,6 +1024,15 @@ def process_measurement(spark, measurement, required_measurement):
     measurement_unit_stats_df = spark.sql(
         measurement_unit_stats_query
     )
+
+    if output_folder:
+        measurement_unit_stats_df.repartition(10) \
+            .write.mode('overwrite') \
+            .parquet(path.join(output_folder, 'measurement_unit_stats'))
+        measurement_unit_stats_df = spark.read.parquet(
+            path.join(output_folder, 'measurement_unit_stats')
+        )
+
     # Cache the stats in memory
     measurement_unit_stats_df.cache()
     # Broadcast df to local executors
@@ -1068,7 +1082,13 @@ def process_measurement(spark, measurement, required_measurement):
         )
     ''')
 
-    return scaled_numeric_lab.unionAll(categorical_lab)
+    processed_measurement_df = scaled_numeric_lab.unionAll(categorical_lab)
+
+    if output_folder:
+        processed_measurement_df.write.mode('overwrite').parquet(path.join(output_folder, 'processed_measurement'))
+        processed_measurement_df = spark.read.parquet(path.join(output_folder, 'processed_measurement'))
+
+    return processed_measurement_df
 
 
 def get_mlm_skip_domains(spark, input_folder, mlm_skip_table_list):

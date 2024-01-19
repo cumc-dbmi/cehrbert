@@ -49,7 +49,8 @@ def main(
 
     domain_tables = []
     for domain_table_name in domain_table_list:
-        domain_tables.append(preprocess_domain_table(spark, input_folder, domain_table_name))
+        if domain_table_name != MEASUREMENT:
+            domain_tables.append(preprocess_domain_table(spark, input_folder, domain_table_name))
 
     visit_occurrence = preprocess_domain_table(spark, input_folder, VISIT_OCCURRENCE)
     visit_occurrence = visit_occurrence.select(
@@ -80,9 +81,8 @@ def main(
 
     patient_events = join_domain_tables(domain_tables)
 
-    column_names = patient_events.schema.fieldNames()
-
     if include_concept_list and patient_events:
+        column_names = patient_events.schema.fieldNames()
         # Filter out concepts
         qualified_concepts = preprocess_domain_table(
             spark,
@@ -104,12 +104,13 @@ def main(
         scaled_measurement = process_measurement(
             spark,
             measurement,
-            required_measurement
-        ).select(column_names)
+            required_measurement,
+            output_folder
+        )
 
         if patient_events:
             # Union all measurement records together with other domain records
-            patient_events = patient_events.union(
+            patient_events = patient_events.unionByName(
                 scaled_measurement
             )
         else:
