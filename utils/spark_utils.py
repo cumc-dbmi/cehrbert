@@ -488,13 +488,13 @@ def create_sequence_data_with_att(
     struct_columns = [
         'order', 'date_in_week', 'standard_concept_id', 'visit_segment', 'age',
         'visit_rank_order', 'concept_value_mask', 'concept_value', 'mlm_skip_value',
-        'visit_concept_id'
+        'visit_concept_id', 'visit_concept_order', 'concept_order', 'priority'
     ]
     output_columns = [
         'cohort_member_id', 'person_id', 'concept_ids', 'visit_segments', 'orders',
         'dates', 'ages', 'visit_concept_orders', 'num_of_visits', 'num_of_concepts',
-        'concept_value_masks', 'concept_values', 'mlm_skip_values',
-        'visit_concept_ids'
+        'concept_value_masks', 'concept_values', 'mlm_skip_values', 'priorities',
+        'visit_concept_ids', 'visit_rank_orders', 'concept_orders'
     ]
 
     patient_grouped_events = patient_events \
@@ -509,7 +509,10 @@ def create_sequence_data_with_att(
         .withColumn('concept_ids', F.col('data_for_sorting.standard_concept_id')) \
         .withColumn('visit_segments', F.col('data_for_sorting.visit_segment')) \
         .withColumn('ages', F.col('data_for_sorting.age')) \
-        .withColumn('visit_concept_orders', F.col('data_for_sorting.visit_rank_order')) \
+        .withColumn('visit_rank_orders', F.col('data_for_sorting.visit_rank_order')) \
+        .withColumn('visit_concept_orders', F.col('data_for_sorting.visit_concept_order')) \
+        .withColumn('concept_orders', F.col('data_for_sorting.concept_order')) \
+        .withColumn('priorities', F.col('data_for_sorting.priority')) \
         .withColumn('concept_value_masks', F.col('data_for_sorting.concept_value_mask')) \
         .withColumn('concept_values', F.col('data_for_sorting.concept_value')) \
         .withColumn('mlm_skip_values', F.col('data_for_sorting.mlm_skip_value')) \
