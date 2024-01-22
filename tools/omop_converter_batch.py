@@ -6,7 +6,7 @@ import uuid
 from datetime import date, timedelta
 from multiprocessing import Pool
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Union
 
 import numpy as np
 import pandas as pd
@@ -129,7 +129,7 @@ def export_and_clear(
 
 def gpt_to_omop_converter_serial(
         const: int,
-        pat_seq_split: np.ndarray,
+        pat_seq_split: Union[np.ndarray, pd.core.series.Series],
         domain_map: Dict[int, str],
         output_folder: str,
         buffer_size: int,
@@ -379,7 +379,7 @@ def gpt_to_omop_converter_parallel(
     pool_tuples = []
     # TODO: Need to make this dynamic
     const = 10000000
-    patient_sequences_list = np.array_split(patient_sequences.tolist(), num_of_cores)
+    patient_sequences_list = np.array_split(patient_sequences, num_of_cores)
     for i in range(1, num_of_cores + 1):
         pool_tuples.append(
             (const * i, patient_sequences_list[i - 1], domain_map, output_folder, buffer_size,
