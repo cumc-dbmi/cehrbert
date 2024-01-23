@@ -580,55 +580,46 @@ class VisitEmbeddingLayer(tf.keras.layers.Layer):
         return self.visit_embedding_layer(visit_orders, **kwargs) + concept_embeddings
 
 
-class ConceptValueDecoderLayer(tf.keras.layers.Layer):
+class ConceptValuePredictionLayer(tf.keras.layers.Layer):
     def __init__(self, embedding_size, *args, **kwargs):
-        super(ConceptValueDecoderLayer, self).__init__(*args, **kwargs)
+        super(ConceptValuePredictionLayer, self).__init__(*args, **kwargs)
         self.embedding_size = embedding_size
-        # the hidden size equals embedding size + 1 (val)
-        self.concept_value_decoder_layer = tf.keras.layers.Dense(
-            embedding_size + 1,
-            name='value_decoder_layer'
-        )
+        self.concept_value_decoder_layer = tf.keras.Sequential(layers=[
+            tf.keras.layers.Dense(
+                self.embedding_size,
+                activation='tanh'
+            ),
+            tf.keras.layers.Dense(
+                self.embedding_size,
+                activation='tanh'
+            ),
+            tf.keras.layers.Dense(
+                1
+            )
+        ], name='value_decoder_layer')
 
     def get_config(self):
         config = super().get_config()
         config['embedding_size'] = self.embedding_size
         return config
 
-    def call(self, concept_val_embeddings, concept_value_masks):
-
-        # (batch_size, context_window, embedding_size + 1)
-        concept_embeddings_with_val = self.concept_value_decoder_layer(concept_val_embeddings)
+    def call(self, original_concept_embeddings, concept_val_embeddings, concept_value_masks):
+        # (batch_size, context_window, 2 * embedding_size)
+        context = tf.concat([original_concept_embeddings, concept_val_embeddings], axis=-1)
+        # (batch_size, context_window, 1)
+        concept_vals = self.concept_value_decoder_layer(context)
 
         # (batch_size, context_window, 1)
         concept_value_masks = tf.expand_dims(
             concept_value_masks,
             axis=-1
         )
-
         # Zero out the positions without a val
-        concept_embeddings_with_val = tf.multiply(
-            concept_embeddings_with_val,
+        concept_vals = tf.multiply(
+            concept_vals,
             tf.cast(concept_value_masks, dtype=tf.float32)
         )
-        # Derive the inverse concept value masks for zeroing out the embeddings without a val
-        inverse_concept_value_masks = tf.cast(
-            tf.logical_not(
-                tf.cast(concept_value_masks, dtype=tf.bool)
-            ),
-            dtype=tf.float32
-        )
-
-        # Zero out the position of concept embeddings with a val
-        concept_embeddings_without_val = tf.multiply(
-            inverse_concept_value_masks,
-            concept_val_embeddings
-        )
-
-        # Merge two sets of concept embeddings
-        concept_embeddings = concept_embeddings_without_val + concept_embeddings_with_val[..., :-1]
-
-        return concept_embeddings, concept_embeddings_with_val[..., -1]
+        return concept_vals
 
 
 class ConceptValueTransformationLayer(tf.keras.layers.Layer):
@@ -1325,5 +1316,5 @@ get_custom_objects().update({
     'ConvolutionBertLayer': ConvolutionBertLayer,
     'HiddenPhenotypeLayer': HiddenPhenotypeLayer,
     'VisitPhenotypeLayer': VisitPhenotypeLayer,
-    'ConceptValueDecoderLayer': ConceptValueDecoderLayer
+    'ConceptValuePredictionLayer': ConceptValuePredictionLayer
 })

@@ -1,49 +1,40 @@
 import tensorflow as tf
-from models.layers.custom_layers import ConceptValueDecoderLayer
+from models.layers.custom_layers import ConceptValuePredictionLayer
 import unittest
 
 
-class TestConceptValueDecoderLayer(unittest.TestCase):
+class TestConceptValuePredictionLayer(unittest.TestCase):
 
-    def test_initialization(self):
-        """ Test the initialization of ConceptValueDecoderLayer. """
-        embedding_size = 128
-        layer = ConceptValueDecoderLayer(embedding_size)
+    def test_layer_initialization(self):
+        """ Test if the layer initializes with the correct embedding size. """
+        embedding_size = 64
+        layer = ConceptValuePredictionLayer(embedding_size)
         self.assertEqual(layer.embedding_size, embedding_size)
 
     def test_get_config(self):
-        """ Test the get_config method. """
-        embedding_size = 128
-        layer = ConceptValueDecoderLayer(embedding_size)
+        """ Test if the get_config method returns the correct configuration. """
+        embedding_size = 64
+        layer = ConceptValuePredictionLayer(embedding_size)
         config = layer.get_config()
         self.assertEqual(config['embedding_size'], embedding_size)
 
     def test_call(self):
         """ Test the call method of the layer. """
-        embedding_size = 128
-        layer = ConceptValueDecoderLayer(embedding_size)
+        embedding_size = 64
+        layer = ConceptValuePredictionLayer(embedding_size)
 
-        # Create dummy data for testing
+        # Create mock data for testing
         batch_size = 2
         context_window = 3
+        original_concept_embeddings = tf.random.normal((batch_size, context_window, embedding_size))
         concept_val_embeddings = tf.random.normal((batch_size, context_window, embedding_size))
         concept_value_masks = tf.random.uniform((batch_size, context_window), minval=0, maxval=2, dtype=tf.int32)
 
         # Test the call method
-        concept_embeddings, concept_values = layer(concept_val_embeddings, concept_value_masks)
-        self.assertEqual(concept_embeddings.shape, (batch_size, context_window, embedding_size))
-        self.assertEqual(concept_values.shape, (batch_size, context_window))
+        concept_vals = layer(original_concept_embeddings, concept_val_embeddings, concept_value_masks)
 
-        inverse_mask = tf.cast(
-            tf.logical_not(tf.cast(concept_value_masks[..., tf.newaxis], dtype=tf.bool)),
-            dtype=tf.float32
-        )
-
-        # This is to test whether the positions without a val are equal between concept_embeddings and
-        # concept_val_embeddings
-        self.assertTrue(
-            tf.reduce_all(tf.equal(inverse_mask * concept_embeddings, inverse_mask * concept_val_embeddings).numpy())
-        )
+        # Check the shape of the output
+        self.assertEqual(concept_vals.shape, (batch_size, context_window, 1))
 
 
 if __name__ == '__main__':

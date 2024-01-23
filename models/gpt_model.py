@@ -9,7 +9,7 @@ import tensorflow as tf
 from data_generators.tokenizer import ConceptTokenizer
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 from models.layers.custom_layers import (
-    GptDecoder, TrainablePositionEmbedding, ConceptValueTransformationLayer, ConceptValueDecoderLayer
+    GptDecoder, TrainablePositionEmbedding, ConceptValueTransformationLayer, ConceptValuePredictionLayer
 )
 
 
@@ -376,10 +376,10 @@ def create_model(
     )
 
     # embeddings for encoder input
-    x, concept_embedding_matrix = concept_embedding_layer(concept_inputs)
+    original_concept_embeddings, concept_embedding_matrix = concept_embedding_layer(concept_inputs)
 
-    x += positional_encoding_layer(
-        x
+    x = original_concept_embeddings + positional_encoding_layer(
+        original_concept_embeddings
     )
 
     # If this flag is enabled, we will include additional inputs to incorporate the numeric values into the model
@@ -423,25 +423,23 @@ def create_model(
         name='concept_predictions'
     )
 
-    model_outputs = []
+    concept_predictions = concept_prediction_layer(
+        output_layer([contextualized_embeddings, concept_embedding_matrix])
+    )
+    model_outputs = [concept_predictions]
 
     # If this flag is enabled, we will include an additional learning objective to predict the next value
     if include_numeric_value:
-        concept_value_decoder_layer = ConceptValueDecoderLayer(
-            embedding_size=embedding_size,
+        concept_value_decoder_layer = ConceptValuePredictionLayer(
             name='concept_value_decoder_layer'
         )
-        contextualized_embeddings, concept_values = concept_value_decoder_layer(
+        concept_values = concept_value_decoder_layer(
+            original_concept_embeddings,
             contextualized_embeddings,
             concept_value_masks
         )
-
         # Creating a new tensor based on the existing one with a new name
         model_outputs.append(tf.identity(concept_values, name='next_value_predictions'))
-
-    model_outputs.insert(0, concept_prediction_layer(
-        output_layer([contextualized_embeddings, concept_embedding_matrix])
-    ))
 
     model = tf.keras.Model(inputs=model_inputs, outputs=model_outputs)
 
