@@ -522,8 +522,9 @@ class PositionalEncodingLayer(tf.keras.layers.Layer):
         # Normalize the visit_orders using the smallest visit_concept_orders
         # Take the absolute value to make sure the padded values are not negative after
         # normalization
-        visit_concept_orders = tf.abs(visit_concept_orders - tf.expand_dims(
-            tf.math.reduce_min(visit_concept_orders, axis=1), axis=-1))
+        visit_concept_orders = tf.abs(
+            visit_concept_orders - tf.reduce_min(visit_concept_orders, axis=-1)[..., tf.newaxis]
+        )
         # Get the same positional encodings for the concepts with the same visit_order
         positional_embeddings = tf.gather(self.pos_encoding, visit_concept_orders, axis=0)
         return positional_embeddings

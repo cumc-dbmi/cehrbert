@@ -397,7 +397,13 @@ def create_model(
         name='concept_ids'
     )
 
-    model_inputs = [concept_inputs]
+    visit_concept_orders = tf.keras.layers.Input(
+        shape=(context_window_size,),
+        dtype=tf.int32,
+        name='visit_concept_orders'
+    )
+
+    model_inputs = [concept_inputs, visit_concept_orders]
 
     look_ahead_mask_base = tf.cast(
         1 - tf.linalg.band_part(tf.ones((context_window_size, context_window_size)), -1, 0),
@@ -430,7 +436,7 @@ def create_model(
     original_concept_embeddings, concept_embedding_matrix = concept_embedding_layer(concept_inputs)
 
     x = original_concept_embeddings + positional_encoding_layer(
-        original_concept_embeddings
+        visit_concept_orders
     )
 
     # If this flag is enabled, we will include additional inputs to incorporate the numeric values into the model
