@@ -1,4 +1,5 @@
 import copy
+import math
 from itertools import islice
 from typing import List
 
@@ -8,6 +9,41 @@ from tensorflow.dtypes import int32, float32
 from data_generators.data_classes import RowSlicer
 from data_generators.learning_objective import LearningObjective, validate_columns_decorator, post_pad_pre_truncate
 from data_generators.tokenizer import ConceptTokenizer
+
+
+class CosineMaskRateScheduler:
+    def __init__(
+            self,
+            low_rate: float = 0.5,
+            high_rate: float = 1.0,
+            low_rate_mult: float = 1.1,
+            period: int = 1000,
+            total: int = np.infty
+    ):
+        assert low_rate < high_rate
+
+        self._low_rate = low_rate
+        self._high_rate = high_rate
+        self._low_rate_mult = low_rate_mult
+        self._period = period
+        self._total = total
+        self._counter = 0
+
+    def get_rate(self):
+        if self._counter % self._period == 0 and self._counter != 0:
+            # The new low_rate can't exceed the high rate
+            if self._low_rate * self._low_rate_mult < self._high_rate:
+                self._low_rate *= self._low_rate_mult
+            else:
+                self._low_rate = self._high_rate
+
+        self._counter += 1
+        modulo = self._counter % self._period
+        result = self._low_rate + (self._high_rate - self._low_rate) * math.sin(math.pi * (modulo / self._period))
+        return result
+
+    def stopped(self):
+        return self._counter > self._total
 
 
 class PredictNextValueLearningObjective(LearningObjective):
@@ -105,12 +141,11 @@ class SequenceGenerationLearningObjective(LearningObjective):
             self,
             concept_tokenizer: ConceptTokenizer,
             max_seq_len: int,
-            warmup_step: int = 0
+            mask_rate_scheduler: CosineMaskRateScheduler
     ):
         self._max_seq_len = max_seq_len
         self._concept_tokenizer = concept_tokenizer
-        self._warmup_step = warmup_step
-        self._counter = 0
+        self._mask_rate_scheduler = mask_rate_scheduler
 
     def get_tf_dataset_schema(self):
         input_dict_schema = {
@@ -144,9 +179,9 @@ class SequenceGenerationLearningObjective(LearningObjective):
 
         mask = (concepts != unused_token_id).astype(int)
 
-        if self._counter < self._warmup_step:
-            self._counter += 1
-            mask = (np.random.rand(*mask.shape) < 0.5) & mask
+        if not self._mask_rate_scheduler.stopped():
+            rate = self._mask_rate_scheduler.get_rate()
+            mask = (np.random.rand(*mask.shape) < rate) & mask
 
         visit_concept_orders = post_pad_pre_truncate(
             visit_concept_orders,

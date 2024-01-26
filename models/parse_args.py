@@ -154,6 +154,20 @@ def create_parse_args_base_bert():
 
 
 def create_parse_args_gpt():
+    from numpy import infty
+
+    def valid_mask_rate(mask_rate: str) -> float:
+        """Custom argparse type for validating the mask rate given from the command line"""
+        try:
+            rate = float(mask_rate)
+            if rate < 0:
+                raise RuntimeError(f'{mask_rate} cannot be less than 0')
+            if rate > 1:
+                raise RuntimeError(f'{mask_rate} cannot be grater than 1')
+            return rate
+        except ValueError as e:
+            raise argparse.ArgumentTypeError(e)
+
     parser = create_parse_args()
     parser.add_argument(
         '--min_num_of_concepts',
@@ -234,11 +248,35 @@ def create_parse_args_gpt():
         required=False
     )
     parser.add_argument(
-        '--warmup_step',
-        dest='warmup_step',
+        '--low_rate',
+        dest='low_rate',
+        action='store',
+        type=valid_mask_rate,
+        default=0.5,
+        required=False
+    )
+    parser.add_argument(
+        '--high_rate',
+        dest='high_rate',
+        action='store',
+        type=valid_mask_rate,
+        default=1.0,
+        required=False
+    )
+    parser.add_argument(
+        '--period',
+        dest='period',
         action='store',
         type=int,
-        default=100,
+        default=1000,
+        required=False
+    )
+    parser.add_argument(
+        '--total',
+        dest='total',
+        action='store',
+        type=int,
+        default=infty,
         required=False
     )
     parser.add_argument(

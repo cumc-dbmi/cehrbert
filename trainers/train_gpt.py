@@ -4,6 +4,7 @@ import tensorflow as tf
 from tensorflow.keras import optimizers
 
 from data_generators.data_generator_base import *
+from data_generators.gpt_learning_objectives import CosineMaskRateScheduler
 from keras_transformer.bert import (
     masked_perplexity,
     MaskedPenalizedSparseCategoricalCrossentropy,
@@ -38,7 +39,10 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             sampling_dataset_enabled: bool = False,
             is_random_cursor_long_sequence: bool = False,
             include_numeric_value: bool = False,
-            warmup_step: int = 100,
+            low_rate: float = 0.5,
+            high_rate: float = 1.0,
+            period: int = 1000,
+            total: int = np.infty,
             *args, **kwargs
     ):
         self._tokenizer_path = tokenizer_path
@@ -57,7 +61,12 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         self._sampling_dataset_enabled = sampling_dataset_enabled
         self._is_random_cursor_long_sequence = is_random_cursor_long_sequence
         self._include_numeric_value = include_numeric_value
-        self._warmup_step = warmup_step
+        self._cosine_mask_rate_scheduler = CosineMaskRateScheduler(
+            low_rate=low_rate,
+            high_rate=high_rate,
+            period=period,
+            total=total
+        )
 
         super(GptModelTrainer, self).__init__(*args, **kwargs)
 
@@ -79,7 +88,10 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             f'sampling_dataset_enabled: {sampling_dataset_enabled}\n'
             f'is_random_cursor_long_sequence: {is_random_cursor_long_sequence}\n'
             f'include_numeric_value: {include_numeric_value}\n'
-            f'warmup_step: {warmup_step}\n'
+            f'low_rate: {low_rate}\n'
+            f'high_rate: {high_rate}\n'
+            f'period: {period}\n'
+            f'total: {total}\n'
         )
 
     def _load_dependencies(self):
@@ -113,7 +125,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             'sampling_dataset_enabled': self._sampling_dataset_enabled,
             'is_random_cursor': self._is_random_cursor_long_sequence,
             'include_numeric_value': self._include_numeric_value,
-            'warmup_step': self._warmup_step
+            'mask_rate_scheduler': self._cosine_mask_rate_scheduler
         }
 
         return GptDataGenerator(**parameters)
@@ -203,7 +215,10 @@ def main(args):
         sampling_dataset_enabled=args.sampling_dataset_enabled,
         is_random_cursor_long_sequence=args.is_random_cursor_long_sequence,
         include_numeric_value=args.include_numeric_value,
-        warmup_step=args.warmup_step
+        low_rate=args.low_rate,
+        high_rate=args.high_rate,
+        period=args.period,
+        total=args.total
     ).train_model()
 
 

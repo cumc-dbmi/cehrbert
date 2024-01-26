@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from data_generators.data_classes import RowSlicer
 from data_generators.tokenizer import ConceptTokenizer
-from data_generators.gpt_learning_objectives import SequenceGenerationLearningObjective
+from data_generators.gpt_learning_objectives import SequenceGenerationLearningObjective, CosineMaskRateScheduler
 
 
 class TestSequenceGenerationLearningObjective(unittest.TestCase):
@@ -13,7 +13,11 @@ class TestSequenceGenerationLearningObjective(unittest.TestCase):
         self.max_seq_len = 10  # Example maximum sequence length
         self.concept_tokenizer = ConceptTokenizer()  # Mock or actual tokenizer instance
         self.concept_tokenizer.fit_on_concept_sequences(pd.Series({'concept_ids': ['101', '102', '103']}))
-        self.learning_obj = SequenceGenerationLearningObjective(self.concept_tokenizer, self.max_seq_len)
+        self.learning_obj = SequenceGenerationLearningObjective(
+            self.concept_tokenizer,
+            self.max_seq_len,
+            CosineMaskRateScheduler()
+        )
 
     @staticmethod
     def create_mock_row():
@@ -32,6 +36,14 @@ class TestSequenceGenerationLearningObjective(unittest.TestCase):
 
     def test_process_batch(self):
         mock_rows = [self.create_mock_row() for _ in range(5)]  # Create a list of mock rows
+
+        np.random.seed(42)
+        cosine_mask_rate_scheduler = CosineMaskRateScheduler()
+        random_mask = np.random.rand(len(mock_rows), self.max_seq_len) < cosine_mask_rate_scheduler.get_rate()
+        mask = np.tile([[1] * 4 + [0] * 6], [5, 1])
+        expected_mask = mask & random_mask
+
+        np.random.seed(42)
         input_dict, output_dict = self.learning_obj.process_batch(mock_rows)
 
         # Test the shapes of the output
@@ -49,6 +61,10 @@ class TestSequenceGenerationLearningObjective(unittest.TestCase):
         # Test the shifted concept ids
         self.assertTrue(
             (input_dict['concept_ids'][:, 1:4] == output_dict['concept_predictions'][:, :3, 0]).all()
+        )
+        # Test the mask
+        self.assertTrue(
+            (expected_mask == output_dict['concept_predictions'][:, :, 1]).all()
         )
 
 
