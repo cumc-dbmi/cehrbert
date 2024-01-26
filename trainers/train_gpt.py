@@ -38,6 +38,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             sampling_dataset_enabled: bool = False,
             is_random_cursor_long_sequence: bool = False,
             include_numeric_value: bool = False,
+            warmup_step: int = 100,
             *args, **kwargs
     ):
         self._tokenizer_path = tokenizer_path
@@ -56,6 +57,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         self._sampling_dataset_enabled = sampling_dataset_enabled
         self._is_random_cursor_long_sequence = is_random_cursor_long_sequence
         self._include_numeric_value = include_numeric_value
+        self._warmup_step = warmup_step
 
         super(GptModelTrainer, self).__init__(*args, **kwargs)
 
@@ -77,6 +79,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             f'sampling_dataset_enabled: {sampling_dataset_enabled}\n'
             f'is_random_cursor_long_sequence: {is_random_cursor_long_sequence}\n'
             f'include_numeric_value: {include_numeric_value}\n'
+            f'warmup_step: {warmup_step}\n'
         )
 
     def _load_dependencies(self):
@@ -109,7 +112,8 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             'including_long_sequence': self._including_long_sequence,
             'sampling_dataset_enabled': self._sampling_dataset_enabled,
             'is_random_cursor': self._is_random_cursor_long_sequence,
-            'include_numeric_value': self._include_numeric_value
+            'include_numeric_value': self._include_numeric_value,
+            'warmup_step': self._warmup_step
         }
 
         return GptDataGenerator(**parameters)
@@ -198,7 +202,8 @@ def main(args):
         save_freq=args.save_freq,
         sampling_dataset_enabled=args.sampling_dataset_enabled,
         is_random_cursor_long_sequence=args.is_random_cursor_long_sequence,
-        include_numeric_value=args.include_numeric_value
+        include_numeric_value=args.include_numeric_value,
+        warmup_step=args.warmup_step
     ).train_model()
 
 

@@ -234,6 +234,14 @@ def create_parse_args_gpt():
         required=False
     )
     parser.add_argument(
+        '--warmup_step',
+        dest='warmup_step',
+        action='store',
+        type=int,
+        default=100,
+        required=False
+    )
+    parser.add_argument(
         '--including_long_sequence',
         dest='including_long_sequence',
         action='store_true'

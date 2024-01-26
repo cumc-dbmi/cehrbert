@@ -1,9 +1,9 @@
 import copy
 from itertools import islice
 from typing import List
-from tensorflow.dtypes import int32, float32
 
 import numpy as np
+from tensorflow.dtypes import int32, float32
 
 from data_generators.data_classes import RowSlicer
 from data_generators.learning_objective import LearningObjective, validate_columns_decorator, post_pad_pre_truncate
@@ -104,10 +104,13 @@ class SequenceGenerationLearningObjective(LearningObjective):
     def __init__(
             self,
             concept_tokenizer: ConceptTokenizer,
-            max_seq_len: int
+            max_seq_len: int,
+            warmup_step: int = 0
     ):
         self._max_seq_len = max_seq_len
         self._concept_tokenizer = concept_tokenizer
+        self._warmup_step = warmup_step
+        self._counter = 0
 
     def get_tf_dataset_schema(self):
         input_dict_schema = {
@@ -140,6 +143,10 @@ class SequenceGenerationLearningObjective(LearningObjective):
         )
 
         mask = (concepts != unused_token_id).astype(int)
+
+        if self._counter < self._warmup_step:
+            self._counter += 1
+            mask = (np.random.rand(*mask.shape) < 0.5) & mask
 
         visit_concept_orders = post_pad_pre_truncate(
             visit_concept_orders,
