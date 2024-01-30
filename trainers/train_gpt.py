@@ -4,8 +4,11 @@ import tensorflow as tf
 from tensorflow.keras import optimizers
 
 from data_generators.data_generator_base import *
-from keras_transformer.bert import (masked_perplexity,
-                                    MaskedPenalizedSparseCategoricalCrossentropy)
+from keras_transformer.bert import (
+    masked_perplexity,
+    MaskedPenalizedSparseCategoricalCrossentropy,
+    MaskedMeanSquaredError
+)
 from models.gpt_model import create_model, ComputeMarginalDistribution
 from models.layers.custom_layers import get_custom_objects
 from models.model_parameters import ModelPathConfig
@@ -34,6 +37,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             including_long_sequence: bool,
             sampling_dataset_enabled: bool = False,
             is_random_cursor_long_sequence: bool = False,
+            include_numeric_value: bool = False,
             *args, **kwargs
     ):
         self._tokenizer_path = tokenizer_path
@@ -51,6 +55,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         self._including_long_sequence = including_long_sequence
         self._sampling_dataset_enabled = sampling_dataset_enabled
         self._is_random_cursor_long_sequence = is_random_cursor_long_sequence
+        self._include_numeric_value = include_numeric_value
 
         super(GptModelTrainer, self).__init__(*args, **kwargs)
 
@@ -71,6 +76,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             f'including_long_sequence: {including_long_sequence}\n'
             f'sampling_dataset_enabled: {sampling_dataset_enabled}\n'
             f'is_random_cursor_long_sequence: {is_random_cursor_long_sequence}\n'
+            f'include_numeric_value: {include_numeric_value}\n'
         )
 
     def _load_dependencies(self):
@@ -102,7 +108,8 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             'min_num_of_concepts': self._min_num_of_concepts,
             'including_long_sequence': self._including_long_sequence,
             'sampling_dataset_enabled': self._sampling_dataset_enabled,
-            'is_random_cursor': self._is_random_cursor_long_sequence
+            'is_random_cursor': self._is_random_cursor_long_sequence,
+            'include_numeric_value': self._include_numeric_value
         }
 
         return GptDataGenerator(**parameters)
@@ -126,13 +133,17 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
                     vocab_size=self._tokenizer.get_vocab_size(),
                     embedding_size=self._embedding_size,
                     num_heads=self._num_heads,
-                    depth=self._depth
+                    depth=self._depth,
+                    include_numeric_value=self._include_numeric_value
                 )
 
                 losses = {
                     'concept_predictions': MaskedPenalizedSparseCategoricalCrossentropy(
                         self.confidence_penalty)
                 }
+
+                if self._include_numeric_value:
+                    losses['next_value_predictions'] = MaskedMeanSquaredError()
 
                 model.compile(
                     optimizer,
@@ -186,7 +197,8 @@ def main(args):
         save_checkpoint=args.save_checkpoint,
         save_freq=args.save_freq,
         sampling_dataset_enabled=args.sampling_dataset_enabled,
-        is_random_cursor_long_sequence=args.is_random_cursor_long_sequence
+        is_random_cursor_long_sequence=args.is_random_cursor_long_sequence,
+        include_numeric_value=args.include_numeric_value
     ).train_model()
 
 

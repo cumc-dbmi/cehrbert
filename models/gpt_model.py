@@ -8,7 +8,9 @@ import tensorflow as tf
 
 from data_generators.tokenizer import ConceptTokenizer
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
-from models.layers.custom_layers import GptDecoder, TrainablePositionEmbedding
+from models.layers.custom_layers import (
+    GptDecoder, TrainablePositionEmbedding, ConceptValueTransformationLayer, ConceptValuePredictionLayer
+)
 
 
 class SamplingStrategy(ABC):
@@ -319,7 +321,7 @@ def create_model(
         num_heads,
         depth,
         embedding_dropout: float = 0.6,
-        confidence_penalty_weight: float = 0.1
+        include_numeric_value: bool = False
 ):
     """
     model = create_model(
@@ -334,8 +336,8 @@ def create_model(
     :param embedding_size:
     :param num_heads:
     :param depth:
-    :param confidence_penalty_weight:
     :param embedding_dropout:
+    :param include_numeric_value
     :return:
     """
     concept_inputs = tf.keras.layers.Input(
@@ -343,6 +345,8 @@ def create_model(
         dtype=tf.int32,
         name='concept_ids'
     )
+
+    model_inputs = [concept_inputs]
 
     look_ahead_mask_base = tf.cast(
         1 - tf.linalg.band_part(tf.ones((context_window_size, context_window_size)), -1, 0),
@@ -358,6 +362,7 @@ def create_model(
         # https://arxiv.org/pdf/1508.03721.pdf
         embeddings_regularizer=tf.keras.regularizers.l2(1e-4)
     )
+
     positional_encoding_layer = TrainablePositionEmbedding(
         maxlen=context_window_size,
         embed_dim=embedding_size,
@@ -371,11 +376,36 @@ def create_model(
     )
 
     # embeddings for encoder input
-    x, concept_embedding_matrix = concept_embedding_layer(concept_inputs)
+    original_concept_embeddings, concept_embedding_matrix = concept_embedding_layer(concept_inputs)
 
-    x += positional_encoding_layer(
-        x
+    x = original_concept_embeddings + positional_encoding_layer(
+        original_concept_embeddings
     )
+
+    # If this flag is enabled, we will include additional inputs to incorporate the numeric values into the model
+    if include_numeric_value:
+        concept_values = tf.keras.layers.Input(
+            shape=(context_window_size,),
+            dtype=tf.float32,
+            name='concept_values'
+        )
+
+        concept_value_masks = tf.keras.layers.Input(
+            shape=(context_window_size,),
+            dtype=tf.int32,
+            name='concept_value_masks'
+        )
+
+        value_transformation_layer = ConceptValueTransformationLayer(
+            embedding_size=embedding_size,
+            name='value_transformation_layer'
+        )
+
+        x = value_transformation_layer(
+            x, concept_values, concept_value_masks
+        )
+
+        model_inputs.extend([concept_values, concept_value_masks])
 
     transformer_block = GptDecoder(
         depth,
@@ -383,6 +413,7 @@ def create_model(
         num_heads,
         name='decoder'
     )
+
     contextualized_embeddings, _, _ = transformer_block(
         x,
         look_ahead_mask_base
@@ -392,30 +423,30 @@ def create_model(
         name='concept_predictions'
     )
 
-    outputs = concept_prediction_layer(
+    concept_predictions = concept_prediction_layer(
         output_layer([contextualized_embeddings, concept_embedding_matrix])
     )
+    model_outputs = [concept_predictions]
 
-    model = tf.keras.Model(inputs=[concept_inputs], outputs=[outputs])
+    # If this flag is enabled, we will include an additional learning objective to predict the next value
+    if include_numeric_value:
+        concept_value_decoder_layer = ConceptValuePredictionLayer(
+            name='concept_value_decoder_layer'
+        )
+        concept_values = concept_value_decoder_layer(
+            original_concept_embeddings,
+            contextualized_embeddings,
+            concept_value_masks
+        )
+        # Creating a new tensor based on the existing one with a new name
+        model_outputs.append(tf.identity(concept_values, name='next_value_predictions'))
 
-    # # Penalty for confidence of the output distribution, as described in
-    # # "Regularizing Neural Networks by Penalizing Confident
-    # # Output Distributions" (https://arxiv.org/abs/1701.06548)
-    # confidence_penalty = K.mean(
-    #     confidence_penalty_weight * K.sum(outputs * K.log(outputs), axis=-1)
-    # )
-    #
-    # model.add_loss(confidence_penalty)
-    #
-    # model.add_metric(
-    #     confidence_penalty,
-    #     name='Output distribution penalty'
-    # )
+    model = tf.keras.Model(inputs=model_inputs, outputs=model_outputs)
 
     return model
 
 
-def sample_predicted_probabibility(
+def sample_predicted_probability(
         pred_logits,
         top_k,
         temperature

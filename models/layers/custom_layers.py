@@ -580,6 +580,48 @@ class VisitEmbeddingLayer(tf.keras.layers.Layer):
         return self.visit_embedding_layer(visit_orders, **kwargs) + concept_embeddings
 
 
+class ConceptValuePredictionLayer(tf.keras.layers.Layer):
+    def __init__(self, embedding_size, *args, **kwargs):
+        super(ConceptValuePredictionLayer, self).__init__(*args, **kwargs)
+        self.embedding_size = embedding_size
+        self.concept_value_decoder_layer = tf.keras.Sequential(layers=[
+            tf.keras.layers.Dense(
+                self.embedding_size,
+                activation='tanh'
+            ),
+            tf.keras.layers.Dense(
+                self.embedding_size,
+                activation='tanh'
+            ),
+            tf.keras.layers.Dense(
+                1
+            )
+        ], name='value_decoder_layer')
+
+    def get_config(self):
+        config = super().get_config()
+        config['embedding_size'] = self.embedding_size
+        return config
+
+    def call(self, original_concept_embeddings, concept_val_embeddings, concept_value_masks):
+        # (batch_size, context_window, 2 * embedding_size)
+        context = tf.concat([original_concept_embeddings, concept_val_embeddings], axis=-1)
+        # (batch_size, context_window, 1)
+        concept_vals = self.concept_value_decoder_layer(context)
+
+        # (batch_size, context_window, 1)
+        concept_value_masks = tf.expand_dims(
+            concept_value_masks,
+            axis=-1
+        )
+        # Zero out the positions without a val
+        concept_vals = tf.multiply(
+            concept_vals,
+            tf.cast(concept_value_masks, dtype=tf.float32)
+        )
+        return concept_vals
+
+
 class ConceptValueTransformationLayer(tf.keras.layers.Layer):
     def __init__(self, embedding_size, *args, **kwargs):
         super(ConceptValueTransformationLayer, self).__init__(*args, **kwargs)
@@ -1273,5 +1315,6 @@ get_custom_objects().update({
     'BertLayer': BertLayer,
     'ConvolutionBertLayer': ConvolutionBertLayer,
     'HiddenPhenotypeLayer': HiddenPhenotypeLayer,
-    'VisitPhenotypeLayer': VisitPhenotypeLayer
+    'VisitPhenotypeLayer': VisitPhenotypeLayer,
+    'ConceptValuePredictionLayer': ConceptValuePredictionLayer
 })

@@ -1,7 +1,7 @@
+import math
 from abc import ABC, abstractmethod
 from enum import Enum
 
-import math
 import numpy as np
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F, Window as W, types as T
@@ -34,7 +34,7 @@ class PatientEventDecorator(ABC):
                     'visit_occurrence_id', 'domain', 'concept_value', 'visit_rank_order',
                     'visit_segment', 'priority', 'date_in_week', 'concept_value_mask',
                     'mlm_skip_value', 'age', 'visit_concept_id', 'visit_start_date',
-                    'visit_start_datetime'])
+                    'visit_start_datetime', 'visit_concept_order', 'concept_order'])
 
     def validate(self, patient_events: DataFrame):
         actual_column_set = set(patient_events.columns)
@@ -84,20 +84,60 @@ class PatientEventBaseDecorator(
             )
         )
         visit_segment_udf = F.col('visit_rank_order') % F.lit(2) + 1
+
         visits = self._visit_occurrence.join(valid_visit_ids, 'visit_occurrence_id').select(
+            'person_id',
             'visit_occurrence_id',
+            'visit_end_date',
             F.col('visit_start_date').cast(T.DateType()).alias('visit_start_date'),
             F.col('visit_start_datetime').cast(T.TimestampType()).alias('visit_start_datetime'),
-            'person_id',
             F.col('visit_concept_id').cast('int').isin([9201, 262, 8971, 8920]).cast('int').alias('is_inpatient'),
             F.when(F.col('discharged_to_concept_id').cast('int') == 4216643, F.lit(1)).otherwise(F.lit(0)).alias(
                 'expired')
         ).withColumn('visit_rank_order', visit_rank_udf) \
             .withColumn('visit_segment', visit_segment_udf) \
-            .drop('person_id', 'is_inpatient', 'expired')
+            .drop('person_id', 'expired')
 
-        # Add visit_rank_order, and visit_segment to patient_events
-        patient_events = patient_events.join(visits, 'visit_occurrence_id')
+        # Determine the concept order depending on the visit type. For outpatient visits, we assume the concepts to
+        # have the same order, whereas for inpatient visits, the concept order is determined by the time stamp
+        concept_order_udf = F.when(
+            F.col('is_inpatient') == 1,
+            F.dense_rank().over(W.partitionBy('visit_occurrence_id').orderBy('date'))
+        ).otherwise(F.lit(1))
+
+        # Determine the global visit concept order for each patient, this takes both visit_rank_order and concept_order
+        # into account when assigning this new order.
+        # e.g. visit_rank_order = [1, 1, 2, 2], concept_order = [1, 1, 1, 2] -> visit_concept_order = [1, 1, 2, 3]
+        visit_concept_order_udf = F.dense_rank().over(
+            W.partitionBy('person_id').orderBy(
+                'visit_rank_order', 'concept_order'
+            )
+        )
+
+        # We need to set the visit_end_date as the visit_start_date for outpatient visits
+        # For inpatient visits, we use the original visit_end_date if available, otherwise
+        # we will infer the visit_end_date using the max(date) of the current visit
+        visit_end_date_udf = F.when(
+            F.col('is_inpatient') == 1, F.coalesce(
+                F.col('visit_end_date'),
+                F.max('date').over(W.partitionBy('visit_occurrence_id'))
+            )
+        ).otherwise(F.col('visit_start_date'))
+
+        # We need to bound the medical event dates between visit_start_date and visit_end_date
+        bound_medical_event_date = F.when(
+            F.col('date') < F.col('visit_start_date'), F.col('visit_start_date')).otherwise(
+            F.when(F.col('date') > F.col('visit_end_date'), F.col('visit_end_date')).otherwise(F.col('date'))
+        )
+
+        patient_events = patient_events \
+            .join(visits, 'visit_occurrence_id') \
+            .withColumn('visit_end_date', visit_end_date_udf) \
+            .withColumn('date', bound_medical_event_date) \
+            .withColumn('concept_order', concept_order_udf) \
+            .withColumn('visit_concept_order', visit_concept_order_udf) \
+            .drop('is_inpatient', 'visit_end_date') \
+            .distinct()
 
         # Set the priority for the events.
         # Create the week since epoch UDF
@@ -114,7 +154,7 @@ class PatientEventBaseDecorator(
                         (F.col('domain').isin([MEASUREMENT, CATEGORICAL_MEASUREMENT])).cast('int'))
 
         if 'concept_value' not in patient_events.schema.fieldNames():
-            patient_events = patient_events.withColumn('concept_value', F.lit(-1.0))
+            patient_events = patient_events.withColumn('concept_value', F.lit(0.0))
 
         # (cohort_member_id, person_id, standard_concept_id, date, visit_occurrence_id, domain,
         # concept_value, visit_rank_order, visit_segment, priority, date_in_week,
@@ -145,15 +185,13 @@ class PatientEventAttDecorator(PatientEventDecorator):
         # visits should the following columns (person_id,
         # visit_concept_id, visit_start_date, visit_occurrence_id, domain, concept_value)
         cohort_member_person_pair = patient_events.select('person_id', 'cohort_member_id').distinct()
-        valid_visit_ids = patient_events.select('visit_occurrence_id').distinct()
+        valid_visit_ids = patient_events \
+            .groupby('visit_occurrence_id', 'visit_segment', 'visit_rank_order') \
+            .agg(F.min('visit_concept_order').alias('min_visit_concept_order'),
+                 F.max('visit_concept_order').alias('max_visit_concept_order'),
+                 F.min('concept_order').alias('min_concept_order'),
+                 F.max('concept_order').alias('max_concept_order'))
 
-        # Add visit_rank and visit_segment to the visits dataframe and create the visit rank
-        visit_rank_udf = F.row_number().over(
-            W.partitionBy('person_id').orderBy(
-                'visit_start_datetime', 'is_inpatient', 'expired', 'visit_occurrence_id'
-            )
-        )
-        visit_segment_udf = F.col('visit_rank_order') % F.lit(2) + 1
         visit_occurrence = self._visit_occurrence.select(
             'person_id',
             F.col('visit_start_date').cast(T.DateType()).alias('date'),
@@ -163,14 +201,11 @@ class PatientEventAttDecorator(PatientEventDecorator):
             'visit_concept_id',
             'visit_occurrence_id',
             F.lit('visit').alias('domain'),
-            F.lit(-1).alias('concept_value'),
+            F.lit(0.0).alias('concept_value'),
             F.lit(0).alias('concept_value_mask'),
             F.lit(0).alias('mlm_skip_value'),
             'age',
-            'discharged_to_concept_id',
-            F.col('visit_concept_id').cast('int').isin([9201, 262, 8971, 8920]).cast('int').alias('is_inpatient'),
-            F.when(F.col('discharged_to_concept_id').cast('int') == 4216643, F.lit(1)).otherwise(F.lit(0)).alias(
-                'expired')
+            'discharged_to_concept_id'
         ).join(valid_visit_ids, 'visit_occurrence_id') \
             .join(cohort_member_person_pair, 'person_id')
 
@@ -184,10 +219,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
 
         weeks_since_epoch_udf = (F.unix_timestamp('date') / F.lit(24 * 60 * 60 * 7)).cast('int')
         visit_occurrence = visit_occurrence \
-            .withColumn('visit_rank_order', visit_rank_udf) \
-            .withColumn('visit_segment', visit_segment_udf) \
-            .withColumn('date_in_week', weeks_since_epoch_udf) \
-            .drop('is_inpatient', 'expired')
+            .withColumn('date_in_week', weeks_since_epoch_udf)
 
         # Cache visit for faster processing
         visit_occurrence.cache()
@@ -200,12 +232,20 @@ class PatientEventAttDecorator(PatientEventDecorator):
         visit_start_events = visits \
             .withColumn('date', F.col('visit_start_date')) \
             .withColumn('standard_concept_id', F.lit('VS')) \
-            .withColumn('priority', F.lit(-2))
+            .withColumn('visit_concept_order', F.col('min_visit_concept_order')) \
+            .withColumn('concept_order', F.col('min_concept_order') - 1) \
+            .withColumn('priority', F.lit(-2)) \
+            .drop('min_visit_concept_order', 'max_visit_concept_order') \
+            .drop('min_concept_order', 'max_concept_order')
 
         visit_end_events = visits \
             .withColumn('date', F.col('visit_end_date')) \
             .withColumn('standard_concept_id', F.lit('VE')) \
-            .withColumn('priority', F.lit(200))
+            .withColumn('visit_concept_order', F.col('max_visit_concept_order')) \
+            .withColumn('concept_order', F.col('max_concept_order') + 1) \
+            .withColumn('priority', F.lit(200)) \
+            .drop('min_visit_concept_order', 'max_visit_concept_order') \
+            .drop('min_concept_order', 'max_concept_order')
 
         # Get the prev days_since_epoch
         prev_visit_end_date_udf = F.lag('visit_end_date').over(
@@ -239,7 +279,11 @@ class PatientEventAttDecorator(PatientEventDecorator):
             .withColumn('standard_concept_id', time_token_udf('time_delta')) \
             .withColumn('priority', F.lit(-3)) \
             .withColumn('visit_rank_order', F.col('visit_rank_order') - 1) \
-            .drop('prev_visit_end_date', 'time_delta')
+            .withColumn('visit_concept_order', F.lit(0)) \
+            .withColumn('concept_order', F.lit(0)) \
+            .drop('prev_visit_end_date', 'time_delta') \
+            .drop('min_visit_concept_order', 'max_visit_concept_order') \
+            .drop('min_concept_order', 'max_concept_order')
 
         if self._exclude_visit_tokens:
             artificial_tokens = att_tokens
@@ -250,7 +294,12 @@ class PatientEventAttDecorator(PatientEventDecorator):
             # insert visit type after the VS token
             visit_type_tokens = visits \
                 .withColumn('standard_concept_id', F.col('visit_concept_id')) \
-                .withColumn('priority', F.lit(-1))
+                .withColumn('visit_concept_order', F.col('min_visit_concept_order')) \
+                .withColumn('concept_order', F.lit(0)) \
+                .withColumn('priority', F.lit(-1)) \
+                .drop('min_visit_concept_order', 'max_visit_concept_order') \
+                .drop('min_concept_order', 'max_concept_order')
+
             artificial_tokens = artificial_tokens.unionByName(visit_type_tokens)
 
         artificial_tokens = artificial_tokens.drop('visit_end_date')
@@ -277,11 +326,8 @@ class PatientEventAttDecorator(PatientEventDecorator):
                 )
             )
         ).withColumn(
-            'span_rank',
-            F.dense_rank().over(W.partitionBy('visit_occurrence_id').orderBy('date'))
-        ).withColumn(
-            'priority', F.col('priority') + F.col('span_rank') * 0.1
-        ).drop('span_rank', 'visit_end_date')
+            'priority', F.col('priority') + F.col('concept_order') * 0.1
+        ).drop('visit_end_date')
 
         # Get the prev days_since_epoch
         inpatient_prev_date_udf = F.lag('date').over(
@@ -296,9 +342,13 @@ class PatientEventAttDecorator(PatientEventDecorator):
         discharge_events = visit_occurrence \
             .where(F.col('visit_concept_id').isin([9201, 262, 8971, 8920])) \
             .withColumn('standard_concept_id', F.coalesce(F.col('discharged_to_concept_id'), F.lit(0))) \
+            .withColumn('visit_concept_order', F.col('max_visit_concept_order')) \
+            .withColumn('concept_order', F.col('max_concept_order') + 1) \
             .withColumn('date', F.col('visit_end_date')) \
             .withColumn('priority', F.lit(100)) \
-            .drop('discharged_to_concept_id', 'visit_end_date')
+            .drop('discharged_to_concept_id', 'visit_end_date') \
+            .drop('min_visit_concept_order', 'max_visit_concept_order') \
+            .drop('min_concept_order', 'max_concept_order')
 
         # Add discharge events to the inpatient visits
         inpatient_events = inpatient_events.unionByName(discharge_events)
@@ -306,7 +356,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
         # Create ATT tokens within the inpatient visits
         inpatient_att_events = inpatient_events \
             .withColumn('is_span_boundary', F.row_number().over(
-            W.partitionBy('visit_occurrence_id', 'date').orderBy('standard_concept_id'))) \
+            W.partitionBy('visit_occurrence_id', 'concept_order').orderBy('priority'))) \
             .where(F.col('is_span_boundary') == 1) \
             .withColumn('prev_date', inpatient_prev_date_udf) \
             .withColumn('time_delta', inpatient_time_delta_udf) \
@@ -368,6 +418,8 @@ class DemographicPromptDecorator(
         # Identify the first token of each patient history
         patient_first_token = patient_events \
             .withColumn('token_order', first_token_udf) \
+            .withColumn('concept_value_mask', F.lit(0)) \
+            .withColumn('concept_value', F.lit(0.0)) \
             .where('token_order = 1') \
             .drop('token_order')
 
@@ -379,7 +431,9 @@ class DemographicPromptDecorator(
             .withColumn('visit_segment', F.lit(0)) \
             .withColumn('date_in_week', F.lit(0)) \
             .withColumn('age', F.lit(-1)) \
-            .withColumn('visit_rank_order', F.lit(0))
+            .withColumn('visit_rank_order', F.lit(0)) \
+            .withColumn('visit_concept_order', F.lit(0)) \
+            .withColumn('concept_order', F.lit(0))
 
         sequence_start_year_token.cache()
 

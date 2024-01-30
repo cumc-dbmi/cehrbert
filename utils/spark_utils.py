@@ -488,13 +488,13 @@ def create_sequence_data_with_att(
     struct_columns = [
         'order', 'date_in_week', 'standard_concept_id', 'visit_segment', 'age',
         'visit_rank_order', 'concept_value_mask', 'concept_value', 'mlm_skip_value',
-        'visit_concept_id'
+        'visit_concept_id', 'visit_concept_order', 'concept_order', 'priority'
     ]
     output_columns = [
         'cohort_member_id', 'person_id', 'concept_ids', 'visit_segments', 'orders',
         'dates', 'ages', 'visit_concept_orders', 'num_of_visits', 'num_of_concepts',
-        'concept_value_masks', 'concept_values', 'mlm_skip_values',
-        'visit_concept_ids'
+        'concept_value_masks', 'concept_values', 'mlm_skip_values', 'priorities',
+        'visit_concept_ids', 'visit_rank_orders', 'concept_orders'
     ]
 
     patient_grouped_events = patient_events \
@@ -509,7 +509,10 @@ def create_sequence_data_with_att(
         .withColumn('concept_ids', F.col('data_for_sorting.standard_concept_id')) \
         .withColumn('visit_segments', F.col('data_for_sorting.visit_segment')) \
         .withColumn('ages', F.col('data_for_sorting.age')) \
-        .withColumn('visit_concept_orders', F.col('data_for_sorting.visit_rank_order')) \
+        .withColumn('visit_rank_orders', F.col('data_for_sorting.visit_rank_order')) \
+        .withColumn('visit_concept_orders', F.col('data_for_sorting.visit_concept_order')) \
+        .withColumn('concept_orders', F.col('data_for_sorting.concept_order')) \
+        .withColumn('priorities', F.col('data_for_sorting.priority')) \
         .withColumn('concept_value_masks', F.col('data_for_sorting.concept_value_mask')) \
         .withColumn('concept_values', F.col('data_for_sorting.concept_value')) \
         .withColumn('mlm_skip_values', F.col('data_for_sorting.mlm_skip_value')) \
@@ -1002,7 +1005,12 @@ def create_visit_person_join(
     return visit_occurrence.join(person, 'person_id')
 
 
-def process_measurement(spark, measurement, required_measurement):
+def process_measurement(
+        spark,
+        measurement,
+        required_measurement,
+        output_folder: str = None
+):
     """
     Remove the measurement values that are outside the 0.01-0.99 quantiles. And scale the the
     measurement value by substracting the mean and dividing by the standard deivation :param
@@ -1019,6 +1027,15 @@ def process_measurement(spark, measurement, required_measurement):
     measurement_unit_stats_df = spark.sql(
         measurement_unit_stats_query
     )
+
+    if output_folder:
+        measurement_unit_stats_df.repartition(10) \
+            .write.mode('overwrite') \
+            .parquet(path.join(output_folder, 'measurement_unit_stats'))
+        measurement_unit_stats_df = spark.read.parquet(
+            path.join(output_folder, 'measurement_unit_stats')
+        )
+
     # Cache the stats in memory
     measurement_unit_stats_df.cache()
     # Broadcast df to local executors
@@ -1068,7 +1085,13 @@ def process_measurement(spark, measurement, required_measurement):
         )
     ''')
 
-    return scaled_numeric_lab.unionAll(categorical_lab)
+    processed_measurement_df = scaled_numeric_lab.unionAll(categorical_lab)
+
+    if output_folder:
+        processed_measurement_df.write.mode('overwrite').parquet(path.join(output_folder, 'processed_measurement'))
+        processed_measurement_df = spark.read.parquet(path.join(output_folder, 'processed_measurement'))
+
+    return processed_measurement_df
 
 
 def get_mlm_skip_domains(spark, input_folder, mlm_skip_table_list):

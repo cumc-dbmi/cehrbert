@@ -3,7 +3,7 @@ from datetime import datetime, date
 
 
 def fill_datetime(year: int):
-    return datetime.strptime(str(year) + '-01' + '-01', '%Y-%m-%d')
+    return datetime.strptime(str(year) + '-01' + '-01', '%Y-%m-%d').isoformat()
 
 
 def fill_start_datetime(date: date):
