@@ -203,6 +203,18 @@ class PatientDataIndex(ABC):
         if self.set_unique_concepts:
             concept_ids = list(set(concept_ids))
         return concept_ids
+    
+    def extract_common_medical_concepts(self, patient_seq):
+        common_concept_ids = [_ for _ in patient_seq[4:] if str.isnumeric(_) and _ in self.common_attributes]
+        if self.set_unique_concepts:
+            common_concept_ids = list(set(common_concept_ids))
+        return common_concept_ids
+    
+    def extract_sensitive_medical_concepts(self, patient_seq):
+        sensitive_concept_ids = [_ for _ in patient_seq[4:] if str.isnumeric(_) and _ in self.sensitive_attributes]
+        if self.set_unique_concepts:
+            sensitive_concept_ids = list(set(sensitive_concept_ids))
+        return sensitive_concept_ids        
 
     @staticmethod
     def validate_demographics(
