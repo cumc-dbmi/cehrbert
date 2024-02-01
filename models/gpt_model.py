@@ -282,9 +282,19 @@ class GptInferenceModel(tf.keras.Model):
                 [inputs, next_tokens]
             )
 
-            # if the previous visit_concept_orders = 0, this indicates a new span
+            # if the previous visit_concept_orders = 0, this indicates a starting point of a sequence
+            start_span_indicators = visit_concept_orders[:, -1:] == 0
+
+            # For all ATT tokens including inter/intra ones, we set the corresponding next_visit_concept_orders to
+            # the previous next_visit_concept_orders + 1
+            all_att_token_indicators = tf.reduce_any(
+                next_tokens[..., tf.newaxis] == self.all_att_token_ids,
+                axis=-1
+            )
+
+            # Combine these two indicators via logical or operation.
             new_span_indicators = tf.cast(
-                visit_concept_orders[:, -1:] == 0,
+                tf.logical_or(start_span_indicators, all_att_token_indicators),
                 dtype=tf.int32
             )
 
@@ -295,17 +305,6 @@ class GptInferenceModel(tf.keras.Model):
                     new_span_indicators * (visit_concept_orders[:, -2:-1] + 1)
                     + (1 - new_span_indicators) * visit_concept_orders[:, -1:]
             )
-
-            # att token indicators including the inpatient att tokens
-            all_att_token_indicators = tf.cast(
-                tf.reduce_any(
-                    next_tokens[..., tf.newaxis] == self.all_att_token_ids,
-                    axis=-1
-                ),
-                dtype=tf.int32
-            )
-            # For all ATT tokens including inter/intra ones, we set the corresponding next_visit_concept_orders to 0
-            next_visit_concept_orders = (1 - all_att_token_indicators) * next_visit_concept_orders
 
             visit_concept_orders = np.hstack([
                 visit_concept_orders,
