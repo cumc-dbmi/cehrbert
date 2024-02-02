@@ -37,6 +37,8 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             sampling_batch_size: int,
             including_long_sequence: bool,
             sampling_dataset_enabled: bool = False,
+            efficient_training: bool = False,
+            efficient_training_shuffle_buffer: int = 1000,
             is_random_cursor_long_sequence: bool = False,
             include_numeric_value: bool = False,
             low_rate: float = 0.5,
@@ -68,7 +70,14 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             total=total
         )
 
-        super(GptModelTrainer, self).__init__(*args, **kwargs)
+        if efficient_training:
+            kwargs['efficient_training'] = efficient_training
+            kwargs['shuffle_training_data'] = False
+            kwargs['efficient_training_shuffle_buffer'] = efficient_training_shuffle_buffer
+
+        super(GptModelTrainer, self).__init__(
+            *args, **kwargs
+        )
 
         self.get_logger().info(
             f'{self} will be trained with the following parameters:\n'
@@ -214,6 +223,8 @@ def main(args):
         save_freq=args.save_freq,
         sampling_dataset_enabled=args.sampling_dataset_enabled,
         is_random_cursor_long_sequence=args.is_random_cursor_long_sequence,
+        efficient_training=args.efficient_training,
+        efficient_training_shuffle_buffer=args.efficient_training_shuffle_buffer,
         include_numeric_value=args.include_numeric_value,
         low_rate=args.low_rate,
         high_rate=args.high_rate,

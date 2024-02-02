@@ -67,6 +67,8 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             learning_rate: float,
             tf_board_log_path: str = None,
             shuffle_training_data: bool = True,
+            efficient_training: bool = False,
+            efficient_training_shuffle_buffer: int = 1000,
             cache_dataset: bool = False,
             use_dask: bool = False,
             save_checkpoint: bool = False,
@@ -81,6 +83,8 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         self._epochs = epochs
         self._learning_rate = learning_rate
         self._shuffle_training_data = shuffle_training_data
+        self._efficient_training = efficient_training
+        self._efficient_training_shuffle_buffer = efficient_training_shuffle_buffer
         self._cache_dataset = cache_dataset
         self._use_dask = use_dask
         self._save_checkpoint = save_checkpoint
@@ -90,6 +94,9 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         # shuffle the training data
         if self._shuffle_training_data and not self._use_dask:
             self._training_data = self._training_data.sample(frac=1).reset_index(drop=True)
+
+        if self._efficient_training and not self._use_dask:
+            self._training_data = self._training_data.sort_values('num_of_concepts')
 
         self._load_dependencies()
 
@@ -103,11 +110,18 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             f'learning_rate: {learning_rate}\n'
             f'tf_board_log_path: {tf_board_log_path}\n'
             f'shuffle_training_data: {shuffle_training_data}\n'
+            f'efficient_training: {efficient_training}\n'
+            f'efficient_training_shuffle_buffer: {efficient_training_shuffle_buffer}\n'
             f'cache_dataset: {cache_dataset}\n'
             f'use_dask: {use_dask}\n'
             f'save_checkpoint: {save_checkpoint}\n'
             f'save_freq: {save_freq}\n'
         )
+
+        if efficient_training & shuffle_training_data:
+            raise RuntimeError(
+                'shuffle_training_data_by_size and shuffle_training_data cannot be true at the same time!'
+            )
 
     @abstractmethod
     def _load_dependencies(self):
@@ -142,6 +156,9 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             data_generator.create_batch_generator,
             output_types=(data_generator.get_tf_dataset_schema())
         ).prefetch(tf.data.experimental.AUTOTUNE)
+
+        if self._efficient_training:
+            dataset = dataset.shuffle(self._efficient_training_shuffle_buffer)
 
         if self._cache_dataset:
             dataset = dataset.take(data_generator.get_steps_per_epoch()).cache().repeat()
