@@ -382,6 +382,9 @@ class GptDecoderLayer(tf.keras.layers.Layer):
         return config
 
     def call(self, query, key, value, decoder_mask=None, **kwargs):
+        # Supports backward compability
+        if 'mask' in kwargs:
+            kwargs.pop('mask')
         # (batch_size, target_seq_len, d_model)
         attn, attn_weights_block = self.mha(
             v=value,
