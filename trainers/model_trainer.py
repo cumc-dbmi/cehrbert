@@ -1,17 +1,18 @@
 import copy
-from abc import ABC, abstractmethod
 import os
+from abc import ABC, abstractmethod
 from pathlib import Path
-import pandas as pd
-import dask.dataframe as dd
 
+import dask.dataframe as dd
+import numpy as np
+import pandas as pd
 import tensorflow as tf
 
 from data_generators.data_generator_base import AbstractDataGeneratorBase
+from models.loss_schedulers import CosineLRSchedule
 from utils.logging_utils import *
 from utils.model_utils import log_function_decorator, create_folder_if_not_exist, \
     save_training_history
-from models.loss_schedulers import CosineLRSchedule
 
 
 class AbstractModel(ABC):
@@ -68,7 +69,6 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             tf_board_log_path: str = None,
             shuffle_training_data: bool = True,
             efficient_training: bool = False,
-            efficient_training_shuffle_buffer: int = 1000,
             cache_dataset: bool = False,
             use_dask: bool = False,
             save_checkpoint: bool = False,
@@ -84,7 +84,6 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         self._learning_rate = learning_rate
         self._shuffle_training_data = shuffle_training_data
         self._efficient_training = efficient_training
-        self._efficient_training_shuffle_buffer = efficient_training_shuffle_buffer
         self._cache_dataset = cache_dataset
         self._use_dask = use_dask
         self._save_checkpoint = save_checkpoint
@@ -96,7 +95,10 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             self._training_data = self._training_data.sample(frac=1).reset_index(drop=True)
 
         if self._efficient_training and not self._use_dask:
-            self._training_data = self._training_data.sort_values('num_of_concepts')
+            self._training_data['bucket'] = (self._training_data.num_of_concepts // 256)
+            self._training_data['random_num'] = np.random.rand(len(self._training_data['bucket']))
+            self._training_data['bucket_even'] = self._training_data['bucket'] % 2
+            self._training_data = self._training_data.sort_values(['bucket_even', 'bucket', 'random_num'])
 
         self._load_dependencies()
 
@@ -111,7 +113,6 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             f'tf_board_log_path: {tf_board_log_path}\n'
             f'shuffle_training_data: {shuffle_training_data}\n'
             f'efficient_training: {efficient_training}\n'
-            f'efficient_training_shuffle_buffer: {efficient_training_shuffle_buffer}\n'
             f'cache_dataset: {cache_dataset}\n'
             f'use_dask: {use_dask}\n'
             f'save_checkpoint: {save_checkpoint}\n'
@@ -156,9 +157,6 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             data_generator.create_batch_generator,
             output_types=(data_generator.get_tf_dataset_schema())
         ).prefetch(tf.data.experimental.AUTOTUNE)
-
-        if self._efficient_training:
-            dataset = dataset.shuffle(self._efficient_training_shuffle_buffer)
 
         if self._cache_dataset:
             dataset = dataset.take(data_generator.get_steps_per_epoch()).cache().repeat()

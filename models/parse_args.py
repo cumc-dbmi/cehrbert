@@ -313,13 +313,6 @@ def create_parse_args_gpt():
         action='store_true'
     )
     parser.add_argument(
-        '--efficient_training_shuffle_buffer',
-        dest='efficient_training_shuffle_buffer',
-        action='store',
-        type=int,
-        default=1000
-    )
-    parser.add_argument(
         '--include_numeric_value',
         dest='include_numeric_value',
         action='store_true'
