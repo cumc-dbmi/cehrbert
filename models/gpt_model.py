@@ -391,13 +391,13 @@ def create_model(
     :return:
     """
     concept_inputs = tf.keras.layers.Input(
-        shape=(context_window_size,),
+        shape=(None,),
         dtype=tf.int32,
         name='concept_ids'
     )
 
     visit_concept_orders = tf.keras.layers.Input(
-        shape=(context_window_size,),
+        shape=(None,),
         dtype=tf.int32,
         name='visit_concept_orders'
     )
@@ -406,7 +406,6 @@ def create_model(
 
     concept_embedding_layer = ReusableEmbedding(
         vocab_size, embedding_size,
-        input_length=context_window_size,
         name='concept_embeddings',
         # Regularization is based on paper "A Comparative Study on
         # Regularization Strategies for Embedding-based Neural Networks"
@@ -436,13 +435,13 @@ def create_model(
     # If this flag is enabled, we will include additional inputs to incorporate the numeric values into the model
     if include_numeric_value:
         concept_values = tf.keras.layers.Input(
-            shape=(context_window_size,),
+            shape=(None,),
             dtype=tf.float32,
             name='concept_values'
         )
 
         concept_value_masks = tf.keras.layers.Input(
-            shape=(context_window_size,),
+            shape=(None,),
             dtype=tf.int32,
             name='concept_value_masks'
         )

@@ -381,13 +381,14 @@ class GptDecoderLayer(tf.keras.layers.Layer):
         config['rate'] = self.rate
         return config
 
-    def call(self, query, key, value, **kwargs):
+    def call(self, query, key, value, decoder_mask=None, **kwargs):
         # (batch_size, target_seq_len, d_model)
         attn, attn_weights_block = self.mha(
             v=value,
             k=key,
             q=query,
-            use_causal_mask=True,
+            mask=decoder_mask,
+            use_causal_mask=decoder_mask is None,
             **kwargs
         )
         attn = self.dropout1(attn)
