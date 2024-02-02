@@ -1,3 +1,4 @@
+import copy
 from abc import ABC, abstractmethod
 import os
 from pathlib import Path
@@ -163,20 +164,30 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             'monitor': 'loss',
             'verbose': 1
         }
-        if self._save_checkpoint:
-            model_checkpoint_args['save_freq'] = self._save_freq
-
         model_checkpoint = tf.keras.callbacks.ModelCheckpoint(
             **model_checkpoint_args
         )
         learning_rate_scheduler = tf.keras.callbacks.LearningRateScheduler(
             CosineLRSchedule(lr_high=self._learning_rate, lr_low=1e-8, initial_period=10),
             verbose=1)
-        return [
+
+        callbacks = [
             tensor_board_callback,
             model_checkpoint,
             learning_rate_scheduler
         ]
+
+        # Additional step-based checkpoint callback
+        if self._save_checkpoint:
+            frequency_checkpoint_args = copy.deepcopy(model_checkpoint_args)
+            frequency_checkpoint_args['save_freq'] = self._save_freq
+            frequency_checkpoint_args['name'] = ' '
+            callbacks.append(
+                tf.keras.callbacks.ModelCheckpoint(
+                    **frequency_checkpoint_args
+                )
+            )
+        return callbacks
 
     def get_model_folder(self):
         """
