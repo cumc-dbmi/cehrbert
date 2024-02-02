@@ -404,11 +404,6 @@ def create_model(
 
     model_inputs = [concept_inputs, visit_concept_orders]
 
-    look_ahead_mask_base = tf.cast(
-        1 - tf.linalg.band_part(tf.ones((context_window_size, context_window_size)), -1, 0),
-        dtype=tf.int32
-    )[tf.newaxis, tf.newaxis, :, :]
-
     concept_embedding_layer = ReusableEmbedding(
         vocab_size, embedding_size,
         input_length=context_window_size,
@@ -471,8 +466,7 @@ def create_model(
     )
 
     contextualized_embeddings, _, _ = transformer_block(
-        x,
-        look_ahead_mask_base
+        x
     )
 
     concept_prediction_layer = tf.keras.layers.Softmax(

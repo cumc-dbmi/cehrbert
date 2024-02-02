@@ -36,7 +36,13 @@ def point_wise_feed_forward_network(d_model, dff):
     ])
 
 
-def scaled_dot_product_attention(q, k, v, mask):
+def scaled_dot_product_attention(
+        q,
+        k,
+        v,
+        mask,
+        use_causal_mask=False
+):
     """Calculate the attention weights.
     q, k, v must have matching leading dimensions.
     k, v must have matching penultimate dimension, i.e.: seq_len_k = seq_len_v.
@@ -54,7 +60,16 @@ def scaled_dot_product_attention(q, k, v, mask):
     output, attention_weights
     """
 
+    if mask is None and not use_causal_mask:
+        raise RuntimeError(f'Either the mask needs to be provided or use_causal_mask needs to be true')
+
     matmul_qk = tf.matmul(q, k, transpose_b=True)  # (..., seq_len_q, seq_len_k)
+
+    if use_causal_mask:
+        mask = tf.cast(
+            1 - tf.linalg.band_part(tf.ones_like(matmul_qk), -1, 0),
+            dtype=tf.int32
+        )
 
     # scale matmul_qk
     dk = tf.cast(tf.shape(k)[-1], tf.float32)
@@ -110,7 +125,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         v = self.split_heads(v, batch_size)  # (batch_size, num_heads, seq_len_v, depth)
         return k, q, v
 
-    def call(self, v, k, q, mask):
+    def call(self, v, k, q, mask=None, use_causal_mask=False):
         batch_size = tf.shape(q)[0]
 
         q = self.wq(q)  # (batch_size, seq_len, d_model)
@@ -121,7 +136,10 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
         # scaled_attention.shape == (batch_size, num_heads, seq_len_q, depth)
         # attention_weights.shape == (batch_size, num_heads, seq_len_q, seq_len_k)
-        scaled_attention, attention_weights = scaled_dot_product_attention(q, k, v, mask)
+        scaled_attention, attention_weights = scaled_dot_product_attention(
+            q, k, v, mask,
+            use_causal_mask=use_causal_mask
+        )
 
         scaled_attention = tf.transpose(scaled_attention,
                                         perm=[0, 2, 1,
@@ -238,11 +256,11 @@ class GptDecoder(tf.keras.layers.Layer):
         config['dropout_rate'] = self.dropout_rate
         return config
 
-    def call(self, x, mask, **kwargs):
+    def call(self, x, **kwargs):
         attention_weights = []
         layer_contexts = []
         for i in range(self.num_layers):
-            x, attn_weights = self.decoder_layers[i](x, x, x, mask, **kwargs)
+            x, attn_weights = self.decoder_layers[i](x, x, x, **kwargs)
             attention_weights.append(attn_weights)
             layer_contexts.append(x)
         return x, tf.stack(layer_contexts, axis=0), tf.stack(attention_weights, axis=0)
@@ -363,13 +381,13 @@ class GptDecoderLayer(tf.keras.layers.Layer):
         config['rate'] = self.rate
         return config
 
-    def call(self, query, key, value, decoder_mask, **kwargs):
+    def call(self, query, key, value, **kwargs):
         # (batch_size, target_seq_len, d_model)
         attn, attn_weights_block = self.mha(
             v=value,
             k=key,
             q=query,
-            mask=decoder_mask,
+            use_causal_mask=True,
             **kwargs
         )
         attn = self.dropout1(attn)
