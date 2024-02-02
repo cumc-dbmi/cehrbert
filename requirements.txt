@@ -2,16 +2,15 @@ dask
 dask[dataframe]
 fast-ml==3.68
 fastML==1.0
-fastparquet==0.8.1
+fastparquet
 Jinja2==2.11.2
 packaging
 Pillow
-py4j==0.10.9
-pyarrow==9.0.0
-pyspark==3.0.0
-pytest==6.1.1
+py4j
+pyarrow
+pyspark
+pytest
 scikit-learn
-sortedcontainers==2.3.0
 tensorboard==2.9.0; sys_platform != 'darwin'
 tensorflow==2.9.0; sys_platform != 'darwin'
 tensorboard; sys_platform == 'darwin'
@@ -19,10 +18,9 @@ tensorflow; sys_platform == 'darwin'
 tensorflow-metal; sys_platform == 'darwin'
 tensorflow-datasets==4.5.2 
 tqdm
-Werkzeug==1.0.1
+Werkzeug
 xgboost
-fastparquet==0.8.1
-pyarrow==9.0.0
+fastparquet
 numpy
 setuptools
 networkx
