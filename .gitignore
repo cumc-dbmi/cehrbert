@@ -1,6 +1,8 @@
 .DS_Store
 .idea/
+.vscode/
 venv*
+
 
 *ipynb_checkpoints/
 *h5

@@ -88,25 +88,27 @@ class PredictNextValueLearningObjective(LearningObjective):
             d_type='float32'
         )
 
-        shifted_concept_value_masks = np.concatenate(
-            [
-                np.zeros_like(concept_value_masks[..., :1], dtype='int32'),
-                concept_value_masks[..., :-1]
-            ], axis=-1
+        shifted_concept_value_masks = post_pad_pre_truncate(
+            concept_value_masks[..., 1:],
+            0,
+            max_length_in_batch
         )
-        shifted_concept_values = np.concatenate(
-            [
-                np.zeros_like(concept_value_masks[..., :1], dtype='float32'),
-                concept_values[..., :-1]
-            ], axis=-1
+        shifted_concept_values = post_pad_pre_truncate(
+            concept_values[..., 1:],
+            0.0,
+            max_length_in_batch,
+            d_type='float32'
         )
-
+        
         input_dict = {
-            'concept_value_masks': shifted_concept_value_masks,
-            'concept_values': shifted_concept_values
+            'concept_value_masks': concept_value_masks,
+            'concept_values': concept_values
         }
 
-        output_dict = {'next_value_predictions': np.stack([concept_values, concept_value_masks], axis=-1)}
+        output_dict = {
+            'next_value_predictions': 
+                np.stack([shifted_concept_values, shifted_concept_value_masks], axis=-1)
+                }
 
         return input_dict, output_dict
 
@@ -130,7 +132,10 @@ class PredictNextValueLearningObjective(LearningObjective):
         sorted_list = sorted(iterator, key=lambda tup2: (tup2[0], tup2[1]))
 
         _, concept_value_masks, concept_values = zip(*list(islice(sorted_list, left_index, right_index)))
-
+        
+        concept_value_masks = [0] + list(concept_value_masks)
+        concept_values = [0.0] + list(concept_values)
+        
         return (
             concept_value_masks, concept_values
         )
