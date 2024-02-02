@@ -249,7 +249,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
 
         # Get the prev days_since_epoch
         prev_visit_end_date_udf = F.lag('visit_end_date').over(
-            W.partitionBy('person_id').orderBy('visit_start_datetime')
+            W.partitionBy('person_id').orderBy('visit_rank_order')
         )
 
         # Compute the time difference between the current record and the previous record
@@ -278,7 +278,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
             .withColumn('time_delta', F.when(F.col('time_delta') < 0, F.lit(0)).otherwise(F.col('time_delta'))) \
             .withColumn('standard_concept_id', time_token_udf('time_delta')) \
             .withColumn('priority', F.lit(-3)) \
-            .withColumn('visit_rank_order', F.col('visit_rank_order') - 1) \
+            .withColumn('visit_rank_order', F.col('visit_rank_order')) \
             .withColumn('visit_concept_order', F.col('min_visit_concept_order')) \
             .withColumn('concept_order', F.lit(0)) \
             .drop('prev_visit_end_date', 'time_delta') \
@@ -331,7 +331,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
 
         # Get the prev days_since_epoch
         inpatient_prev_date_udf = F.lag('date').over(
-            W.partitionBy('visit_occurrence_id').orderBy('date')
+            W.partitionBy('visit_occurrence_id').orderBy('concept_order')
         )
 
         # Compute the time difference between the current record and the previous record
@@ -371,9 +371,9 @@ class PatientEventAttDecorator(PatientEventDecorator):
 
         # Retrieving the events that are NOT linked to inpatient visits
         other_events = patient_events.join(
-            inpatient_visits.select('visit_occurrence_id'), 'visit_occurrence_id', 'left_outer'
-        ).where(
-            inpatient_visits['visit_occurrence_id'].isNull()
+            inpatient_visits.select('visit_occurrence_id'),
+            'visit_occurrence_id',
+            how='left_anti'
         )
 
         patient_events = inpatient_events.unionByName(inpatient_att_events).unionByName(other_events)
