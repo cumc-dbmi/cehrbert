@@ -71,15 +71,20 @@ class PredictNextValueLearningObjective(LearningObjective):
             concept_value_masks, concept_values
         ) = zip(*list(map(self._make_record, rows)))
 
+        # Get the max length from the current batch
+        max_length_in_batch = max(map(len, concept_value_masks))
+        # Take the min value between max_length_in_batch and self._max_seq_len
+        max_length_in_batch = min(max_length_in_batch, self._max_seq_len)
+
         concept_value_masks = post_pad_pre_truncate(
             concept_value_masks,
             0,
-            self._max_seq_len
+            max_length_in_batch
         )
         concept_values = post_pad_pre_truncate(
             concept_values,
             0.0,
-            self._max_seq_len,
+            max_length_in_batch,
             d_type='float32'
         )
 
@@ -163,18 +168,23 @@ class SequenceGenerationLearningObjective(LearningObjective):
 
         unused_token_id = self._concept_tokenizer.get_unused_token_id()
 
+        # Get the max length from the current batch
+        max_length_in_batch = max(map(len, concepts))
+        # Take the min value between max_length_in_batch and self._max_seq_len
+        max_length_in_batch = min(max_length_in_batch, self._max_seq_len)
+
         # The main inputs for bert
         concepts = post_pad_pre_truncate(
             concepts,
             unused_token_id,
-            self._max_seq_len
+            max_length_in_batch
         )
 
         # The main inputs for bert
         shifted_concepts = post_pad_pre_truncate(
             shifted_concepts,
             unused_token_id,
-            self._max_seq_len
+            max_length_in_batch
         )
 
         mask = (concepts != unused_token_id).astype(int)
@@ -186,7 +196,7 @@ class SequenceGenerationLearningObjective(LearningObjective):
         visit_concept_orders = post_pad_pre_truncate(
             visit_concept_orders,
             self._max_seq_len,
-            self._max_seq_len
+            max_length_in_batch
         )
 
         input_dict = {
