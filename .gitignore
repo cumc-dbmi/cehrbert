@@ -24,3 +24,9 @@ concept_embeddings.egg-info/
 *.parquet
 *.out
 *.egg-info/
+
+cehr_transformers.egg-info/dependency_links.txt
+cehr_transformers.egg-info/PKG-INFO
+cehr_transformers.egg-info/requires.txt
+cehr_transformers.egg-info/SOURCES.txt
+cehr_transformers.egg-info/top_level.txt
