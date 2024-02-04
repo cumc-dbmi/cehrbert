@@ -18,6 +18,30 @@ from trainers.model_trainer import AbstractConceptEmbeddingTrainer
 from utils.model_utils import tokenize_one_field
 
 
+class StepValidationCallBack(tf.keras.callbacks.Callback):
+    def __init__(
+            self,
+            val_data_generator,
+            save_freq
+    ):
+        self.val_data_generator = val_data_generator
+        self.save_freq = save_freq
+
+    def on_batch_end(self, batch, logs=None):
+        if self.val_data_generator is None or batch == 0 or batch % self.save_freq != 0:
+            return
+        val_steps_per_epoch = self.val_data_generator.get_steps_per_epoch()
+        val_dataset = tf.data.Dataset.from_generator(
+            self.val_data_generator.create_batch_generator,
+            output_types=(self.val_data_generator.get_tf_dataset_schema())
+        ).prefetch(tf.data.experimental.AUTOTUNE)
+        results = self.model.evaluate(val_dataset, steps=val_steps_per_epoch)
+        for key, value in results.items():
+            print(f'val_{key}: {value}')
+            logs[f'val_{key}'] = value
+        return logs
+
+
 class GptModelTrainer(AbstractConceptEmbeddingTrainer):
     confidence_penalty = 0.1
 
@@ -115,7 +139,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
                 'token_ids',
                 self._tokenizer_path
             )
-        
+
         self._concept_map = dict()
         concept_ids = self._tokenizer.tokenizer.word_index.keys()
         concept = pd.read_parquet(self._concept_path)
@@ -144,9 +168,9 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         }
 
         return GptDataGenerator(**parameters)
-    
+
     def create_val_data_generator(self) -> GptDataGenerator:
-        
+
         if self._val_data is not None:
             parameters = {
                 'training_data': self._val_data,
@@ -159,10 +183,10 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
                 'including_long_sequence': self._including_long_sequence,
                 'include_numeric_value': self._include_numeric_value,
                 'mask_rate_scheduler': self._cosine_mask_rate_scheduler,
-                'is_pretraining' : False
+                'is_pretraining': False
             }
             return GptDataGenerator(**parameters)
-        
+
         return None
 
     def _create_model(self):
@@ -219,6 +243,13 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
                 num_of_patients=self._num_of_patients
             )
         )
+        if self._save_checkpoint:
+            call_backs.append(
+                StepValidationCallBack(
+                    val_data_generator=self.create_val_data_generator(),
+                    save_freq=self._save_freq
+                )
+            )
         return call_backs
 
 
