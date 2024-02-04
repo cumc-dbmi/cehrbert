@@ -317,6 +317,12 @@ def create_parse_args_gpt():
         dest='include_numeric_value',
         action='store_true'
     )
+    parser.add_argument(
+        '--val_data_parquet_path',
+        dest='val_data_parquet_path',
+        action='store',
+        required=False
+    )
     return parser
 
 

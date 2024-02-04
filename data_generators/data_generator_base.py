@@ -344,12 +344,11 @@ class GptDataGenerator(BertDataGenerator):
         Create an iterator that will iterate through all training data
         :return:
         """
-        randomized_indices = self._training_data.sample(frac=1.0).index
-        for row_index in randomized_indices:
+        for row_index in self._training_data.index:
             # If the sampling strategy is enabled, we will randomly sample a record every time
             if self._sampling_dataset_enabled:
                 # Overwrite row_index with a random index sampled from randomized_indices
-                row_index = random.choice(randomized_indices)
+                row_index = random.choice(self._training_data.index)
             row = self._training_data.iloc[row_index]
             seq_length = len(row.token_ids)
             if seq_length <= self._max_seq_len:

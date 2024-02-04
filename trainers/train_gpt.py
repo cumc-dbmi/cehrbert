@@ -108,6 +108,14 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             'token_ids',
             self._tokenizer_path
         )
+        if self._val_data is not None:
+            tokenize_one_field(
+                self._val_data,
+                'concept_ids',
+                'token_ids',
+                self._tokenizer_path
+            )
+        
         self._concept_map = dict()
         concept_ids = self._tokenizer.tokenizer.word_index.keys()
         concept = pd.read_parquet(self._concept_path)
@@ -136,6 +144,26 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         }
 
         return GptDataGenerator(**parameters)
+    
+    def create_val_data_generator(self) -> GptDataGenerator:
+        
+        if self._val_data is not None:
+            parameters = {
+                'training_data': self._val_data,
+                'batch_size': self._batch_size,
+                'max_seq_len': self._context_window_size,
+                'concept_tokenizer': self._tokenizer,
+                'min_num_of_visits': self._min_num_of_visits,
+                'max_num_of_visits': self._max_num_of_visits,
+                'min_num_of_concepts': self._min_num_of_concepts,
+                'including_long_sequence': self._including_long_sequence,
+                'include_numeric_value': self._include_numeric_value,
+                'mask_rate_scheduler': self._cosine_mask_rate_scheduler,
+                'is_pretraining' : False
+            }
+            return GptDataGenerator(**parameters)
+        
+        return None
 
     def _create_model(self):
         strategy = tf.distribute.MirroredStrategy()
@@ -198,6 +226,7 @@ def main(args):
     config = ModelPathConfig(args.input_folder, args.output_folder)
     GptModelTrainer(
         training_data_parquet_path=config.parquet_data_path,
+        val_data_parquet_path=args.val_data_parquet_path,
         model_path=config.model_path,
         tokenizer_path=config.tokenizer_path,
         concept_path=args.concept_path,

@@ -66,6 +66,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             batch_size: int,
             epochs: int,
             learning_rate: float,
+            val_data_parquet_path: str = None,
             tf_board_log_path: str = None,
             shuffle_training_data: bool = True,
             efficient_training: bool = False,
@@ -77,6 +78,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
     ):
 
         self._training_data_parquet_path = training_data_parquet_path
+        self._val_data_parquet_path = val_data_parquet_path
         self._model_path = model_path
         self._tf_board_log_path = tf_board_log_path
         self._batch_size = batch_size
@@ -88,7 +90,12 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         self._use_dask = use_dask
         self._save_checkpoint = save_checkpoint
         self._save_freq = save_freq
-        self._training_data = self._load_training_data()
+        self._training_data = self._load_data(self._training_data_parquet_path)
+        
+        if self._val_data_parquet_path:
+            self._val_data = self._load_data(self._val_data_parquet_path)
+        else:
+            self._val_data = None
 
         # shuffle the training data
         if self._shuffle_training_data and not self._use_dask:
@@ -106,6 +113,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
 
         self.get_logger().info(
             f'training_data_parquet_path: {training_data_parquet_path}\n'
+            f'val_data_parquet_path: {val_data_parquet_path}\n'
             f'model_path: {model_path}\n'
             f'batch_size: {batch_size}\n'
             f'epochs: {epochs}\n'
@@ -129,14 +137,14 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         pass
 
     @log_function_decorator
-    def _load_training_data(self):
-        if not os.path.exists(self._training_data_parquet_path):
-            raise FileExistsError(f'{self._training_data_parquet_path} does not exist!')
+    def _load_data(self, data_parquet_path):
+        if not os.path.exists(data_parquet_path):
+            raise FileExistsError(f'{data_parquet_path} does not exist!')
 
         if self._use_dask:
-            return dd.read_parquet(self._training_data_parquet_path)
+            return dd.read_parquet(data_parquet_path)
         else:
-            return pd.read_parquet(self._training_data_parquet_path)
+            return pd.read_parquet(data_parquet_path)
 
     @abstractmethod
     def create_data_generator(self) -> AbstractDataGeneratorBase:
@@ -145,6 +153,13 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         :return:
         """
         pass
+
+    def create_val_data_generator(self) -> AbstractDataGeneratorBase:
+        """
+        Prepare _training_data for the model such as tokenize concepts.
+        :return:
+        """
+        return None
 
     def train_model(self):
         """
@@ -162,11 +177,25 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             dataset = dataset.take(data_generator.get_steps_per_epoch()).cache().repeat()
             dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
+        val_dataset = None
+        val_steps_per_epoch = None
+        val_data_generator = self.create_val_data_generator()
+        if val_data_generator:
+            val_steps_per_epoch = val_data_generator.get_steps_per_epoch()
+            val_dataset = tf.data.Dataset.from_generator(
+                val_data_generator.create_batch_generator,
+                output_types=(val_data_generator.get_tf_dataset_schema())
+            ).prefetch(tf.data.experimental.AUTOTUNE)
+
         history = self._model.fit(
-            dataset,
+            x=dataset,
+            validation_data=val_dataset,
+            validation_steps=val_steps_per_epoch,
             steps_per_epoch=steps_per_epoch,
             epochs=self._epochs,
-            callbacks=self._get_callbacks()
+            callbacks=self._get_callbacks(),
+            validation_freq=1,
+            use_multiprocessing=True
         )
 
         save_training_history(history, self.get_model_history_folder())
