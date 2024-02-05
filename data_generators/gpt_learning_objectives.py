@@ -151,7 +151,7 @@ class SequenceGenerationLearningObjective(LearningObjective):
             self,
             concept_tokenizer: ConceptTokenizer,
             max_seq_len: int,
-            mask_rate_scheduler: CosineMaskRateScheduler
+            mask_rate_scheduler: CosineMaskRateScheduler=None
     ):
         self._max_seq_len = max_seq_len
         self._concept_tokenizer = concept_tokenizer
@@ -194,7 +194,7 @@ class SequenceGenerationLearningObjective(LearningObjective):
 
         mask = (concepts != unused_token_id).astype(int)
 
-        if not self._mask_rate_scheduler.stopped():
+        if self._mask_rate_scheduler and not self._mask_rate_scheduler.stopped():
             rate = self._mask_rate_scheduler.get_rate()
             mask = (np.random.rand(*mask.shape) < rate) & mask
 
