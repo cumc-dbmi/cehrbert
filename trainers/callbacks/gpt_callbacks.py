@@ -35,16 +35,16 @@ class StepValidationCallBack(tf.keras.callbacks.Callback):
     def on_batch_end(self, batch, logs=None):
         if self.val_data_generator is None or batch == 0 or batch % self.save_freq != 0:
             return
-        val_steps_per_epoch = self.val_data_generator.get_steps_per_epoch()
         val_dataset = tf.data.Dataset.from_generator(
             self.val_data_generator.create_batch_generator,
             output_types=(self.val_data_generator.get_tf_dataset_schema())
         ).prefetch(tf.data.experimental.AUTOTUNE)
-        results = self.model.evaluate(val_dataset, steps=val_steps_per_epoch)
+        val_logs = self.model.evaluate(val_dataset, return_dict=True)
+        val_logs = {
+            "val_" + name: val for name, val in val_logs.items()
+        }
         metrics = copy.deepcopy(logs)
-        val_loss, val_perplexity = results
-        metrics['val_loss'] = val_loss
-        metrics['val_perplexity'] = val_perplexity
+        metrics.update(val_logs)
         # Convert and write JSON object to file
         metric_file = os.path.join(self.metrics_folder, f"epoch-{self.epoch}-batch-{batch}-metrics.json")
         with open(metric_file, "w") as outfile:
