@@ -306,6 +306,7 @@ class GptDataGenerator(BertDataGenerator):
             including_long_sequence: bool = False,
             sampling_dataset_enabled: bool = False,
             include_numeric_value: bool = False,
+            efficient_training: bool = False,
             *args,
             **kwargs
     ):
@@ -315,6 +316,7 @@ class GptDataGenerator(BertDataGenerator):
         self._concept_tokenizer = concept_tokenizer
         self._sampling_dataset_enabled = sampling_dataset_enabled
         self._include_numeric_value = include_numeric_value
+        self._efficient_training = efficient_training
 
         super(BertDataGenerator,
               self).__init__(
@@ -330,6 +332,17 @@ class GptDataGenerator(BertDataGenerator):
             self._training_data['num_of_visits'] <= self._max_num_of_visits]
         self._training_data = self._training_data[
             self._training_data['num_of_concepts'] >= self._min_num_of_concepts]
+
+        # Only remove the long sequences when these two options are not enabled
+        if not self._including_long_sequence and not self._is_random_cursor:
+            self._training_data = self._training_data[
+                self._training_data['num_of_concepts'] <= self._max_seq_len]
+
+        if self._efficient_training:
+            self._training_data = self._training_data.sort_values('num_of_concepts')
+            self._training_data['row_num'] = self._training_data.reset_index().index + 1
+            self._training_data['batch_num'] = self._training_data.row_num // self._batch_size
+
         # This is important so that the iloc works correctly when retrieving records from the dataframe
         self._training_data = self._training_data.reset_index()
 
@@ -344,6 +357,24 @@ class GptDataGenerator(BertDataGenerator):
         Create an iterator that will iterate through all training data
         :return:
         """
+
+        if self._efficient_training:
+            unique_batch_nums = self._training_data['batch_num'].unique()
+            uniform_random_order = np.random.uniform(size=unique_batch_nums.size)
+            random_order_pd = pd.DataFrame({
+                'batch_num': unique_batch_nums,
+                'random_order': uniform_random_order}
+            )
+            # Random order the batches of examples so that all the data points in the same batch have the same number
+            # of concepts
+            self._training_data = self._training_data.merge(
+                random_order_pd, on='batch_num'
+            ).sort_values(
+                ['random_order', 'batch_num']
+            ).drop(columns=['random_order'])
+        else:
+            self._training_data = self._training_data.sample(frac=1.0)
+
         for row_index in self._training_data.index:
             # If the sampling strategy is enabled, we will randomly sample a record every time
             if self._sampling_dataset_enabled:

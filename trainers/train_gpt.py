@@ -63,6 +63,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         self._sampling_dataset_enabled = sampling_dataset_enabled
         self._is_random_cursor_long_sequence = is_random_cursor_long_sequence
         self._include_numeric_value = include_numeric_value
+        self._efficient_training = efficient_training
         self._cosine_mask_rate_scheduler = CosineMaskRateScheduler(
             low_rate=low_rate,
             high_rate=high_rate,
@@ -71,7 +72,6 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         )
 
         if efficient_training:
-            kwargs['efficient_training'] = efficient_training
             kwargs['shuffle_training_data'] = False
 
         super(GptModelTrainer, self).__init__(
@@ -100,6 +100,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             f'high_rate: {high_rate}\n'
             f'period: {period}\n'
             f'total: {total}\n'
+            f'efficient_training: {efficient_training}\n'
         )
 
     def _load_dependencies(self):
@@ -141,7 +142,8 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             'sampling_dataset_enabled': self._sampling_dataset_enabled,
             'is_random_cursor': self._is_random_cursor_long_sequence,
             'include_numeric_value': self._include_numeric_value,
-            'mask_rate_scheduler': self._cosine_mask_rate_scheduler
+            'mask_rate_scheduler': self._cosine_mask_rate_scheduler,
+            'efficient_training': self._efficient_training
         }
 
         return GptDataGenerator(**parameters)

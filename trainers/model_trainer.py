@@ -69,7 +69,6 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             val_data_parquet_path: str = None,
             tf_board_log_path: str = None,
             shuffle_training_data: bool = True,
-            efficient_training: bool = False,
             cache_dataset: bool = False,
             use_dask: bool = False,
             save_checkpoint: bool = False,
@@ -85,13 +84,12 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         self._epochs = epochs
         self._learning_rate = learning_rate
         self._shuffle_training_data = shuffle_training_data
-        self._efficient_training = efficient_training
         self._cache_dataset = cache_dataset
         self._use_dask = use_dask
         self._save_checkpoint = save_checkpoint
         self._save_freq = save_freq
         self._training_data = self._load_data(self._training_data_parquet_path)
-        
+
         if self._val_data_parquet_path:
             self._val_data = self._load_data(self._val_data_parquet_path)
         else:
@@ -100,12 +98,6 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         # shuffle the training data
         if self._shuffle_training_data and not self._use_dask:
             self._training_data = self._training_data.sample(frac=1).reset_index(drop=True)
-
-        if self._efficient_training and not self._use_dask:
-            self._training_data['bucket'] = (self._training_data.num_of_concepts // 256)
-            self._training_data['random_num'] = np.random.rand(len(self._training_data['bucket']))
-            self._training_data['bucket_even'] = self._training_data['bucket'] % 2
-            self._training_data = self._training_data.sort_values(['bucket_even', 'bucket', 'random_num'])
 
         self._load_dependencies()
 
@@ -120,17 +112,11 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             f'learning_rate: {learning_rate}\n'
             f'tf_board_log_path: {tf_board_log_path}\n'
             f'shuffle_training_data: {shuffle_training_data}\n'
-            f'efficient_training: {efficient_training}\n'
             f'cache_dataset: {cache_dataset}\n'
             f'use_dask: {use_dask}\n'
             f'save_checkpoint: {save_checkpoint}\n'
             f'save_freq: {save_freq}\n'
         )
-
-        if efficient_training & shuffle_training_data:
-            raise RuntimeError(
-                'shuffle_training_data_by_size and shuffle_training_data cannot be true at the same time!'
-            )
 
     @abstractmethod
     def _load_dependencies(self):
