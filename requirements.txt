@@ -3,7 +3,7 @@ dask[dataframe]
 fast-ml==3.68
 fastML==1.0
 fastparquet
-Jinja2==2.11.2
+Jinja2
 packaging
 Pillow
 py4j
