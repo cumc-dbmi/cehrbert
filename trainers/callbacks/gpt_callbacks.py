@@ -49,7 +49,6 @@ class StepValidationCallBack(tf.keras.callbacks.Callback):
         metric_file = os.path.join(self.metrics_folder, f"epoch-{self.epoch}-batch-{batch}-metrics.json")
         with open(metric_file, "w") as outfile:
             json.dump(metrics, outfile)
-        return logs
 
 
 class ComputeMarginalDistribution(tf.keras.callbacks.Callback):
