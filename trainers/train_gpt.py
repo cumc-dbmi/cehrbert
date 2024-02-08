@@ -222,14 +222,14 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
                 num_of_patients=self._num_of_patients
             )
         )
-        if self._save_checkpoint:
-            call_backs.append(
-                StepValidationCallBack(
-                    val_data_generator=self.create_val_data_generator(),
-                    save_freq=self._save_freq,
-                    model_folder=self.get_model_folder()
-                )
-            )
+        # if self._save_checkpoint:
+        #     call_backs.append(
+        #         StepValidationCallBack(
+        #             val_data_generator=self.create_val_data_generator(),
+        #             save_freq=self._save_freq,
+        #             model_folder=self.get_model_folder()
+        #         )
+        #     )
         return call_backs
 
 
