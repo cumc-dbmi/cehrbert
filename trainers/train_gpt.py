@@ -10,36 +10,13 @@ from keras_transformer.bert import (
     MaskedPenalizedSparseCategoricalCrossentropy,
     MaskedMeanSquaredError
 )
-from models.gpt_model import create_model, ComputeMarginalDistribution
+from models.gpt_model import create_model
 from models.layers.custom_layers import get_custom_objects
 from models.model_parameters import ModelPathConfig
 from models.parse_args import create_parse_args_gpt
+from trainers.callbacks.gpt_callbacks import StepValidationCallBack, ComputeMarginalDistribution
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
 from utils.model_utils import tokenize_one_field
-
-
-class StepValidationCallBack(tf.keras.callbacks.Callback):
-    def __init__(
-            self,
-            val_data_generator,
-            save_freq
-    ):
-        self.val_data_generator = val_data_generator
-        self.save_freq = save_freq
-
-    def on_batch_end(self, batch, logs=None):
-        if self.val_data_generator is None or batch == 0 or batch % self.save_freq != 0:
-            return
-        val_steps_per_epoch = self.val_data_generator.get_steps_per_epoch()
-        val_dataset = tf.data.Dataset.from_generator(
-            self.val_data_generator.create_batch_generator,
-            output_types=(self.val_data_generator.get_tf_dataset_schema())
-        ).prefetch(tf.data.experimental.AUTOTUNE)
-        results = self.model.evaluate(val_dataset, steps=val_steps_per_epoch)
-        for key, value in results.items():
-            print(f'val_{key}: {value}')
-            logs[f'val_{key}'] = value
-        return logs
 
 
 class GptModelTrainer(AbstractConceptEmbeddingTrainer):
@@ -247,7 +224,8 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             call_backs.append(
                 StepValidationCallBack(
                     val_data_generator=self.create_val_data_generator(),
-                    save_freq=self._save_freq
+                    save_freq=self._save_freq,
+                    model_folder=self.get_model_folder()
                 )
             )
         return call_backs
