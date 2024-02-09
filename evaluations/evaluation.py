@@ -8,7 +8,7 @@ from evaluations.model_evaluators.bert_model_evaluators import *
 from evaluations.model_evaluators.sequence_model_evaluators import *
 from evaluations.model_evaluators.frequency_model_evaluators import *
 from utils.model_utils import *
-from trainers.model_trainer import find_tokenizer_path, find_visit_tokenizer_path
+from utils.checkpoint_utils import find_tokenizer_path, find_visit_tokenizer_path
 
 
 def get_grid_search_config(grid_search_config) -> GridSearchConfig:

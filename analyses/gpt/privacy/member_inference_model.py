@@ -12,7 +12,7 @@ from utils.model_utils import tokenize_one_field
 from data_generators.data_generator_base import GptDataGenerator
 from data_generators.learning_objective import CustomLearningObjective
 from models.layers.custom_layers import get_custom_objects
-from trainers.model_trainer import find_tokenizer_path
+from utils.checkpoint_utils import find_tokenizer_path
 
 logger = logging.getLogger('member_inference_model')
 
