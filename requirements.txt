@@ -8,9 +8,9 @@ packaging
 Pillow
 py4j
 pyarrow
-pyspark
+pyspark~=3.0.0
 pytest
-scikit-learn
+scikit-learn~=1.4.0
 tensorboard==2.9.0; sys_platform != 'darwin'
 tensorflow==2.9.0; sys_platform != 'darwin'
 tensorboard; sys_platform == 'darwin'
@@ -23,10 +23,14 @@ xgboost
 fastparquet
 numpy
 setuptools
-networkx
+networkx~=3.2.1
 whoosh
-pyyaml
-docarray
+pyyaml~=6.0.1
+docarray~=0.40.0
 docarray[hnswlib]
 docarray[weaviate]
 evaluate
+toml
+pandas
+pydantic
+scipy
