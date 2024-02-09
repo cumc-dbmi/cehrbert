@@ -246,7 +246,7 @@ def create_probabilistic_phenotype_model(
 
     # (num_of_visits_with_att, num_of_visits_with_att)
     look_ahead_mask_base = tf.cast(
-        1 - tf.linalg.band_part(tf.ones((num_of_visits, num_of_visits)), -1, 0),
+        tf.linalg.band_part(tf.ones((num_of_visits, num_of_visits)), -1, 0),
         dtype=tf.int32
     )
     look_ahead_visit_mask_with_att = tf.reshape(
@@ -266,7 +266,7 @@ def create_probabilistic_phenotype_model(
     )
 
     # (batch_size, 1, num_of_visits_with_att, num_of_visits_with_att)
-    look_ahead_visit_mask_with_att = tf.maximum(
+    look_ahead_visit_mask_with_att = tf.minimum(
         visit_mask_with_att,
         look_ahead_visit_mask_with_att
     )

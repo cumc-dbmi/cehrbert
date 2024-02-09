@@ -124,8 +124,9 @@ class GptInferenceModel(tf.keras.Model):
             first_layer_context
         )
 
+        # Where 1 indicates attention and 0 indicates mask
         look_ahead_mask_base = tf.cast(
-            1 - tf.linalg.band_part(
+            tf.linalg.band_part(
                 tf.ones((current_length, current_length)), -1, 0
             ),
             dtype=tf.int32

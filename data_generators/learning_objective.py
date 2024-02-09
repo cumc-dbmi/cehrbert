@@ -362,7 +362,9 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
             self._max_seq_len,
             d_type='float32'
         )
-        mask = (concepts == unused_token_id).astype(int)
+
+        # 1 indicates attention and 0 indicates mask
+        mask = (concepts != unused_token_id).astype(int)
 
         # The auxiliary inputs for bert
         visit_segments = post_pad_pre_truncate(
@@ -557,8 +559,8 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
             (-1, self._max_num_of_visits, self._max_num_of_concepts)
         )
 
-        # Derive the concept mask
-        padded_pat_mask = (padded_masked_concepts == unused_token_id).astype(int)
+        # 1 indicates attention and 0 indicates mask
+        padded_pat_mask = (padded_masked_concepts != unused_token_id).astype(int)
 
         # Process visit_rank_orders
         padded_visit_rank_orders = post_pad_pre_truncate(
@@ -572,6 +574,8 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
             pad_value=1,
             max_seq_len=self._max_num_of_visits
         )
+        # 1 indicates attention and 0 indicates mask, therefore we need to flip it.
+        padded_visit_masks = 1 - padded_visit_masks
 
         # The concept values for bert
         concept_values = (

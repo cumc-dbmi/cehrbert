@@ -36,134 +36,21 @@ def point_wise_feed_forward_network(d_model, dff):
     ])
 
 
-def scaled_dot_product_attention(
-        q,
-        k,
-        v,
-        mask,
-        use_causal_mask=False
-):
-    """Calculate the attention weights.
-    q, k, v must have matching leading dimensions.
-    k, v must have matching penultimate dimension, i.e.: seq_len_k = seq_len_v.
-    The mask has different shapes depending on its type(padding or look ahead)
-    but it must be broadcastable for addition.
-
-    Args:
-    q: query shape == (..., seq_len_q, depth)
-    k: key shape == (..., seq_len_k, depth)
-    v: value shape == (..., seq_len_v, depth_v)
-    mask: Float tensor with shape broadcastable
-          to (..., seq_len_q, seq_len_k). Defaults to None.
-
-    Returns:
-    output, attention_weights
-    """
-
-    if mask is None and not use_causal_mask:
-        raise RuntimeError(f'Either the mask needs to be provided or use_causal_mask needs to be true')
-
-    matmul_qk = tf.matmul(q, k, transpose_b=True)  # (..., seq_len_q, seq_len_k)
-
-    if use_causal_mask:
-        mask = tf.cast(
-            1 - tf.linalg.band_part(tf.ones_like(matmul_qk), -1, 0),
-            dtype=tf.int32
-        )
-
-    # scale matmul_qk
-    dk = tf.cast(tf.shape(k)[-1], tf.float32)
-    scaled_attention_logits = matmul_qk / tf.math.sqrt(dk)
-
-    # add the mask to the scaled tensor.
-    if mask is not None:
-        scaled_attention_logits += (tf.cast(mask, dtype='float32') * -1e9)
-
-    # softmax is normalized on the last axis (seq_len_k) so that the scores
-    # add up to 1.
-    attention_weights = tf.nn.softmax(scaled_attention_logits,
-                                      axis=-1)  # (..., seq_len_q, seq_len_k)
-
-    output = tf.matmul(attention_weights, v)  # (..., seq_len_q, depth_v)
-
-    return output, attention_weights
-
-
-class MultiHeadAttention(tf.keras.layers.Layer):
-
-    def __init__(self, d_model, num_heads, **kwargs):
-        super(MultiHeadAttention, self).__init__(**kwargs)
-
-        self.num_heads = num_heads
-        self.d_model = d_model
-
-        assert d_model % self.num_heads == 0
-
-        self.depth = d_model // self.num_heads
-
-        self.wq = tf.keras.layers.Dense(d_model)
-        self.wk = tf.keras.layers.Dense(d_model)
-        self.wv = tf.keras.layers.Dense(d_model)
-        self.dense = tf.keras.layers.Dense(d_model)
-
-    def get_config(self):
-        config = super().get_config()
-        config['d_model'] = self.d_model
-        config['num_heads'] = self.num_heads
-        return config
-
-    def split_heads(self, x, batch_size):
-        """Split the last dimension into (num_heads, depth).
-        Transpose the result such that the shape is (batch_size, num_heads, seq_len, depth)
-        """
-        x = tf.reshape(x, (batch_size, -1, self.num_heads, self.depth))
-        return tf.transpose(x, perm=[0, 2, 1, 3])
-
-    def split_heads_query_key_value(self, batch_size, k, q, v):
-        q = self.split_heads(q, batch_size)  # (batch_size, num_heads, seq_len_q, depth)
-        k = self.split_heads(k, batch_size)  # (batch_size, num_heads, seq_len_k, depth)
-        v = self.split_heads(v, batch_size)  # (batch_size, num_heads, seq_len_v, depth)
-        return k, q, v
-
-    def call(self, v, k, q, mask=None, use_causal_mask=False):
-        batch_size = tf.shape(q)[0]
-
-        q = self.wq(q)  # (batch_size, seq_len, d_model)
-        k = self.wk(k)  # (batch_size, seq_len, d_model)
-        v = self.wv(v)  # (batch_size, seq_len, d_model)
-
-        k, q, v = self.split_heads_query_key_value(batch_size, k, q, v)
-
-        # scaled_attention.shape == (batch_size, num_heads, seq_len_q, depth)
-        # attention_weights.shape == (batch_size, num_heads, seq_len_q, seq_len_k)
-        scaled_attention, attention_weights = scaled_dot_product_attention(
-            q, k, v, mask,
-            use_causal_mask=use_causal_mask
-        )
-
-        scaled_attention = tf.transpose(scaled_attention,
-                                        perm=[0, 2, 1,
-                                              3])  # (batch_size, seq_len_q, num_heads, depth)
-
-        concat_attention = tf.reshape(scaled_attention,
-                                      (batch_size, -1,
-                                       self.d_model))  # (batch_size, seq_len_q, d_model)
-
-        output = self.dense(concat_attention)  # (batch_size, seq_len_q, d_model)
-
-        return output, attention_weights
-
-
 class EncoderLayer(tf.keras.layers.Layer):
     def __init__(self, d_model, num_heads, dff, rate=0.1, *args, **kwargs):
         super(EncoderLayer, self).__init__(*args, **kwargs)
+
+        assert d_model % num_heads == 0
 
         self.d_model = d_model
         self.num_heads = num_heads
         self.dff = dff
         self.rate = rate
 
-        self.mha = MultiHeadAttention(d_model, num_heads)
+        self.mha = tf.keras.layers.MultiHeadAttention(
+            num_heads=num_heads,
+            key_dim=d_model // num_heads
+        )
         self.ffn = point_wise_feed_forward_network(d_model, dff)
 
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
@@ -181,20 +68,25 @@ class EncoderLayer(tf.keras.layers.Layer):
         return config
 
     def call(self, x, mask, **kwargs):
-        attn_output, attn_weights = self.mha(x, x, x, mask)  # (batch_size, input_seq_len, d_model)
-        attn_output = self.dropout1(attn_output, training=kwargs.get('training'))
+        attn_output, attn_weights = self.mha(
+            query=x,
+            key=x,
+            value=x,
+            attention_mask=mask,
+            return_attention_scores=True,
+            **kwargs
+        )
+        attn_output = self.dropout1(attn_output, **kwargs)
         out1 = self.layernorm1(x + attn_output)  # (batch_size, input_seq_len, d_model)
 
         ffn_output = self.ffn(out1)  # (batch_size, input_seq_len, d_model)
-        ffn_output = self.dropout2(ffn_output, training=kwargs.get('training'))
+        ffn_output = self.dropout2(ffn_output, **kwargs)
         out2 = self.layernorm2(out1 + ffn_output)  # (batch_size, input_seq_len, d_model)
-
         return out2, attn_weights
 
 
 class Encoder(tf.keras.layers.Layer):
-    def __init__(self, num_layers, d_model, num_heads, dff=2148, dropout_rate=0.1, *args,
-                 **kwargs):
+    def __init__(self, num_layers, d_model, num_heads, dff=2148, dropout_rate=0.1, *args, **kwargs):
         super(Encoder, self).__init__(*args, **kwargs)
 
         self.d_model = d_model
@@ -244,7 +136,8 @@ class GptDecoder(tf.keras.layers.Layer):
         self.dropout_rate = dropout_rate
         self.decoder_layers = [
             GptDecoderLayer(d_model, num_heads, dff, dropout_rate, name='transformer' + str(i))
-            for i in range(num_layers)]
+            for i in range(num_layers)
+        ]
         self.dropout = tf.keras.layers.Dropout(dropout_rate)
 
     def get_config(self):
@@ -270,13 +163,21 @@ class DecoderLayer(tf.keras.layers.Layer):
     def __init__(self, d_model, num_heads, dff, rate=0.1, *args, **kwargs):
         super(DecoderLayer, self).__init__(*args, **kwargs)
 
+        assert d_model % num_heads == 0
+
         self.d_model = d_model
         self.num_heads = num_heads
         self.dff = dff
         self.rate = rate
 
-        self.mha1 = MultiHeadAttention(d_model, num_heads)
-        self.mha2 = MultiHeadAttention(d_model, num_heads)
+        self.mha1 = tf.keras.layers.MultiHeadAttention(
+            num_heads=num_heads,
+            key_dim=d_model // num_heads
+        )
+        self.mha2 = tf.keras.layers.MultiHeadAttention(
+            num_heads=num_heads,
+            key_dim=d_model // num_heads
+        )
 
         self.ffn = point_wise_feed_forward_network(d_model, dff)
 
@@ -298,14 +199,27 @@ class DecoderLayer(tf.keras.layers.Layer):
 
     def call(self, x, enc_output, decoder_mask, encoder_mask, **kwargs):
         # enc_output.shape == (batch_size, input_seq_len, d_model)
+        attn1, attn_weights_block1 = self.mha1(
+            query=x,
+            key=x,
+            value=x,
+            attention_mask=decoder_mask,
+            return_attention_scores=True,
+            **kwargs
+        )  # (batch_size, target_seq_len, d_model)
 
-        attn1, attn_weights_block1 = self.mha1(x, x, x,
-                                               decoder_mask)  # (batch_size, target_seq_len, d_model)
-        attn1 = self.dropout1(attn1)
+        attn1 = self.dropout1(attn1, **kwargs)
         out1 = self.layernorm1(attn1 + x)
 
-        attn2, attn_weights_block2 = self.mha2(enc_output, enc_output, out1,
-                                               encoder_mask)  # (batch_size, target_seq_len, d_model)
+        attn2, attn_weights_block2 = self.mha2(
+            value=enc_output,
+            key=enc_output,
+            query=out1,
+            attention_mask=encoder_mask,
+            return_attention_scores=True,
+            **kwargs
+        )  # (batch_size, target_seq_len, d_model)
+
         attn2 = self.dropout2(attn2, **kwargs)
         out2 = self.layernorm2(attn2 + out1)  # (batch_size, target_seq_len, d_model)
 
@@ -320,18 +234,19 @@ class GptDecoderLayer(tf.keras.layers.Layer):
     def __init__(self, d_model, num_heads, dff, rate=0.1, *args, **kwargs):
         super(GptDecoderLayer, self).__init__(*args, **kwargs)
 
+        assert d_model % num_heads == 0
         self.d_model = d_model
         self.num_heads = num_heads
         self.dff = dff
         self.rate = rate
 
-        self.mha = MultiHeadAttention(d_model, num_heads)
-
+        self.mha = tf.keras.layers.MultiHeadAttention(
+            num_heads=num_heads,
+            key_dim=d_model // num_heads
+        )
         self.ffn = point_wise_feed_forward_network(d_model, dff)
-
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
-
         self.dropout1 = tf.keras.layers.Dropout(rate)
         self.dropout2 = tf.keras.layers.Dropout(rate)
 
@@ -344,20 +259,22 @@ class GptDecoderLayer(tf.keras.layers.Layer):
         return config
 
     def call(self, query, key, value, decoder_mask=None, **kwargs):
-        # Supports backward compability
+        # Supports backward compatibility
         if 'mask' in kwargs:
             kwargs.pop('mask')
+
         # (batch_size, target_seq_len, d_model)
         attn, attn_weights_block = self.mha(
-            v=value,
-            k=key,
-            q=query,
-            mask=decoder_mask,
+            value=value,
+            key=key,
+            query=query,
+            attention_mask=decoder_mask,
             use_causal_mask=decoder_mask is None,
+            return_attention_scores=True,
             **kwargs
         )
 
-        attn = self.dropout1(attn)
+        attn = self.dropout1(attn, **kwargs)
         # The reason we are doing this is that tensorflow on Mac doesn't seem to recognize the rank correctly
         if platform.system() == 'Darwin':
             # This code block will only execute on macOS
@@ -442,14 +359,14 @@ class SimpleDecoderLayer(tf.keras.layers.Layer):
             *args,
             **kwargs
         )
-
+        assert d_model % num_heads == 0
         self.d_model = d_model
         self.num_heads = num_heads
         self.dff = dff
         self.rate = rate
-        self.multi_head_attention_layer = MultiHeadAttention(
-            d_model,
-            num_heads
+        self.multi_head_attention_layer = tf.keras.layers.MultiHeadAttention(
+            num_heads=num_heads,
+            key_dim=d_model // num_heads
         )
         self.ffn = point_wise_feed_forward_network(d_model, dff)
         self.mha_layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
@@ -465,20 +382,15 @@ class SimpleDecoderLayer(tf.keras.layers.Layer):
         config['rate'] = self.rate
         return config
 
-    def call(
-            self,
-            decoder_input,
-            enc_output,
-            encoder_mask,
-            **kwargs
-    ):
+    def call(self, decoder_input, enc_output, encoder_mask, **kwargs):
         # enc_output.shape == (batch_size, input_seq_len, d_model)
-
         attn, attn_weights_block = self.multi_head_attention_layer(
-            enc_output,
-            enc_output,
-            decoder_input,
-            encoder_mask
+            value=enc_output,
+            key=enc_output,
+            query=decoder_input,
+            attention_mask=encoder_mask,
+            return_attention_scores=True,
+            **kwargs
         )  # (batch_size, target_seq_len, d_model)
         attn = self.mha_dropout_layer(attn, **kwargs)
         out2 = self.mha_layernorm(attn + decoder_input)  # (batch_size, target_seq_len, d_model)
@@ -1063,13 +975,12 @@ def distance_matrix(matrix_1, matrix_2):
 
 
 get_custom_objects().update({
-    'MultiHeadAttention': MultiHeadAttention,
     'Encoder': Encoder,
     'GptDecoder': GptDecoder,
+    'GptDecoderLayer': GptDecoderLayer,
     'TrainablePositionEmbedding': TrainablePositionEmbedding,
     'EncoderLayer': EncoderLayer,
     'DecoderLayer': DecoderLayer,
-    'GptDecoderLayer': GptDecoderLayer,
     'SimpleDecoderLayer': SimpleDecoderLayer,
     'VisitEmbeddingLayer': VisitEmbeddingLayer,
     'PositionalEncodingLayer': PositionalEncodingLayer,
