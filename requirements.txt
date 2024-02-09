@@ -11,8 +11,8 @@ pyarrow
 pyspark~=3.0.0
 pytest
 scikit-learn~=1.4.0
-tensorboard==2.9.0; sys_platform != 'darwin'
-tensorflow==2.9.0; sys_platform != 'darwin'
+tensorboard==2.1.15; sys_platform != 'darwin'
+tensorflow==2.1.15; sys_platform != 'darwin'
 tensorboard; sys_platform == 'darwin'
 tensorflow; sys_platform == 'darwin'
 tensorflow-metal; sys_platform == 'darwin'

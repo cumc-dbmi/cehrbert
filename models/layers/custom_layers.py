@@ -5,7 +5,6 @@ from tensorflow.keras.utils import get_custom_objects
 
 from keras_transformer.bert import MaskedPenalizedSparseCategoricalCrossentropy
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
-from keras_transformer.position import TransformerCoordinateEmbedding
 from utils.model_utils import create_concept_mask
 
 
@@ -265,44 +264,6 @@ class GptDecoder(tf.keras.layers.Layer):
             attention_weights.append(attn_weights)
             layer_contexts.append(x)
         return x, tf.stack(layer_contexts, axis=0), tf.stack(attention_weights, axis=0)
-
-
-class AdaptiveLogitLayer(tf.keras.layers.Layer):
-    def __init__(
-            self,
-            vocab_size,
-            empirical_dist,
-            generated_dist,
-            *args,
-            **kwargs
-    ):
-        super(AdaptiveLogitLayer, self).__init__(*args, **kwargs)
-        self.vocab_size = vocab_size
-        self.empirical_dist = np.asarray(empirical_dist)
-        self.generated_dist = np.asarray(generated_dist)
-        self.dense_layer = tf.keras.layers.Dense(vocab_size, activation='relu')
-
-    def get_config(self):
-        config = super().get_config()
-        config['empirical_dist'] = self.empirical_dist
-        config['generated_dist'] = self.generated_dist
-        config['vocab_size'] = self.vocab_size
-        return config
-
-    def call(self, x, **kwargs):
-        batch = tf.shape(x)[0]
-        # (batch, 1, vocab_size)
-        importance_score = tf.tile(
-            tf.reshape(
-                self.empirical_dist - self.generated_dist,
-                (1, 1, self.vocab_size)
-            ), (batch, 1, 1)
-        )
-
-        importance_score = tf.cast(importance_score, dtype=tf.float32)
-        # (batch, length, vocab_size)
-        adaptive_logits = self.dense_layer(x, **kwargs) * importance_score
-        return tf.exp(-adaptive_logits)
 
 
 class DecoderLayer(tf.keras.layers.Layer):
@@ -786,129 +747,6 @@ class TemporalTransformationLayer(tf.keras.layers.Layer):
         return temporal_concept_embeddings
 
 
-class TimeAttention(tf.keras.layers.Layer):
-
-    def __init__(self, vocab_size: int,
-                 target_seq_len: int,
-                 context_seq_len: int,
-                 time_window_size: int,
-                 return_logits: bool = False,
-                 *args, **kwargs):
-        super(TimeAttention, self).__init__(*args, **kwargs)
-        self.vocab_size = vocab_size
-        self.target_seq_len = target_seq_len
-        self.context_seq_len = context_seq_len
-
-        # Save the half window size
-        self.half_time_window_size = int(time_window_size / 2)
-        # Pad one for time zero, in which the index event occurred
-        self.time_window_size = self.half_time_window_size * 2 + 1
-        self.return_logits = return_logits
-
-        self.embedding_layer = tf.keras.layers.Embedding(self.vocab_size,
-                                                         self.time_window_size,
-                                                         embeddings_initializer=tf.keras.initializers.zeros,
-                                                         name='time_attention_embedding',
-                                                         trainable=kwargs.get('trainable'))
-        self.softmax_layer = tf.keras.layers.Softmax()
-
-    def get_config(self):
-        config = super().get_config()
-        config['vocab_size'] = self.vocab_size
-        config['target_seq_len'] = self.target_seq_len
-        config['context_seq_len'] = self.context_seq_len
-        config['time_window_size'] = self.time_window_size
-        config['return_logits'] = self.return_logits
-        return config
-
-    def call(self, inputs, **kwargs):
-        """
-
-        :param inputs:
-        :param kwargs:
-        :return:
-        """
-        target_concepts = inputs[0]
-        target_time_stamps = inputs[1]
-        context_time_stamps = inputs[2]
-        time_mask = inputs[3]
-
-        # shape = (batch_size, target_seq_length, time_window_size)
-        concept_time_embeddings = self.embedding_layer(target_concepts)
-
-        # shape = (batch_size, context_seq_length, target_seq_len)
-        multiplied_context_time_stamps = tf.tile(tf.expand_dims(context_time_stamps, axis=-1),
-                                                 tf.constant([1, 1, self.target_seq_len]))
-
-        # shape = (batch_size, target_seq_length, context_seq_length)
-        time_delta = tf.transpose(
-            multiplied_context_time_stamps - tf.expand_dims(target_time_stamps, axis=1),
-            perm=[0, 2, 1])
-
-        # Clip the time deltas to fit the time window. E.g. if the time window is 101,
-        # the allowed time delta values are between -50 to 50
-        time_delta_value_clipped = tf.clip_by_value(time_delta,
-                                                    clip_value_min=-self.half_time_window_size,
-                                                    clip_value_max=self.half_time_window_size)
-        # shape = (batch_size, target_seq_length, context_seq_length, full_time_window_size)
-        time_delta_one_hot = tf.one_hot(time_delta_value_clipped + self.half_time_window_size,
-                                        self.time_window_size)
-
-        # shape = (batch_size, target_seq_length, time_window_size, 1)
-        concept_time_embeddings_expanded = tf.expand_dims(concept_time_embeddings, axis=-1)
-
-        # shape = (batch_size, target_seq_length, context_seq_length)
-        next_input = tf.squeeze(tf.matmul(time_delta_one_hot, concept_time_embeddings_expanded),
-                                axis=-1)
-
-        # add the mask to the scaled tensor.
-        if time_mask is not None:
-            next_input += (tf.cast(tf.expand_dims(time_mask, axis=1), dtype='float32') * -1e9)
-
-        return next_input if self.return_logits else self.softmax_layer(next_input)
-
-
-class TimeSelfAttention(TimeAttention):
-
-    def __init__(self,
-                 target_seq_len: int,
-                 context_seq_len: int,
-                 self_attention_return_logits: bool,
-                 *args, **kwargs):
-        assert target_seq_len == context_seq_len
-        super(TimeSelfAttention, self).__init__(target_seq_len=target_seq_len,
-                                                context_seq_len=context_seq_len,
-                                                *args, **kwargs)
-        self.self_attention_return_logits = self_attention_return_logits
-
-    def get_config(self):
-        config = super().get_config()
-        config['self_attention_return_logits'] = self.self_attention_return_logits
-        return config
-
-    def call(self, inputs, **kwargs):
-        """
-
-        :param inputs:
-        :param kwargs:
-        :return:
-        """
-        concept_ids = inputs[0]
-        time_stamps = inputs[1]
-        time_mask = inputs[2]
-
-        # shape = (batch_size, seq_len, seq_len)
-        self_attention_logits = super().call([concept_ids, time_stamps, time_stamps, time_mask])
-
-        # add the mask to the scaled tensor.
-        if time_mask is not None:
-            self_attention_logits += (
-                    tf.cast(tf.expand_dims(time_mask, axis=1), dtype='float32') * -1e9)
-
-        return self_attention_logits if self.self_attention_return_logits else self.softmax_layer(
-            self_attention_logits)
-
-
 class BertLayer(tf.keras.layers.Layer):
 
     def __init__(self, model_path: str, *args, **kwargs):
@@ -1051,103 +889,6 @@ class ConvolutionBertLayer(tf.keras.layers.Layer):
         #             (-1, self.conv_1d.filters * embedding_size))
 
         return context_representation
-
-
-class HiddenPhenotypeLayer(tf.keras.layers.Layer):
-
-    def __init__(self,
-                 hidden_unit: int,
-                 embedding_size: int,
-                 num_heads: int,
-                 dropout_rate: float = 0.1,
-                 *args, **kwargs):
-        super(HiddenPhenotypeLayer, self).__init__(*args, **kwargs)
-        self.hidden_unit = hidden_unit
-        self.embedding_size = embedding_size
-        self.num_heads = num_heads
-        self.dropout_rate = dropout_rate
-
-        # num_hidden_state, embedding_size
-        self.hidden_unit_embedding = self.add_weight(
-            shape=(hidden_unit, embedding_size),
-            initializer=tf.keras.initializers.GlorotNormal(),
-            trainable=True,
-            name='phenotype_embeddings'
-        )
-
-        self.mha_layer = MultiHeadAttention(
-            d_model=embedding_size,
-            num_heads=num_heads
-        )
-
-        self.layer_norm_layer = tf.keras.layers.LayerNormalization(
-            epsilon=1e-6
-        )
-        self.dropout_layer = tf.keras.layers.Dropout(dropout_rate)
-
-        self.phenotype_hidden_state_layer = tf.keras.layers.Dense(
-            units=1
-        )
-
-    def get_config(self):
-        config = super().get_config()
-        config['hidden_unit'] = self.hidden_unit
-        config['embedding_size'] = self.embedding_size
-        config['num_heads'] = self.num_heads
-        config['dropout_rate'] = self.dropout_rate
-        return config
-
-    def call(self, inputs, **kwargs):
-        seq_embeddings, mask = inputs
-        # Use broadcasting to copy hidden_unit_embedding
-        # (batch_size, num_hidden_state, embedding_size)
-        expanded_phenotype_embeddings = tf.ones_like(
-            seq_embeddings
-        )[:, 0:1, 0:1] * self.hidden_unit_embedding[tf.newaxis, :, :]
-
-        # (batch_size, num_hidden_state, embedding_size)
-        context_phenotype_embeddings, _ = self.mha_layer(
-            seq_embeddings,
-            seq_embeddings,
-            expanded_phenotype_embeddings,
-            mask,
-        )
-
-        context_phenotype_embeddings = self.dropout_layer(
-            context_phenotype_embeddings,
-            **kwargs
-        )
-
-        context_phenotype_embeddings = self.layer_norm_layer(
-            expanded_phenotype_embeddings + context_phenotype_embeddings,
-            **kwargs
-        )
-
-        # (batch_size, num_hidden_state)
-        phenotype_probability_dist = tf.nn.softmax(
-            tf.squeeze(
-                self.phenotype_hidden_state_layer(
-                    context_phenotype_embeddings
-                )
-            )
-        )
-
-        phenotype_prob_entropy = -tf.reduce_sum(
-            phenotype_probability_dist * tf.math.log(phenotype_probability_dist),
-            axis=-1
-        )
-        # self.add_loss(
-        #     tf.reduce_mean(
-        #         phenotype_prob_entropy
-        #     )
-        # )
-
-        self.add_metric(
-            phenotype_prob_entropy,
-            name='phenotype_probability_entropy'
-        )
-
-        return context_phenotype_embeddings, phenotype_probability_dist
 
 
 class VisitPhenotypeLayer(tf.keras.layers.Layer):
@@ -1325,16 +1066,11 @@ get_custom_objects().update({
     'MultiHeadAttention': MultiHeadAttention,
     'Encoder': Encoder,
     'GptDecoder': GptDecoder,
-    'AdaptiveLogitLayer': AdaptiveLogitLayer,
     'TrainablePositionEmbedding': TrainablePositionEmbedding,
-    'TransformerCoordinateEmbedding': TransformerCoordinateEmbedding,
     'EncoderLayer': EncoderLayer,
     'DecoderLayer': DecoderLayer,
     'GptDecoderLayer': GptDecoderLayer,
     'SimpleDecoderLayer': SimpleDecoderLayer,
-    'TimeAttention': TimeAttention,
-    'TimeSelfAttention': TimeSelfAttention,
-    'PairwiseTimeAttention': TimeSelfAttention,
     'VisitEmbeddingLayer': VisitEmbeddingLayer,
     'PositionalEncodingLayer': PositionalEncodingLayer,
     'NonTrainablePositionEmbedding': NonTrainablePositionEmbedding,
@@ -1346,7 +1082,6 @@ get_custom_objects().update({
     'MaskedPenalizedSparseCategoricalCrossentropy': MaskedPenalizedSparseCategoricalCrossentropy,
     'BertLayer': BertLayer,
     'ConvolutionBertLayer': ConvolutionBertLayer,
-    'HiddenPhenotypeLayer': HiddenPhenotypeLayer,
     'VisitPhenotypeLayer': VisitPhenotypeLayer,
     'ConceptValuePredictionLayer': ConceptValuePredictionLayer
 })
