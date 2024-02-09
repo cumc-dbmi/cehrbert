@@ -28,10 +28,6 @@ class AbstractModel(ABC):
         pass
 
     @abstractmethod
-    def eval_model(self, *args, **kwargs):
-        pass
-
-    @abstractmethod
     def get_model_folder(self):
         pass
 
@@ -65,6 +61,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             batch_size: int,
             epochs: int,
             learning_rate: float,
+            checkpoint_name: str = None,
             val_data_parquet_path: str = None,
             tf_board_log_path: str = None,
             shuffle_training_data: bool = True,
@@ -77,6 +74,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
 
         self._training_data_parquet_path = training_data_parquet_path
         self._val_data_parquet_path = val_data_parquet_path
+        self._checkpoint_name = checkpoint_name
         self._tf_board_log_path = tf_board_log_path
         self._batch_size = batch_size
         self._epochs = epochs
@@ -109,6 +107,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             f'epochs: {epochs}\n'
             f'learning_rate: {learning_rate}\n'
             f'model_folder: {model_folder}\n'
+            f'checkpoint_name: {checkpoint_name}\n'
             f'tf_board_log_path: {tf_board_log_path}\n'
             f'shuffle_training_data: {shuffle_training_data}\n'
             f'cache_dataset: {cache_dataset}\n'
@@ -238,6 +237,16 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
     def get_tokenizer_path(self):
         tokenizer_name = f"{self.get_model_name()}_tokenizer.pickle"
         return os.path.join(self.get_model_folder(), tokenizer_name)
+
+    def get_visit_tokenizer_path(self):
+        tokenizer_name = f"{self.get_model_name()}_visit_tokenizer.pickle"
+        return os.path.join(self.get_model_folder(), tokenizer_name)
+
+    def checkpoint_exists(self):
+        if self._checkpoint_name:
+            existing_model_path = os.path.join(self.get_model_folder(), self._checkpoint_name)
+            return os.path.exists(existing_model_path)
+        return False
 
     @abstractmethod
     def get_model_name(self):

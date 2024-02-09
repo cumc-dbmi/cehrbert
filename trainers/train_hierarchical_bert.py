@@ -20,8 +20,6 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
 
     def __init__(
             self,
-            tokenizer_path: str,
-            visit_tokenizer_path: str,
             concept_similarity_path: str,
             concept_similarity_type: str,
             embedding_size: int,
@@ -40,9 +38,6 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
             warmup_step: int = -1,
             *args, **kwargs
     ):
-
-        self._tokenizer_path = tokenizer_path
-        self._visit_tokenizer_path = visit_tokenizer_path
         self._concept_similarity_path = concept_similarity_path
         self._concept_similarity_type = concept_similarity_type
         self._embedding_size = embedding_size
@@ -64,8 +59,9 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
 
         self.get_logger().info(
             f'{self} will be trained with the following parameters:\n'
-            f'tokenizer_path: {tokenizer_path}\n'
-            f'visit_tokenizer_path: {visit_tokenizer_path}\n'
+            f'model_name: {self.get_model_name()}\n'
+            f'tokenizer_path: {self.get_tokenizer_path()}\n'
+            f'visit_tokenizer_path: {self.get_visit_tokenizer_path()}\n'
             f'concept_similarity_table: {concept_similarity_path}\n'
             f'concept_similarity_type: {concept_similarity_type}\n'
             f'embedding_size: {embedding_size}\n'
@@ -95,14 +91,14 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
         self._tokenizer = tokenize_multiple_fields(
             self._training_data,
             tokenize_fields_info,
-            self._tokenizer_path,
+            self.get_tokenizer_path(),
             encode=False)
 
         self._visit_tokenizer = tokenize_one_field(
             self._training_data,
             'visit_concept_ids',
             'visit_token_ids',
-            self._visit_tokenizer_path
+            self.get_visit_tokenizer_path()
         )
 
     def create_data_generator(self) -> HierarchicalBertDataGenerator:
@@ -141,12 +137,13 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
         self.get_logger().info('Number of devices: {}'.format(
             strategy.num_replicas_in_sync))
         with strategy.scope():
-            existing_model_path = os.path.join(self.get_model_folder(), 'bert_model.h5')
-            if os.path.exists(existing_model_path):
+            if self.checkpoint_exists():
+                existing_model_path = os.path.join(self.get_model_folder(), self._checkpoint_name)
                 self.get_logger().info(
                     f'The {self} model will be loaded from {existing_model_path}')
                 model = tf.keras.models.load_model(
-                    existing_model_path, custom_objects=get_custom_objects())
+                    existing_model_path, custom_objects=get_custom_objects()
+                )
             else:
                 optimizer = optimizers.Adam(
                     lr=self._learning_rate,
@@ -210,18 +207,16 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
                 or self._include_prolonged_length_stay
         )
 
-    def eval_model(self):
-        pass
+    def get_model_name(self):
+        return 'HIERARCHICAL_CEHR_BERT'
 
 
 def main(args):
-    config = ModelPathConfig(args.input_folder, args.output_folder)
     HierarchicalBertTrainer(
-        training_data_parquet_path=config.parquet_data_path,
-        model_path=config.model_path,
-        tokenizer_path=config.tokenizer_path,
-        visit_tokenizer_path=config.visit_tokenizer_path,
-        concept_similarity_path=config.concept_similarity_path,
+        training_data_parquet_path=args.training_data_parquet_path,
+        model_folder=args.output_folder,
+        checkpoint_name=args.checkpoint_name,
+        concept_similarity_path=args.concept_similarity_path,
         concept_similarity_type=args.concept_similarity_type,
         embedding_size=args.embedding_size,
         depth=args.depth,

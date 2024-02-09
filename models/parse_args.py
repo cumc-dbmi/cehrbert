@@ -25,6 +25,14 @@ def create_parse_args():
         required=True
     )
     parser.add_argument(
+        '--checkpoint_name',
+        dest='checkpoint_name',
+        action='store',
+        help='This refers to the model name in the model output folder, which will be used as the checkpoint to '
+             'restore the training from',
+        required=False
+    )
+    parser.add_argument(
         '-m',
         '--max_seq_length',
         dest='max_seq_length',
@@ -392,6 +400,12 @@ def create_parse_args_hierarchical_bert():
         help='The probability the secondary learning objective uses. The value 0.2 '
              'indicates there is a 20% chance of masking in pre-training '
              'for secondary learning objectives'
+    )
+    parser.add_argument(
+        '--concept_similarity_path',
+        dest='concept_similarity_path',
+        action='store',
+        required=False
     )
     parser.add_argument(
         '--concept_similarity_type',

@@ -79,6 +79,8 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
 
         self.get_logger().info(
             f'{self} will be trained with the following parameters:\n'
+            f'model_name: {self.get_model_name()}\n'
+            f'tokenizer_path: {self.get_tokenizer_path()}\n'
             f'concept_path: {concept_path}\n'
             f'embedding_size: {embedding_size}\n'
             f'context_window_size: {context_window_size}\n'
@@ -170,12 +172,13 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         strategy = tf.distribute.MirroredStrategy()
         self.get_logger().info('Number of devices: {}'.format(strategy.num_replicas_in_sync))
         with strategy.scope():
-            existing_model_path = os.path.join(self.get_model_folder(), 'bert_model.h5')
-            if os.path.exists(existing_model_path):
+            if self.checkpoint_exists():
+                existing_model_path = os.path.join(self.get_model_folder(), self._checkpoint_name)
                 self.get_logger().info(
                     f'The {self} model will be loaded from {existing_model_path}')
                 model = tf.keras.models.load_model(
-                    existing_model_path, custom_objects=get_custom_objects())
+                    existing_model_path, custom_objects=get_custom_objects()
+                )
             else:
                 optimizer = optimizers.Adam(
                     lr=self._learning_rate, beta_1=0.9, beta_2=0.999)
@@ -203,9 +206,6 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
                     metrics={'concept_predictions': masked_perplexity}
                 )
         return model
-
-    def eval_model(self):
-        pass
 
     def _get_callbacks(self):
         call_backs = super()._get_callbacks()
@@ -240,6 +240,7 @@ def main(args):
         training_data_parquet_path=args.training_data_parquet_path,
         val_data_parquet_path=args.val_data_parquet_path,
         model_folder=args.output_folder,
+        checkpoint_name=args.checkpoint_name,
         concept_path=args.concept_path,
         embedding_size=args.embedding_size,
         context_window_size=args.max_seq_length,

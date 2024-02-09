@@ -21,8 +21,6 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
 
     def __init__(
             self,
-            tokenizer_path: str,
-            visit_tokenizer_path: str,
             embedding_size: int,
             context_window_size: int,
             depth: int,
@@ -34,9 +32,6 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
             time_embeddings_size: int,
             *args, **kwargs
     ):
-
-        self._tokenizer_path = tokenizer_path
-        self._visit_tokenizer_path = visit_tokenizer_path
         self._embedding_size = embedding_size
         self._context_window_size = context_window_size
         self._depth = depth
@@ -51,8 +46,9 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
 
         self.get_logger().info(
             f'{self} will be trained with the following parameters:\n'
-            f'tokenizer_path: {tokenizer_path}\n'
-            f'visit_tokenizer_path: {visit_tokenizer_path}\n'
+            f'model_name: {self.get_model_name()}\n'
+            f'tokenizer_path: {self.get_tokenizer_path()}\n'
+            f'visit_tokenizer_path: {self.get_visit_tokenizer_path()}\n'
             f'embedding_size: {embedding_size}\n'
             f'context_window_size: {context_window_size}\n'
             f'depth: {depth}\n'
@@ -65,26 +61,32 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
 
     def _load_dependencies(self):
 
-        self._tokenizer = tokenize_one_field(self._training_data,
-                                             'concept_ids',
-                                             'token_ids',
-                                             self._tokenizer_path)
+        self._tokenizer = tokenize_one_field(
+            self._training_data,
+            'concept_ids',
+            'token_ids',
+            self.get_tokenizer_path()
+        )
 
         if self._include_visit_prediction:
-            self._visit_tokenizer = tokenize_one_field(self._training_data,
-                                                       'visit_concept_ids',
-                                                       'visit_token_ids',
-                                                       self._visit_tokenizer_path,
-                                                       oov_token='-1')
+            self._visit_tokenizer = tokenize_one_field(
+                self._training_data,
+                'visit_concept_ids',
+                'visit_token_ids',
+                self.get_visit_tokenizer_path(),
+                oov_token='-1'
+            )
 
     def create_data_generator(self) -> BertDataGenerator:
 
-        parameters = {'training_data': self._training_data,
-                      'batch_size': self._batch_size,
-                      'max_seq_len': self._context_window_size,
-                      'min_num_of_concepts': self.min_num_of_concepts,
-                      'concept_tokenizer': self._tokenizer,
-                      'is_random_cursor': True}
+        parameters = {
+            'training_data': self._training_data,
+            'batch_size': self._batch_size,
+            'max_seq_len': self._context_window_size,
+            'min_num_of_concepts': self.min_num_of_concepts,
+            'concept_tokenizer': self._tokenizer,
+            'is_random_cursor': True
+        }
 
         data_generator_class = BertDataGenerator
 
@@ -100,12 +102,13 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
         strategy = tf.distribute.MirroredStrategy()
         self.get_logger().info('Number of devices: {}'.format(strategy.num_replicas_in_sync))
         with strategy.scope():
-            existing_model_path = os.path.join(self.get_model_folder(), 'bert_model.h5')
-            if os.path.exists(existing_model_path):
+            if self.checkpoint_exists():
+                existing_model_path = os.path.join(self.get_model_folder(), self._checkpoint_name)
                 self.get_logger().info(
                     f'The {self} model will be loaded from {existing_model_path}')
                 model = tf.keras.models.load_model(
-                    existing_model_path, custom_objects=get_custom_objects())
+                    existing_model_path, custom_objects=get_custom_objects()
+                )
             else:
                 optimizer = optimizers.Adam(
                     lr=self._learning_rate, beta_1=0.9, beta_2=0.999)
@@ -153,17 +156,15 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
                               metrics={'concept_predictions': masked_perplexity})
         return model
 
-    def eval_model(self):
-        pass
+    def get_model_name(self):
+        return 'CEHR_BERT'
 
 
 def main(args):
-    config = ModelPathConfig(args.input_folder, args.output_folder)
     VanillaBertTrainer(
-        training_data_parquet_path=config.parquet_data_path,
-        model_path=config.model_path,
-        tokenizer_path=config.tokenizer_path,
-        visit_tokenizer_path=config.visit_tokenizer_path,
+        training_data_parquet_path=args.training_data_parquet_path,
+        model_folder=args.output_folder,
+        checkpoint_name=args.checkpoint_name,
         embedding_size=args.embedding_size,
         context_window_size=args.max_seq_length,
         depth=args.depth,
