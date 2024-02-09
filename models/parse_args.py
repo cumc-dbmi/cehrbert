@@ -6,14 +6,15 @@ from data_generators.graph_sample_method import SimilarityType
 
 def create_parse_args():
     parser = argparse.ArgumentParser(
-        description='Arguments for concept embedding model')
+        description='Arguments for concept embedding model'
+    )
     parser.add_argument(
-        '-i',
-        '--input_folder',
-        dest='input_folder',
+        '--training_data_parquet_path',
+        dest='training_data_parquet_path',
         action='store',
         help='The path for your input_folder where the raw data is',
-        required=True)
+        required=True
+    )
     parser.add_argument(
         '-o',
         '--output_folder',
@@ -21,7 +22,8 @@ def create_parse_args():
         action='store',
         help=
         'The output folder that stores the domain tables download destination',
-        required=True)
+        required=True
+    )
     parser.add_argument(
         '-m',
         '--max_seq_length',

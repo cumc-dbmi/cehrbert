@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 import dask.dataframe as dd
-import numpy as np
 import pandas as pd
 import tensorflow as tf
 
@@ -62,7 +61,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
     def __init__(
             self,
             training_data_parquet_path: str,
-            model_path: str,
+            model_folder: str,
             batch_size: int,
             epochs: int,
             learning_rate: float,
@@ -78,11 +77,11 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
 
         self._training_data_parquet_path = training_data_parquet_path
         self._val_data_parquet_path = val_data_parquet_path
-        self._model_path = model_path
         self._tf_board_log_path = tf_board_log_path
         self._batch_size = batch_size
         self._epochs = epochs
         self._learning_rate = learning_rate
+        self._model_folder = model_folder
         self._shuffle_training_data = shuffle_training_data
         self._cache_dataset = cache_dataset
         self._use_dask = use_dask
@@ -106,10 +105,10 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         self.get_logger().info(
             f'training_data_parquet_path: {training_data_parquet_path}\n'
             f'val_data_parquet_path: {val_data_parquet_path}\n'
-            f'model_path: {model_path}\n'
             f'batch_size: {batch_size}\n'
             f'epochs: {epochs}\n'
             f'learning_rate: {learning_rate}\n'
+            f'model_folder: {model_folder}\n'
             f'tf_board_log_path: {tf_board_log_path}\n'
             f'shuffle_training_data: {shuffle_training_data}\n'
             f'cache_dataset: {cache_dataset}\n'
@@ -188,8 +187,9 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
 
     def _get_callbacks(self):
         tensor_board_callback = tf.keras.callbacks.TensorBoard(log_dir=self._tf_board_log_path)
+
         model_checkpoint_args = {
-            'filepath': self._model_path,
+            'filepath': self.get_model_path_epoch(),
             'save_best_only': True,
             'monitor': 'loss',
             'verbose': 1
@@ -210,6 +210,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         # Additional step-based checkpoint callback
         if self._save_checkpoint:
             frequency_checkpoint_args = copy.deepcopy(model_checkpoint_args)
+            frequency_checkpoint_args['filepath'] = self.get_model_path_step()
             frequency_checkpoint_args['save_freq'] = self._save_freq
             frequency_checkpoint_args['name'] = ' '
             callbacks.append(
@@ -224,4 +225,20 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         Infer the model folder from the property model_path
         :return:
         """
-        return str(Path(self._model_path).parent)
+        return str(Path(self._model_folder))
+
+    def get_model_path_epoch(self):
+        model_name = f"{self.get_model_name()}" + '_epoch_{epoch:02d}_final.h5'
+        return os.path.join(self.get_model_folder(), model_name)
+
+    def get_model_path_step(self):
+        model_name = f"{self.get_model_name()}" + '_epoch_{epoch:02d}_batch_{batch:02d}.h5'
+        return os.path.join(self.get_model_folder(), model_name)
+
+    def get_tokenizer_path(self):
+        tokenizer_name = f"{self.get_model_name()}_tokenizer.pickle"
+        return os.path.join(self.get_model_folder(), tokenizer_name)
+
+    @abstractmethod
+    def get_model_name(self):
+        pass

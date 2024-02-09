@@ -1,5 +1,7 @@
 import os
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
 import tensorflow as tf
 from tensorflow.keras import optimizers
 
@@ -12,7 +14,6 @@ from keras_transformer.bert import (
 )
 from models.gpt_model import create_model
 from models.layers.custom_layers import get_custom_objects
-from models.model_parameters import ModelPathConfig
 from models.parse_args import create_parse_args_gpt
 from trainers.callbacks.gpt_callbacks import StepValidationCallBack, ComputeMarginalDistribution
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
@@ -24,7 +25,6 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
 
     def __init__(
             self,
-            tokenizer_path: str,
             concept_path: str,
             embedding_size: int,
             context_window_size: int,
@@ -47,7 +47,6 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             total: int = np.infty,
             *args, **kwargs
     ):
-        self._tokenizer_path = tokenizer_path
         self._concept_path = concept_path
         self._embedding_size = embedding_size
         self._context_window_size = context_window_size
@@ -80,7 +79,6 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
 
         self.get_logger().info(
             f'{self} will be trained with the following parameters:\n'
-            f'tokenizer_path: {tokenizer_path}\n'
             f'concept_path: {concept_path}\n'
             f'embedding_size: {embedding_size}\n'
             f'context_window_size: {context_window_size}\n'
@@ -108,14 +106,14 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             self._training_data,
             'concept_ids',
             'token_ids',
-            self._tokenizer_path
+            self.get_tokenizer_path()
         )
         if self._val_data is not None:
             tokenize_one_field(
                 self._val_data,
                 'concept_ids',
                 'token_ids',
-                self._tokenizer_path
+                self.get_tokenizer_path()
             )
 
         self._concept_map = dict()
@@ -232,14 +230,16 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         #     )
         return call_backs
 
+    @staticmethod
+    def get_model_name():
+        return 'CEHR_GPT'
+
 
 def main(args):
-    config = ModelPathConfig(args.input_folder, args.output_folder)
     GptModelTrainer(
-        training_data_parquet_path=config.parquet_data_path,
+        training_data_parquet_path=args.training_data_parquet_path,
         val_data_parquet_path=args.val_data_parquet_path,
-        model_path=config.model_path,
-        tokenizer_path=config.tokenizer_path,
+        model_folder=args.output_folder,
         concept_path=args.concept_path,
         embedding_size=args.embedding_size,
         context_window_size=args.max_seq_length,
