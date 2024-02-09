@@ -9,7 +9,6 @@ from keras_transformer.bert import (
     masked_perplexity, MaskedPenalizedSparseCategoricalCrossentropy, SequenceCrossentropy)
 from models.hierachical_bert_model_v2 import transformer_hierarchical_bert_model
 from models.layers.custom_layers import get_custom_objects
-from models.model_parameters import ModelPathConfig
 from models.parse_args import create_parse_args_hierarchical_bert
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
 from utils.model_utils import tokenize_one_field, tokenize_multiple_fields

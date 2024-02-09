@@ -8,10 +8,9 @@ from tqdm import tqdm
 import tensorflow as tf
 
 from utils.model_utils import tokenize_one_field
-from models.model_parameters import ModelPathConfig
 from data_generators.data_generator_base import GptDataGenerator
-from data_generators.learning_objective import CustomLearningObjective
 from models.layers.custom_layers import get_custom_objects
+from trainers.model_trainer import find_tokenizer_path
 
 logger = logging.getLogger("model_overfitting_analysis")
 
@@ -24,10 +23,13 @@ def main(args):
             tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None
         )
 
-    config = ModelPathConfig(args.validation_data_folder, args.model_folder)
     validation_data = pd.read_parquet(args.validation_data_folder)
+    tokenizer_path = find_tokenizer_path(args.model_folder)
     tokenizer = tokenize_one_field(
-        validation_data, "concept_ids", "token_ids", config.tokenizer_path
+        validation_data,
+        "concept_ids",
+        "token_ids",
+        tokenizer_path
     )
     gpt_data_generator = GptDataGenerator(
         training_data=validation_data,
@@ -42,7 +44,7 @@ def main(args):
         is_random_cursor=False,
         is_pretraining=False,
     )
-    
+
     strategy = tf.distribute.MirroredStrategy()
     logger.info("Number of devices: {}".format(strategy.num_replicas_in_sync))
     with strategy.scope():
@@ -58,9 +60,8 @@ def main(args):
 
     batch_iterator = gpt_data_generator.create_batch_generator()
     for i, each_batch in tqdm(
-        enumerate(batch_iterator), total=gpt_data_generator.get_steps_per_epoch()
+            enumerate(batch_iterator), total=gpt_data_generator.get_steps_per_epoch()
     ):
-
         inputs, outputs = each_batch
         predictions = distributed_inference(inputs)
         y_true_val = outputs["concept_predictions"][:, :, 0]

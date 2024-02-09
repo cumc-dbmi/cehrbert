@@ -9,10 +9,10 @@ import tensorflow as tf
 import evaluate
 
 from utils.model_utils import tokenize_one_field
-from models.model_parameters import ModelPathConfig
 from data_generators.data_generator_base import GptDataGenerator
 from data_generators.learning_objective import CustomLearningObjective
 from models.layers.custom_layers import get_custom_objects
+from trainers.model_trainer import find_tokenizer_path
 
 logger = logging.getLogger('member_inference_model')
 
@@ -23,13 +23,13 @@ def main(args):
         per_replica_losses = strategy.run(model, args=(dist_inputs,))
         return strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
 
-    config = ModelPathConfig(args.attack_data_folder, args.model_folder)
     attack_data = pd.read_parquet(args.attack_data_folder)
+    tokenizer_path = find_tokenizer_path(args.model_folder)
     tokenizer = tokenize_one_field(
         attack_data,
         'concept_ids',
         'token_ids',
-        config.tokenizer_path
+        tokenizer_path
     )
 
     gpt_data_generator = GptDataGenerator(
@@ -38,7 +38,7 @@ def main(args):
         max_seq_len=512,
         concept_tokenizer=tokenizer,
         min_num_of_visits=2,
-        max_num_of_visits=1e10,
+        max_num_of_visits=int(1e8),
         min_num_of_concepts=20,
         including_long_sequence=False,
         sampling_dataset_enabled=False,
@@ -68,7 +68,6 @@ def main(args):
         inputs, outputs = each_batch
         person_ids.extend(inputs['person_id'])
         labels.extend(outputs['label'])
-        # predictions = model(inputs['concept_ids'])
         predictions = distributed_inference(inputs['concept_ids'])
         y_true_val = outputs['concept_predictions'][:, :, 0]
         mask = tf.cast(outputs['concept_predictions'][:, :, 1], dtype=tf.float32)
@@ -143,7 +142,7 @@ def create_argparser():
         required=False
     )
     parser.add_argument(
-        '--model_folder',
+        '--model_folder`',
         dest='model_folder',
         action='store',
         help='The path to trained model folder',

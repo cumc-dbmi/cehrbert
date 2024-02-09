@@ -1,7 +1,6 @@
 import os
 
 import tensorflow as tf
-from models.model_parameters import ModelPathConfig
 from models.parse_args import create_parse_args_base_bert
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
 from utils.model_utils import tokenize_one_field

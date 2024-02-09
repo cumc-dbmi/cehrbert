@@ -14,6 +14,8 @@ from utils.logging_utils import *
 from utils.model_utils import log_function_decorator, create_folder_if_not_exist, \
     save_training_history
 
+MODEL_CONFIG_FILE = 'model_config.json'
+
 
 class AbstractModel(ABC):
     def __init__(self, *args, **kwargs):
@@ -274,7 +276,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
 
     def save_model_config(self):
         model_config = self.get_model_config()
-        model_config_path = os.path.join(self.get_model_folder(), 'model_config.json')
+        model_config_path = os.path.join(self.get_model_folder(), MODEL_CONFIG_FILE)
         if not os.path.exists(model_config_path):
             with open(model_config_path, 'w') as f:
                 f.write(json.dumps(model_config))
@@ -282,3 +284,21 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
     @abstractmethod
     def get_model_name(self):
         pass
+
+
+def find_tokenizer_path(model_folder: str):
+    import glob
+    file_path = os.path.join(model_folder, MODEL_CONFIG_FILE)
+    if os.path.exists(file_path):
+        # Open the JSON file for reading
+        with open(file_path, 'r') as file:
+            model_config = json.load(file)
+            tokenizer_name = model_config['tokenizer']
+            tokenizer_path = os.path.join(model_folder, tokenizer_name)
+            return tokenizer_path
+    else:
+        for candidate_name in glob.glob(os.path.join(model_folder, '*_tokenizer.pickle')):
+            if 'visit_tokenizer.pickle' not in candidate_name:
+                return os.path.join(model_folder, candidate_name)
+
+    raise RuntimeError(f'Could not discover any tokenizer in {model_folder} matching the pattern *_tokenizer.pickle')
