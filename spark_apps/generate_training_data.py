@@ -3,7 +3,7 @@ import os
 
 from pyspark.sql import SparkSession
 
-import config.parameters
+import config.output_names
 from utils.spark_utils import *
 
 VISIT_OCCURRENCE = 'visit_occurrence'

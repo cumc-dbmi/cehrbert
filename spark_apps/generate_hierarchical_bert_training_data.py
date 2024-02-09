@@ -3,7 +3,7 @@ import os
 
 from pyspark.sql import SparkSession
 
-import config.parameters
+import config.output_names
 from utils.spark_utils import *
 from const.common import OBSERVATION_PERIOD, VISIT_OCCURRENCE, PERSON
 from utils.spark_utils import get_mlm_skip_domains, validate_table_names

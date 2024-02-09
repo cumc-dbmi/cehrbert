@@ -8,7 +8,7 @@ from pyspark.sql import Window as W
 from pyspark.sql.functions import broadcast
 from pyspark.sql.pandas.functions import pandas_udf
 
-from config.parameters import qualified_concept_list_path
+from config.output_names import qualified_concept_list_path
 from const.common import PERSON, VISIT_OCCURRENCE, UNKNOWN_CONCEPT, MEASUREMENT, \
     CATEGORICAL_MEASUREMENT, REQUIRED_MEASUREMENT, CDM_TABLES
 from spark_apps.decorators.patient_event_decorator import (

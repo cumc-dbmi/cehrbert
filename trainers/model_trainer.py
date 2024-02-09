@@ -297,8 +297,27 @@ def find_tokenizer_path(model_folder: str):
             tokenizer_path = os.path.join(model_folder, tokenizer_name)
             return tokenizer_path
     else:
-        for candidate_name in glob.glob(os.path.join(model_folder, '*_tokenizer.pickle')):
+        for candidate_name in glob.glob(os.path.join(model_folder, '*tokenizer.pickle')):
             if 'visit_tokenizer.pickle' not in candidate_name:
                 return os.path.join(model_folder, candidate_name)
 
-    raise RuntimeError(f'Could not discover any tokenizer in {model_folder} matching the pattern *_tokenizer.pickle')
+    raise RuntimeError(f'Could not discover any tokenizer in {model_folder} matching the pattern *tokenizer.pickle')
+
+
+def find_visit_tokenizer_path(model_folder: str):
+    import glob
+    file_path = os.path.join(model_folder, MODEL_CONFIG_FILE)
+    if os.path.exists(file_path):
+        # Open the JSON file for reading
+        with open(file_path, 'r') as file:
+            model_config = json.load(file)
+            visit_tokenizer_name = model_config['visit_tokenizer']
+            visit_tokenizer_path = os.path.join(model_folder, visit_tokenizer_name)
+            return visit_tokenizer_path
+    else:
+        for candidate_name in glob.glob(os.path.join(model_folder, '*visit_tokenizer.pickle')):
+            return os.path.join(model_folder, candidate_name)
+
+    raise RuntimeError(
+        f'Could not discover any tokenizer in {model_folder} matching the pattern *_visit_tokenizer.pickle'
+    )

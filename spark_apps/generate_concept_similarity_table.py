@@ -4,7 +4,7 @@ from typing import List
 from pyspark.sql import SparkSession, DataFrame
 
 from utils.spark_utils import *
-from config.parameters import *
+from config.output_names import *
 from const.common import CONCEPT, CONCEPT_ANCESTOR
 
 

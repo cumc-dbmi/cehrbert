@@ -4,7 +4,7 @@ import os
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import countDistinct
 
-import config.parameters
+import config.output_names
 from utils.spark_utils import *
 
 DOMAIN_TABLE_LIST = ['condition_occurrence', 'procedure_occurrence', 'drug_exposure']

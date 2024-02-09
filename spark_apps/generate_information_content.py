@@ -3,7 +3,7 @@ import datetime
 from pyspark.sql import SparkSession
 
 from utils.spark_utils import *
-from config.parameters import *
+from config.output_names import *
 from const.common import CONCEPT_ANCESTOR
 
 
