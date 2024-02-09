@@ -1,5 +1,6 @@
-import copy
 import os
+import json
+import copy
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -115,6 +116,9 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             f'save_checkpoint: {save_checkpoint}\n'
             f'save_freq: {save_freq}\n'
         )
+
+        self.get_logger().info('Saving the model configuration')
+        self.save_model_config()
 
     @abstractmethod
     def _load_dependencies(self):
@@ -234,19 +238,46 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         model_name = f"{self.get_model_name()}" + '_epoch_{epoch:02d}_batch_{batch:02d}.h5'
         return os.path.join(self.get_model_folder(), model_name)
 
+    def get_tokenizer_name(self):
+        return f"{self.get_model_name()}_tokenizer.pickle"
+
     def get_tokenizer_path(self):
-        tokenizer_name = f"{self.get_model_name()}_tokenizer.pickle"
-        return os.path.join(self.get_model_folder(), tokenizer_name)
+        return os.path.join(self.get_model_folder(), self.get_tokenizer_name())
+
+    def get_visit_tokenizer_name(self):
+        return f"{self.get_model_name()}_visit_tokenizer.pickle"
 
     def get_visit_tokenizer_path(self):
-        tokenizer_name = f"{self.get_model_name()}_visit_tokenizer.pickle"
-        return os.path.join(self.get_model_folder(), tokenizer_name)
+        return os.path.join(self.get_model_folder(), self.get_visit_tokenizer_name())
 
     def checkpoint_exists(self):
         if self._checkpoint_name:
             existing_model_path = os.path.join(self.get_model_folder(), self._checkpoint_name)
             return os.path.exists(existing_model_path)
         return False
+
+    def get_model_config(self):
+        def remove_first_underscore(name):
+            if name[0] == '_':
+                return name[1:]
+            return name
+
+        model_config = {
+            remove_first_underscore(k): v for k, v in self.__dict__.items()
+            if type(v) in (int, float, str, bool, type(None))
+        }
+        model_config.update({
+            'model_name': self.get_model_name(),
+            'tokenizer': self.get_tokenizer_name()
+        })
+        return model_config
+
+    def save_model_config(self):
+        model_config = self.get_model_config()
+        model_config_path = os.path.join(self.get_model_folder(), 'model_config.json')
+        if not os.path.exists(model_config_path):
+            with open(model_config_path, 'w') as f:
+                f.write(json.dumps(model_config))
 
     @abstractmethod
     def get_model_name(self):

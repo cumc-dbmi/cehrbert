@@ -159,6 +159,12 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
     def get_model_name(self):
         return 'CEHR_BERT'
 
+    def get_model_config(self):
+        model_config = super().get_model_config()
+        if self._include_visit_prediction:
+            model_config['visit_tokenizer'] = self.get_visit_tokenizer_name()
+        return model_config
+
 
 def main(args):
     VanillaBertTrainer(

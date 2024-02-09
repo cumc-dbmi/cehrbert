@@ -227,8 +227,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         #     )
         return call_backs
 
-    @staticmethod
-    def get_model_name():
+    def get_model_name(self):
         return 'CEHR_GPT'
 
 

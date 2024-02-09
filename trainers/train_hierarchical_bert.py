@@ -92,8 +92,8 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
             self._training_data,
             tokenize_fields_info,
             self.get_tokenizer_path(),
-            encode=False)
-
+            encode=False
+        )
         self._visit_tokenizer = tokenize_one_field(
             self._training_data,
             'visit_concept_ids',
@@ -209,6 +209,11 @@ class HierarchicalBertTrainer(AbstractConceptEmbeddingTrainer):
 
     def get_model_name(self):
         return 'HIERARCHICAL_CEHR_BERT'
+
+    def get_model_config(self):
+        model_config = super().get_model_config()
+        model_config['visit_tokenizer'] = self.get_visit_tokenizer_name()
+        return model_config
 
 
 def main(args):
