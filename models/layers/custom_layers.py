@@ -1,3 +1,4 @@
+import platform
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.utils import get_custom_objects
@@ -394,7 +395,15 @@ class GptDecoderLayer(tf.keras.layers.Layer):
             use_causal_mask=decoder_mask is None,
             **kwargs
         )
+
         attn = self.dropout1(attn)
+        # The reason we are doing this is that tensorflow on Mac doesn't seem to recognize the rank correctly
+        if platform.system() == 'Darwin':
+            # This code block will only execute on macOS
+            batch = tf.shape(query)[0]
+            attn = tf.reshape(attn, (batch, -1, self.d_model))
+            query = tf.reshape(query, (batch, -1, self.d_model))
+
         out = self.layernorm1(attn + query)
 
         ffn_output = self.ffn(out)  # (batch_size, target_seq_len, d_model)
