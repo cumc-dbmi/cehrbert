@@ -422,16 +422,17 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
 
         iterator = zip(
             map(int, sorting_columns), row.token_ids, row.visit_segments, row.dates,
-            row.ages, row.visit_concept_orders, row.concept_value_masks, row.concept_values
+            row.ages, row.visit_concept_orders, row.concept_value_masks, row.concept_values,
+            row.mlm_skip_values
         )
         sorted_list = sorted(iterator, key=lambda tup2: (tup2[0], tup2[1]))
 
         (
             _, concepts, segments, dates, ages, visit_concept_orders,
-            concept_value_masks, concept_values
+            concept_value_masks, concept_values, mlm_skip_values
         ) = zip(*list(islice(sorted_list, left_index, right_index)))
 
-        masked_concepts, output_mask = self._mask_concepts(concepts, concept_value_masks)
+        masked_concepts, output_mask = self._mask_concepts(concepts, mlm_skip_values)
 
         return (
             output_mask, masked_concepts, concepts,

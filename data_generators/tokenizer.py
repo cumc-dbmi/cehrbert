@@ -17,17 +17,11 @@ class ConceptTokenizer:
     visit_start_token = 'VS'
     visit_end_token = 'VE'
 
-    def __init__(self, special_tokens: Optional[Sequence[str]] = None, oov_token='-1'):
+    def __init__(
+            self, special_tokens: Optional[Sequence[str]] = None, oov_token='-1'
+    ):
         self.special_tokens = special_tokens
         self.tokenizer = Tokenizer(oov_token=oov_token, filters='', lower=False)
-
-    def fit_on_concept_sequences(self, concept_sequences: Union[df_series, dd_series]):
-
-        if isinstance(concept_sequences, df_series):
-            self.tokenizer.fit_on_texts(concept_sequences.apply(list))
-        else:
-            self.tokenizer.fit_on_texts(
-                concept_sequences.apply(list, meta='iterable'))
 
         self.tokenizer.fit_on_texts([self.mask_token])
         self.tokenizer.fit_on_texts([self.att_mask_token])
@@ -41,6 +35,14 @@ class ConceptTokenizer:
 
         if self.special_tokens is not None:
             self.tokenizer.fit_on_texts(self.special_tokens)
+
+    def fit_on_concept_sequences(self, concept_sequences: Union[df_series, dd_series]):
+        if isinstance(concept_sequences, df_series):
+            self.tokenizer.fit_on_texts(concept_sequences.apply(list))
+        else:
+            self.tokenizer.fit_on_texts(
+                concept_sequences.apply(list, meta='iterable')
+            )
 
     def encode(self, concept_sequences, is_generator=False):
         return self.tokenizer.texts_to_sequences_generator(
