@@ -35,53 +35,51 @@ def transformer_bert_model_visit_prediction(
     or a vanilla Transformer (2017) to do the job (the original paper uses
     vanilla Transformer).
     """
-    masked_concept_ids = tf.keras.layers.Input(
-        shape=(max_seq_length,),
+    masked_concept_ids = tf.keras.Input(
+        shape=[max_seq_length],
         dtype='int32',
         name='masked_concept_ids'
     )
 
-    visit_segments = tf.keras.layers.Input(
-        shape=(max_seq_length,),
+    visit_segments = tf.keras.Input(
+        shape=[max_seq_length],
         dtype='int32',
         name='visit_segments'
     )
 
-    visit_concept_orders = tf.keras.layers.Input(
-        shape=(max_seq_length,),
+    visit_concept_orders = tf.keras.Input(
+        shape=[max_seq_length],
         dtype='int32',
         name='visit_concept_orders'
     )
 
-    mask = tf.keras.layers.Input(
-        shape=(max_seq_length,),
+    mask = tf.keras.Input(
+        shape=[max_seq_length],
         dtype='int32',
         name='mask'
     )
 
-    masked_visit_concepts = tf.keras.layers.Input(
-        shape=(max_seq_length,),
+    masked_visit_concepts = tf.keras.Input(
+        shape=[max_seq_length],
         dtype='int32',
         name='masked_visit_concepts'
     )
 
-    mask_visit = tf.keras.layers.Input(
-        shape=(max_seq_length,),
+    mask_visit = tf.keras.Input(
+        shape=[max_seq_length],
         dtype='int32',
         name='mask_visit'
     )
-    concept_value_masks = tf.keras.layers.Input(
-        shape=(max_seq_length,),
+    concept_value_masks = tf.keras.Input(
+        shape=[max_seq_length],
         dtype='int32',
         name='concept_value_masks'
     )
-    concept_values = tf.keras.layers.Input(
-        shape=(max_seq_length,),
+    concept_values = tf.keras.Input(
+        shape=[max_seq_length],
         dtype='float32',
         name='concept_values'
     )
-
-    concept_mask = create_concept_mask(mask, max_seq_length)
 
     default_inputs = [
         masked_concept_ids, visit_segments,
@@ -89,8 +87,6 @@ def transformer_bert_model_visit_prediction(
         masked_visit_concepts, mask_visit,
         concept_value_masks, concept_values
     ]
-
-    mask_visit_expanded = create_concept_mask(mask_visit, max_seq_length)
 
     l2_regularizer = (tf.keras.regularizers.l2(l2_reg_penalty) if l2_reg_penalty else None)
 
@@ -233,13 +229,20 @@ def transformer_bert_model_visit_prediction(
         )
         input_for_encoder += positional_encoding_layer(visit_concept_orders)
 
-    input_for_encoder, _ = encoder(input_for_encoder, concept_mask)
+    input_for_encoder, att_weights = encoder(
+        input_for_encoder,
+        mask[:, tf.newaxis, :],
+    )
 
     concept_predictions = concept_softmax_layer(
         output_layer_1([input_for_encoder, concept_embedding_matrix]))
 
-    decoder_output, _, _ = decoder_layer(input_for_decoder, input_for_encoder, concept_mask,
-                                         mask_visit_expanded)
+    decoder_output, _, _ = decoder_layer(
+        input_for_decoder,
+        input_for_encoder,
+        mask[:, tf.newaxis, :],
+        mask_visit[:, tf.newaxis, :]
+    )
     visit_predictions = visit_softmax_layer(
         output_layer_2([decoder_output, visit_embedding_matrix]))
 

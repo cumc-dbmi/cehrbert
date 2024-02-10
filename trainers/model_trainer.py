@@ -185,7 +185,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             steps_per_epoch=steps_per_epoch,
             epochs=self._epochs,
             callbacks=self._get_callbacks(),
-            validation_freq=1,
+            validation_freq=1 if val_dataset is not None else None,
             use_multiprocessing=True
         )
 

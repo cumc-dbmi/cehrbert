@@ -49,7 +49,9 @@ class EncoderLayer(tf.keras.layers.Layer):
 
         self.mha = tf.keras.layers.MultiHeadAttention(
             num_heads=num_heads,
-            key_dim=d_model // num_heads
+            key_dim=d_model // num_heads,
+            output_shape=d_model,
+            attention_axes=1
         )
         self.ffn = point_wise_feed_forward_network(d_model, dff)
 
@@ -68,6 +70,12 @@ class EncoderLayer(tf.keras.layers.Layer):
         return config
 
     def call(self, x, mask, **kwargs):
+        if platform.system() == 'Darwin':
+            pass
+            # batch = tf.shape(x)[0]
+            # x = tf.reshape(x, (batch, -1, self.d_model))
+            # mask = tf.reshape(mask, (batch, -1, -1))
+
         attn_output, attn_weights = self.mha(
             query=x,
             key=x,
@@ -172,11 +180,15 @@ class DecoderLayer(tf.keras.layers.Layer):
 
         self.mha1 = tf.keras.layers.MultiHeadAttention(
             num_heads=num_heads,
-            key_dim=d_model // num_heads
+            key_dim=d_model // num_heads,
+            output_shape=d_model,
+            attention_axes=1
         )
         self.mha2 = tf.keras.layers.MultiHeadAttention(
             num_heads=num_heads,
-            key_dim=d_model // num_heads
+            key_dim=d_model // num_heads,
+            output_shape=d_model,
+            attention_axes=1
         )
 
         self.ffn = point_wise_feed_forward_network(d_model, dff)
@@ -198,6 +210,14 @@ class DecoderLayer(tf.keras.layers.Layer):
         return config
 
     def call(self, x, enc_output, decoder_mask, encoder_mask, **kwargs):
+
+        if platform.system() == 'Darwin':
+            pass
+            # batch = tf.shape(x)[0]
+            # x = tf.reshape(x, (batch, -1, self.d_model))
+            # decoder_mask = tf.reshape(decoder_mask, (batch, -1, -1))
+            # encoder_mask = tf.reshape(encoder_mask, (batch, -1, -1))
+
         # enc_output.shape == (batch_size, input_seq_len, d_model)
         attn1, attn_weights_block1 = self.mha1(
             query=x,
