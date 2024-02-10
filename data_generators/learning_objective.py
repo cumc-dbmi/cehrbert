@@ -245,7 +245,9 @@ class VisitPredictionLearningObjective(LearningObjective):
             unused_token_id,
             self._max_seq_len
         )
-        visit_mask = (visit_concepts == unused_token_id).astype(int)
+
+        # 1 indicates attention and 0 indicates mask
+        visit_mask = (visit_concepts != unused_token_id).astype(int)
 
         combined_label = np.stack(
             [visit_concepts, output_mask],

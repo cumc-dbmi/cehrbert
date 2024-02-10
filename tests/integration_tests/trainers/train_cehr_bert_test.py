@@ -2,6 +2,7 @@ import unittest
 import tempfile
 import shutil
 import os
+
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 from pathlib import Path
 from trainers.train_cehr_bert import VanillaBertTrainer

@@ -40,31 +40,26 @@ def transformer_bert_model_visit_prediction(
         dtype='int32',
         name='masked_concept_ids'
     )
-
     visit_segments = tf.keras.Input(
         shape=[max_seq_length],
         dtype='int32',
         name='visit_segments'
     )
-
     visit_concept_orders = tf.keras.Input(
         shape=[max_seq_length],
         dtype='int32',
         name='visit_concept_orders'
     )
-
     mask = tf.keras.Input(
         shape=[max_seq_length],
         dtype='int32',
         name='mask'
     )
-
     masked_visit_concepts = tf.keras.Input(
         shape=[max_seq_length],
         dtype='int32',
         name='masked_visit_concepts'
     )
-
     mask_visit = tf.keras.Input(
         shape=[max_seq_length],
         dtype='int32',
@@ -244,7 +239,8 @@ def transformer_bert_model_visit_prediction(
         mask_visit[:, tf.newaxis, :]
     )
     visit_predictions = visit_softmax_layer(
-        output_layer_2([decoder_output, visit_embedding_matrix]))
+        output_layer_2([decoder_output, visit_embedding_matrix])
+    )
 
     model = tf.keras.Model(
         inputs=default_inputs,
