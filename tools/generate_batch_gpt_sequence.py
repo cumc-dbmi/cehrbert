@@ -11,6 +11,7 @@ import tensorflow as tf
 
 from models.gpt_model import GptInferenceModel, TopKStrategy, TopPStrategy
 from models.layers.custom_layers import get_custom_objects
+from utils.checkpoint_utils import find_tokenizer_path, find_latest_checkpoint_path
 
 
 def generate_single_batch(
@@ -44,8 +45,17 @@ def generate_single_batch(
 def main(
         args
 ):
-    tokenizer_path = os.path.join(args.model_folder, 'tokenizer.pickle')
-    model_path = os.path.join(args.model_folder, 'bert_model.h5')
+    tokenizer_path = find_tokenizer_path(args.model_folder)
+    model_path = None
+    if args.checkpoint_name:
+        model_path = os.path.join(args.model_folder, args.checkpoint_name)
+        if not os.path.exists(model_path):
+            model_path = None
+            print(f'The checkpoint_name is not valid, setting it to None')
+    if not model_path:
+        print(f'The checkpoint_name is None, the latest checkpoint will be used')
+        model_path = find_latest_checkpoint_path(args.model_folder)
+
     tokenizer = pickle.load(open(tokenizer_path, 'rb'))
     strategy = tf.distribute.MirroredStrategy()
     # atexit.register(strategy._extended._collective_ops._pool.close)  # type: ignore
@@ -133,6 +143,13 @@ if __name__ == "__main__":
         action='store',
         help='The path for your model_folder',
         required=True
+    )
+    parser.add_argument(
+        '--checkpoint_name',
+        dest='checkpoint_name',
+        action='store',
+        help='The name of the model checkpoint in the model_folder',
+        required=False
     )
     parser.add_argument(
         '--output_folder',
