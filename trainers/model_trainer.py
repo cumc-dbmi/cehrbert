@@ -228,12 +228,22 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
 
         # Additional step-based checkpoint callback
         if self._save_checkpoint:
+            def on_epoch_begin(self, epoch, logs=None):
+                self._current_epoch = epoch
+                self._last_batch_seen = -1
+                self._batches_seen_since_last_saving = 0
+
             frequency_checkpoint_args = copy.deepcopy(model_checkpoint_args)
             frequency_checkpoint_args['filepath'] = self.get_model_path_step()
             frequency_checkpoint_args['save_freq'] = self._save_freq
             frequency_checkpoint_args['name'] = ' '
+            # Monkey patch the on_epoch_begin in ModelCheckpoint because we need to clear out _last_batch_seen and
+            # _batches_seen_since_last_saving So the batch number in the model checkpoints created is a multiple of
+            # save_freq
+            frequencyModelCheckpoint = tf.keras.callbacks.ModelCheckpoint
+            frequencyModelCheckpoint.on_batch_begin = on_epoch_begin
             callbacks.append(
-                tf.keras.callbacks.ModelCheckpoint(
+                frequencyModelCheckpoint(
                     **frequency_checkpoint_args
                 )
             )
