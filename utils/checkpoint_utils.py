@@ -34,7 +34,10 @@ def find_latest_checkpoint_path(
     if batch_checkpoint_path_dict:
         return batch_checkpoint_path_dict['checkpoint_path']
 
-    return None
+    raise RuntimeError(f'Could not discover any model checkpoint in {checkpoint_dir} matching patterns\n'
+                       f'{LEGACY_MODEL_CHECKPOINT_PATTERN.pattern}\n'
+                       f'{EPOCH_CHECKPOINT_PATTERN.pattern}\n'
+                       f'{BATCH_CHECKPOINT_PATTERN.pattern}\n')
 
 
 def find_latest_checkpoint_legacy_model_path(checkpoint_dir):

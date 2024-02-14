@@ -56,6 +56,33 @@ def main(
         print(f'The checkpoint_name is None, the latest checkpoint will be used')
         model_path = find_latest_checkpoint_path(args.model_folder)
 
+    model_checkpoint_base_name = os.path.basename(model_path)
+    model_checkpoint_base_name_without_extension, _ = os.path.splitext(model_checkpoint_base_name)
+
+    if args.sampling_strategy == TopKStrategy.__name__:
+        sampling_strategy = TopKStrategy(top_k=args.top_k, temperature=args.temperature)
+        output_folder_name = os.path.join(
+            args.output_folder,
+            model_checkpoint_base_name_without_extension,
+            f'top_k{args.top_k}',
+            'generated_sequences'
+        )
+    elif args.sampling_strategy == TopPStrategy.__name__:
+        sampling_strategy = TopPStrategy(top_p=args.top_p, temperature=args.temperature)
+        output_folder_name = os.path.join(
+            args.output_folder,
+            model_checkpoint_base_name_without_extension,
+            f'top_p{int(args.top_p * 100)}',
+            'generated_sequences'
+        )
+    else:
+        raise RuntimeError(
+            'sampling_strategy has to be one of the following two options TopKStrategy or TopPStrategy'
+        )
+
+    if not os.path.exists(output_folder_name):
+        os.makedirs(output_folder_name)
+
     tokenizer = pickle.load(open(tokenizer_path, 'rb'))
     strategy = tf.distribute.MirroredStrategy()
     # atexit.register(strategy._extended._collective_ops._pool.close)  # type: ignore
@@ -63,7 +90,7 @@ def main(
     # atexit.register(strategy._extended._host_cross_device_ops._pool.close) #type: ignore
     print(f'{datetime.datetime.now()}: Loading tokenizer at {tokenizer_path}')
     print(f'{datetime.datetime.now()}: Loading model at {model_path}')
-    print(f'{datetime.datetime.now()}: Write sequences to {args.output_folder}')
+    print(f'{datetime.datetime.now()}: Write sequences to {output_folder_name}')
     print(f'{datetime.datetime.now()}: Context window {args.context_window}')
     print(f'{datetime.datetime.now()}: Temperature {args.temperature}')
     print(f'{datetime.datetime.now()}: Sampling Strategy {args.sampling_strategy}')
@@ -71,17 +98,6 @@ def main(
     print(f'{datetime.datetime.now()}: Top K {args.top_k}')
     with strategy.scope():
         model = tf.keras.models.load_model(model_path, custom_objects=get_custom_objects())
-
-        sampling_strategy = None
-        if args.sampling_strategy == TopKStrategy.__name__:
-            sampling_strategy = TopKStrategy(top_k=args.top_k, temperature=args.temperature)
-        if args.sampling_strategy == TopPStrategy.__name__:
-            sampling_strategy = TopPStrategy(top_p=args.top_p, temperature=args.temperature)
-        if not sampling_strategy:
-            raise RuntimeError(
-                'sampling_strategy has to be one of the following two options TopKStrategy or TopPStrategy'
-            )
-
         gpt_inference_model = GptInferenceModel(
             gpt_model=model,
             tokenizer=tokenizer,
@@ -123,7 +139,7 @@ def main(
             pd.DataFrame(
                 sequence_to_flush,
                 columns=['concept_ids']
-            ).to_parquet(os.path.join(args.output_folder, f'{uuid.uuid4()}.parquet'))
+            ).to_parquet(os.path.join(output_folder_name, f'{uuid.uuid4()}.parquet'))
             sequence_to_flush.clear()
 
     if len(sequence_to_flush) > 0:
@@ -131,7 +147,7 @@ def main(
         pd.DataFrame(
             sequence_to_flush,
             columns=['concept_ids']
-        ).to_parquet(os.path.join(args.output_folder, f'{uuid.uuid4()}-last.parquet'))
+        ).to_parquet(os.path.join(output_folder_name, f'{uuid.uuid4()}-last.parquet'))
 
 
 if __name__ == "__main__":
