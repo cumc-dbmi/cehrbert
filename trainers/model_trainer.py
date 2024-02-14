@@ -10,12 +10,11 @@ import tensorflow as tf
 
 from data_generators.data_generator_base import AbstractDataGeneratorBase
 from models.loss_schedulers import CosineLRSchedule
+from models.layers.custom_layers import get_custom_objects
 from utils.logging_utils import *
 from utils.model_utils import log_function_decorator, create_folder_if_not_exist, \
     save_training_history
-
-MODEL_NAME_PATTERN = '-{}.pt'
-MODEL_CONFIG_FILE = 'model_config.json'
+from utils.checkpoint_utils import get_checkpoint_epoch, MODEL_CONFIG_FILE
 
 
 class AbstractModel(ABC):
@@ -90,6 +89,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         self._save_checkpoint = save_checkpoint
         self._save_freq = save_freq
         self._training_data = self._load_data(self._training_data_parquet_path)
+        self._current_epoch = 0
 
         if self._val_data_parquet_path:
             self._val_data = self._load_data(self._val_data_parquet_path)
@@ -186,10 +186,23 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             epochs=self._epochs,
             callbacks=self._get_callbacks(),
             validation_freq=1 if val_dataset is not None else None,
+            initial_epoch=self._current_epoch,
             use_multiprocessing=True
         )
 
         save_training_history(history, self.get_model_history_folder())
+
+    def restore_from_checkpoint(self):
+        existing_model_path = os.path.join(self.get_model_folder(), self._checkpoint_name)
+        current_epoch = get_checkpoint_epoch(existing_model_path)
+        self._current_epoch = current_epoch
+        self._epochs += current_epoch
+        self.get_logger().info(
+            f'The {self} model will be loaded from {existing_model_path}')
+        model = tf.keras.models.load_model(
+            existing_model_path, custom_objects=get_custom_objects()
+        )
+        return model
 
     def _get_callbacks(self):
         tensor_board_callback = tf.keras.callbacks.TensorBoard(log_dir=self._tf_board_log_path)

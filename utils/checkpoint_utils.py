@@ -2,11 +2,27 @@ import json
 import os
 import re
 
-from trainers.model_trainer import MODEL_CONFIG_FILE
-
 LEGACY_MODEL_CHECKPOINT_PATTERN = re.compile(r"bert_model_(\d{2})_(\d+\.\d{5})\.h5$")
 EPOCH_CHECKPOINT_PATTERN = re.compile(r"_epoch_(\d{2})_batch_final\.h5$")
 BATCH_CHECKPOINT_PATTERN = re.compile(r".*_epoch_(\d{2})_batch_(\d{2})\.h5$")
+
+
+def get_checkpoint_epoch(checkpoint_path):
+    epoch = get_latest_checkpoint_legacy_model_epoch(checkpoint_path)
+    if not epoch:
+        epoch = get_latest_batch_checkpoint_epoch(checkpoint_path)
+    if not epoch:
+        epoch = get_latest_epoch_checkpoint_epoch(checkpoint_path)
+
+    if epoch:
+        return epoch
+
+    raise RuntimeError(
+        f'The model checkpoint at {checkpoint_path} does not match any patterns below:\n'
+        f'{LEGACY_MODEL_CHECKPOINT_PATTERN.pattern}\n'
+        f'{EPOCH_CHECKPOINT_PATTERN.pattern}\n'
+        f'{BATCH_CHECKPOINT_PATTERN.pattern}\n'
+    )
 
 
 def find_latest_checkpoint_path(
@@ -34,10 +50,21 @@ def find_latest_checkpoint_path(
     if batch_checkpoint_path_dict:
         return batch_checkpoint_path_dict['checkpoint_path']
 
-    raise RuntimeError(f'Could not discover any model checkpoint in {checkpoint_dir} matching patterns\n'
-                       f'{LEGACY_MODEL_CHECKPOINT_PATTERN.pattern}\n'
-                       f'{EPOCH_CHECKPOINT_PATTERN.pattern}\n'
-                       f'{BATCH_CHECKPOINT_PATTERN.pattern}\n')
+    raise RuntimeError(
+        f'Could not discover any model checkpoint in {checkpoint_dir} matching patterns\n'
+        f'{LEGACY_MODEL_CHECKPOINT_PATTERN.pattern}\n'
+        f'{EPOCH_CHECKPOINT_PATTERN.pattern}\n'
+        f'{BATCH_CHECKPOINT_PATTERN.pattern}\n'
+    )
+
+
+def get_latest_checkpoint_legacy_model_epoch(filename):
+    match = LEGACY_MODEL_CHECKPOINT_PATTERN.search(filename)
+    if match:
+        epoch, _ = match.groups()
+        epoch = int(epoch)
+        return epoch
+    return None
 
 
 def find_latest_checkpoint_legacy_model_path(checkpoint_dir):
@@ -65,6 +92,14 @@ def find_latest_checkpoint_legacy_model_path(checkpoint_dir):
     return None
 
 
+def get_latest_epoch_checkpoint_epoch(filename):
+    match = EPOCH_CHECKPOINT_PATTERN.search(filename)
+    if match:
+        epoch = int(match.group(1))
+        return epoch
+    return None
+
+
 def find_latest_epoch_checkpoint_path(
         checkpoint_dir
 ):
@@ -86,6 +121,14 @@ def find_latest_epoch_checkpoint_path(
             'epoch': checkpoints[0][0],
             'checkpoint_path': checkpoints[0][1]
         }
+    return None
+
+
+def get_latest_batch_checkpoint_epoch(filename):
+    step_match = BATCH_CHECKPOINT_PATTERN.search(filename)
+    if step_match:
+        epoch, _ = map(int, step_match.groups())
+        return epoch
     return None
 
 
@@ -148,3 +191,6 @@ def find_visit_tokenizer_path(model_folder: str):
     raise RuntimeError(
         f'Could not discover any tokenizer in {model_folder} matching the pattern *_visit_tokenizer.pickle'
     )
+
+
+MODEL_CONFIG_FILE = 'model_config.json'

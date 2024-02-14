@@ -15,6 +15,7 @@ from models.parse_args import create_parse_args_gpt
 from trainers.callbacks.gpt_callbacks import StepValidationCallBack, ComputeMarginalDistribution
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
 from utils.model_utils import tokenize_one_field
+from utils.checkpoint_utils import get_checkpoint_epoch
 
 
 class GptModelTrainer(AbstractConceptEmbeddingTrainer):
@@ -170,12 +171,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         self.get_logger().info('Number of devices: {}'.format(strategy.num_replicas_in_sync))
         with strategy.scope():
             if self.checkpoint_exists():
-                existing_model_path = os.path.join(self.get_model_folder(), self._checkpoint_name)
-                self.get_logger().info(
-                    f'The {self} model will be loaded from {existing_model_path}')
-                model = tf.keras.models.load_model(
-                    existing_model_path, custom_objects=get_custom_objects()
-                )
+                model = self.restore_from_checkpoint()
             else:
                 optimizer = optimizers.Adam(
                     lr=self._learning_rate, beta_1=0.9, beta_2=0.999)
