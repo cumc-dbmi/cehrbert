@@ -10,12 +10,10 @@ from keras_transformer.bert import (
     MaskedMeanSquaredError
 )
 from models.gpt_model import create_model
-from models.layers.custom_layers import get_custom_objects
 from models.parse_args import create_parse_args_gpt
 from trainers.callbacks.gpt_callbacks import StepValidationCallBack, ComputeMarginalDistribution
 from trainers.model_trainer import AbstractConceptEmbeddingTrainer
 from utils.model_utils import tokenize_one_field
-from utils.checkpoint_utils import get_checkpoint_epoch
 
 
 class GptModelTrainer(AbstractConceptEmbeddingTrainer):

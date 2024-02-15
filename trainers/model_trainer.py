@@ -241,7 +241,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             # _batches_seen_since_last_saving So the batch number in the model checkpoints created is a multiple of
             # save_freq
             frequencyModelCheckpoint = tf.keras.callbacks.ModelCheckpoint
-            frequencyModelCheckpoint.on_batch_begin = on_epoch_begin
+            frequencyModelCheckpoint.on_epoch_begin = on_epoch_begin
             callbacks.append(
                 frequencyModelCheckpoint(
                     **frequency_checkpoint_args
