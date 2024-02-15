@@ -71,10 +71,10 @@ class EncoderLayer(tf.keras.layers.Layer):
 
     def call(self, x, mask, **kwargs):
         # The reason we are doing this is that tensorflow on Mac doesn't seem to recognize the rank correctly
-        if platform.system() == 'Darwin':
-            batch, length = tf.shape(x)[0], tf.shape(x)[1]
-            x = tf.reshape(x, (batch, -1, self.d_model))
-            mask = tf.reshape(mask, (batch, -1, length))
+        # if platform.system() == 'Darwin':
+        batch, length = tf.shape(x)[0], tf.shape(x)[1]
+        x = tf.reshape(x, (batch, -1, self.d_model))
+        mask = tf.reshape(mask, (batch, -1, length))
 
         attn_output, attn_weights = self.mha(
             query=x,
@@ -294,12 +294,11 @@ class GptDecoderLayer(tf.keras.layers.Layer):
         )
 
         attn = self.dropout1(attn, **kwargs)
+
         # The reason we are doing this is that tensorflow on Mac doesn't seem to recognize the rank correctly
-        if platform.system() == 'Darwin':
-            # This code block will only execute on macOS
-            batch = tf.shape(query)[0]
-            attn = tf.reshape(attn, (batch, -1, self.d_model))
-            query = tf.reshape(query, (batch, -1, self.d_model))
+        batch = tf.shape(query)[0]
+        attn = tf.reshape(attn, (batch, -1, self.d_model))
+        query = tf.reshape(query, (batch, -1, self.d_model))
 
         out = self.layernorm1(attn + query)
 
@@ -405,10 +404,10 @@ class SimpleDecoderLayer(tf.keras.layers.Layer):
             self, decoder_input, enc_output, encoder_mask, **kwargs
     ):
         # The reason we are doing this is that tensorflow on Mac doesn't seem to recognize the rank correctly
-        if platform.system() == 'Darwin':
-            batch, enc_length = tf.shape(enc_output)[0], tf.shape(enc_output)[1]
-            enc_output = tf.reshape(enc_output, (batch, -1, self.d_model))
-            encoder_mask = tf.reshape(encoder_mask, (batch, -1, enc_length))
+        # if platform.system() == 'Darwin':
+        batch, enc_length = tf.shape(enc_output)[0], tf.shape(enc_output)[1]
+        enc_output = tf.reshape(enc_output, (batch, -1, self.d_model))
+        encoder_mask = tf.reshape(encoder_mask, (batch, -1, enc_length))
 
         # enc_output.shape == (batch_size, input_seq_len, d_model)
         attn, attn_weights_block = self.multi_head_attention_layer(
