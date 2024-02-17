@@ -394,12 +394,14 @@ class GptDataGenerator(BertDataGenerator):
                     if starting_index == end_index:
                         continue
 
-                    concept_ids = demographic_tokens + row.concept_ids[starting_index:end_index + 1]
+                    # concept_ids = demographic_tokens + row.concept_ids[starting_index:end_index + 1]
+                    concept_ids = row.concept_ids[starting_index:end_index + 1]
                     token_ids = self._concept_tokenizer.encode([concept_ids])[0]
-                    visit_concept_orders = np.concatenate(
-                        [row.visit_concept_orders[:len(demographic_tokens)],
-                         row.visit_concept_orders[starting_index:end_index + 1]]
-                    )
+                    visit_concept_orders = row.visit_concept_orders[starting_index:end_index + 1]
+                    # visit_concept_orders = np.concatenate(
+                    #     [row.visit_concept_orders[:len(demographic_tokens)],
+                    #      row.visit_concept_orders[starting_index:end_index + 1]]
+                    # )
                     new_row = copy.deepcopy(row)
                     new_row.token_ids = token_ids
                     new_row.concept_ids = concept_ids
