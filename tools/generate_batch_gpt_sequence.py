@@ -61,18 +61,26 @@ def main(
 
     if args.sampling_strategy == TopKStrategy.__name__:
         sampling_strategy = TopKStrategy(top_k=args.top_k, temperature=args.temperature)
+        folder_name = (
+            f'top_k{args.top_k}_temp_{int(args.temperature * 100)}'
+            if args.temperature != 1.0 else f'top_k{args.top_k}'
+        )
         output_folder_name = os.path.join(
             args.output_folder,
             model_checkpoint_base_name_without_extension,
-            f'top_k{args.top_k}',
+            folder_name,
             'generated_sequences'
         )
     elif args.sampling_strategy == TopPStrategy.__name__:
         sampling_strategy = TopPStrategy(top_p=args.top_p, temperature=args.temperature)
+        folder_name = (
+            f'top_p{int(args.top_p * 100)}_temp_{int(args.temperature * 100)}'
+            if args.temperature != 1.0 else f'top_p{int(args.top_p * 100)}'
+        )
         output_folder_name = os.path.join(
             args.output_folder,
             model_checkpoint_base_name_without_extension,
-            f'top_p{int(args.top_p * 100)}',
+            folder_name,
             'generated_sequences'
         )
     else:
