@@ -6,7 +6,7 @@ from typing import List
 import numpy as np
 from tensorflow.dtypes import int32, float32
 
-from data_generators.data_classes import RowSlicer
+from data_generators.data_classes import RowSlicer, RecordStatus
 from data_generators.learning_objective import LearningObjective, validate_columns_decorator, post_pad_pre_truncate
 from data_generators.tokenizer import ConceptTokenizer
 
@@ -99,16 +99,16 @@ class PredictNextValueLearningObjective(LearningObjective):
             max_length_in_batch,
             d_type='float32'
         )
-        
+
         input_dict = {
             'concept_value_masks': concept_value_masks,
             'concept_values': concept_values
         }
 
         output_dict = {
-            'next_value_predictions': 
+            'next_value_predictions':
                 np.stack([shifted_concept_values, shifted_concept_value_masks], axis=-1)
-                }
+        }
 
         return input_dict, output_dict
 
@@ -122,7 +122,7 @@ class PredictNextValueLearningObjective(LearningObjective):
         :return:
         """
 
-        row, left_index, right_index, _ = row_slicer
+        row, left_index, right_index, _, record_status = row_slicer
 
         sorting_columns = getattr(row, 'orders') if hasattr(row, 'orders') else row.dates
 
@@ -132,10 +132,14 @@ class PredictNextValueLearningObjective(LearningObjective):
         sorted_list = sorted(iterator, key=lambda tup2: (tup2[0], tup2[1]))
 
         _, concept_value_masks, concept_values = zip(*list(islice(sorted_list, left_index, right_index)))
-        
-        concept_value_masks = [0] + list(concept_value_masks)
-        concept_values = [0.0] + list(concept_values)
-        
+
+        if record_status in (RecordStatus.COMPLETE, RecordStatus.RIGHT_TRUNCATION):
+            concept_value_masks = [0] + list(concept_value_masks)
+            concept_values = [0.0] + list(concept_values)
+        else:
+            concept_value_masks = list(concept_value_masks)
+            concept_values = list(concept_values)
+
         return (
             concept_value_masks, concept_values
         )
@@ -151,7 +155,7 @@ class SequenceGenerationLearningObjective(LearningObjective):
             self,
             concept_tokenizer: ConceptTokenizer,
             max_seq_len: int,
-            mask_rate_scheduler: CosineMaskRateScheduler=None
+            mask_rate_scheduler: CosineMaskRateScheduler = None
     ):
         self._max_seq_len = max_seq_len
         self._concept_tokenizer = concept_tokenizer
@@ -224,7 +228,7 @@ class SequenceGenerationLearningObjective(LearningObjective):
         :return:
         """
 
-        row, left_index, right_index, _ = row_slicer
+        row, left_index, right_index, _, record_status = row_slicer
 
         sorting_columns = getattr(row, 'orders') if hasattr(row, 'orders') else row.dates
 
@@ -235,9 +239,18 @@ class SequenceGenerationLearningObjective(LearningObjective):
 
         _, concept_list, visit_concept_orders = zip(*list(islice(sorted_list, left_index, right_index)))
 
-        concept_list = [self._concept_tokenizer.get_start_token_id()] + list(concept_list)
-        visit_concept_orders = [0] + list(visit_concept_orders)
-        shifted_concept_list = copy.deepcopy(list(concept_list)[1:]) + [
-            self._concept_tokenizer.get_end_token_id()]
+        if record_status == RecordStatus.COMPLETE:
+            concept_list = [self._concept_tokenizer.get_start_token_id()] + list(concept_list)
+            visit_concept_orders = [0] + list(visit_concept_orders)
+            shifted_concept_list = copy.deepcopy(list(concept_list)[1:]) + [
+                self._concept_tokenizer.get_end_token_id()]
+        elif record_status == RecordStatus.RIGHT_TRUNCATION:
+            concept_list = [self._concept_tokenizer.get_start_token_id()] + list(concept_list)
+            visit_concept_orders = [0] + list(visit_concept_orders)
+            shifted_concept_list = copy.deepcopy(list(concept_list)[1:])
+        else:
+            concept_list = list(concept_list)
+            visit_concept_orders = list(visit_concept_orders)
+            shifted_concept_list = copy.deepcopy(list(concept_list)[1:])
 
         return concept_list, visit_concept_orders, shifted_concept_list

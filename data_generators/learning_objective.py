@@ -273,7 +273,7 @@ class VisitPredictionLearningObjective(LearningObjective):
         :return:
         """
 
-        row, left_index, right_index, _ = row_slicer
+        row, left_index, right_index, *_ = row_slicer
 
         iterator = zip(row.visit_concept_orders, row.visit_token_ids)
         (dates, visit_concept_ids) = zip(
@@ -416,7 +416,7 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
         :return:
         """
 
-        row, left_index, right_index, _ = row_slicer
+        row, left_index, right_index, *_ = row_slicer
 
         sorting_columns = getattr(row, 'orders') if hasattr(row, 'orders') else row.dates
 
@@ -703,7 +703,7 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
         :return:
         """
 
-        row, start_index, end_index, _ = row_slicer
+        row, start_index, end_index, *_ = row_slicer
 
         # Get the concepts
         concepts = row.concept_ids[start_index:end_index]
@@ -870,7 +870,7 @@ class HierarchicalVisitTypePredictionLearningObjective(
         :return:
         """
 
-        row, start_index, end_index, _ = row_slicer
+        row, start_index, end_index, *_ = row_slicer
 
         visit_token_ids = row.visit_token_ids[start_index:end_index]
 
@@ -965,7 +965,7 @@ class HierarchicalReadmissionLearningObjective(
         :return:
         """
 
-        row, start_index, end_index, _ = row_slicer
+        row, start_index, end_index, *_ = row_slicer
 
         is_readmissions = row.is_readmissions[start_index:end_index].astype(int)
         is_inpatients = row.is_inpatients[start_index:end_index]
@@ -1050,7 +1050,7 @@ class HierarchicalProlongedLengthStayLearningObjective(
         :return:
         """
 
-        row, start_index, end_index, _ = row_slicer
+        row, start_index, end_index, *_ = row_slicer
 
         visit_prolonged_stays = row.visit_prolonged_stays[start_index:end_index].astype(int)
         is_inpatients = row.is_inpatients[start_index:end_index]
@@ -1154,7 +1154,7 @@ class HierarchicalArtificialTokenPredictionLearningObjective(
         :return:
         """
 
-        row, start_index, end_index, _ = row_slicer
+        row, start_index, end_index, *_ = row_slicer
         time_interval_att_tokens = row.time_interval_atts[start_index:end_index]
 
         masked_time_interval_att_tokens, output_mask = self._mask_visit_concepts(

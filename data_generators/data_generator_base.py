@@ -14,6 +14,7 @@ from data_generators.gpt_learning_objectives import (
 from data_generators.gpt_utils import random_slice_gpt_sequence
 from data_generators.learning_objective import *
 from data_generators.tokenizer import ConceptTokenizer
+from data_generators.data_classes import RecordStatus
 
 
 def create_indexes_by_time_window(dates, cursor, max_seq_len,
@@ -407,7 +408,7 @@ class GptDataGenerator(BertDataGenerator):
                     new_row.concept_ids = concept_ids
                     new_row.visit_concept_orders = visit_concept_orders
                     assert len(new_row.token_ids) <= self._max_seq_len
-                    yield RowSlicer(new_row, 0, len(new_row.token_ids))
+                    yield RowSlicer(new_row, 0, len(new_row.token_ids), record_status=RecordStatus.TRUNCATION)
                 except RuntimeError as e:
                     print(e)
             elif self._including_long_sequence:
@@ -420,7 +421,7 @@ class GptDataGenerator(BertDataGenerator):
                         break
                     if token == self._concept_tokenizer.get_visit_end_token_id():
                         last_ve_token_index = i
-                yield RowSlicer(row, 0, last_ve_token_index + 1)
+                yield RowSlicer(row, 0, last_ve_token_index + 1, record_status=RecordStatus.RIGHT_TRUNCATION)
 
 
 class BertVisitPredictionDataGenerator(BertDataGenerator):
