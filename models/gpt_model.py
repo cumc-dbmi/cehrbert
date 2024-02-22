@@ -28,14 +28,26 @@ class TopKStrategy(SamplingStrategy):
     def __init__(
             self,
             top_k,
-            temperature: float = 1.0
+            end_token_id,
+            temperature: float = 1.0,
+            end_token_temperature: float = 1.0
     ):
         self._top_k = top_k
+        self._end_token_id = end_token_id
         self._temperature = temperature
+        self._end_token_temperature = end_token_temperature
 
     def process_logit(self, outputs):
         # Randomly sample a batch of tokens
-        pred_logits, indices = tf.math.top_k(outputs[:, -1, :] / self._temperature, k=self._top_k, sorted=True)
+        last_token_outputs = outputs[:, -1, :]
+        batch, vocab_size = tf.shape(last_token_outputs)
+        end_token_id_indicator = tf.cast(
+            tf.tile(tf.range(vocab_size)[tf.newaxis, :], [batch, 1]) == self._end_token_id,
+            dtype=tf.float32
+        )
+        last_token_outputs = (1.0 + end_token_id_indicator * (self._end_token_temperature - 1)) * last_token_outputs
+
+        pred_logits, indices = tf.math.top_k(last_token_outputs / self._temperature, k=self._top_k, sorted=True)
         return pred_logits, indices
 
     def get_name(self):
@@ -46,15 +58,26 @@ class TopPStrategy(SamplingStrategy):
     def __init__(
             self,
             top_p,
-            temperature: float = 1.0
+            end_token_id,
+            temperature: float = 1.0,
+            end_token_temperature: float = 1.0
     ):
         self._top_p = top_p
+        self._end_token_id = end_token_id
         self._temperature = temperature
+        self._end_token_temperature = end_token_temperature
 
     def process_logit(self, outputs):
         # Top P strategy
-        indices = tf.argsort(outputs[:, -1, :], direction='DESCENDING')
-        probs = tf.nn.softmax(outputs[:, -1, :] / self._temperature)
+        last_token_outputs = outputs[:, -1, :]
+        batch, vocab_size = tf.shape(last_token_outputs)
+        end_token_id_indicator = tf.cast(
+            tf.tile(tf.range(vocab_size)[tf.newaxis, :], [batch, 1]) == self._end_token_id,
+            dtype=tf.float32
+        )
+        last_token_outputs = (1.0 + end_token_id_indicator * (self._end_token_temperature - 1)) * last_token_outputs
+        indices = tf.argsort(last_token_outputs, direction='DESCENDING')
+        probs = tf.nn.softmax(last_token_outputs / self._temperature)
         sorted_probs = tf.gather(probs, indices, axis=1, batch_dims=1)
         cum_sum_probs = tf.math.cumsum(sorted_probs, axis=-1)
 

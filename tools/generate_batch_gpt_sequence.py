@@ -46,6 +46,8 @@ def main(
         args
 ):
     tokenizer_path = find_tokenizer_path(args.model_folder)
+    tokenizer = pickle.load(open(tokenizer_path, 'rb'))
+
     model_path = None
     if args.checkpoint_name:
         model_path = os.path.join(args.model_folder, args.checkpoint_name)
@@ -60,7 +62,12 @@ def main(
     model_checkpoint_base_name_without_extension, _ = os.path.splitext(model_checkpoint_base_name)
 
     if args.sampling_strategy == TopKStrategy.__name__:
-        sampling_strategy = TopKStrategy(top_k=args.top_k, temperature=args.temperature)
+        sampling_strategy = TopKStrategy(
+            top_k=args.top_k,
+            end_token_id=tokenizer.get_end_token_id(),
+            temperature=args.temperature,
+            end_token_temperature=args.end_token_temperature
+        )
         folder_name = (
             f'top_k{args.top_k}_temp_{int(args.temperature * 100)}'
             if args.temperature != 1.0 else f'top_k{args.top_k}'
@@ -72,7 +79,12 @@ def main(
             'generated_sequences'
         )
     elif args.sampling_strategy == TopPStrategy.__name__:
-        sampling_strategy = TopPStrategy(top_p=args.top_p, temperature=args.temperature)
+        sampling_strategy = TopPStrategy(
+            top_p=args.top_p,
+            end_token_id=tokenizer.get_end_token_id(),
+            temperature=args.temperature,
+            end_token_temperature=args.end_token_temperature
+        )
         folder_name = (
             f'top_p{int(args.top_p * 100)}_temp_{int(args.temperature * 100)}'
             if args.temperature != 1.0 else f'top_p{int(args.top_p * 100)}'
@@ -91,7 +103,6 @@ def main(
     if not os.path.exists(output_folder_name):
         os.makedirs(output_folder_name)
 
-    tokenizer = pickle.load(open(tokenizer_path, 'rb'))
     strategy = tf.distribute.MirroredStrategy()
     # atexit.register(strategy._extended._collective_ops._pool.close)  # type: ignore
     # atexit.register(strategy._extended._cross_device_ops._pool.close) # type: ignore
@@ -101,6 +112,7 @@ def main(
     print(f'{datetime.datetime.now()}: Write sequences to {output_folder_name}')
     print(f'{datetime.datetime.now()}: Context window {args.context_window}')
     print(f'{datetime.datetime.now()}: Temperature {args.temperature}')
+    print(f'{datetime.datetime.now()}: [END] token temperature {args.end_token_temperature}')
     print(f'{datetime.datetime.now()}: Sampling Strategy {args.sampling_strategy}')
     print(f'{datetime.datetime.now()}: Top P {args.top_p}')
     print(f'{datetime.datetime.now()}: Top K {args.top_k}')
@@ -257,5 +269,13 @@ if __name__ == "__main__":
         help='The temperature parameter for softmax',
         required=False
     )
-
+    parser.add_argument(
+        '--end_token_temperature',
+        dest='end_token_temperature',
+        action='store',
+        default=1.0,
+        type=float,
+        help='The temperature parameter for end_token_id',
+        required=False
+    )
     main(parser.parse_args())

@@ -85,7 +85,7 @@ class ComputeMarginalDistribution(tf.keras.callbacks.Callback):
             self.model,
             tokenizer=self.concept_tokenizer,
             context_window=self.max_seq,
-            sampling_strategy=TopKStrategy(top_k=self.k)
+            sampling_strategy=TopKStrategy(top_k=self.k, end_token_id=self.concept_tokenizer.get_end_token_id())
         )
 
         num_of_batches = self.num_of_patients // self.batch_size + 1
@@ -185,7 +185,11 @@ class PatientHistoryGenerator(tf.keras.callbacks.Callback):
             self.model,
             tokenizer=self.concept_tokenizer,
             context_window=self.max_seq,
-            sampling_strategy=TopKStrategy(top_k=self.k, temperature=self.temperature)
+            sampling_strategy=TopKStrategy(
+                top_k=self.k,
+                temperature=self.temperature,
+                end_token_id=self.concept_tokenizer.get_end_token_id()
+            )
         )
         start_tokens = [
             self.concept_tokenizer.get_start_token_id(),
