@@ -279,7 +279,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
             .withColumn('standard_concept_id', time_token_udf('time_delta')) \
             .withColumn('priority', F.lit(-3)) \
             .withColumn('visit_rank_order', F.col('visit_rank_order')) \
-            .withColumn('visit_concept_order', F.col('min_visit_concept_order')) \
+            .withColumn('visit_concept_order', F.lit(0)) \
             .withColumn('concept_order', F.lit(0)) \
             .drop('prev_visit_end_date', 'time_delta') \
             .drop('min_visit_concept_order', 'max_visit_concept_order') \
@@ -363,6 +363,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
             .where(F.col('time_delta') != 0) \
             .where(F.col('prev_date').isNotNull()) \
             .withColumn('standard_concept_id', F.concat(F.lit('VS-'), time_token_udf('time_delta'), F.lit('-VE'))) \
+            .withColumn('visit_concept_order', F.lit(0)) \
             .withColumn('priority', F.col('priority') - 0.01) \
             .drop('prev_date', 'time_delta', 'is_span_boundary')
 
