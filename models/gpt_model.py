@@ -107,8 +107,8 @@ class GptInferenceModel(tf.keras.Model):
         self.tokenizer = tokenizer
         self.sampling_strategy = sampling_strategy
         self.concept_embedding_layer = self._get_concept_embedding(gpt_model)
-        self.positional_encoding_layer = self._get_positional_encoding_layer(gpt_model)
-        # self.concept_positional_encoding_layer = self._get_concept_positional_encoding_layer(gpt_model)
+        # self.positional_encoding_layer = self._get_positional_encoding_layer(gpt_model)
+        self.concept_positional_encoding_layer = self._get_concept_positional_encoding_layer(gpt_model)
         self.output_layer = self._get_output_layer(gpt_model)
         self.gpt_decoder = self._get_gpt_decoder(gpt_model)
         self.vocab_size = self.concept_embedding_layer.input_dim
@@ -155,7 +155,7 @@ class GptInferenceModel(tf.keras.Model):
     def _generate_next_token(
             self,
             generated_tokens,
-            visit_concept_orders,
+            # visit_concept_orders,
             cached_contexts
     ):
         current_length = tf.shape(generated_tokens)[-1]
@@ -165,15 +165,15 @@ class GptInferenceModel(tf.keras.Model):
             generated_tokens,
             training=False
         )
-        # Add the visit positional embeddings
-        first_layer_context += self.positional_encoding_layer(
-            visit_concept_orders
-        )
-
-        # # Add the concept positional embeddings
-        # first_layer_context += self.concept_positional_encoding_layer(
-        #     first_layer_context
+        # # Add the visit positional embeddings
+        # first_layer_context += self.positional_encoding_layer(
+        #     visit_concept_orders
         # )
+
+        # Add the concept positional embeddings
+        first_layer_context += self.concept_positional_encoding_layer(
+            first_layer_context
+        )
 
         # Where 1 indicates attention and 0 indicates mask
         look_ahead_mask_base = tf.cast(
@@ -259,19 +259,19 @@ class GptInferenceModel(tf.keras.Model):
             batch,
             self.tokenizer.get_vocab_size()
         ))
-        # Create the default visit_concept_orders for the demographic prompts
-        # TODO: this may not be a good assumption cos the inputs could be partial history
-        visit_concept_orders = tf.zeros_like(
-            inputs
-        )
-
-        current_visit_concept_orders = visit_concept_orders[..., -1:] + 1
+        # # Create the default visit_concept_orders for the demographic prompts
+        # # TODO: this may not be a good assumption cos the inputs could be partial history
+        # visit_concept_orders = tf.zeros_like(
+        #     inputs
+        # )
+        #
+        # current_visit_concept_orders = visit_concept_orders[..., -1:] + 1
 
         while length < self.context_window:
             # Generate the next batch of tokens and update the contexts
             outputs, cached_contexts = self._generate_next_token(
                 inputs,
-                visit_concept_orders,
+                # visit_concept_orders,
                 cached_contexts
             )
             # Block the sampling of the tokens that already appear within the same visit (defined
@@ -313,26 +313,26 @@ class GptInferenceModel(tf.keras.Model):
                 [inputs, next_tokens]
             )
 
-            # Identify any type of ATT tokens
-            all_att_token_indicators = tf.cast(
-                tf.reduce_any(
-                    next_tokens[..., tf.newaxis] == self.all_att_token_ids,
-                    axis=-1
-                ),
-                dtype=tf.int32
-            )
-
-            # For all ATT tokens including inter/intra ones, we set the corresponding next_visit_concept_orders to
-            # the previous next_visit_concept_orders + 1
-            current_visit_concept_orders += all_att_token_indicators
-
-            # If current token is ATT, we set it to zero otherwise we take the value from current_visit_concept_orders
-            next_visit_concept_orders = (1 - all_att_token_indicators) * current_visit_concept_orders
-
-            visit_concept_orders = np.hstack([
-                visit_concept_orders,
-                next_visit_concept_orders
-            ])
+            # # Identify any type of ATT tokens
+            # all_att_token_indicators = tf.cast(
+            #     tf.reduce_any(
+            #         next_tokens[..., tf.newaxis] == self.all_att_token_ids,
+            #         axis=-1
+            #     ),
+            #     dtype=tf.int32
+            # )
+            #
+            # # For all ATT tokens including inter/intra ones, we set the corresponding next_visit_concept_orders to
+            # # the previous next_visit_concept_orders + 1
+            # current_visit_concept_orders += all_att_token_indicators
+            #
+            # # If current token is ATT, we set it to zero otherwise we take the value from current_visit_concept_orders
+            # next_visit_concept_orders = (1 - all_att_token_indicators) * current_visit_concept_orders
+            #
+            # visit_concept_orders = np.hstack([
+            #     visit_concept_orders,
+            #     next_visit_concept_orders
+            # ])
 
             # Get the new length of the sequence
             _, length = np.shape(
@@ -370,23 +370,23 @@ class GptInferenceModel(tf.keras.Model):
             raise RuntimeError(f'Could not find TiedOutputEmbedding')
         return layers[0]
 
-    @staticmethod
-    def _get_positional_encoding_layer(gpt_model):
-        gpt_model.get_layer('visit_positional_encoding_layer')
-        layers = [layer for layer in gpt_model.layers if
-                  isinstance(layer, PositionalEncodingLayer)]
-        if len(layers) == 0:
-            raise RuntimeError(f'Could not find GptPositionEmbedding')
-        return layers[0]
-
     # @staticmethod
-    # def _get_concept_positional_encoding_layer(gpt_model):
-    #     gpt_model.get_layer('concept_positional_encoding_layer')
+    # def _get_positional_encoding_layer(gpt_model):
+    #     gpt_model.get_layer('visit_positional_encoding_layer')
     #     layers = [layer for layer in gpt_model.layers if
-    #               isinstance(layer, TrainablePositionEmbedding)]
+    #               isinstance(layer, PositionalEncodingLayer)]
     #     if len(layers) == 0:
-    #         raise RuntimeError(f'Could not find TrainablePositionEmbedding')
+    #         raise RuntimeError(f'Could not find GptPositionEmbedding')
     #     return layers[0]
+
+    @staticmethod
+    def _get_concept_positional_encoding_layer(gpt_model):
+        gpt_model.get_layer('concept_positional_encoding_layer')
+        layers = [layer for layer in gpt_model.layers if
+                  isinstance(layer, TrainablePositionEmbedding)]
+        if len(layers) == 0:
+            raise RuntimeError(f'Could not find TrainablePositionEmbedding')
+        return layers[0]
 
     @staticmethod
     def _get_gpt_decoder(gpt_model):
@@ -428,13 +428,13 @@ def create_model(
         name='concept_ids'
     )
 
-    visit_concept_orders = tf.keras.layers.Input(
-        shape=(None,),
-        dtype=tf.int32,
-        name='visit_concept_orders'
-    )
+    # visit_concept_orders = tf.keras.layers.Input(
+    #     shape=(None,),
+    #     dtype=tf.int32,
+    #     name='visit_concept_orders'
+    # )
 
-    model_inputs = [concept_inputs, visit_concept_orders]
+    model_inputs = [concept_inputs]
 
     concept_embedding_layer = ReusableEmbedding(
         vocab_size, embedding_size,
@@ -445,17 +445,17 @@ def create_model(
         embeddings_regularizer=tf.keras.regularizers.l2(1e-4)
     )
 
-    # concept_positional_encoding_layer = TrainablePositionEmbedding(
-    #     maxlen=context_window_size,
-    #     embed_dim=embedding_size,
-    #     name='concept_positional_encoding_layer'
-    # )
-
-    visit_positional_encoding_layer = PositionalEncodingLayer(
-        max_sequence_length=context_window_size,
-        embedding_size=embedding_size,
-        name='visit_positional_encoding_layer'
+    concept_positional_encoding_layer = TrainablePositionEmbedding(
+        maxlen=context_window_size,
+        embed_dim=embedding_size,
+        name='concept_positional_encoding_layer'
     )
+    #
+    # visit_positional_encoding_layer = PositionalEncodingLayer(
+    #     max_sequence_length=context_window_size,
+    #     embedding_size=embedding_size,
+    #     name='visit_positional_encoding_layer'
+    # )
 
     output_layer = TiedOutputEmbedding(
         projection_regularizer=tf.keras.regularizers.l2(1e-4),
@@ -466,13 +466,14 @@ def create_model(
     # embeddings for encoder input
     original_concept_embeddings, concept_embedding_matrix = concept_embedding_layer(concept_inputs)
 
-    x = original_concept_embeddings + visit_positional_encoding_layer(
-        visit_concept_orders
-    )
     #
-    # x = x + concept_positional_encoding_layer(
-    #     x
+    # x = original_concept_embeddings + visit_positional_encoding_layer(
+    #     visit_concept_orders
     # )
+
+    x = original_concept_embeddings + concept_positional_encoding_layer(
+        original_concept_embeddings
+    )
 
     # If this flag is enabled, we will include additional inputs to incorporate the numeric values into the model
     if include_numeric_value:
