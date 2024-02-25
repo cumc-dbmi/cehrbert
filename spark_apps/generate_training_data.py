@@ -3,7 +3,6 @@ import os
 
 from pyspark.sql import SparkSession
 
-import config.output_names
 from utils.spark_utils import *
 
 VISIT_OCCURRENCE = 'visit_occurrence'
@@ -87,7 +86,7 @@ def main(
         qualified_concepts = preprocess_domain_table(
             spark,
             input_folder,
-            config.parameters.qualified_concept_list_path
+            'qualified_concept_list'
         ).select('standard_concept_id')
 
         patient_events = patient_events.join(
@@ -159,7 +158,7 @@ def main(
         sequence_data = sequence_data.join(visit_occurrence, 'person_id')
 
     sequence_data.write.mode('overwrite').parquet(
-        os.path.join(output_folder, config.parameters.parquet_data_path)
+        os.path.join(output_folder, 'patient_sequence')
     )
 
 
