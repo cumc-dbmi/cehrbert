@@ -78,8 +78,7 @@ class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
 
     def extract_model_inputs(self):
         # Load the training data
-        self._dataset.concept_ids = self._dataset.concept_ids.apply(
-            lambda concept_ids: concept_ids.tolist())
+        self._dataset.concept_ids = self._dataset.concept_ids.apply(list)
         self._dataset.race_concept_id = self._dataset.race_concept_id.astype(str)
         self._dataset.gender_concept_id = self._dataset.gender_concept_id.astype(str)
 

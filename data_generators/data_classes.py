@@ -23,7 +23,7 @@ class RowSlicer(NamedTuple):
     row: Tuple
     start_index: int
     end_index: int
-    target_index: int = 0,
+    target_index: int = 0
     record_status: RecordStatus = RecordStatus.COMPLETE
 
 
