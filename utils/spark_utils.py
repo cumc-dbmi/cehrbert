@@ -483,9 +483,17 @@ def create_sequence_data_with_att(
             'standard_concept_id')
     )
 
+    dense_rank_udf = F.dense_rank().over(
+        W.partitionBy('cohort_member_id', 'person_id').orderBy(
+            'visit_rank_order',
+            'concept_order',
+            'priority',
+            'date')
+    )
+
     # Those columns are derived from the previous decorators
     struct_columns = [
-        'order', 'date_in_week', 'standard_concept_id', 'visit_segment', 'age',
+        'order', 'record_rank', 'date_in_week', 'standard_concept_id', 'visit_segment', 'age',
         'visit_rank_order', 'concept_value_mask', 'concept_value', 'mlm_skip_value',
         'visit_concept_id', 'visit_concept_order', 'concept_order', 'priority'
     ]
@@ -493,17 +501,19 @@ def create_sequence_data_with_att(
         'cohort_member_id', 'person_id', 'concept_ids', 'visit_segments', 'orders',
         'dates', 'ages', 'visit_concept_orders', 'num_of_visits', 'num_of_concepts',
         'concept_value_masks', 'concept_values', 'mlm_skip_values', 'priorities',
-        'visit_concept_ids', 'visit_rank_orders', 'concept_orders'
+        'visit_concept_ids', 'visit_rank_orders', 'concept_orders', 'record_ranks'
     ]
 
     patient_grouped_events = patient_events \
         .withColumn('order', order_udf) \
+        .withColumn('record_rank', dense_rank_udf) \
         .withColumn('data_for_sorting', F.struct(struct_columns)) \
         .groupBy('cohort_member_id', 'person_id') \
         .agg(F.sort_array(F.collect_set('data_for_sorting')).alias('data_for_sorting'),
              F.max('visit_rank_order').alias('num_of_visits'),
              F.count('standard_concept_id').alias('num_of_concepts')) \
         .withColumn('orders', F.col('data_for_sorting.order').cast(T.ArrayType(T.IntegerType()))) \
+        .withColumn('record_ranks', F.col('data_for_sorting.record_rank').cast(T.ArrayType(T.IntegerType()))) \
         .withColumn('dates', F.col('data_for_sorting.date_in_week')) \
         .withColumn('concept_ids', F.col('data_for_sorting.standard_concept_id')) \
         .withColumn('visit_segments', F.col('data_for_sorting.visit_segment')) \

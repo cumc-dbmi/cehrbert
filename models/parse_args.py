@@ -328,6 +328,11 @@ def create_parse_args_gpt():
         action='store_true'
     )
     parser.add_argument(
+        '--shuffle_records',
+        dest='shuffle_records',
+        action='store_true'
+    )
+    parser.add_argument(
         '--val_data_parquet_path',
         dest='val_data_parquet_path',
         action='store',

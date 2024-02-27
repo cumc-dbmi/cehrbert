@@ -72,6 +72,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             use_dask: bool = False,
             save_checkpoint: bool = False,
             save_freq: int = 0,
+            shuffle_records: bool = False,
             *args, **kwargs
     ):
 
@@ -90,6 +91,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         self._save_freq = save_freq
         self._training_data = self._load_data(self._training_data_parquet_path)
         self._current_epoch = 0
+        self._shuffle_records = shuffle_records
 
         if self._val_data_parquet_path:
             self._val_data = self._load_data(self._val_data_parquet_path)
@@ -118,6 +120,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
             f'use_dask: {use_dask}\n'
             f'save_checkpoint: {save_checkpoint}\n'
             f'save_freq: {save_freq}\n'
+            f'shuffle_records: {shuffle_records}\n'
         )
 
         self.get_logger().info('Saving the model configuration')

@@ -139,7 +139,8 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             'is_random_cursor': self._is_random_cursor_long_sequence,
             'include_numeric_value': self._include_numeric_value,
             'mask_rate_scheduler': self._cosine_mask_rate_scheduler,
-            'efficient_training': self._efficient_training
+            'efficient_training': self._efficient_training,
+            'shuffle_records': self._shuffle_records
         }
 
         return GptDataGenerator(**parameters)
@@ -158,7 +159,8 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
                 'including_long_sequence': self._including_long_sequence,
                 'include_numeric_value': self._include_numeric_value,
                 'mask_rate_scheduler': self._cosine_mask_rate_scheduler,
-                'is_pretraining': False
+                'is_pretraining': False,
+                'shuffle_records': False
             }
             return GptDataGenerator(**parameters)
 
@@ -257,7 +259,8 @@ def main(args):
         low_rate=args.low_rate,
         high_rate=args.high_rate,
         period=args.period,
-        total=args.total
+        total=args.total,
+        shuffle_records=args.shuffle_records
     ).train_model()
 
 

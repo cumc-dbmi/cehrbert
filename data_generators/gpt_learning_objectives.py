@@ -155,11 +155,13 @@ class SequenceGenerationLearningObjective(LearningObjective):
             self,
             concept_tokenizer: ConceptTokenizer,
             max_seq_len: int,
-            mask_rate_scheduler: CosineMaskRateScheduler = None
+            mask_rate_scheduler: CosineMaskRateScheduler = None,
+            shuffle_records: bool = False
     ):
         self._max_seq_len = max_seq_len
         self._concept_tokenizer = concept_tokenizer
         self._mask_rate_scheduler = mask_rate_scheduler
+        self._shuffle_records = shuffle_records
 
     def get_tf_dataset_schema(self):
         input_dict_schema = {
@@ -230,14 +232,22 @@ class SequenceGenerationLearningObjective(LearningObjective):
 
         row, left_index, right_index, _, record_status = row_slicer
 
-        sorting_columns = getattr(row, 'orders') if hasattr(row, 'orders') else row.dates
+        if self._shuffle_records and hasattr(row, 'record_ranks'):
+            sorting_column = getattr(row, 'record_ranks')
+            random_order = np.random.rand(len(sorting_column))
+            iterator = zip(
+                map(int, sorting_column), random_order, row.token_ids, row.visit_concept_orders
+            )
+            sorted_list = sorted(iterator, key=lambda tup2: (tup2[0], tup2[1], tup2[2]))
+            _, _, concept_list, visit_concept_orders = zip(*list(islice(sorted_list, left_index, right_index)))
+        else:
+            sorting_column = getattr(row, 'orders') if hasattr(row, 'orders') else row.dates
+            iterator = zip(
+                map(int, sorting_column), row.token_ids, row.visit_concept_orders
+            )
+            sorted_list = sorted(iterator, key=lambda tup2: (tup2[0], tup2[1]))
 
-        iterator = zip(
-            map(int, sorting_columns), row.token_ids, row.visit_concept_orders
-        )
-        sorted_list = sorted(iterator, key=lambda tup2: (tup2[0], tup2[1]))
-
-        _, concept_list, visit_concept_orders = zip(*list(islice(sorted_list, left_index, right_index)))
+            _, concept_list, visit_concept_orders = zip(*list(islice(sorted_list, left_index, right_index)))
 
         if record_status == RecordStatus.COMPLETE:
             concept_list = [self._concept_tokenizer.get_start_token_id()] + list(concept_list)
