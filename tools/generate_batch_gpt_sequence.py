@@ -138,6 +138,7 @@ def main(
 
     num_of_batches = args.num_of_patients // args.batch_size + 1
     sequence_to_flush = []
+    current_person_id = 1
     for i in range(num_of_batches):
         print(f'{datetime.datetime.now()}: Batch {i} started')
         batch_sequence = generate_single_batch(
@@ -152,7 +153,8 @@ def main(
                 if token == tokenizer.end_token:
                     break
                 seq_copy.append(token)
-            sequence_to_flush.append({'concept_ids': seq_copy})
+            sequence_to_flush.append({'concept_ids': seq_copy, 'person_id': current_person_id})
+            current_person_id += 1
 
         if len(sequence_to_flush) >= args.buffer_size:
             print(f'{datetime.datetime.now()}: Flushing to the Disk at Batch {i}')
