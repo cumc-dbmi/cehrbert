@@ -182,9 +182,14 @@ def gpt_to_omop_converter_serial(
         [start_year, start_age, start_gender, start_race] = [_ for _ in start_tokens]
         if 'year' not in start_year.lower():
             continue
-        start_year = start_year.split(':')[1]
-        start_age = start_age.split(':')[1]
-        birth_year = int(start_year) - int(start_age)
+        
+        try:
+            start_year = start_year.split(':')[1]
+            start_age = start_age.split(':')[1]
+            birth_year = int(start_year) - int(start_age)
+        except Exception as e:
+            print(f'Failed to convert {start_tokens} due to {e}, skipping to the next record')
+            continue
 
         # Skip the patients whose birth year is either before 1900 or after this year
         if int(birth_year) < 1900 or int(birth_year) > datetime.date.today().year:
