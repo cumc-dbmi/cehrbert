@@ -2,9 +2,9 @@ import json
 import os
 import re
 
-LEGACY_MODEL_CHECKPOINT_PATTERN = re.compile(r"bert_model_(\d{2})_(\d+\.\d{5})\.h5$")
+LEGACY_MODEL_CHECKPOINT_PATTERN = re.compile(r"bert_model_(\d{2})_(\d+\.\d+)\.h5$")
 EPOCH_CHECKPOINT_PATTERN = re.compile(r"_epoch_(\d{2})_batch_final\.h5$")
-BATCH_CHECKPOINT_PATTERN = re.compile(r".*_epoch_(\d{2})_batch_(\d{2})\.h5$")
+BATCH_CHECKPOINT_PATTERN = re.compile(r".*_epoch_(\d{2})_batch_(\d+)\.h5$")
 
 
 def get_checkpoint_epoch(checkpoint_path):
