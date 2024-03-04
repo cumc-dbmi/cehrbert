@@ -108,7 +108,7 @@ class GptInferenceModel(tf.keras.Model):
         self.sampling_strategy = sampling_strategy
         self.concept_embedding_layer = self._get_concept_embedding(gpt_model)
         # self.positional_encoding_layer = self._get_positional_encoding_layer(gpt_model)
-        self.concept_positional_encoding_layer = self._get_concept_positional_encoding_layer(gpt_model)
+        # self.concept_positional_encoding_layer = self._get_concept_positional_encoding_layer(gpt_model)
         self.output_layer = self._get_output_layer(gpt_model)
         self.gpt_decoder = self._get_gpt_decoder(gpt_model)
         self.vocab_size = self.concept_embedding_layer.input_dim
@@ -170,10 +170,10 @@ class GptInferenceModel(tf.keras.Model):
         #     visit_concept_orders
         # )
 
-        # Add the concept positional embeddings
-        first_layer_context += self.concept_positional_encoding_layer(
-            first_layer_context
-        )
+        # # Add the concept positional embeddings
+        # first_layer_context += self.concept_positional_encoding_layer(
+        #     first_layer_context
+        # )
 
         # Where 1 indicates attention and 0 indicates mask
         look_ahead_mask_base = tf.cast(
@@ -445,11 +445,11 @@ def create_model(
         embeddings_regularizer=tf.keras.regularizers.l2(1e-4)
     )
 
-    concept_positional_encoding_layer = TrainablePositionEmbedding(
-        maxlen=context_window_size,
-        embed_dim=embedding_size,
-        name='concept_positional_encoding_layer'
-    )
+    # concept_positional_encoding_layer = TrainablePositionEmbedding(
+    #     maxlen=context_window_size,
+    #     embed_dim=embedding_size,
+    #     name='concept_positional_encoding_layer'
+    # )
     #
     # visit_positional_encoding_layer = PositionalEncodingLayer(
     #     max_sequence_length=context_window_size,
@@ -470,10 +470,10 @@ def create_model(
     # x = original_concept_embeddings + visit_positional_encoding_layer(
     #     visit_concept_orders
     # )
-
-    x = original_concept_embeddings + concept_positional_encoding_layer(
-        original_concept_embeddings
-    )
+    #
+    # x = original_concept_embeddings + concept_positional_encoding_layer(
+    #     original_concept_embeddings
+    # )
 
     # If this flag is enabled, we will include additional inputs to incorporate the numeric values into the model
     if include_numeric_value:
@@ -495,7 +495,7 @@ def create_model(
         )
 
         x = value_transformation_layer(
-            x, concept_values, concept_value_masks
+            original_concept_embeddings, concept_values, concept_value_masks
         )
 
         model_inputs.extend([concept_values, concept_value_masks])
@@ -508,7 +508,7 @@ def create_model(
     )
 
     contextualized_embeddings, _, _ = transformer_block(
-        x
+        original_concept_embeddings
     )
 
     concept_prediction_layer = tf.keras.layers.Softmax(
