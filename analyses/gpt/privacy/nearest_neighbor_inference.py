@@ -1,6 +1,7 @@
 import os
 import pickle
 import logging
+import random
 from datetime import datetime
 import numpy as np
 import pandas as pd
@@ -119,95 +120,98 @@ def main(args):
     with open(args.concept_tokenizer_path, 'rb') as f:
         concept_tokenizer = pickle.load(f)
 
-    LOG.info(f'Started loading attack_data at {args.attack_data_folder}')
-    attack_data = pd.read_parquet(args.attack_data_folder)
-    train_data = attack_data[attack_data.label == 1]
-    evaluation_data = attack_data[attack_data.label == 0]
+    LOG.info(f'Started loading training data at {args.training_data_folder}')
+    train_data = pd.read_parquet(args.training_data_folder)
+
+    LOG.info(f'Started loading evaluation data at {args.evaluation_data_folder}')
+    evaluation_data = pd.read_parquet(args.evaluation_data_folder)
 
     LOG.info(f'Started loading synthetic_data at {args.synthetic_data_folder}')
     synthetic_data = pd.read_parquet(args.synthetic_data_folder)
 
-    train_data_sample = train_data.sample(args.num_of_samples, random_state=RANDOM_SEE)
-    evaluation_data_sample = evaluation_data.sample(args.num_of_samples, random_state=RANDOM_SEE)
-    synthetic_data_sample = synthetic_data.sample(args.num_of_samples, random_state=RANDOM_SEE)
-
     LOG.info('Started extracting the demographic information from the patient sequences')
-    train_data_sample = create_demographics(train_data_sample)
-    evaluation_data_sample = create_demographics(evaluation_data_sample)
-    synthetic_data_sample = create_demographics(synthetic_data_sample)
+    train_data = create_demographics(train_data)
+    evaluation_data = create_demographics(evaluation_data)
+    synthetic_data = create_demographics(synthetic_data)
 
     LOG.info('Started rescaling age columns')
-    train_data_sample = scale_age(train_data_sample)
-    evaluation_data_sample = scale_age(evaluation_data_sample)
-    synthetic_data_sample = scale_age(synthetic_data_sample)
+    train_data = scale_age(train_data)
+    evaluation_data = scale_age(evaluation_data)
+    synthetic_data = scale_age(synthetic_data)
 
     LOG.info('Started encoding gender')
     gender_encoder = create_gender_encoder(
-        train_data_sample,
-        evaluation_data_sample,
-        synthetic_data_sample
+        train_data,
+        evaluation_data,
+        synthetic_data
     )
     LOG.info('Completed encoding gender')
 
     LOG.info('Started encoding race')
     race_encoder = create_race_encoder(
-        train_data_sample,
-        evaluation_data_sample,
-        synthetic_data_sample
+        train_data,
+        evaluation_data,
+        synthetic_data
     )
     LOG.info('Completed encoding race')
 
-    LOG.info('Started creating train vectors')
-    train_vectors = create_vector_representations(
-        train_data_sample,
-        concept_tokenizer,
-        gender_encoder,
-        race_encoder
-    )
+    random.seed(RANDOM_SEE)
+    metrics = []
 
-    LOG.info('Started creating evaluation vectors')
-    evaluation_vectors = create_vector_representations(
-        evaluation_data_sample,
-        concept_tokenizer,
-        gender_encoder,
-        race_encoder
-    )
+    for i in range(args.n_iterations):
+        LOG.info(f'Iteration {i} Started')
+        train_data_sample = train_data.sample(args.num_of_samples)
+        evaluation_data_sample = evaluation_data.sample(args.num_of_samples)
+        synthetic_data_sample = synthetic_data.sample(args.num_of_samples)
+        LOG.info(f'Iteration {i}: Started creating train vectors')
+        train_vectors = create_vector_representations(
+            train_data_sample,
+            concept_tokenizer,
+            gender_encoder,
+            race_encoder
+        )
+        LOG.info(f'Iteration {i}: Started creating evaluation vectors')
+        evaluation_vectors = create_vector_representations(
+            evaluation_data_sample,
+            concept_tokenizer,
+            gender_encoder,
+            race_encoder
+        )
+        LOG.info(f'Iteration {i}: Started creating synthetic vectors')
+        synthetic_vectors = create_vector_representations(
+            synthetic_data_sample,
+            concept_tokenizer,
+            gender_encoder,
+            race_encoder
+        )
+        LOG.info(f'Iteration {i}: Started calculating the distances between synthetic and training vectors')
+        distance_train_TS = find_replicant(train_vectors, synthetic_vectors)
+        distance_train_ST = find_replicant(synthetic_vectors, train_vectors)
+        distance_train_TT = find_replicant_self(train_vectors, train_vectors)
+        distance_train_SS = find_replicant_self(synthetic_vectors, synthetic_vectors)
 
-    LOG.info('Started creating synthetic vectors')
-    synthetic_vectors = create_vector_representations(
-        synthetic_data_sample,
-        concept_tokenizer,
-        gender_encoder,
-        race_encoder
-    )
+        aa_train = (np.sum(distance_train_TS > distance_train_TT) + np.sum(
+            distance_train_ST > distance_train_SS)) / args.num_of_samples / 2
 
-    LOG.info('Started calculating the distances between synthetic and training vectors')
-    distance_train_TS = find_replicant(train_vectors, synthetic_vectors)
-    distance_train_ST = find_replicant(synthetic_vectors, train_vectors)
-    distance_train_TT = find_replicant_self(train_vectors, train_vectors)
-    distance_train_SS = find_replicant_self(synthetic_vectors, synthetic_vectors)
+        LOG.info(f'Iteration {i}: Started calculating the distances between synthetic and evaluation vectors')
+        distance_test_TS = find_replicant(evaluation_vectors, synthetic_vectors)
+        distance_test_ST = find_replicant(synthetic_vectors, evaluation_vectors)
+        distance_test_TT = find_replicant_self(evaluation_vectors, evaluation_vectors)
+        distance_test_SS = find_replicant_self(synthetic_vectors, synthetic_vectors)
 
-    aa_train = (np.sum(distance_train_TS > distance_train_TT) + np.sum(
-        distance_train_ST > distance_train_SS)) / args.num_of_samples / 2
+        aa_test = (np.sum(distance_test_TS > distance_test_TT) + np.sum(
+            distance_test_ST > distance_test_SS)) / args.num_of_samples / 2
 
-    LOG.info('Started calculating the distances between synthetic and evaluation vectors')
-    distance_test_TS = find_replicant(evaluation_vectors, synthetic_vectors)
-    distance_test_ST = find_replicant(synthetic_vectors, evaluation_vectors)
-    distance_test_TT = find_replicant_self(evaluation_vectors, evaluation_vectors)
-    distance_test_SS = find_replicant_self(synthetic_vectors, synthetic_vectors)
-
-    aa_test = (np.sum(distance_test_TS > distance_test_TT) + np.sum(
-        distance_test_ST > distance_test_SS)) / args.num_of_samples / 2
-
-    privacy_loss = aa_test - aa_train
-    LOG.info(f'Privacy loss: {privacy_loss}')
+        privacy_loss = aa_test - aa_train
+        metrics.append(privacy_loss)
+        LOG.info(f'Iteration {i}: Privacy loss {privacy_loss}')
 
     results = {
-        "NNAAE": privacy_loss
+        "NNAAE": metrics
     }
 
     current_time = datetime.now().strftime("%m-%d-%Y-%H-%M-%S")
-    pd.DataFrame([results]).to_parquet(
+    pd.DataFrame([results], columns=['NNAAE']).to_parquet(
         os.path.join(args.metrics_folder, f"nearest_neighbor_inference_{current_time}.parquet")
     )
 
@@ -218,10 +222,17 @@ def create_argparser():
         description='Nearest Neighbor Inference Analysis Arguments using the GPT model'
     )
     parser.add_argument(
-        '--attack_data_folder',
-        dest='attack_data_folder',
+        '--training_data_folder',
+        dest='training_data_folder',
         action='store',
-        help='The path for where the attack data folder',
+        help='The path for where the training data folder',
+        required=True
+    )
+    parser.add_argument(
+        '--evaluation_data_folder',
+        dest='evaluation_data_folder',
+        action='store',
+        help='The path for where the evaluation data folder',
         required=True
     )
     parser.add_argument(
@@ -245,6 +256,14 @@ def create_argparser():
         type=int,
         required=False,
         default=5000
+    )
+    parser.add_argument(
+        '--n_iterations',
+        dest='n_iterations',
+        action='store',
+        type=int,
+        required=False,
+        default=1
     )
     parser.add_argument(
         '--metrics_folder',
