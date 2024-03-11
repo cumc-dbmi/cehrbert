@@ -41,6 +41,8 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             high_rate: float = 1.0,
             period: int = 1000,
             total: int = np.infty,
+            is_weighted_sample: bool = False,
+            weighted_sample_scaling_factor: float = 2.0,
             *args, **kwargs
     ):
         self._concept_path = concept_path
@@ -59,6 +61,8 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         self._is_random_cursor_long_sequence = is_random_cursor_long_sequence
         self._include_numeric_value = include_numeric_value
         self._efficient_training = efficient_training
+        self._is_weighted_sample = is_weighted_sample
+        self._weighted_sample_scaling_factor = weighted_sample_scaling_factor
         self._cosine_mask_rate_scheduler = CosineMaskRateScheduler(
             low_rate=low_rate,
             high_rate=high_rate,
@@ -97,6 +101,8 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             f'period: {period}\n'
             f'total: {total}\n'
             f'efficient_training: {efficient_training}\n'
+            f'is_weighted_sample: {is_weighted_sample}\n'
+            f'weighted_sample_scaling_factor: {weighted_sample_scaling_factor}\n'
         )
 
     def _load_dependencies(self):
@@ -140,7 +146,9 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             'include_numeric_value': self._include_numeric_value,
             'mask_rate_scheduler': self._cosine_mask_rate_scheduler,
             'efficient_training': self._efficient_training,
-            'shuffle_records': self._shuffle_records
+            'shuffle_records': self._shuffle_records,
+            'is_weighted_sample': self._is_weighted_sample,
+            'weighted_sample_scaling_factor': self._weighted_sample_scaling_factor
         }
 
         return GptDataGenerator(**parameters)
@@ -260,7 +268,9 @@ def main(args):
         high_rate=args.high_rate,
         period=args.period,
         total=args.total,
-        shuffle_records=args.shuffle_records
+        shuffle_records=args.shuffle_records,
+        is_weighted_sample=args.is_weighted_sample,
+        weighted_sample_scaling_factor=args.weighted_sample_scaling_factor
     ).train_model()
 
 

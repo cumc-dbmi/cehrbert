@@ -4,6 +4,7 @@ import copy
 from collections import ChainMap
 from itertools import chain
 from typing import Set
+import scipy
 
 from pandas import DataFrame
 
@@ -308,6 +309,8 @@ class GptDataGenerator(BertDataGenerator):
             sampling_dataset_enabled: bool = False,
             include_numeric_value: bool = False,
             efficient_training: bool = False,
+            is_weighted_sample: bool = False,
+            weighted_sample_scaling_factor: float = 2.0,
             *args,
             **kwargs
     ):
@@ -318,6 +321,8 @@ class GptDataGenerator(BertDataGenerator):
         self._sampling_dataset_enabled = sampling_dataset_enabled
         self._include_numeric_value = include_numeric_value
         self._efficient_training = efficient_training
+        self._is_weighted_sample = is_weighted_sample
+        self._weighted_sample_scaling_factor = weighted_sample_scaling_factor
 
         super(BertDataGenerator,
               self).__init__(
@@ -344,6 +349,13 @@ class GptDataGenerator(BertDataGenerator):
             self._training_data['row_num'] = self._training_data.reset_index().index + 1
             self._training_data['batch_num'] = self._training_data.row_num // self._batch_size
 
+        if self._sampling_dataset_enabled and self._is_weighted_sample:
+            if 'ic' not in self._training_data.columns:
+                raise RuntimeError(f'The columns ic must exist in the training data when is_weighted_sample is true')
+            self._training_data['sample_weight'] = scipy.special.softmax(
+                self._training_data.ic / self._weighted_sample_scaling_factor
+            )
+
         # This is important so that the iloc works correctly when retrieving records from the dataframe
         self._training_data = self._training_data.reset_index()
 
@@ -358,7 +370,6 @@ class GptDataGenerator(BertDataGenerator):
         Create an iterator that will iterate through all training data
         :return:
         """
-
         if self._efficient_training:
             unique_batch_nums = self._training_data['batch_num'].unique()
             uniform_random_order = np.random.uniform(size=unique_batch_nums.size)
@@ -380,7 +391,13 @@ class GptDataGenerator(BertDataGenerator):
             # If the sampling strategy is enabled, we will randomly sample a record every time
             if self._sampling_dataset_enabled:
                 # Overwrite row_index with a random index sampled from randomized_indices
-                row_index = random.choice(self._training_data.index)
+                if self._is_weighted_sample:
+                    row_index = np.random.choice(
+                        self._training_data.index, size=1, p=self._training_data.sample_weight
+                    )[0]
+                else:
+                    row_index = random.choice(self._training_data.index)
+
             row = self._training_data.iloc[row_index]
             seq_length = len(row.token_ids)
             if seq_length <= self._max_seq_len:

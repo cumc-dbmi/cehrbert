@@ -170,6 +170,15 @@ def main(
             .groupby('person_id') \
             .agg(F.mean('ic').alias('ic'))
 
+        bound_df = patient_ic_df.select(
+            F.percentile_approx('ic', 0.01).alias('lower_bound'),
+            F.percentile_approx('ic', 0.99).alias('upper_bound')
+        )
+
+        patient_ic_df = patient_ic_df.crossJoin(bound_df) \
+            .withColumn('ic', F.greatest(F.least('upper_bound', 'ic'), 'lower_bound')) \
+            .drop('lower_bound', 'upper_bound')
+
         sequence_data = sequence_data.join(patient_ic_df, 'person_id')
 
     sequence_data.write.mode('overwrite').parquet(

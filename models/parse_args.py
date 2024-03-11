@@ -338,6 +338,19 @@ def create_parse_args_gpt():
         action='store',
         required=False
     )
+    parser.add_argument(
+        '--is_weighted_sample',
+        dest='is_weighted_sample',
+        action='store_true'
+    )
+    parser.add_argument(
+        '--weighted_sample_scaling_factor',
+        dest='weighted_sample_scaling_factor',
+        action='store',
+        required=False,
+        type=float,
+        default=2.0
+    )
     return parser
 
 
