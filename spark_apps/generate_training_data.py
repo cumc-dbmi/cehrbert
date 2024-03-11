@@ -2,6 +2,7 @@ import datetime
 import os
 
 from pyspark.sql import SparkSession
+from pyspark.sql.window import Window
 
 from utils.spark_utils import *
 
@@ -24,7 +25,8 @@ def main(
         gpt_patient_sequence: bool,
         apply_age_filter: bool,
         include_death: bool,
-        att_type: AttType
+        att_type: AttType,
+        include_sequence_information_content: bool = True
 ):
     spark = SparkSession.builder.appName('Generate CEHR-BERT Training Data').getOrCreate()
 
@@ -156,6 +158,19 @@ def main(
             .withColumn('prolonged_length_stay',
                         F.max('prolonged_length_stay').over(W.partitionBy('person_id'))).distinct()
         sequence_data = sequence_data.join(visit_occurrence, 'person_id')
+
+    if include_sequence_information_content:
+        concept_df = patient_events.select('person_id', F.col('standard_concept_id').alias('concept_id'))
+        concept_freq = concept_df \
+            .groupBy('concept_id').count() \
+            .withColumn('prob', F.col('count') / F.sum('count').over(Window.partitionBy())) \
+            .withColumn('ic', -F.log('prob'))
+
+        patient_ic_df = concept_df.join(concept_freq, 'concept_id') \
+            .groupby('person_id') \
+            .agg(F.mean('ic').alias('ic'))
+
+        sequence_data = sequence_data.join(patient_ic_df, 'person_id')
 
     sequence_data.write.mode('overwrite').parquet(
         os.path.join(output_folder, 'patient_sequence')
