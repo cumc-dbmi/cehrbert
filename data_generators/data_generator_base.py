@@ -70,6 +70,7 @@ class AbstractDataGeneratorBase(ABC):
             min_num_of_concepts: int,
             is_random_cursor: bool = False,
             is_pretraining: bool = True,
+            num_steps: int = None,
             *args,
             **kwargs
     ):
@@ -80,6 +81,7 @@ class AbstractDataGeneratorBase(ABC):
         self._min_num_of_concepts = min_num_of_concepts
         self._is_random_cursor = is_random_cursor
         self._is_pretraining = is_pretraining
+        self._num_steps = num_steps
 
         self.get_logger().info(
             f'batch_size: {batch_size}\n'
@@ -87,6 +89,7 @@ class AbstractDataGeneratorBase(ABC):
             f'min_num_of_concepts: {min_num_of_concepts}\n'
             f'is_random_cursor: {is_random_cursor}\n'
             f'is_pretraining: {is_pretraining}\n'
+            f'num_of_steps: {num_steps}\n'
         )
 
         self._learning_objectives = self._initialize_learning_objectives(
@@ -209,10 +212,15 @@ class AbstractDataGeneratorBase(ABC):
         Floor division + 1 if there is any modulo value
         :return:
         """
-        return (
+        num_of_steps = (
                 self.get_data_size() // self._batch_size
                 + bool(self.get_data_size() % self._batch_size)
         )
+
+        if self._num_steps:
+            return min(self._num_steps, num_of_steps)
+
+        return num_of_steps
 
     def _get_required_columns(self) -> Set[str]:
         """

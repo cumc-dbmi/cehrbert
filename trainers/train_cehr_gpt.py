@@ -43,6 +43,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             total: int = np.infty,
             is_weighted_sample: bool = False,
             weighted_sample_scaling_factor: float = 2.0,
+            num_steps: int = None,
             *args, **kwargs
     ):
         self._concept_path = concept_path
@@ -63,6 +64,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         self._efficient_training = efficient_training
         self._is_weighted_sample = is_weighted_sample
         self._weighted_sample_scaling_factor = weighted_sample_scaling_factor
+        self._num_steps = num_steps
         self._cosine_mask_rate_scheduler = CosineMaskRateScheduler(
             low_rate=low_rate,
             high_rate=high_rate,
@@ -103,6 +105,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             f'efficient_training: {efficient_training}\n'
             f'is_weighted_sample: {is_weighted_sample}\n'
             f'weighted_sample_scaling_factor: {weighted_sample_scaling_factor}\n'
+            f'num_steps: {num_steps}\n'
         )
 
     def _load_dependencies(self):
@@ -148,7 +151,8 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             'efficient_training': self._efficient_training,
             'shuffle_records': self._shuffle_records,
             'is_weighted_sample': self._is_weighted_sample,
-            'weighted_sample_scaling_factor': self._weighted_sample_scaling_factor
+            'weighted_sample_scaling_factor': self._weighted_sample_scaling_factor,
+            'num_steps': self._num_steps
         }
 
         return GptDataGenerator(**parameters)
@@ -270,7 +274,8 @@ def main(args):
         total=args.total,
         shuffle_records=args.shuffle_records,
         is_weighted_sample=args.is_weighted_sample,
-        weighted_sample_scaling_factor=args.weighted_sample_scaling_factor
+        weighted_sample_scaling_factor=args.weighted_sample_scaling_factor,
+        num_steps=args.num_steps
     ).train_model()
 
 

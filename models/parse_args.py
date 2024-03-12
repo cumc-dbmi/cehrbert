@@ -351,6 +351,13 @@ def create_parse_args_gpt():
         type=float,
         default=2.0
     )
+    parser.add_argument(
+        '--num_steps',
+        dest='num_steps',
+        action='store',
+        required=False,
+        type=int
+    )
     return parser
 
 
