@@ -358,6 +358,11 @@ def create_parse_args_gpt():
         required=False,
         type=int
     )
+    parser.add_argument(
+        '--include_penalty',
+        dest='include_penalty',
+        action='store_true'
+    )
     return parser
 
 

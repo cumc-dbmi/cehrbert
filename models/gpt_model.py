@@ -3,6 +3,7 @@ import re
 
 import numpy as np
 import tensorflow as tf
+from keras import backend as K
 
 from data_generators.tokenizer import ConceptTokenizer
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
@@ -403,7 +404,9 @@ def create_model(
         num_heads,
         depth,
         embedding_dropout: float = 0.6,
-        include_numeric_value: bool = False
+        include_numeric_value: bool = False,
+        include_penalty: bool = False,
+        confidence_penalty_weight: float = 0.1
 ):
     """
     model = create_model(
@@ -420,6 +423,7 @@ def create_model(
     :param depth:
     :param embedding_dropout:
     :param include_numeric_value
+    :param confidence_penalty_weight:
     :return:
     """
     concept_inputs = tf.keras.layers.Input(
@@ -535,6 +539,16 @@ def create_model(
 
     model = tf.keras.Model(inputs=model_inputs, outputs=model_outputs)
 
+    if include_penalty:
+        # Penalty for confidence of the output distribution, as described in
+        # "Regularizing Neural Networks by Penalizing Confident
+        # Output Distributions" (https://arxiv.org/abs/1701.06548)
+        confidence_penalty = K.mean(
+            confidence_penalty_weight * K.sum(concept_predictions * K.log(concept_predictions), axis=-1)
+        )
+
+        model.add_loss(confidence_penalty)
+        model.add_metric(name='confidence_penalty', value=confidence_penalty)
     return model
 
 

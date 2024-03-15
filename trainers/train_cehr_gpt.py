@@ -44,6 +44,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             is_weighted_sample: bool = False,
             weighted_sample_scaling_factor: float = 2.0,
             num_steps: int = None,
+            include_penalty: bool = False,
             *args, **kwargs
     ):
         self._concept_path = concept_path
@@ -65,6 +66,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         self._is_weighted_sample = is_weighted_sample
         self._weighted_sample_scaling_factor = weighted_sample_scaling_factor
         self._num_steps = num_steps
+        self._include_penalty = include_penalty
         self._cosine_mask_rate_scheduler = CosineMaskRateScheduler(
             low_rate=low_rate,
             high_rate=high_rate,
@@ -106,6 +108,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             f'is_weighted_sample: {is_weighted_sample}\n'
             f'weighted_sample_scaling_factor: {weighted_sample_scaling_factor}\n'
             f'num_steps: {num_steps}\n'
+            f'include_penalty: {include_penalty}\n'
         )
 
     def _load_dependencies(self):
@@ -194,7 +197,8 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
                     embedding_size=self._embedding_size,
                     num_heads=self._num_heads,
                     depth=self._depth,
-                    include_numeric_value=self._include_numeric_value
+                    include_numeric_value=self._include_numeric_value,
+                    include_penalty=self._include_penalty
                 )
 
                 losses = {
@@ -275,7 +279,8 @@ def main(args):
         shuffle_records=args.shuffle_records,
         is_weighted_sample=args.is_weighted_sample,
         weighted_sample_scaling_factor=args.weighted_sample_scaling_factor,
-        num_steps=args.num_steps
+        num_steps=args.num_steps,
+        include_penalty=args.include_penalty
     ).train_model()
 
 
