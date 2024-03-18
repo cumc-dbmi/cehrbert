@@ -81,11 +81,12 @@ class TopPStrategy(SamplingStrategy):
         indices = tf.argsort(last_token_outputs, direction='DESCENDING')
         probs = tf.nn.softmax(last_token_outputs / self._temperature)
         sorted_probs = tf.gather(probs, indices, axis=1, batch_dims=1)
+        sorted_logits = tf.gather(last_token_outputs, indices, axis=1, batch_dims=1)
         cum_sum_probs = tf.math.cumsum(sorted_probs, axis=-1)
 
         included_top_probs = tf.cast(cum_sum_probs >= self._top_p, dtype=tf.float32)
         prob_mask = tf.concat([tf.zeros_like(included_top_probs[:, :1]), included_top_probs[:, :-1]], axis=-1)
-        pred_logit = tf.math.log(sorted_probs) + prob_mask * MASK_VALUE
+        pred_logit = sorted_logits + prob_mask * MASK_VALUE
 
         return pred_logit, indices
 
