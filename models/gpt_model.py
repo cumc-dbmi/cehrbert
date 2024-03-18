@@ -8,7 +8,7 @@ from keras import backend as K
 from data_generators.tokenizer import ConceptTokenizer
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 from models.layers.custom_layers import (
-    GptDecoder, PositionalEncodingLayer, TrainablePositionEmbedding, ConceptValueTransformationLayer,
+    GptDecoder, ConceptValueTransformationLayer,
     ConceptValuePredictionLayer
 )
 
@@ -108,8 +108,6 @@ class GptInferenceModel(tf.keras.Model):
         self.tokenizer = tokenizer
         self.sampling_strategy = sampling_strategy
         self.concept_embedding_layer = self._get_concept_embedding(gpt_model)
-        # self.positional_encoding_layer = self._get_positional_encoding_layer(gpt_model)
-        # self.concept_positional_encoding_layer = self._get_concept_positional_encoding_layer(gpt_model)
         self.output_layer = self._get_output_layer(gpt_model)
         self.gpt_decoder = self._get_gpt_decoder(gpt_model)
         self.vocab_size = self.concept_embedding_layer.input_dim
@@ -166,15 +164,6 @@ class GptInferenceModel(tf.keras.Model):
             generated_tokens,
             training=False
         )
-        # # Add the visit positional embeddings
-        # first_layer_context += self.positional_encoding_layer(
-        #     visit_concept_orders
-        # )
-
-        # # Add the concept positional embeddings
-        # first_layer_context += self.concept_positional_encoding_layer(
-        #     first_layer_context
-        # )
 
         # Where 1 indicates attention and 0 indicates mask
         look_ahead_mask_base = tf.cast(
@@ -260,13 +249,6 @@ class GptInferenceModel(tf.keras.Model):
             batch,
             self.tokenizer.get_vocab_size()
         ))
-        # # Create the default visit_concept_orders for the demographic prompts
-        # # TODO: this may not be a good assumption cos the inputs could be partial history
-        # visit_concept_orders = tf.zeros_like(
-        #     inputs
-        # )
-        #
-        # current_visit_concept_orders = visit_concept_orders[..., -1:] + 1
 
         while length < self.context_window:
             # Generate the next batch of tokens and update the contexts
@@ -314,27 +296,6 @@ class GptInferenceModel(tf.keras.Model):
                 [inputs, next_tokens]
             )
 
-            # # Identify any type of ATT tokens
-            # all_att_token_indicators = tf.cast(
-            #     tf.reduce_any(
-            #         next_tokens[..., tf.newaxis] == self.all_att_token_ids,
-            #         axis=-1
-            #     ),
-            #     dtype=tf.int32
-            # )
-            #
-            # # For all ATT tokens including inter/intra ones, we set the corresponding next_visit_concept_orders to
-            # # the previous next_visit_concept_orders + 1
-            # current_visit_concept_orders += all_att_token_indicators
-            #
-            # # If current token is ATT, we set it to zero otherwise we take the value from current_visit_concept_orders
-            # next_visit_concept_orders = (1 - all_att_token_indicators) * current_visit_concept_orders
-            #
-            # visit_concept_orders = np.hstack([
-            #     visit_concept_orders,
-            #     next_visit_concept_orders
-            # ])
-
             # Get the new length of the sequence
             _, length = np.shape(
                 inputs
@@ -369,24 +330,6 @@ class GptInferenceModel(tf.keras.Model):
         layers = [layer for layer in gpt_model.layers if isinstance(layer, TiedOutputEmbedding)]
         if len(layers) == 0:
             raise RuntimeError(f'Could not find TiedOutputEmbedding')
-        return layers[0]
-
-    # @staticmethod
-    # def _get_positional_encoding_layer(gpt_model):
-    #     gpt_model.get_layer('visit_positional_encoding_layer')
-    #     layers = [layer for layer in gpt_model.layers if
-    #               isinstance(layer, PositionalEncodingLayer)]
-    #     if len(layers) == 0:
-    #         raise RuntimeError(f'Could not find GptPositionEmbedding')
-    #     return layers[0]
-
-    @staticmethod
-    def _get_concept_positional_encoding_layer(gpt_model):
-        gpt_model.get_layer('concept_positional_encoding_layer')
-        layers = [layer for layer in gpt_model.layers if
-                  isinstance(layer, TrainablePositionEmbedding)]
-        if len(layers) == 0:
-            raise RuntimeError(f'Could not find TrainablePositionEmbedding')
         return layers[0]
 
     @staticmethod
