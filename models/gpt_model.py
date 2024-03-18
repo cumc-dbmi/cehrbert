@@ -12,6 +12,7 @@ from models.layers.custom_layers import (
     ConceptValuePredictionLayer
 )
 
+MASK_VALUE = -1e10
 INPATIENT_ATT_PATTERN = r"VS-.\d+-VE"
 
 
@@ -84,12 +85,66 @@ class TopPStrategy(SamplingStrategy):
 
         included_top_probs = tf.cast(cum_sum_probs >= self._top_p, dtype=tf.float32)
         prob_mask = tf.concat([tf.zeros_like(included_top_probs[:, :1]), included_top_probs[:, :-1]], axis=-1)
-        pred_logit = tf.math.log(sorted_probs) + prob_mask * (-1e10)
+        pred_logit = tf.math.log(sorted_probs) + prob_mask * MASK_VALUE
 
         return pred_logit, indices
 
     def get_name(self):
         return 'top_p_strategy'
+
+
+class TopMixStrategy(SamplingStrategy):
+    def __init__(
+            self,
+            top_k,
+            top_p,
+            end_token_id,
+            temperature: float = 1.0,
+            end_token_temperature: float = 1.0
+    ):
+        self._top_p_strategy = TopPStrategy(
+            top_p=top_p,
+            end_token_id=end_token_id,
+            temperature=temperature,
+            end_token_temperature=end_token_temperature
+        )
+        self._top_k_strategy = TopKStrategy(
+            top_k=top_k,
+            end_token_id=end_token_id,
+            temperature=temperature,
+            end_token_temperature=end_token_temperature
+        )
+
+    def process_logit(self, outputs):
+        top_p_pred_logits, top_p_indices = self._top_p_strategy.process_logit(outputs)
+        top_k_pred_logits, top_k_indices = self._top_k_strategy.process_logit(outputs)
+
+        # Todo this gives us the tokens that are in the predictive distributions
+        top_p_valid_logit_indicator = tf.cast(
+            top_p_pred_logits >= MASK_VALUE / 100,
+            dtype=tf.float32
+        )
+        # If the number of valid tokens in the top_p strategy is less than the top k, we will use the top_p
+        # strategy, otherwise we will use the top k strategy.
+        is_top_p_strategy_gate = tf.cast(
+            tf.reduce_sum(top_p_valid_logit_indicator, axis=-1, keepdims=True) < self._top_k_strategy._top_k,
+            dtype=tf.float32
+        )
+
+        pred_logtis = (
+                is_top_p_strategy_gate * top_p_pred_logits[:, :self._top_k_strategy._top_k]
+                + (1 - is_top_p_strategy_gate) * top_k_pred_logits
+        )
+
+        indices = (
+                tf.cast(is_top_p_strategy_gate, dtype=tf.int32) * top_p_indices[:, :self._top_k_strategy._top_k]
+                + (1 - tf.cast(is_top_p_strategy_gate, dtype=tf.int32)) * top_k_indices
+        )
+
+        return pred_logtis, indices
+
+    def get_name(self):
+        return 'top_mix_strategy'
 
 
 class GptInferenceModel(tf.keras.Model):

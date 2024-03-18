@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
-from models.gpt_model import GptInferenceModel, TopKStrategy, TopPStrategy
+from models.gpt_model import GptInferenceModel, TopKStrategy, TopPStrategy, TopMixStrategy
 from models.layers.custom_layers import get_custom_objects
 from utils.checkpoint_utils import find_tokenizer_path, find_latest_checkpoint_path
 
@@ -88,6 +88,24 @@ def main(
         folder_name = (
             f'top_p{int(args.top_p * 100)}_temp_{int(args.temperature * 100)}'
             if args.temperature != 1.0 else f'top_p{int(args.top_p * 100)}'
+        )
+        output_folder_name = os.path.join(
+            args.output_folder,
+            model_checkpoint_base_name_without_extension,
+            folder_name,
+            'generated_sequences'
+        )
+    elif args.sampling_strategy == TopMixStrategy.__name__:
+        sampling_strategy = TopMixStrategy(
+            top_k=args.top_k,
+            top_p=args.top_p,
+            end_token_id=tokenizer.get_end_token_id(),
+            temperature=args.temperature,
+            end_token_temperature=args.end_token_temperature
+        )
+        folder_name = (
+            f'top_mix_p{int(args.top_p * 100)}_k{args.top_k}_temp_{int(args.temperature * 100)}'
+            if args.temperature != 1.0 else f'top_mix_p{int(args.top_p * 100)}_k{args.top_k}'
         )
         output_folder_name = os.path.join(
             args.output_folder,
@@ -233,7 +251,7 @@ if __name__ == "__main__":
         '--sampling_strategy',
         dest='sampling_strategy',
         action='store',
-        choices=[TopPStrategy.__name__, TopKStrategy.__name__],
+        choices=[TopPStrategy.__name__, TopKStrategy.__name__, TopMixStrategy.__name__],
         help='Pick the sampling strategy between top_k and top_p',
         required=True
     )
