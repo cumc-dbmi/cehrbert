@@ -5,114 +5,13 @@ import random
 from datetime import datetime
 import numpy as np
 import pandas as pd
-from analyses.gpt.privacy.patient_index.base_indexer import PatientDataIndex
-from sklearn.preprocessing import OneHotEncoder
+
+from analyses.gpt.privacy.utils import create_race_encoder, create_gender_encoder, scale_age, create_demographics, \
+    create_vector_representations, find_match, find_match_self, RANDOM_SEE
 
 logging.basicConfig(level=logging.INFO)
 LOG = logging.getLogger("NNAA")
-validate_demographics = PatientDataIndex.validate_demographics
-get_demographics = PatientDataIndex.get_demographics
-
-RANDOM_SEE = 42
-NUM_OF_GENDERS = 3
-NUM_OF_RACES = 21
-
-
-def create_race_encoder(train_data_sample, evaluation_data_sample, synthetic_data_sample):
-    race_encoder = OneHotEncoder()
-    all_unique_races = np.unique(np.concatenate([
-        train_data_sample.race.unique(),
-        evaluation_data_sample.race.unique(),
-        synthetic_data_sample.race.unique()], axis=0)
-    )
-    race_encoder.fit(all_unique_races[:, np.newaxis])
-    return race_encoder
-
-
-def create_gender_encoder(train_data_sample, evaluation_data_sample, synthetic_data_sample):
-    gender_encoder = OneHotEncoder()
-    all_unique_genders = np.unique(np.concatenate([
-        train_data_sample.gender.unique(),
-        evaluation_data_sample.gender.unique(),
-        synthetic_data_sample.gender.unique()], axis=0)
-    )
-    gender_encoder.fit(all_unique_genders[:, np.newaxis])
-    return gender_encoder
-
-
-def transform_concepts(dataset, concept_tokenizer):
-    def extract_medical_concepts(concept_ids):
-        concept_ids = [_ for _ in concept_ids[4:] if str.isnumeric(_)]
-        return list(set(concept_ids))
-
-    def create_binary_format(concept_ids):
-        indices = np.array(concept_tokenizer.encode(concept_ids)).flatten().astype(int)
-        embeddings = np.zeros(concept_tokenizer.get_vocab_size())
-        embeddings.put(indices, 1)
-        return embeddings
-
-    embedding_list = []
-    for _, pat_seq in dataset.concept_ids.items():
-        embedding_list.append(create_binary_format(extract_medical_concepts(pat_seq)))
-
-    return np.asarray(embedding_list)
-
-
-def scale_age(dataset):
-    # The first 4 elements have a value of -1 because the corresponding positions are demographic tokens
-    ages = dataset.ages.apply(lambda age_list: age_list[4])
-    assert (ages >= 0).all() > 0
-    max_age = ages.max()
-    dataset['scaled_age'] = ages / max_age
-    return dataset
-
-
-def create_demographics(dataset):
-    genders = dataset.concept_ids.apply(lambda concept_list: get_demographics(concept_list)[2])
-    races = dataset.concept_ids.apply(lambda concept_list: get_demographics(concept_list)[3])
-    dataset['gender'] = genders
-    dataset['race'] = races
-    return dataset
-
-
-def create_vector_representations(
-        dataset,
-        concept_tokenizer,
-        gender_encoder,
-        race_encoder
-):
-    concept_vectors = transform_concepts(dataset, concept_tokenizer)
-    gender_vectors = gender_encoder.transform(dataset.gender.to_numpy()[:, np.newaxis]).todense()
-    race_vectors = race_encoder.transform(dataset.race.to_numpy()[:, np.newaxis]).todense()
-    age_vectors = dataset.scaled_age.to_numpy()[:, np.newaxis]
-
-    pat_vectors = np.concatenate([
-        age_vectors,
-        gender_vectors,
-        race_vectors,
-        concept_vectors
-    ], axis=-1)
-
-    return np.asarray(pat_vectors)
-
-
-def find_replicant(source, target):
-    a = np.sum(target ** 2, axis=1).reshape(target.shape[0], 1) + np.sum(source.T ** 2, axis=0)
-    b = np.dot(target, source.T) * 2
-    distance_matrix = a - b
-    return np.min(distance_matrix, axis=0)
-
-
-def find_replicant_self(source, target):
-    a = np.sum(target ** 2, axis=1).reshape(target.shape[0], 1) + np.sum(source.T ** 2, axis=0)
-    b = np.dot(target, source.T) * 2
-    distance_matrix = a - b
-    n_col = np.shape(distance_matrix)[1]
-    min_distance = np.zeros(n_col)
-    for i in range(n_col):
-        sorted_column = np.sort(distance_matrix[:, i])
-        min_distance[i] = sorted_column[1]
-    return min_distance
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 
 def main(args):
@@ -185,19 +84,19 @@ def main(args):
             race_encoder
         )
         LOG.info(f'Iteration {i}: Started calculating the distances between synthetic and training vectors')
-        distance_train_TS = find_replicant(train_vectors, synthetic_vectors)
-        distance_train_ST = find_replicant(synthetic_vectors, train_vectors)
-        distance_train_TT = find_replicant_self(train_vectors, train_vectors)
-        distance_train_SS = find_replicant_self(synthetic_vectors, synthetic_vectors)
+        distance_train_TS = find_match(train_vectors, synthetic_vectors)
+        distance_train_ST = find_match(synthetic_vectors, train_vectors)
+        distance_train_TT = find_match_self(train_vectors, train_vectors)
+        distance_train_SS = find_match_self(synthetic_vectors, synthetic_vectors)
 
         aa_train = (np.sum(distance_train_TS > distance_train_TT) + np.sum(
             distance_train_ST > distance_train_SS)) / args.num_of_samples / 2
 
         LOG.info(f'Iteration {i}: Started calculating the distances between synthetic and evaluation vectors')
-        distance_test_TS = find_replicant(evaluation_vectors, synthetic_vectors)
-        distance_test_ST = find_replicant(synthetic_vectors, evaluation_vectors)
-        distance_test_TT = find_replicant_self(evaluation_vectors, evaluation_vectors)
-        distance_test_SS = find_replicant_self(synthetic_vectors, synthetic_vectors)
+        distance_test_TS = find_match(evaluation_vectors, synthetic_vectors)
+        distance_test_ST = find_match(synthetic_vectors, evaluation_vectors)
+        distance_test_TT = find_match_self(evaluation_vectors, evaluation_vectors)
+        distance_test_SS = find_match_self(synthetic_vectors, synthetic_vectors)
 
         aa_test = (np.sum(distance_test_TS > distance_test_TT) + np.sum(
             distance_test_ST > distance_test_SS)) / args.num_of_samples / 2
