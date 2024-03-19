@@ -88,6 +88,35 @@ def create_vector_representations(
     return np.asarray(pat_vectors)
 
 
+def batched_pairwise_euclidean_distance_indices(A, B, batch_size):
+    # Initialize an array to hold the minimum distances and indices for each point in A
+    min_distances = np.full((A.shape[0],), np.inf)
+    min_indices = np.full((A.shape[0],), -1, dtype=int)
+
+    # Iterate over A in batches
+    for i in range(0, A.shape[0], batch_size):
+        end_i = i + batch_size
+
+        # Iterate over B in batches
+        for j in range(0, B.shape[0], batch_size):
+            end_j = j + batch_size
+            B_batch = B[j:end_j]
+
+            # Compute the distances between the current batches of A and B
+            distances = np.sqrt(np.sum((A[i:end_i, np.newaxis, :] - B_batch[np.newaxis, :, :]) ** 2, axis=2))
+
+            # Find the minimum distance for each point in the A batch to points in the B batch
+            min_batch_indices = np.argmin(distances, axis=1) + j
+            min_batch_distances = np.min(distances, axis=1)
+
+            # Update the minimum distances and indices if the current batch distances are smaller
+            update_mask = min_batch_distances < min_distances[i:end_i]
+            min_distances[i:end_i][update_mask] = min_batch_distances[update_mask]
+            min_indices[i:end_i][update_mask] = min_batch_indices[update_mask]
+
+    return min_indices
+
+
 def find_match(source, target):
     a = np.sum(target ** 2, axis=1).reshape(target.shape[0], 1) + np.sum(source.T ** 2, axis=0)
     b = np.dot(target, source.T) * 2
