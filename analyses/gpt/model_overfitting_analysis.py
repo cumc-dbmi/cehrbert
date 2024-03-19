@@ -2,6 +2,7 @@ import logging
 from statistics import mean
 
 import os
+import glob
 import pandas as pd
 from tqdm import tqdm
 import tensorflow as tf
@@ -27,6 +28,13 @@ def main(args):
         )
 
     validation_data = pd.read_parquet(args.validation_data_folder)
+    if glob.glob(os.path.join(args.output_folder, '*.parquet')):
+        logger.info(f'Detected existing output in {args.output_folder}')
+        existing_output = pd.read_parquet(args.output_folder)
+        total = len(validation_data)
+        validation_data = validation_data[~validation_data.person_id.isin(existing_output.person_id)]
+        logger.info(f'{total - len(validation_data)} examples will be skipped.')
+
     tokenizer_path = find_tokenizer_path(args.model_folder)
     tokenizer = tokenize_one_field(
         validation_data,
@@ -88,8 +96,6 @@ def main(args):
         mask = tf.cast(outputs["concept_predictions"][:, :, 1], dtype=tf.float32)
         loss = tf.keras.losses.sparse_categorical_crossentropy(y_true_val, predictions)
         masked_loss = tf.reduce_mean(loss * mask, axis=-1).numpy().tolist()
-        losses.extend(masked_loss)
-        perplexities.extend(perplexity)
         perplexity = masked_perplexity(y_true=outputs['concept_predictions'], y_pred=predictions)
         print(f"Batch {i}: Val loss: {mean(masked_loss)}. Val perplexity: {mean(perplexity)}\n")
         results_df = pd.DataFrame(
