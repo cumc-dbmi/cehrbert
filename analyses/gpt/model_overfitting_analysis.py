@@ -50,7 +50,7 @@ def main(args):
     )
 
     gpt_data_generator._learning_objectives.append(
-        CustomLearningObjective(input_schema={'person_id': tf.int32}, output_schema={'label': tf.int32})
+        CustomLearningObjective(input_schema={'person_id': tf.int32}, output_schema={})
     )
 
     strategy = tf.distribute.MirroredStrategy()
@@ -77,44 +77,27 @@ def main(args):
             existing_model_path, custom_objects=get_custom_objects()
         )
 
-    person_ids = []
-    losses = []
-    labels = []
-    perplexities = []
-
     batch_iterator = gpt_data_generator.create_batch_generator()
     for i, each_batch in tqdm(
             enumerate(batch_iterator), total=gpt_data_generator.get_steps_per_epoch()
     ):
         inputs, outputs = each_batch
-        person_ids.extend(inputs['person_id'])
-        labels.extend(outputs['label'])
+        person_ids = inputs['person_id']
         predictions = distributed_inference(inputs)
         y_true_val = outputs["concept_predictions"][:, :, 0]
         mask = tf.cast(outputs["concept_predictions"][:, :, 1], dtype=tf.float32)
         loss = tf.keras.losses.sparse_categorical_crossentropy(y_true_val, predictions)
         masked_loss = tf.reduce_mean(loss * mask, axis=-1).numpy().tolist()
-<<<<<<< Updated upstream
-        perplexity = masked_perplexity(predictions)
         losses.extend(masked_loss)
         perplexities.extend(perplexity)
-=======
         perplexity = masked_perplexity(y_true=outputs['concept_predictions'], y_pred=predictions)
->>>>>>> Stashed changes
         print(f"Batch {i}: Val loss: {mean(masked_loss)}. Val perplexity: {mean(perplexity)}\n")
-
         results_df = pd.DataFrame(
-            zip(person_ids, losses, perplexities, labels),
-            columns=['person_id', 'loss', 'perplexity', 'label']
+            zip(person_ids, masked_loss, perplexity),
+            columns=['person_id', 'loss', 'perplexity']
         )
         current_time = datetime.now().strftime("%m-%d-%Y-%H-%M-%S")
         results_df.to_parquet(os.path.join(args.output_folder, f'{current_time}.parquet'))
-        # Clear the lists for the next batch
-        person_ids.clear()
-        losses.clear()
-        labels.clear()
-
-    print(f"Average Val loss: {mean(losses)}\n")
 
 
 def create_argparser():
