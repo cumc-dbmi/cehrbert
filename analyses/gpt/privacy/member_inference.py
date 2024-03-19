@@ -9,6 +9,7 @@ from datetime import datetime
 from analyses.gpt.privacy.utils import create_race_encoder, create_gender_encoder, scale_age, create_demographics, \
     create_vector_representations, find_match, RANDOM_SEE
 
+logging.basicConfig(level=logging.INFO)
 LOG = logging.getLogger('member_inference')
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 

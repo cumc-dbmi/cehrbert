@@ -15,6 +15,7 @@ from data_generators.learning_objective import CustomLearningObjective
 from models.layers.custom_layers import get_custom_objects
 from utils.checkpoint_utils import find_tokenizer_path, find_latest_checkpoint_path, checkpoint_exists
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("model_overfitting_analysis")
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
@@ -91,7 +92,7 @@ def main(args):
     ):
         inputs, outputs = each_batch
         person_ids = inputs['person_id']
-        predictions = distributed_inference(inputs)
+        predictions = model(inputs, training=False)
         y_true_val = outputs["concept_predictions"][:, :, 0]
         mask = tf.cast(outputs["concept_predictions"][:, :, 1], dtype=tf.float32)
         loss = tf.keras.losses.sparse_categorical_crossentropy(y_true_val, predictions)
