@@ -7,6 +7,13 @@ EPOCH_CHECKPOINT_PATTERN = re.compile(r"_epoch_(\d{2})_batch_final\.h5$")
 BATCH_CHECKPOINT_PATTERN = re.compile(r".*_epoch_(\d{2})_batch_(\d+)\.h5$")
 
 
+def checkpoint_exists(model_folder, checkpoint_name):
+    if checkpoint_name:
+        existing_model_path = os.path.join(model_folder, checkpoint_name)
+        return os.path.exists(existing_model_path)
+    return False
+
+
 def get_checkpoint_epoch(checkpoint_path):
     epoch = get_latest_checkpoint_legacy_model_epoch(checkpoint_path)
     if not epoch:
