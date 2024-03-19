@@ -34,7 +34,7 @@ def masked_perplexity(y_true, y_pred):
     More info: http://cs224d.stanford.edu/lecture_notes/LectureNotes4.pdf
     """
     y_true_value = y_true[:, :, 0]
-    mask = y_true[:, :, 1]
+    mask = K.cast(y_true[:, :, 1], dtype='float32')
     cross_entropy = K.sparse_categorical_crossentropy(y_true_value, y_pred)
     batch_perplexities = K.exp(
         K.sum(mask * cross_entropy, axis=-1) / (K.sum(mask, axis=-1) + 1e-6))

@@ -96,10 +96,12 @@ def main(args):
         mask = tf.cast(outputs["concept_predictions"][:, :, 1], dtype=tf.float32)
         loss = tf.keras.losses.sparse_categorical_crossentropy(y_true_val, predictions)
         masked_loss = tf.reduce_mean(loss * mask, axis=-1).numpy().tolist()
-        perplexity = masked_perplexity(y_true=outputs['concept_predictions'], y_pred=predictions)
-        print(f"Batch {i}: Val loss: {mean(masked_loss)}. Val perplexity: {mean(perplexity)}\n")
+        batch_perplexities = tf.math.exp(
+            tf.reduce_sum(mask * loss, axis=-1) / (tf.reduce_sum(mask, axis=-1) + 1e-6)
+        ).numpy().tolist()
+        print(f"Batch {i}: Val loss: {mean(masked_loss)}. Val perplexity: {mean(batch_perplexities)}\n")
         results_df = pd.DataFrame(
-            zip(person_ids, masked_loss, perplexity),
+            zip(person_ids, masked_loss, batch_perplexities),
             columns=['person_id', 'loss', 'perplexity']
         )
         current_time = datetime.now().strftime("%m-%d-%Y-%H-%M-%S")
