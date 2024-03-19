@@ -6,6 +6,7 @@ import pandas as pd
 from tqdm import tqdm
 import tensorflow as tf
 from datetime import datetime
+from keras_transformer.bert import masked_perplexity
 
 from utils.model_utils import tokenize_one_field
 from data_generators.data_generator_base import GptDataGenerator
@@ -79,6 +80,7 @@ def main(args):
     person_ids = []
     losses = []
     labels = []
+    perplexities = []
 
     batch_iterator = gpt_data_generator.create_batch_generator()
     for i, each_batch in tqdm(
@@ -92,10 +94,19 @@ def main(args):
         mask = tf.cast(outputs["concept_predictions"][:, :, 1], dtype=tf.float32)
         loss = tf.keras.losses.sparse_categorical_crossentropy(y_true_val, predictions)
         masked_loss = tf.reduce_mean(loss * mask, axis=-1).numpy().tolist()
+<<<<<<< Updated upstream
+        perplexity = masked_perplexity(predictions)
         losses.extend(masked_loss)
-        print(f"Batch {i}: Val loss: {mean(masked_loss)}\n")
+        perplexities.extend(perplexity)
+=======
+        perplexity = masked_perplexity(y_true=outputs['concept_predictions'], y_pred=predictions)
+>>>>>>> Stashed changes
+        print(f"Batch {i}: Val loss: {mean(masked_loss)}. Val perplexity: {mean(perplexity)}\n")
 
-        results_df = pd.DataFrame(zip(person_ids, losses, labels), columns=['person_id', 'loss', 'label'])
+        results_df = pd.DataFrame(
+            zip(person_ids, losses, perplexities, labels),
+            columns=['person_id', 'loss', 'perplexity', 'label']
+        )
         current_time = datetime.now().strftime("%m-%d-%Y-%H-%M-%S")
         results_df.to_parquet(os.path.join(args.output_folder, f'{current_time}.parquet'))
         # Clear the lists for the next batch
