@@ -8,7 +8,7 @@ from keras import backend as K
 from data_generators.tokenizer import ConceptTokenizer
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 from models.layers.custom_layers import (
-    GptDecoder, ConceptValueTransformationLayer,
+    GptDecoder, TrainablePositionEmbedding, ConceptValueTransformationLayer,
     ConceptValuePredictionLayer
 )
 
@@ -164,6 +164,7 @@ class GptInferenceModel(tf.keras.Model):
         self.tokenizer = tokenizer
         self.sampling_strategy = sampling_strategy
         self.concept_embedding_layer = self._get_concept_embedding(gpt_model)
+        self.concept_positional_encoding_layer = self._get_concept_positional_encoding_layer(gpt_model)
         self.output_layer = self._get_output_layer(gpt_model)
         self.gpt_decoder = self._get_gpt_decoder(gpt_model)
         self.vocab_size = self.concept_embedding_layer.input_dim
@@ -220,6 +221,14 @@ class GptInferenceModel(tf.keras.Model):
             generated_tokens,
             training=False
         )
+
+        # If concept_positional_encoding_layer exists, we apply the positional embeddings
+        # This is needed for backward compatability
+        if self.concept_positional_encoding_layer:
+            # Add the concept positional embeddings
+            first_layer_context += self.concept_positional_encoding_layer(
+                first_layer_context
+            )
 
         # Where 1 indicates attention and 0 indicates mask
         look_ahead_mask_base = tf.cast(
@@ -386,6 +395,14 @@ class GptInferenceModel(tf.keras.Model):
         layers = [layer for layer in gpt_model.layers if isinstance(layer, TiedOutputEmbedding)]
         if len(layers) == 0:
             raise RuntimeError(f'Could not find TiedOutputEmbedding')
+        return layers[0]
+
+    @staticmethod
+    def _get_concept_positional_encoding_layer(gpt_model):
+        layers = [layer for layer in gpt_model.layers if
+                  isinstance(layer, TrainablePositionEmbedding)]
+        if len(layers) == 0:
+            return None
         return layers[0]
 
     @staticmethod
