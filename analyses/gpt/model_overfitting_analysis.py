@@ -15,9 +15,8 @@ from data_generators.learning_objective import CustomLearningObjective
 from models.layers.custom_layers import get_custom_objects
 from utils.checkpoint_utils import find_tokenizer_path, find_latest_checkpoint_path, checkpoint_exists
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("model_overfitting_analysis")
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 
 def main(args):

@@ -4,9 +4,8 @@ import numpy as np
 import pandas as pd
 import math
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("compare_sequence_prevalence")
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 
 def main(args):
@@ -45,6 +44,7 @@ def main(args):
         l2_metrics.append(math.sqrt(diff.sum()))
 
     print(f'Average Mean Squared Error: {np.mean(mse_metrics)}; Average L2 norm {np.mean(l2_metrics)}')
+
 
 def create_argparser():
     import argparse
