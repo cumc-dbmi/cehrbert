@@ -60,6 +60,7 @@ def main(
 
     model_checkpoint_base_name = os.path.basename(model_path)
     model_checkpoint_base_name_without_extension, _ = os.path.splitext(model_checkpoint_base_name)
+    model_checkpoint_base_name_without_extension = model_checkpoint_base_name_without_extension.replace('.', '_')
 
     if args.sampling_strategy == TopKStrategy.__name__:
         sampling_strategy = TopKStrategy(
