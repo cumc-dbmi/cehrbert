@@ -1,47 +1,57 @@
 import logging
-
+from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql import functions as f
 import numpy as np
-import pandas as pd
-import math
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("compare_sequence_prevalence")
 
 
+def calculate_prevalence(dataframe: DataFrame) -> DataFrame:
+    row_count = dataframe.count()
+    concept_dataframe = dataframe \
+        .select(f.explode('concept_ids').alias('concept_id'))
+    return concept_dataframe.groupby('concept_id').count() \
+        .withColumn('prevalence', f.col('count') / f.lit(row_count)) \
+        .drop('count')
+
+
 def main(args):
+    spark = SparkSession \
+        .builder \
+        .appName('Compare Sequence Prevalence') \
+        .getOrCreate()
+
     logger.info(f'Loading the reference sequence at {args.reference_sequence_path}')
-    reference_sequences = pd.read_parquet(args.reference_sequence_path)
+    reference_sequences = spark.read.parquet(args.reference_sequence_path)
     logger.info(f'Loading the synthetic sequence at {args.synthetic_sequence_path}')
-    synthetic_sequences = pd.read_parquet(args.synthetic_sequence_path)
+    synthetic_sequences = spark.read.parquet(args.synthetic_sequence_path)
+    ref_count = reference_sequences.count()
+    syn_count = synthetic_sequences.count()
     mse_metrics = []
     l2_metrics = []
     for _ in range(args.n_iterations):
-        reference_samples = reference_sequences.sample(args.sample_size)
-        synthetic_samples = synthetic_sequences.sample(args.sample_size)
+        reference_prevalence = calculate_prevalence(
+            reference_sequences.sample(args.sample_size / ref_count)
+        ).withColumnRenamed('prevalence', 'ref_prevalence')
+        synthetic_prevalence = calculate_prevalence(
+            synthetic_sequences.sample(args.sample_size / syn_count)
+        ).withColumnRenamed('prevalence', 'syn_prevalence')
 
-        reference_prevalence = (
-                reference_samples.concept_ids.explode().value_counts() / len(reference_samples)
-        ).reset_index().rename(
-            columns={'concept_ids': 'concept_id', 'count': 'ref_prevalence'}
-        )
-
-        synthetic_prevalence = (
-                synthetic_samples.concept_ids.explode().value_counts() / len(reference_samples)
-        ).reset_index().rename(
-            columns={'concept_ids': 'concept_id', 'count': 'syn_prevalence'}
-        )
-
-        merge_pd = reference_prevalence.merge(
+        merge_dataframe = reference_prevalence.join(
             synthetic_prevalence,
-            how='outer',
-            on='concept_id'
-        ).fillna(0.0)
+            on='concept_id',
+            how='full_outer'
+        ).withColumn('squared_error', f.pow(f.col('ref_prevalence') - f.col('syn_prevalence'), 2))
 
-        diff = (merge_pd['ref_prevalence'] - merge_pd['syn_prevalence']) ** 2
+        results = merge_dataframe.select(
+            f.sqrt(f.sum('squared_error')).alias('l2_norm'),
+            f.mean('squared_error').alias('mse')
+        ).head(1)[0]
 
-        print(f'Iteration {_}. Mean Squared Error: {diff.mean()}; L2 norm {math.sqrt(diff.sum())}')
-        mse_metrics.append(diff.mean())
-        l2_metrics.append(math.sqrt(diff.sum()))
+        print(f'Iteration {_}. Mean Squared Error: {results.mse}; L2 norm {results.l2_norm}')
+        mse_metrics.append(results.mse)
+        l2_metrics.append(results.l2_norm)
 
     print(f'Average Mean Squared Error: {np.mean(mse_metrics)}; Average L2 norm {np.mean(l2_metrics)}')
 
