@@ -32,21 +32,35 @@ def create_gender_encoder(train_data_sample, evaluation_data_sample, synthetic_d
     return gender_encoder
 
 
+def extract_medical_concepts(concept_ids):
+    concept_ids = [_ for _ in concept_ids[4:] if str.isnumeric(_)]
+    return list(set(concept_ids))
+
+
+def create_binary_format(concept_ids, concept_tokenizer):
+    indices = np.array(concept_tokenizer.encode(concept_ids)).flatten().astype(int)
+    embeddings = np.zeros(concept_tokenizer.get_vocab_size())
+    embeddings.put(indices, 1)
+    return embeddings
+
+
+def extract_common_sensitive_concepts(dataset, concept_tokenizer, common_attributes, sensitive_attributes):
+    common_embeddings_list = []
+    sensitive_embeddings_list = []
+    for _, pat_seq in dataset.concept_ids.items():
+        concept_ids = extract_medical_concepts(pat_seq)
+        common_concept_ids = [_ for _ in concept_ids if _ in common_attributes]
+        sensitive_concept_ids = [_ for _ in concept_ids if _ in sensitive_attributes]
+
+        common_embeddings_list.append(create_binary_format(common_concept_ids, concept_tokenizer))
+        sensitive_embeddings_list.append(create_binary_format(sensitive_concept_ids, concept_tokenizer))
+    return np.array(common_embeddings_list), np.array(sensitive_embeddings_list)
+
+
 def transform_concepts(dataset, concept_tokenizer):
-    def extract_medical_concepts(concept_ids):
-        concept_ids = [_ for _ in concept_ids[4:] if str.isnumeric(_)]
-        return list(set(concept_ids))
-
-    def create_binary_format(concept_ids):
-        indices = np.array(concept_tokenizer.encode(concept_ids)).flatten().astype(int)
-        embeddings = np.zeros(concept_tokenizer.get_vocab_size())
-        embeddings.put(indices, 1)
-        return embeddings
-
     embedding_list = []
     for _, pat_seq in dataset.concept_ids.items():
-        embedding_list.append(create_binary_format(extract_medical_concepts(pat_seq)))
-
+        embedding_list.append(create_binary_format(extract_medical_concepts(pat_seq), concept_tokenizer))
     return np.asarray(embedding_list)
 
 
@@ -88,6 +102,29 @@ def create_vector_representations(
     return np.asarray(pat_vectors)
 
 
+def create_vector_representations_for_attribute(
+        dataset,
+        concept_tokenizer,
+        gender_encoder,
+        race_encoder,
+        common_attributes,
+        sensitive_attributes
+):
+    common_concept_vectors, sensitive_concept_vectors = extract_common_sensitive_concepts(dataset, concept_tokenizer, common_attributes, sensitive_attributes)
+    gender_vectors = gender_encoder.transform(dataset.gender.to_numpy()[:, np.newaxis]).todense()
+    race_vectors = race_encoder.transform(dataset.race.to_numpy()[:, np.newaxis]).todense()
+    age_vectors = dataset.scaled_age.to_numpy()[:, np.newaxis]
+
+    common_pat_vectors = np.concatenate([
+        age_vectors,
+        gender_vectors,
+        race_vectors,
+        common_concept_vectors
+    ], axis=-1)
+
+    return np.asarray(common_pat_vectors), np.asarray(sensitive_concept_vectors)
+
+
 def batched_pairwise_euclidean_distance_indices(A, B, batch_size):
     # Initialize an array to hold the minimum distances and indices for each point in A
     min_distances = np.full((A.shape[0],), np.inf)
@@ -106,6 +143,43 @@ def batched_pairwise_euclidean_distance_indices(A, B, batch_size):
             distances = np.sqrt(np.sum((A[i:end_i, np.newaxis, :] - B_batch[np.newaxis, :, :]) ** 2, axis=2))
 
             # Find the minimum distance for each point in the A batch to points in the B batch
+            min_batch_indices = np.argmin(distances, axis=1) + j
+            min_batch_distances = np.min(distances, axis=1)
+
+            # Update the minimum distances and indices if the current batch distances are smaller
+            update_mask = min_batch_distances < min_distances[i:end_i]
+            min_distances[i:end_i][update_mask] = min_batch_distances[update_mask]
+            min_indices[i:end_i][update_mask] = min_batch_indices[update_mask]
+
+    return min_indices
+
+def batched_pairwise_euclidean_distance_indices(A, B, batch_size, self_exclude=False):
+    # Initialize arrays to hold the minimum distances and indices for each point in A
+    min_distances = np.full((A.shape[0],), np.inf)
+    min_indices = np.full((A.shape[0],), -1, dtype=int)
+
+    # Iterate over A in batches
+    for i in range(0, A.shape[0], batch_size):
+        end_i = i + batch_size
+        A_batch = A[i:end_i]
+
+        # Adjust the identity matrix size based on the actual batch size
+        actual_batch_size = A_batch.shape[0]
+
+        # Iterate over B in batches
+        for j in range(0, B.shape[0], batch_size):
+            end_j = j + batch_size
+            B_batch = B[j:end_j]
+
+            # Compute distances between the current batches of A and B
+            distances = np.sqrt(np.sum((A_batch[:, np.newaxis, :] - B_batch[np.newaxis, :, :]) ** 2, axis=2))
+
+            # Apply the identity matrix to exclude self-matches if required
+            if self_exclude and i == j:
+                identity_matrix = np.eye(actual_batch_size) * 10e8
+                distances += identity_matrix
+
+            # Find the minimum distance and corresponding indices for the A batch
             min_batch_indices = np.argmin(distances, axis=1) + j
             min_batch_distances = np.min(distances, axis=1)
 
