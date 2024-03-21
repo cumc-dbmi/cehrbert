@@ -363,6 +363,11 @@ def create_parse_args_gpt():
         dest='include_penalty',
         action='store_true'
     )
+    parser.add_argument(
+        '--include_positional_encoding',
+        dest='include_positional_encoding',
+        action='store_true'
+    )
     return parser
 
 

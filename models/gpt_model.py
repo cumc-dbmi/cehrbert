@@ -422,7 +422,8 @@ def create_model(
         embedding_dropout: float = 0.6,
         include_numeric_value: bool = False,
         include_penalty: bool = False,
-        confidence_penalty_weight: float = 0.1
+        confidence_penalty_weight: float = 0.1,
+        include_positional_encoding: bool = False
 ):
     """
     model = create_model(
@@ -465,11 +466,6 @@ def create_model(
         embeddings_regularizer=tf.keras.regularizers.l2(1e-4)
     )
 
-    # concept_positional_encoding_layer = TrainablePositionEmbedding(
-    #     maxlen=context_window_size,
-    #     embed_dim=embedding_size,
-    #     name='concept_positional_encoding_layer'
-    # )
     #
     # visit_positional_encoding_layer = PositionalEncodingLayer(
     #     max_sequence_length=context_window_size,
@@ -485,15 +481,22 @@ def create_model(
 
     # embeddings for encoder input
     original_concept_embeddings, concept_embedding_matrix = concept_embedding_layer(concept_inputs)
-
     #
     # x = original_concept_embeddings + visit_positional_encoding_layer(
     #     visit_concept_orders
     # )
-    #
-    # x = original_concept_embeddings + concept_positional_encoding_layer(
-    #     original_concept_embeddings
-    # )
+
+    if include_positional_encoding:
+        concept_positional_encoding_layer = TrainablePositionEmbedding(
+            maxlen=context_window_size,
+            embed_dim=embedding_size,
+            name='concept_positional_encoding_layer'
+        )
+        x = original_concept_embeddings + concept_positional_encoding_layer(
+            original_concept_embeddings
+        )
+    else:
+        x = original_concept_embeddings
 
     # If this flag is enabled, we will include additional inputs to incorporate the numeric values into the model
     if include_numeric_value:
@@ -515,7 +518,7 @@ def create_model(
         )
 
         x = value_transformation_layer(
-            original_concept_embeddings, concept_values, concept_value_masks
+            x, concept_values, concept_value_masks
         )
 
         model_inputs.extend([concept_values, concept_value_masks])
@@ -528,7 +531,7 @@ def create_model(
     )
 
     contextualized_embeddings, _, _ = transformer_block(
-        original_concept_embeddings
+        x
     )
 
     concept_prediction_layer = tf.keras.layers.Softmax(

@@ -45,6 +45,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             weighted_sample_scaling_factor: float = 2.0,
             num_steps: int = None,
             include_penalty: bool = False,
+            include_positional_encoding: bool = False,
             *args, **kwargs
     ):
         self._concept_path = concept_path
@@ -67,6 +68,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         self._weighted_sample_scaling_factor = weighted_sample_scaling_factor
         self._num_steps = num_steps
         self._include_penalty = include_penalty
+        self._include_positional_encoding = include_positional_encoding
         self._cosine_mask_rate_scheduler = CosineMaskRateScheduler(
             low_rate=low_rate,
             high_rate=high_rate,
@@ -109,6 +111,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             f'weighted_sample_scaling_factor: {weighted_sample_scaling_factor}\n'
             f'num_steps: {num_steps}\n'
             f'include_penalty: {include_penalty}\n'
+            f'include_positional_encoding: {include_positional_encoding}\n'
         )
 
     def _load_dependencies(self):
@@ -198,7 +201,8 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
                     num_heads=self._num_heads,
                     depth=self._depth,
                     include_numeric_value=self._include_numeric_value,
-                    include_penalty=self._include_penalty
+                    include_penalty=self._include_penalty,
+                    include_positional_encoding=self._include_positional_encoding
                 )
 
                 losses = {
@@ -280,7 +284,8 @@ def main(args):
         is_weighted_sample=args.is_weighted_sample,
         weighted_sample_scaling_factor=args.weighted_sample_scaling_factor,
         num_steps=args.num_steps,
-        include_penalty=args.include_penalty
+        include_penalty=args.include_penalty,
+        include_positional_encoding=args.include_positional_encoding
     ).train_model()
 
 
