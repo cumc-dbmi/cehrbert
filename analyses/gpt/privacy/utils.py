@@ -2,6 +2,7 @@ import numpy as np
 from sklearn.preprocessing import OneHotEncoder
 
 from analyses.gpt.privacy.patient_index.base_indexer import PatientDataIndex
+from tqdm import tqdm
 
 RANDOM_SEE = 42
 NUM_OF_GENDERS = 3
@@ -159,7 +160,7 @@ def batched_pairwise_euclidean_distance_indices(A, B, batch_size, self_exclude=F
     min_indices = np.full((A.shape[0],), -1, dtype=int)
 
     # Iterate over A in batches
-    for i in range(0, A.shape[0], batch_size):
+    for i in tqdm(range(0, A.shape[0], batch_size), total=A.shape[0]//batch_size + 1):
         end_i = i + batch_size
         A_batch = A[i:end_i]
 

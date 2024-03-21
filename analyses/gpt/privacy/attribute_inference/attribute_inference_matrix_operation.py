@@ -2,10 +2,7 @@ import os
 import pickle
 import pandas as pd
 import logging
-import random
-from sklearn import metrics
 from datetime import datetime
-from utils.model_utils import tokenize_one_field
 import yaml
 from typing import Union
 import numpy as np
@@ -13,9 +10,8 @@ import numpy as np
 from analyses.gpt.privacy.utils import (create_race_encoder, create_gender_encoder, scale_age, create_demographics \
     , create_vector_representations_for_attribute, batched_pairwise_euclidean_distance_indices, RANDOM_SEE)
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 LOG = logging.getLogger('attribute_inference')
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 
 def main(
