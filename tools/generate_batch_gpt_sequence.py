@@ -70,7 +70,7 @@ def main(
             end_token_temperature=args.end_token_temperature
         )
         folder_name = (
-            f'top_k{args.top_k}_temp_{int(args.temperature * 100)}'
+            f'top_k{args.top_k}_temp_{int(args.temperature * 1000)}'
             if args.temperature != 1.0 else f'top_k{args.top_k}'
         )
         output_folder_name = os.path.join(
@@ -87,8 +87,8 @@ def main(
             end_token_temperature=args.end_token_temperature
         )
         folder_name = (
-            f'top_p{int(args.top_p * 100)}_temp_{int(args.temperature * 100)}'
-            if args.temperature != 1.0 else f'top_p{int(args.top_p * 100)}'
+            f'top_p{int(args.top_p * 100)}_temp_{int(args.temperature * 1000)}'
+            if args.temperature != 1.0 else f'top_p{int(args.top_p * 1000)}'
         )
         output_folder_name = os.path.join(
             args.output_folder,
@@ -105,8 +105,8 @@ def main(
             end_token_temperature=args.end_token_temperature
         )
         folder_name = (
-            f'top_mix_p{int(args.top_p * 100)}_k{args.top_k}_temp_{int(args.temperature * 100)}'
-            if args.temperature != 1.0 else f'top_mix_p{int(args.top_p * 100)}_k{args.top_k}'
+            f'top_mix_p{int(args.top_p * 100)}_k{args.top_k}_temp_{int(args.temperature * 1000)}'
+            if args.temperature != 1.0 else f'top_mix_p{int(args.top_p * 1000)}_k{args.top_k}'
         )
         output_folder_name = os.path.join(
             args.output_folder,
