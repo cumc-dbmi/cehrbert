@@ -91,10 +91,8 @@ if __name__ == "__main__":
                 common_attributes = data['common_attributes']
             if 'sensitive_attributes' in data:
                 sensitive_attributes = data['sensitive_attributes']
-        except FileNotFoundError:
-            print(f"The file {args.attribute_config} was not found")
-        except Union[PermissionError, OSError] as e:
-            print(e)
+        except Union[PermissionError, OSError, FileNotFoundError] as e:
+            raise e
 
     try:
         concept_tokenizer = pickle.load(open(args.tokenizer_path, 'rb'))
