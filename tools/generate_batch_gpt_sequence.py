@@ -152,6 +152,7 @@ def main(
     data = pd.read_parquet(
         args.demographic_data_path
     )
+    data = data[data.num_of_concepts >= args.min_num_of_concepts]
     demographic_info = data.concept_ids.apply(lambda concept_list: concept_list[0:4])
     demographic_info = tokenizer.encode(map(list, demographic_info))
 
@@ -247,6 +248,14 @@ if __name__ == "__main__":
         type=int,
         help='The context window of the gpt model',
         required=True
+    )
+    parser.add_argument(
+        '--min_num_of_concepts',
+        dest='min_num_of_concepts',
+        action='store',
+        type=int,
+        default=1,
+        required=False
     )
     parser.add_argument(
         '--sampling_strategy',
