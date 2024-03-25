@@ -46,6 +46,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             num_steps: int = None,
             include_penalty: bool = False,
             include_positional_encoding: bool = False,
+            sort_sequence_by_length: bool = False,
             *args, **kwargs
     ):
         self._concept_path = concept_path
@@ -69,6 +70,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         self._num_steps = num_steps
         self._include_penalty = include_penalty
         self._include_positional_encoding = include_positional_encoding
+        self._sort_sequence_by_length = sort_sequence_by_length
         self._cosine_mask_rate_scheduler = CosineMaskRateScheduler(
             low_rate=low_rate,
             high_rate=high_rate,
@@ -112,6 +114,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             f'num_steps: {num_steps}\n'
             f'include_penalty: {include_penalty}\n'
             f'include_positional_encoding: {include_positional_encoding}\n'
+            f'sort_sequence_by_length: {sort_sequence_by_length}\n'
         )
 
     def _load_dependencies(self):
@@ -158,7 +161,8 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             'shuffle_records': self._shuffle_records,
             'is_weighted_sample': self._is_weighted_sample,
             'weighted_sample_scaling_factor': self._weighted_sample_scaling_factor,
-            'num_steps': self._num_steps
+            'num_steps': self._num_steps,
+            'sort_sequence_by_length': self._sort_sequence_by_length
         }
 
         return GptDataGenerator(**parameters)
@@ -285,7 +289,8 @@ def main(args):
         weighted_sample_scaling_factor=args.weighted_sample_scaling_factor,
         num_steps=args.num_steps,
         include_penalty=args.include_penalty,
-        include_positional_encoding=args.include_positional_encoding
+        include_positional_encoding=args.include_positional_encoding,
+        sort_sequence_by_length=args.sort_sequence_by_length
     ).train_model()
 
 

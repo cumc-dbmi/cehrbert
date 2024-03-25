@@ -319,6 +319,7 @@ class GptDataGenerator(BertDataGenerator):
             efficient_training: bool = False,
             is_weighted_sample: bool = False,
             weighted_sample_scaling_factor: float = 2.0,
+            sort_sequence_by_length: bool = False,
             *args,
             **kwargs
     ):
@@ -331,6 +332,7 @@ class GptDataGenerator(BertDataGenerator):
         self._efficient_training = efficient_training
         self._is_weighted_sample = is_weighted_sample
         self._weighted_sample_scaling_factor = weighted_sample_scaling_factor
+        self._sort_sequence_by_length = sort_sequence_by_length
 
         super(BertDataGenerator,
               self).__init__(
@@ -379,19 +381,24 @@ class GptDataGenerator(BertDataGenerator):
         :return:
         """
         if self._efficient_training:
-            unique_batch_nums = self._training_data['batch_num'].unique()
-            uniform_random_order = np.random.uniform(size=unique_batch_nums.size)
-            random_order_pd = pd.DataFrame({
-                'batch_num': unique_batch_nums,
-                'random_order': uniform_random_order}
-            )
-            # Random order the batches of examples so that all the data points in the same batch have the same number
-            # of concepts
-            self._training_data = self._training_data.merge(
-                random_order_pd, on='batch_num'
-            ).sort_values(
-                ['random_order', 'batch_num']
-            ).drop(columns=['random_order'])
+            if self._sort_sequence_by_length:
+                # This sorts the training data from short to long, the model will be fed with short sequences first,
+                # then long sequences gradually
+                self._training_data = self._training_data.sort_values('batch_num')
+            else:
+                unique_batch_nums = self._training_data['batch_num'].unique()
+                uniform_random_order = np.random.uniform(size=unique_batch_nums.size)
+                random_order_pd = pd.DataFrame({
+                    'batch_num': unique_batch_nums,
+                    'random_order': uniform_random_order}
+                )
+                # Random order the batches of examples so that all the data points in the same batch have the same
+                # number of concepts
+                self._training_data = self._training_data.merge(
+                    random_order_pd, on='batch_num'
+                ).sort_values(
+                    ['random_order', 'batch_num']
+                ).drop(columns=['random_order'])
         else:
             self._training_data = self._training_data.sample(frac=1.0)
 

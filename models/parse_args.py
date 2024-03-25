@@ -368,6 +368,11 @@ def create_parse_args_gpt():
         dest='include_positional_encoding',
         action='store_true'
     )
+    parser.add_argument(
+        '--sort_sequence_by_length',
+        dest='sort_sequence_by_length',
+        action='store_true'
+    )
     return parser
 
 
