@@ -418,8 +418,8 @@ class GptDataGenerator(BertDataGenerator):
             if self._sampling_dataset_enabled:
                 # Overwrite row_index with a random index sampled from randomized_indices
                 if self._is_weighted_sample:
-                    row_index = random.choices(
-                        self._training_data.index, k=1, weights=self._training_data.sample_weight
+                    row_index = np.random.choice(
+                        self._training_data.index, size=1, p=self._training_data.sample_weight
                     )[0]
                 else:
                     row_index = random.choice(self._training_data.index)
