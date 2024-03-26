@@ -43,6 +43,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             total: int = np.infty,
             is_weighted_sample: bool = False,
             weighted_sample_scaling_factor: float = 2.0,
+            weighted_sample_bin_width: int = 20,
             num_steps: int = None,
             include_penalty: bool = False,
             include_positional_encoding: bool = False,
@@ -66,6 +67,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
         self._include_numeric_value = include_numeric_value
         self._efficient_training = efficient_training
         self._is_weighted_sample = is_weighted_sample
+        self._weighted_sample_bin_width = weighted_sample_bin_width
         self._weighted_sample_scaling_factor = weighted_sample_scaling_factor
         self._num_steps = num_steps
         self._include_penalty = include_penalty
@@ -111,6 +113,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             f'efficient_training: {efficient_training}\n'
             f'is_weighted_sample: {is_weighted_sample}\n'
             f'weighted_sample_scaling_factor: {weighted_sample_scaling_factor}\n'
+            f'weighted_sample_bin_width: {weighted_sample_bin_width}\n'
             f'num_steps: {num_steps}\n'
             f'include_penalty: {include_penalty}\n'
             f'include_positional_encoding: {include_positional_encoding}\n'
@@ -161,6 +164,7 @@ class GptModelTrainer(AbstractConceptEmbeddingTrainer):
             'shuffle_records': self._shuffle_records,
             'is_weighted_sample': self._is_weighted_sample,
             'weighted_sample_scaling_factor': self._weighted_sample_scaling_factor,
+            'weighted_sample_bin_width' : self._weighted_sample_bin_width,
             'num_steps': self._num_steps,
             'sort_sequence_by_length': self._sort_sequence_by_length
         }
@@ -287,6 +291,7 @@ def main(args):
         shuffle_records=args.shuffle_records,
         is_weighted_sample=args.is_weighted_sample,
         weighted_sample_scaling_factor=args.weighted_sample_scaling_factor,
+        weighted_sample_bin_width=args.weighted_sample_bin_width,
         num_steps=args.num_steps,
         include_penalty=args.include_penalty,
         include_positional_encoding=args.include_positional_encoding,

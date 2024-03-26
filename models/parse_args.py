@@ -349,7 +349,15 @@ def create_parse_args_gpt():
         action='store',
         required=False,
         type=float,
-        default=2.0
+        default=0.5
+    )
+    parser.add_argument(
+        '--weighted_sample_bin_width',
+        dest='weighted_sample_bin_width',
+        action='store',
+        required=False,
+        type=int,
+        default=20
     )
     parser.add_argument(
         '--num_steps',

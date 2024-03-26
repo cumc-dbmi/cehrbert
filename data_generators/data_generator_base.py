@@ -318,7 +318,8 @@ class GptDataGenerator(BertDataGenerator):
             include_numeric_value: bool = False,
             efficient_training: bool = False,
             is_weighted_sample: bool = False,
-            weighted_sample_scaling_factor: float = 2.0,
+            weighted_sample_scaling_factor: float = 0.5,
+            weighted_sample_bin_width: int = 20,
             sort_sequence_by_length: bool = False,
             *args,
             **kwargs
@@ -332,6 +333,7 @@ class GptDataGenerator(BertDataGenerator):
         self._efficient_training = efficient_training
         self._is_weighted_sample = is_weighted_sample
         self._weighted_sample_scaling_factor = weighted_sample_scaling_factor
+        self._weighted_sample_bin_width = weighted_sample_bin_width
         self._sort_sequence_by_length = sort_sequence_by_length
 
         super(BertDataGenerator,
@@ -360,11 +362,20 @@ class GptDataGenerator(BertDataGenerator):
             self._training_data['batch_num'] = self._training_data.row_num // self._batch_size
 
         if self._sampling_dataset_enabled and self._is_weighted_sample:
-            if 'ic' not in self._training_data.columns:
-                raise RuntimeError(f'The columns ic must exist in the training data when is_weighted_sample is true')
-            self._training_data['sample_weight'] = scipy.special.softmax(
-                self._training_data.ic / self._weighted_sample_scaling_factor
-            )
+            self._training_data['bucket'] = self._training_data.num_of_concepts // self._weighted_sample_bin_width
+            # Calculate the bucket counts
+            bucket_counts = self._training_data.groupby(['bucket'])['num_of_concepts'].count()
+            buck_prob_pd = bucket_counts / len(self._training_data)
+            buck_prob_pd.name = 'sample_weight'
+            # Dampen the bucket probabilities by applying a power function e.g. 0.5
+            buck_dampened_prob_pd = np.power(buck_prob_pd, self._weighted_sample_scaling_factor)
+            # re-scale the probability distribution so it sums up to 1
+            buck_dampened_prob_pd = buck_dampened_prob_pd / buck_dampened_prob_pd.sum()
+            buck_dampened_prob_pd = buck_dampened_prob_pd.reset_index()
+            # Calculate the individual sample weight by dividing the bucket probability by the total number of
+            # patient sequences in the bucket
+            buck_dampened_prob_pd['sample_weight'] = buck_dampened_prob_pd.sample_weight / bucket_counts
+            self._training_data = self._training_data.merge(buck_dampened_prob_pd, on='bucket')
 
         # This is important so that the iloc works correctly when retrieving records from the dataframe
         self._training_data = self._training_data.reset_index()
