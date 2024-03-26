@@ -4,7 +4,6 @@ import copy
 from collections import ChainMap
 from itertools import chain
 from typing import Set
-import scipy
 
 from pandas import DataFrame
 
@@ -12,7 +11,7 @@ from data_generators.gpt_learning_objectives import (
     SequenceGenerationLearningObjective,
     PredictNextValueLearningObjective
 )
-from data_generators.gpt_utils import random_slice_gpt_sequence
+from data_generators.gpt_utils import random_slice_gpt_sequence, RandomSampleCache
 from data_generators.learning_objective import *
 from data_generators.tokenizer import ConceptTokenizer
 from data_generators.data_classes import RecordStatus
@@ -366,16 +365,26 @@ class GptDataGenerator(BertDataGenerator):
             # Calculate the bucket counts
             bucket_counts = self._training_data.groupby(['bucket'])['num_of_concepts'].count()
             buck_prob_pd = bucket_counts / len(self._training_data)
-            buck_prob_pd.name = 'sample_weight'
+
             # Dampen the bucket probabilities by applying a power function e.g. 0.5
-            buck_dampened_prob_pd = np.power(buck_prob_pd, self._weighted_sample_scaling_factor)
+            buck_dampened_probs = np.power(buck_prob_pd, self._weighted_sample_scaling_factor)
             # re-scale the probability distribution so it sums up to 1
-            buck_dampened_prob_pd = buck_dampened_prob_pd / buck_dampened_prob_pd.sum()
-            buck_dampened_prob_pd = buck_dampened_prob_pd.reset_index()
+            buck_dampened_probs = buck_dampened_probs / buck_dampened_probs.sum()
+
+            # Check the probability distribution
+            assert buck_dampened_probs.sum() - 1 < 1e-8
+
+            buck_dampened_prob_df = pd.DataFrame({
+                'bucket_freq': bucket_counts,
+                'sample_weight': buck_dampened_probs
+            }).reset_index()
+
             # Calculate the individual sample weight by dividing the bucket probability by the total number of
             # patient sequences in the bucket
-            buck_dampened_prob_pd['sample_weight'] = buck_dampened_prob_pd.sample_weight / bucket_counts
-            self._training_data = self._training_data.merge(buck_dampened_prob_pd, on='bucket')
+            buck_dampened_prob_df['sample_weight'] = (
+                    buck_dampened_prob_df['sample_weight'] / buck_dampened_prob_df['bucket_freq']
+            )
+            self._training_data = self._training_data.merge(buck_dampened_prob_df, on='bucket')
 
         # This is important so that the iloc works correctly when retrieving records from the dataframe
         self._training_data = self._training_data.reset_index()
@@ -413,17 +422,22 @@ class GptDataGenerator(BertDataGenerator):
         else:
             self._training_data = self._training_data.sample(frac=1.0)
 
+        # Create a random sample cache utility class to generate a batch of indices
+        if self._sampling_dataset_enabled:
+            sample_weights = self._training_data.sample_weight if self._is_weighted_sample else None
+            random_sample_cache = RandomSampleCache(
+                data_indices=self._training_data.index,
+                cache_size=self._batch_size,
+                sample_weights=sample_weights
+            )
+        else:
+            random_sample_cache = None
+
         for row_index in self._training_data.index:
             # If the sampling strategy is enabled, we will randomly sample a record every time
             if self._sampling_dataset_enabled:
                 # Overwrite row_index with a random index sampled from randomized_indices
-                if self._is_weighted_sample:
-                    row_index = np.random.choice(
-                        self._training_data.index, size=1, p=self._training_data.sample_weight
-                    )[0]
-                else:
-                    row_index = random.choice(self._training_data.index)
-
+                row_index = random_sample_cache.next()
             row = self._training_data.iloc[row_index]
             seq_length = len(row.token_ids)
             if seq_length <= self._max_seq_len:

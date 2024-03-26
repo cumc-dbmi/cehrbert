@@ -1,5 +1,29 @@
 import random
 from datetime import date, timedelta
+from typing import Sequence
+
+
+class RandomSampleCache:
+    def __init__(self, data_indices: Sequence[int], cache_size: int, sample_weights: Sequence[float] = None):
+        self._data_indices = data_indices
+        self._sample_weights = sample_weights
+        self._cache_size = cache_size
+        self._cache = []
+
+        if self._sample_weights is not None:
+            assert sum(self._sample_weights) - 1 < 1e-8
+
+    def next(self):
+        if not self._cache:
+            if self._sample_weights is not None:
+                self._cache.extend(
+                    random.choices(self._data_indices, k=self._cache_size, weights=self._sample_weights)
+                )
+            else:
+                self._cache.extend(
+                    random.choices(self._data_indices, k=self._cache_size)
+                )
+        return self._cache.pop()
 
 
 def random_slice_gpt_sequence(
