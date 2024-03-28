@@ -52,6 +52,9 @@ class ConceptTokenizer:
     def decode(self, concept_sequence_token_ids):
         return self.tokenizer.sequences_to_texts(concept_sequence_token_ids)
 
+    def get_all_tokens(self):
+        return set(self.tokenizer.word_index.keys())
+
     def get_all_token_indexes(self):
         all_keys = set(self.tokenizer.index_word.keys())
 

@@ -102,6 +102,12 @@ if __name__ == "__main__":
         # everything else, possibly fatal
         sys.exit(traceback.format_exc(e))
 
+    # If common attribute list is provide but sensitive attribute list is empty, we assume all concepts except the
+    # common attributes are sensitive
+    if common_attributes and not sensitive_attributes:
+        all_tokens = concept_tokenizer.get_all_tokens()
+        sensitive_attributes = list(set(all_tokens) - set(common_attributes))
+
     patient_data_index = PatientDataWeaviateDocumentIndex(
         index_name=args.index_name,
         server_name=args.server_name,
