@@ -52,6 +52,7 @@ class PatientDataWeaviateDocumentIndex(PatientDataIndex):
             sensitive_attributes: str
             num_of_visits: int
             num_of_concepts: int
+            is_real_sample: bool
 
         return PatientDocument
 

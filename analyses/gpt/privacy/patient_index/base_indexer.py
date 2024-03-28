@@ -150,7 +150,9 @@ class PatientDataIndex(ABC):
                     sensitive_attributes=sensitive_concepts,
                     concept_ids=common_concepts,
                     num_of_visits=t.num_of_visits,
-                    num_of_concepts=t.num_of_concepts
+                    num_of_concepts=t.num_of_concepts,
+                    is_real_sample=t.is_real_sample
+
 
                 )
                 batch_of_docs.append(document)
