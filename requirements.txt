@@ -34,3 +34,6 @@ toml
 pandas
 pydantic
 scipy
+transformers
+femr
+torch
