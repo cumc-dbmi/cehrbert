@@ -1,7 +1,7 @@
 import unittest
 import torch
 from models.hf_models.config import CehrBertConfig
-from models.hf_models.hf_cehrbert import CehrBert
+from models.hf_models.hf_cehrbert import CehrBertForPreTraining
 
 
 class TestCehrBert(unittest.TestCase):
@@ -9,11 +9,11 @@ class TestCehrBert(unittest.TestCase):
     def setUp(self):
         # Setup the configuration and model for testing
         self.config = CehrBertConfig(output_attentions=True)
-        self.model = CehrBert(self.config)
+        self.model = CehrBertForPreTraining(self.config)
 
     def test_positional_encoding_layer_output_shape(self):
         # Test the shape of the output from the PositionalEncodingLayer
-        layer = self.model.cehr_bert_embeddings.positional_embedding_layer
+        layer = self.model.bert.cehr_bert_embeddings.positional_embedding_layer
         seq_length = 10  # example sequence length
         embedding_size = self.config.n_time_embd
         output = layer(torch.randint(0, seq_length, (1, seq_length)))
@@ -21,7 +21,7 @@ class TestCehrBert(unittest.TestCase):
 
     def test_time_embedding_layer_output_shape(self):
         # Test the output shape of the TimeEmbeddingLayer
-        layer = self.model.cehr_bert_embeddings.time_embedding_layer
+        layer = self.model.bert.cehr_bert_embeddings.time_embedding_layer
         seq_length = 10  # example sequence length
         time_stamps = torch.rand(1, seq_length)
         output = layer(time_stamps)
@@ -29,7 +29,7 @@ class TestCehrBert(unittest.TestCase):
 
     def test_concept_value_transformation_layer_output_shape(self):
         # Test the output shape of the ConceptValueTransformationLayer
-        layer = self.model.cehr_bert_embeddings.concept_value_transformation_layer
+        layer = self.model.bert.cehr_bert_embeddings.concept_value_transformation_layer
         seq_length = 10  # example sequence length
         embedding_size = self.config.hidden_size
         concept_embeddings = torch.rand(1, seq_length, embedding_size)
@@ -57,11 +57,36 @@ class TestCehrBert(unittest.TestCase):
             visit_concept_orders=visit_concept_orders,
             concept_values=concept_values,
             concept_value_masks=concept_value_masks,
-            visit_segments=visit_segments
+            visit_segments=visit_segments,
+            labels=input_ids
         )
 
+        self.assertTrue(hasattr(output, 'loss'))
         self.assertTrue(hasattr(output, 'last_hidden_state'))
         self.assertTrue(hasattr(output, 'attentions'))
+        self.assertTrue(hasattr(output, 'prediction_logits'))
+        self.assertTrue(hasattr(output, 'pooler_output'))
+
+        self.assertEqual(
+            output.prediction_logits.shape,
+            torch.Size([1, 10, self.config.vocab_size])
+        )
+        self.assertEqual(
+            output.pooler_output.shape,
+            torch.Size([1, 128])
+        )
+        self.assertEqual(
+            output.last_hidden_state.shape,
+            torch.Size([1, 10, self.config.hidden_size])
+        )
+        self.assertEqual(
+            len(output.attentions),
+            self.config.num_hidden_layers
+        )
+        self.assertEqual(
+            output.attentions[0].shape,
+            torch.Size([1, self.config.num_attention_heads, 10, 10])
+        )
 
 
 if __name__ == '__main__':

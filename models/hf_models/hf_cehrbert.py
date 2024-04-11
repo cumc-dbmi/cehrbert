@@ -3,7 +3,7 @@ from typing import Optional
 import torch
 from torch import nn
 from torch.nn import functional as f
-from transformers.models.bert.modeling_bert import BertEncoder
+from transformers.models.bert.modeling_bert import BertEncoder, BertPooler, BertOnlyMLMHead
 from transformers import PreTrainedModel
 from models.hf_models.config import CehrBertConfig
 from models.hf_models.hf_modeling_outputs import CehrBertModelOutput
@@ -190,15 +190,10 @@ class CehrBert(CehrBertPreTrainedModel):
 
         self.cehr_bert_embeddings = CehrBertEmbeddings(config)
         self.encoder = BertEncoder(config)
+        self.pooler = BertPooler(config)
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.cehr_bert_embeddings.concept_embeddings
-
-    def set_input_embeddings(self, value):
-        self.cehr_bert_embeddings.concept_embeddings = value
 
     def forward(
             self,
@@ -234,7 +229,6 @@ class CehrBert(CehrBertPreTrainedModel):
             concept_value_masks=concept_value_masks,
             visit_segments=visit_segments
         )
-
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
@@ -242,8 +236,80 @@ class CehrBert(CehrBertPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=True
         )
+        sequence_output = encoder_outputs[0]
+        pooled_output = self.pooler(sequence_output)
 
         return CehrBertModelOutput(
             last_hidden_state=encoder_outputs.last_hidden_state,
-            attentions=encoder_outputs.attentions
+            attentions=encoder_outputs.attentions,
+            pooler_output=pooled_output
+        )
+
+
+class CehrBertForPreTraining(CehrBertPreTrainedModel):
+    _tied_weights_keys = ["predictions.decoder.bias", "cls.predictions.decoder.weight"]
+
+    def __init__(self, config: CehrBertConfig):
+        super().__init__(config)
+
+        self.bert = CehrBert(config)
+        self.cls = BertOnlyMLMHead(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.bert.cehr_bert_embeddings.concept_embeddings
+
+    def set_input_embeddings(self, value):
+        self.bert.cehr_bert_embeddings.concept_embeddings = value
+
+    def get_output_embeddings(self):
+        return self.cls.predictions.decoder
+
+    def set_output_embeddings(self, new_embeddings):
+        self.cls.predictions.decoder = new_embeddings
+
+    def forward(
+            self,
+            input_ids: torch.LongTensor,
+            attention_mask: torch.Tensor,
+            ages: Optional[torch.LongTensor] = None,
+            time_stamps: Optional[torch.LongTensor] = None,
+            visit_concept_orders: Optional[torch.LongTensor] = None,
+            concept_values: Optional[torch.FloatTensor] = None,
+            concept_value_masks: Optional[torch.FloatTensor] = None,
+            visit_segments: Optional[torch.LongTensor] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            labels: Optional[torch.Tensor] = None
+    ) -> CehrBertModelOutput:
+
+        cehrbert_output = self.bert(
+            input_ids,
+            attention_mask,
+            ages,
+            time_stamps,
+            visit_concept_orders,
+            concept_values,
+            concept_value_masks,
+            visit_segments,
+            output_attentions,
+            output_hidden_states
+        )
+
+        prediction_scores = self.cls(cehrbert_output.last_hidden_state)
+
+        total_loss = None
+        if labels is not None:
+            loss_fct = nn.CrossEntropyLoss()
+            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            total_loss = masked_lm_loss
+
+        return CehrBertModelOutput(
+            loss=total_loss,
+            prediction_logits=prediction_scores,
+            last_hidden_state=cehrbert_output.last_hidden_state,
+            attentions=cehrbert_output.attentions,
+            pooler_output=cehrbert_output.pooler_output
         )
