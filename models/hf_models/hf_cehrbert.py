@@ -2,10 +2,11 @@ import math
 from typing import Optional
 import torch
 from torch import nn
+from torch.nn import functional as f
 from transformers.models.bert.modeling_bert import BertEncoder
 from transformers import PreTrainedModel
-from transformers.pytorch_utils import Conv1D
 from models.hf_models.config import CehrBertConfig
+from models.hf_models.hf_modeling_outputs import CehrBertModelOutput
 from transformers.utils import logging
 
 logger = logging.get_logger("transformers")
@@ -45,14 +46,14 @@ class PositionalEncodingLayer(nn.Module):
 class TimeEmbeddingLayer(nn.Module):
     def __init__(
             self,
-            n_time_embd,
+            embedding_size,
             is_time_delta=False
     ):
         super(TimeEmbeddingLayer, self).__init__()
-        self.n_time_embd = n_time_embd
+        self.embedding_size = embedding_size
         self.is_time_delta = is_time_delta
-        self.w = nn.Parameter(torch.randn(1, self.n_time_embd))
-        self.phi = nn.Parameter(torch.randn(1, self.n_time_embd))
+        self.w = nn.Parameter(torch.randn(1, self.embedding_size))
+        self.phi = nn.Parameter(torch.randn(1, self.embedding_size))
 
     def forward(
             self,
@@ -70,11 +71,11 @@ class TimeEmbeddingLayer(nn.Module):
 
 
 class ConceptValueTransformationLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, embedding_size):
         super(ConceptValueTransformationLayer, self).__init__()
         self.merge_value_transformation_layer = nn.Linear(
-            config.n_embd + 1,
-            config.n_embd
+            embedding_size + 1,
+            embedding_size
         )
 
     def forward(
@@ -109,6 +110,46 @@ class ConceptValueTransformationLayer(nn.Module):
         return merged
 
 
+class CehrBertEmbeddings(nn.Module):
+    def __init__(self, config: CehrBertConfig):
+        super(CehrBertEmbeddings, self).__init__()
+        self.concept_embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.visit_segment_embeddings = nn.Embedding(config.n_visit_segments, config.hidden_size)
+        self.time_embedding_layer = TimeEmbeddingLayer(config.n_time_embd)
+        self.age_embedding_layer = TimeEmbeddingLayer(config.n_time_embd)
+        self.positional_embedding_layer = PositionalEncodingLayer(config.n_time_embd, config.n_positions)
+        self.concept_value_transformation_layer = ConceptValueTransformationLayer(config.hidden_size)
+        self.linear_proj = nn.Linear(config.hidden_size + 3 * config.n_time_embd, config.hidden_size)
+
+    def forward(
+            self,
+            input_ids: Optional[torch.LongTensor] = None,
+            ages: Optional[torch.LongTensor] = None,
+            time_stamps: Optional[torch.LongTensor] = None,
+            visit_concept_orders: Optional[torch.LongTensor] = None,
+            concept_values: Optional[torch.FloatTensor] = None,
+            concept_value_masks: Optional[torch.FloatTensor] = None,
+            visit_segments: Optional[torch.LongTensor] = None
+    ) -> torch.Tensor:
+        # Get the concept embeddings
+        x = self.concept_embeddings(input_ids)
+        # Combine values with the concept embeddings
+        x = self.concept_value_transformation_layer(
+            x,
+            concept_values,
+            concept_value_masks
+        )
+        age_embeddings = self.age_embedding_layer(ages)
+        time_embeddings = self.age_embedding_layer(time_stamps)
+        positional_embeddings = self.positional_embedding_layer(visit_concept_orders)
+        x = self.linear_proj(
+            torch.cat([x, time_embeddings, age_embeddings, positional_embeddings], dim=-1)
+        )
+        x = f.gelu(x)
+        x += self.visit_segment_embeddings(visit_segments)
+        return x
+
+
 class CehrBertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -121,29 +162,9 @@ class CehrBertPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["BertLayer"]
 
-    def __init__(self, config):
-        super().__init__(config)
-
-        self.embed_dim = config.hidden_size
-        self.concept_embedding_layer = nn.Embedding(config.vocab_size, self.embed_dim)
-        self.visit_segment_layer = nn.Embedding(config.n_visit_segments, self.embed_dim)
-        self.time_embedding_layer = TimeEmbeddingLayer(config.n_time_embd)
-        self.age_embedding_layer = TimeEmbeddingLayer(config.n_time_embd)
-        self.concept_value_transformation_layer = ConceptValueTransformationLayer(config)
-        self.encoder = BertEncoder(config)
-        self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
-
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
-        self.gradient_checkpointing = False
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
     def _init_weights(self, module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Linear, Conv1D)):
+        """Initialize the weights"""
+        if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -157,13 +178,72 @@ class CehrBertPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-        # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
-        #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
-        #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
-        #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
-        #
-        # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
-        for name, p in module.named_parameters():
-            if name == "c_proj.weight":
-                # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
-                p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
+
+class CehrBert(CehrBertPreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    def __init__(self, config: CehrBertConfig):
+        super().__init__(config)
+
+        self.cehr_bert_embeddings = CehrBertEmbeddings(config)
+        self.encoder = BertEncoder(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.cehr_bert_embeddings.concept_embeddings
+
+    def set_input_embeddings(self, value):
+        self.cehr_bert_embeddings.concept_embeddings = value
+
+    def forward(
+            self,
+            input_ids: torch.LongTensor,
+            attention_mask: torch.Tensor,
+            ages: Optional[torch.LongTensor] = None,
+            time_stamps: Optional[torch.LongTensor] = None,
+            visit_concept_orders: Optional[torch.LongTensor] = None,
+            concept_values: Optional[torch.FloatTensor] = None,
+            concept_value_masks: Optional[torch.FloatTensor] = None,
+            visit_segments: Optional[torch.LongTensor] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None
+    ) -> CehrBertModelOutput:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
+        input_shape = input_ids.size()
+
+        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
+        # ourselves in which case we just need to make it broadcastable to all heads.
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
+
+        embedding_output = self.cehr_bert_embeddings(
+            input_ids=input_ids,
+            ages=ages,
+            time_stamps=time_stamps,
+            visit_concept_orders=visit_concept_orders,
+            concept_values=concept_values,
+            concept_value_masks=concept_value_masks,
+            visit_segments=visit_segments
+        )
+
+        encoder_outputs = self.encoder(
+            embedding_output,
+            attention_mask=extended_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True
+        )
+
+        return CehrBertModelOutput(
+            last_hidden_state=encoder_outputs.last_hidden_state,
+            attentions=encoder_outputs.attentions
+        )
