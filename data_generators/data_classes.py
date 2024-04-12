@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Tuple, NamedTuple
+from typing import Tuple, NamedTuple, Union
 
 
 class RecordStatus(Enum):

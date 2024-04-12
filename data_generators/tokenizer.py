@@ -100,12 +100,6 @@ class ConceptTokenizer:
             unused_token_id = unused_token_id[0]
         return unused_token_id
 
-    def get_unused_token_id(self):
-        unused_token_id = self.encode([self.unused_token])
-        while isinstance(unused_token_id, list):
-            unused_token_id = unused_token_id[0]
-        return unused_token_id
-
     def get_unused_token(self):
         return self.unused_token
 
