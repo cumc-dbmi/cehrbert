@@ -60,6 +60,10 @@ class CehrBertTokenizer(PushToHubMixin):
     def unused_token_index(self):
         return self._unused_token_index
 
+    @property
+    def pad_token_index(self):
+        return self._padding_token_index
+
     def encode(self, concept_ids: Sequence[str]) -> Sequence[int]:
         return list(map(self._convert_token_to_id, concept_ids))
 

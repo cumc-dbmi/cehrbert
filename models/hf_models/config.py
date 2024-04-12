@@ -7,7 +7,6 @@ class CehrBertConfig(PretrainedConfig):
     def __init__(
             self,
             vocab_size=20000,
-            n_positions=512,
             n_visit_segments=3,
             hidden_size=128,
             n_time_embd=16,
@@ -28,7 +27,6 @@ class CehrBertConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.n_time_embd = n_time_embd
-        self.n_positions = n_positions
         self.n_visit_segments = n_visit_segments
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads

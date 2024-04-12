@@ -57,16 +57,16 @@ class TimeEmbeddingLayer(nn.Module):
 
     def forward(
             self,
-            time_stamps: torch.Tensor
+            dates: torch.Tensor
     ) -> torch.Tensor:
-        time_stamps = time_stamps.to(torch.float)
+        dates = dates.to(torch.float)
         if self.is_time_delta:
-            time_stamps = torch.cat(
-                [torch.zeros(time_stamps[..., 0:1].shape),
-                 time_stamps[..., 1:] - time_stamps[..., :-1]],
+            dates = torch.cat(
+                [torch.zeros(dates[..., 0:1].shape),
+                 dates[..., 1:] - dates[..., :-1]],
                 dim=-1
             )
-        next_input = time_stamps.unsqueeze(-1) * self.w + self.phi
+        next_input = dates.unsqueeze(-1) * self.w + self.phi
         return torch.sin(next_input)
 
 
@@ -117,7 +117,7 @@ class CehrBertEmbeddings(nn.Module):
         self.visit_segment_embeddings = nn.Embedding(config.n_visit_segments, config.hidden_size)
         self.time_embedding_layer = TimeEmbeddingLayer(config.n_time_embd)
         self.age_embedding_layer = TimeEmbeddingLayer(config.n_time_embd)
-        self.positional_embedding_layer = PositionalEncodingLayer(config.n_time_embd, config.n_positions)
+        self.positional_embedding_layer = PositionalEncodingLayer(config.n_time_embd, config.max_position_embeddings)
         self.concept_value_transformation_layer = ConceptValueTransformationLayer(config.hidden_size)
         self.linear_proj = nn.Linear(config.hidden_size + 3 * config.n_time_embd, config.hidden_size)
 
@@ -125,7 +125,7 @@ class CehrBertEmbeddings(nn.Module):
             self,
             input_ids: Optional[torch.LongTensor] = None,
             ages: Optional[torch.LongTensor] = None,
-            time_stamps: Optional[torch.LongTensor] = None,
+            dates: Optional[torch.LongTensor] = None,
             visit_concept_orders: Optional[torch.LongTensor] = None,
             concept_values: Optional[torch.FloatTensor] = None,
             concept_value_masks: Optional[torch.FloatTensor] = None,
@@ -140,7 +140,7 @@ class CehrBertEmbeddings(nn.Module):
             concept_value_masks
         )
         age_embeddings = self.age_embedding_layer(ages)
-        time_embeddings = self.age_embedding_layer(time_stamps)
+        time_embeddings = self.age_embedding_layer(dates)
         positional_embeddings = self.positional_embedding_layer(visit_concept_orders)
         x = self.linear_proj(
             torch.cat([x, time_embeddings, age_embeddings, positional_embeddings], dim=-1)
@@ -200,7 +200,7 @@ class CehrBert(CehrBertPreTrainedModel):
             input_ids: torch.LongTensor,
             attention_mask: torch.Tensor,
             ages: Optional[torch.LongTensor] = None,
-            time_stamps: Optional[torch.LongTensor] = None,
+            dates: Optional[torch.LongTensor] = None,
             visit_concept_orders: Optional[torch.LongTensor] = None,
             concept_values: Optional[torch.FloatTensor] = None,
             concept_value_masks: Optional[torch.FloatTensor] = None,
@@ -223,7 +223,7 @@ class CehrBert(CehrBertPreTrainedModel):
         embedding_output = self.cehr_bert_embeddings(
             input_ids=input_ids,
             ages=ages,
-            time_stamps=time_stamps,
+            dates=dates,
             visit_concept_orders=visit_concept_orders,
             concept_values=concept_values,
             concept_value_masks=concept_value_masks,
@@ -275,21 +275,20 @@ class CehrBertForPreTraining(CehrBertPreTrainedModel):
             input_ids: torch.LongTensor,
             attention_mask: torch.Tensor,
             ages: Optional[torch.LongTensor] = None,
-            time_stamps: Optional[torch.LongTensor] = None,
+            dates: Optional[torch.LongTensor] = None,
             visit_concept_orders: Optional[torch.LongTensor] = None,
             concept_values: Optional[torch.FloatTensor] = None,
             concept_value_masks: Optional[torch.FloatTensor] = None,
             visit_segments: Optional[torch.LongTensor] = None,
             output_attentions: Optional[bool] = None,
             output_hidden_states: Optional[bool] = None,
-            labels: Optional[torch.Tensor] = None
+            labels: Optional[torch.LongTensor] = None
     ) -> CehrBertModelOutput:
-
         cehrbert_output = self.bert(
             input_ids,
             attention_mask,
             ages,
-            time_stamps,
+            dates,
             visit_concept_orders,
             concept_values,
             concept_value_masks,

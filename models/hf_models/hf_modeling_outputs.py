@@ -32,8 +32,8 @@ class CehrBertModelOutput(ModelOutput):
             the classification token after processing through a linear layer and a tanh activation function. The linear
             layer weights are trained from the next sentence prediction (classification) objective during pretraining.
     """
+    loss: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
     pooler_output: torch.FloatTensor = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    loss: Optional[torch.FloatTensor] = None
     prediction_logits: Optional[torch.FloatTensor] = None
