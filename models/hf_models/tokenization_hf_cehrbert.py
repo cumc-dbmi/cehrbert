@@ -1,13 +1,16 @@
 import os
 import json
+from tqdm import tqdm
 import collections
 import transformers
 from transformers.tokenization_utils_base import PushToHubMixin
 from typing import Sequence, Union, List, Dict
+from datasets import Dataset, DatasetDict
 
 PAD_TOKEN = "[PAD]"
 CLS_TOKEN = "[CLS]"
 MASK_TOKEN = "[MASK]"
+UNUSED_TOKEN = '[UNUSED]'
 OUT_OF_VOCABULARY_TOKEN = "[OOV]"
 VS_TOKEN = "[VS]"
 VE_TOKEN = "[VE]"
@@ -41,12 +44,21 @@ class CehrBertTokenizer(PushToHubMixin):
         self._oov_token_index = self._word_index[OUT_OF_VOCABULARY_TOKEN]
         self._padding_token_index = self._word_index[PAD_TOKEN]
         self._mask_token_index = self._word_index[MASK_TOKEN]
+        self._unused_token_index = self._word_index[UNUSED_TOKEN]
 
         super().__init__()
 
     @property
     def vocab_size(self):
         return len(self._word_index)
+
+    @property
+    def mask_token_index(self):
+        return self._mask_token_index
+
+    @property
+    def unused_token_index(self):
+        return self._unused_token_index
 
     def encode(self, concept_ids: Sequence[str]) -> Sequence[int]:
         return list(map(self._convert_token_to_id, concept_ids))
@@ -146,12 +158,23 @@ class CehrBertTokenizer(PushToHubMixin):
         return CehrBertTokenizer(word_index, concept_name_mapping)
 
     @classmethod
-    def train_tokenizer(cls, records: Sequence[List[str]], concept_name_mapping: Dict[str, str]):
+    def train_tokenizer(
+            cls,
+            dataset: Dataset,
+            feature_names: List[str],
+            concept_name_mapping: Dict[str, str]
+    ):
+
+        if isinstance(dataset, DatasetDict):
+            dataset = dataset['train']
+
         words = set()
-        for seq in records:
-            for concept_id in seq:
-                words.add(concept_id)
-        vocabulary = [PAD_TOKEN, MASK_TOKEN, OUT_OF_VOCABULARY_TOKEN, CLS_TOKEN, VS_TOKEN, VE_TOKEN]
+        for record in tqdm(dataset, total=len(dataset)):
+            for feature_name in feature_names:
+                for concept_id in record[feature_name]:
+                    words.add(concept_id)
+
+        vocabulary = [PAD_TOKEN, MASK_TOKEN, OUT_OF_VOCABULARY_TOKEN, CLS_TOKEN, UNUSED_TOKEN, VS_TOKEN, VE_TOKEN]
         vocabulary.extend(words)
         word_index = collections.OrderedDict(zip(vocabulary, list(range(0, len(vocabulary)))))
         return CehrBertTokenizer(word_index, concept_name_mapping)
