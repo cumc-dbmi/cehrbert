@@ -158,7 +158,7 @@ class CehrBertPreTrainedModel(PreTrainedModel):
 
     config_class = CehrBertConfig
     base_model_prefix = "cehr_bert"
-    is_parallelizable = True
+    is_parallelizable = False
     supports_gradient_checkpointing = True
     _no_split_modules = ["BertLayer"]
 
