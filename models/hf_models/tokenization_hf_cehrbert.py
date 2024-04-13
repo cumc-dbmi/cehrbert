@@ -45,6 +45,7 @@ class CehrBertTokenizer(PushToHubMixin):
         self._padding_token_index = self._word_index[PAD_TOKEN]
         self._mask_token_index = self._word_index[MASK_TOKEN]
         self._unused_token_index = self._word_index[UNUSED_TOKEN]
+        self._cls_token_index = self._word_index[CLS_TOKEN]
 
         super().__init__()
 
@@ -63,6 +64,10 @@ class CehrBertTokenizer(PushToHubMixin):
     @property
     def pad_token_index(self):
         return self._padding_token_index
+
+    @property
+    def cls_token_index(self):
+        return self._cls_token_index
 
     def encode(self, concept_ids: Sequence[str]) -> Sequence[int]:
         return list(map(self._convert_token_to_id, concept_ids))
