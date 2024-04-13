@@ -45,14 +45,14 @@ def generate_prepared_ds_path(data_args, model_args) -> Path:
             (
                     str(data_args.max_seq_length)
                     + "|"
-                    + data_args.data_folder
+                    + os.path.abspath(data_args.data_folder)
                     + "|"
-                    + model_args.tokenizer_name_or_path
+                    + os.path.abspath(model_args.tokenizer_name_or_path)
             )
         )
     )
     prepared_ds_path = (
-            Path(data_args.dataset_prepared_path) / ds_hash
+            Path(os.path.abspath(data_args.dataset_prepared_path)) / ds_hash
     )
     return prepared_ds_path
 
@@ -61,20 +61,23 @@ def load_model_and_tokenizer(data_args, model_args) -> Tuple[CehrBertForPreTrain
     tokenizer = None
     # Try to load the pretrained tokenizer
     try:
-        tokenizer = CehrBertTokenizer.from_pretrained(model_args.tokenizer_name_or_path)
-    except Union[EnvironmentError, ValueError] as e:
+        tokenizer_abspath = os.path.abspath(model_args.tokenizer_name_or_path)
+        tokenizer = CehrBertTokenizer.from_pretrained(tokenizer_abspath)
+    except Exception as e:
         LOG.warning(e)
 
     # If the tokenizer doesn't exist, train it from scratch using the training data
     if not tokenizer:
-        data_files = glob.glob(os.path.join(data_args.data_folder, "*.parquet"))
+        data_folder_abspath = os.path.abspath(data_args.data_folder)
+        data_files = glob.glob(os.path.join(data_folder_abspath, "*.parquet"))
         dataset = load_dataset('parquet', data_files=data_files, split='train')
         tokenizer = CehrBertTokenizer.train_tokenizer(dataset, ['concept_ids'], {})
-        tokenizer.save_pretrained(model_args.tokenizer_name_or_path)
+        tokenizer.save_pretrained(os.path.abspath(model_args.tokenizer_name_or_path))
 
     # Try to load the pretrained model
     try:
-        model_config = AutoConfig.from_pretrained(model_args.model_name_or_path)
+        model_abspath = os.path.abspath(model_args.model_name_or_path)
+        model_config = AutoConfig.from_pretrained(model_abspath)
     except Exception as e:
         LOG.warning(e)
         model_config = CehrBertConfig(vocab_size=tokenizer.vocab_size, **model_args.as_dict())
@@ -102,7 +105,8 @@ def main():
         processed_dataset = load_from_disk(str(prepared_ds_path))
         LOG.info("Prepared dataset loaded from disk...")
     else:
-        data_files = glob.glob(os.path.join(data_args.data_folder, "*.parquet"))
+        data_abspath = os.path.abspath(data_args.data_folder)
+        data_files = glob.glob(os.path.join(data_abspath, "*.parquet"))
         dataset = load_dataset('parquet', data_files=data_files, split='train')
         dataset = dataset.train_test_split(test_size=data_args.validation_split_percentage, seed=training_args.seed)
         processed_dataset = create_cehrbert_dataset(
@@ -117,11 +121,12 @@ def main():
 
     # Detecting last checkpoint.
     last_checkpoint = None
-    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
-        last_checkpoint = get_last_checkpoint(training_args.output_dir)
-        if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
+    output_dir_abspath = os.path.abspath(training_args.output_dir)
+    if os.path.isdir(output_dir_abspath) and training_args.do_train and not training_args.overwrite_output_dir:
+        last_checkpoint = get_last_checkpoint(output_dir_abspath)
+        if last_checkpoint is None and len([_ for _ in os.listdir(output_dir_abspath) if os.path.isdir(_)]) > 0:
             raise ValueError(
-                f"Output directory ({training_args.output_dir}) already exists and is not empty. "
+                f"Output directory ({output_dir_abspath}) already exists and is not empty. "
                 "Use --overwrite_output_dir to overcome."
             )
         elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
