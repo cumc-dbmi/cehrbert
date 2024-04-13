@@ -80,6 +80,12 @@ class ModelArguments:
             "choices": ["auto", "bfloat16", "float16", "float32"],
         },
     )
+    num_hidden_layers: Optional[str] = field(
+        default=12
+    )
+    max_position_embeddings: Optional[str] = field(
+        default=512
+    )
 
     def as_dict(self) -> Dict[str, Any]:
         return asdict(self)
