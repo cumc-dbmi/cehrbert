@@ -1,12 +1,17 @@
 import os
 import sys
 import glob
-import logging
 from pathlib import Path
-from datasets import load_dataset, load_from_disk
-from transformers import HfArgumentParser, TrainingArguments
+
 from typing import Union, Tuple
 import hashlib
+
+import torch
+from datasets import load_dataset, load_from_disk
+from transformers.utils import logging
+from transformers import AutoConfig, Trainer, set_seed
+from transformers.trainer_utils import get_last_checkpoint
+from transformers import HfArgumentParser, TrainingArguments, EvalPrediction
 
 from runner.hf_runner_argument_dataclass import DataTrainingArguments, ModelArguments
 from data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
@@ -14,10 +19,17 @@ from data_generators.hf_data_generator.hf_dataset import create_cehrbert_dataset
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from models.hf_models.config import CehrBertConfig
 from models.hf_models.hf_cehrbert import CehrBertForPreTraining
-from transformers import AutoConfig, Trainer, set_seed
-from transformers.trainer_utils import get_last_checkpoint
 
-LOG = logging.getLogger("cehrbert_runner")
+LOG = logging.get_logger("transformers")
+
+
+def compute_metrics(eval_pred: EvalPrediction):
+    logits, labels = eval_pred
+    # Cross entropy loss for calculating perplexity
+    cross_entropy = torch.nn.functional.cross_entropy(torch.tensor(logits), torch.tensor(labels), reduction='none')
+    # Calculate perplexity as the exponential of the average loss
+    perplexity = torch.exp(torch.mean(cross_entropy)).item()
+    return {"perplexity": perplexity}
 
 
 def md5(to_hash: str, encoding: str = "utf-8") -> str:
@@ -128,6 +140,7 @@ def main():
         data_collator=collator,
         train_dataset=processed_dataset['train'],
         eval_dataset=processed_dataset['test'],
+        compute_metrics=compute_metrics,
         args=training_args
     )
 
