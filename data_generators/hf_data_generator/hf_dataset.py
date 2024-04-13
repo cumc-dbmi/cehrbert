@@ -1,3 +1,4 @@
+from typing import Union
 from datasets import Dataset, DatasetDict
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from data_generators.hf_data_generator.hf_dataset_mapping import (
@@ -13,7 +14,7 @@ TRANSFORMER_COLUMNS = ['input_ids', 'labels']
 
 
 def create_cehrbert_dataset(
-        dataset: Dataset,
+        dataset: Union[Dataset, DatasetDict],
         concept_tokenizer: CehrBertTokenizer,
         max_sequence_length: int,
         is_pretraining: bool = True,

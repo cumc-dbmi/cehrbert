@@ -151,11 +151,17 @@ class CehrBertTokenizer(PushToHubMixin):
         vocab_file = transformers.utils.hub.cached_file(
             pretrained_model_name_or_path, VOCAB_FILE_NAME, **kwargs
         )
+
+        if not vocab_file:
+            return None
+
         word_index = load_json_file(vocab_file)
 
         concept_name_mapping_file = transformers.utils.hub.cached_file(
             pretrained_model_name_or_path, CONCEPT_MAPPING_FILE_NAME, **kwargs
         )
+        if not concept_name_mapping_file:
+            return None
 
         concept_name_mapping = load_json_file(concept_name_mapping_file)
 
