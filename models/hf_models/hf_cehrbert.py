@@ -312,3 +312,54 @@ class CehrBertForPreTraining(CehrBertPreTrainedModel):
             attentions=cehrbert_output.attentions,
             pooler_output=cehrbert_output.pooler_output
         )
+
+
+class CehrBertForClassification(CehrBertPreTrainedModel):
+
+    def __init__(self, config: CehrBertConfig):
+        super().__init__(config)
+
+        self.bert = CehrBert(config)
+        self.age_batch_norm = torch.nn.BatchNorm1d(1)
+
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
+        self.classifier = nn.Linear(config.hidden_size, 1)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(
+            self,
+            input_ids: torch.LongTensor,
+            attention_mask: torch.Tensor,
+            age_at_index: torch.Tensor,
+            ages: Optional[torch.LongTensor] = None,
+            dates: Optional[torch.LongTensor] = None,
+            visit_concept_orders: Optional[torch.LongTensor] = None,
+            concept_values: Optional[torch.FloatTensor] = None,
+            concept_value_masks: Optional[torch.FloatTensor] = None,
+            visit_segments: Optional[torch.LongTensor] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None
+    ) -> torch.Tensor:
+        normalized_age = self.age_batch_norm(age_at_index)
+
+        cehrbert_output = self.bert(
+            input_ids,
+            attention_mask,
+            ages,
+            dates,
+            visit_concept_orders,
+            concept_values,
+            concept_value_masks,
+            visit_segments,
+            output_attentions,
+            output_hidden_states
+        )
+
+        next_input = torch.cat([cehrbert_output.pooler_output, normalized_age.unsqueeze(1)], dim=1)
+        next_input = self.dropout(next_input)
+        return self.classifier(next_input)
