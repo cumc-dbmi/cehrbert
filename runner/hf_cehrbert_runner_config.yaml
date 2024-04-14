@@ -4,7 +4,6 @@ tokenizer_name_or_path: "test_results"
 data_folder: "sample_data"
 dataset_prepared_path: "test_dataset_prepared"
 validation_split_percentage: 0.05
-max_seq_length: 512
 preprocessing_num_workers: 16
 
 do_train: true
@@ -13,7 +12,7 @@ resume_from_checkpoint: # path to the checkpoint folder
 seed: 42
 
 num_hidden_layers: 6
-max_position_embeddings: 512
+max_position_embeddings: 128
 
 output_dir: "test_results"
 evaluation_strategy: "epoch"
@@ -22,7 +21,7 @@ learning_rate: 0.00005
 per_device_train_batch_size: 4
 per_device_eval_batch_size: 4
 gradient_accumulation_steps: 1
-num_train_epochs: 1
+num_train_epochs: 2
 warmup_steps: 500
 weight_decay: 0.01
 logging_dir: "./logs"

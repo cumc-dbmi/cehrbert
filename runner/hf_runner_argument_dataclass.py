@@ -19,15 +19,6 @@ class DataTrainingArguments:
             "help": "The percentage of the train set used as validation set in case there's no validation split"
         },
     )
-    max_seq_length: Optional[int] = field(
-        default=512,
-        metadata={
-            "help": (
-                "The maximum total input sequence length after tokenization. Sequences longer "
-                "than this will be truncated."
-            )
-        },
-    )
     preprocessing_num_workers: Optional[int] = field(
         default=4,
         metadata={"help": "The number of processes to use for the preprocessing."},

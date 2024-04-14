@@ -3,11 +3,11 @@ import sys
 import glob
 from pathlib import Path
 
-from typing import Union, Tuple
+from typing import Tuple
 import hashlib
 
 import torch
-from datasets import load_dataset, load_from_disk
+from datasets import load_dataset, load_from_disk, DatasetDict
 from transformers.utils import logging
 from transformers import AutoConfig, Trainer, set_seed
 from transformers.trainer_utils import get_last_checkpoint
@@ -26,7 +26,7 @@ LOG = logging.get_logger("transformers")
 def compute_metrics(eval_pred: EvalPrediction):
     logits, labels = eval_pred
     # Cross entropy loss for calculating perplexity
-    cross_entropy = torch.nn.functional.cross_entropy(torch.tensor(logits), torch.tensor(labels), reduction='none')
+    cross_entropy = torch.nn.functional.cross_entropy(logits, labels, reduction='none')
     # Calculate perplexity as the exponential of the average loss
     perplexity = torch.exp(torch.mean(cross_entropy)).item()
     return {"perplexity": perplexity}
@@ -43,11 +43,13 @@ def generate_prepared_ds_path(data_args, model_args) -> Path:
     ds_hash = str(
         md5(
             (
-                    str(data_args.max_seq_length)
-                    + "|"
-                    + os.path.abspath(data_args.data_folder)
-                    + "|"
-                    + os.path.abspath(model_args.tokenizer_name_or_path)
+                str(model_args.max_position_embeddings)
+                + "|"
+                + os.path.abspath(data_args.data_folder)
+                + "|"
+                + os.path.abspath(model_args.tokenizer_name_or_path)
+                + "|"
+                + str(data_args.validation_split_percentage) if data_args.validation_split_percentage else ""
             )
         )
     )
@@ -108,16 +110,19 @@ def main():
         data_abspath = os.path.abspath(data_args.data_folder)
         data_files = glob.glob(os.path.join(data_abspath, "*.parquet"))
         dataset = load_dataset('parquet', data_files=data_files, split='train')
-        dataset = dataset.train_test_split(test_size=data_args.validation_split_percentage, seed=training_args.seed)
+
+        if data_args.validation_split_percentage:
+            dataset = dataset.train_test_split(test_size=data_args.validation_split_percentage, seed=training_args.seed)
+
         processed_dataset = create_cehrbert_dataset(
             dataset=dataset,
             concept_tokenizer=tokenizer,
-            max_sequence_length=data_args.max_seq_length,
+            max_sequence_length=model_args.max_position_embeddings,
             num_proc=data_args.preprocessing_num_workers
         )
         processed_dataset.save_to_disk(prepared_ds_path)
 
-    collator = CehrBertDataCollator(tokenizer, data_args.max_seq_length)
+    collator = CehrBertDataCollator(tokenizer, model_args.max_position_embeddings)
 
     # Detecting last checkpoint.
     last_checkpoint = None
@@ -140,12 +145,20 @@ def main():
 
     processed_dataset.set_format('pt')
 
+    eval_dataset = None
+    if isinstance(processed_dataset, DatasetDict):
+        train_dataset = processed_dataset['train']
+        if 'test' in processed_dataset:
+            eval_dataset = processed_dataset['test']
+    else:
+        train_dataset = processed_dataset
+
     trainer = Trainer(
         model=model,
         data_collator=collator,
-        train_dataset=processed_dataset['train'],
-        eval_dataset=processed_dataset['test'],
-        compute_metrics=compute_metrics,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        # compute_metrics=compute_metrics,
         args=training_args
     )
 

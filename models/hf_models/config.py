@@ -22,6 +22,7 @@ class CehrBertConfig(PretrainedConfig):
             layer_norm_eps=1e-12,
             pad_token_id=0,
             tie_word_embeddings=True,
+            num_labels=2,
             **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -39,5 +40,6 @@ class CehrBertConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.tie_word_embeddings = tie_word_embeddings
+        self.num_labels = num_labels
 
         super().__init__(pad_token_id=pad_token_id, **kwargs)
