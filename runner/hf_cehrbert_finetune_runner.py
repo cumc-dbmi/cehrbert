@@ -133,9 +133,6 @@ def main():
 
     collator = CehrBertDataCollator(tokenizer, model_args.max_position_embeddings)
 
-    # Detecting last checkpoint.
-    get_last_hf_checkpoint(training_args)
-
     # Set seed before initializing model.
     set_seed(training_args.seed)
 
