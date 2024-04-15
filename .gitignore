@@ -22,6 +22,8 @@ hospitalization_prediction-new-data-generator.py
 build/
 concept_embeddings.egg-info/
 
+runner/*yaml
+
 *.out
 *.egg-info/
 
