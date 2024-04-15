@@ -4,7 +4,8 @@ import glob
 
 from typing import Tuple
 
-import torch
+import numpy as np
+from scipy.special import softmax
 from datasets import load_dataset, load_from_disk, DatasetDict
 from transformers.utils import logging
 from transformers import AutoConfig, Trainer, set_seed
@@ -17,34 +18,38 @@ from data_generators.hf_data_generator.hf_dataset import create_cehrbert_pretrai
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from models.hf_models.config import CehrBertConfig
 from models.hf_models.hf_cehrbert import CehrBertForPreTraining
-from runner.runner_util import generate_prepared_ds_path
+from runner.runner_util import generate_prepared_ds_path, load_parquet_as_dataset, get_last_hf_checkpoint
 
 LOG = logging.get_logger("transformers")
 
 
 def compute_metrics(eval_pred: EvalPrediction):
-    logits, labels = eval_pred
-    # Cross entropy loss for calculating perplexity
-    cross_entropy = torch.nn.functional.cross_entropy(logits, labels, reduction='none')
-    # Calculate perplexity as the exponential of the average loss
-    perplexity = torch.exp(torch.mean(cross_entropy)).item()
+    outputs, labels = eval_pred
+    # Transformers Trainer will remove the loss from the model output
+    # We need to take the first entry of the model output, which is logits
+    logits = outputs[0]
+    # Exclude entries where labels == -100
+    mask = labels != -100
+    # Convert logits to probabilities using the numerically stable softmax from SciPy
+    probabilities = softmax(logits[mask], axis=1)
+    # Prepare labels for valid (non-masked) entries
+    labels_one_hot = np.eye(probabilities.shape[1])[labels[mask]]
+    # Compute cross-entropy loss for valid entries
+    log_probs = np.log(probabilities + 1e-9)  # Adding a small constant for numerical stability
+    cross_entropy_loss = -np.sum(labels_one_hot * log_probs, axis=1)
+    # Calculate perplexity
+    perplexity = np.exp(np.mean(cross_entropy_loss))
     return {"perplexity": perplexity}
 
 
 def load_model_and_tokenizer(data_args, model_args) -> Tuple[CehrBertForPreTraining, CehrBertTokenizer]:
-    tokenizer = None
     # Try to load the pretrained tokenizer
     try:
         tokenizer_abspath = os.path.abspath(model_args.tokenizer_name_or_path)
         tokenizer = CehrBertTokenizer.from_pretrained(tokenizer_abspath)
     except Exception as e:
         LOG.warning(e)
-
-    # If the tokenizer doesn't exist, train it from scratch using the training data
-    if not tokenizer:
-        data_folder_abspath = os.path.abspath(data_args.data_folder)
-        data_files = glob.glob(os.path.join(data_folder_abspath, "*.parquet"))
-        dataset = load_dataset('parquet', data_files=data_files, split='train')
+        dataset = load_parquet_as_dataset(data_args.data_folder)
         tokenizer = CehrBertTokenizer.train_tokenizer(dataset, ['concept_ids'], {})
         tokenizer.save_pretrained(os.path.abspath(model_args.tokenizer_name_or_path))
 
@@ -97,20 +102,7 @@ def main():
     collator = CehrBertDataCollator(tokenizer, model_args.max_position_embeddings)
 
     # Detecting last checkpoint.
-    last_checkpoint = None
-    output_dir_abspath = os.path.abspath(training_args.output_dir)
-    if os.path.isdir(output_dir_abspath) and training_args.do_train and not training_args.overwrite_output_dir:
-        last_checkpoint = get_last_checkpoint(output_dir_abspath)
-        if last_checkpoint is None and len([_ for _ in os.listdir(output_dir_abspath) if os.path.isdir(_)]) > 0:
-            raise ValueError(
-                f"Output directory ({output_dir_abspath}) already exists and is not empty. "
-                "Use --overwrite_output_dir to overcome."
-            )
-        elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
-            LOG.info(
-                f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
-                "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
-            )
+    last_checkpoint = get_last_hf_checkpoint(training_args)
 
     # Set seed before initializing model.
     set_seed(training_args.seed)
@@ -130,7 +122,7 @@ def main():
         data_collator=collator,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        # compute_metrics=compute_metrics,
+        compute_metrics=compute_metrics,
         args=training_args
     )
 

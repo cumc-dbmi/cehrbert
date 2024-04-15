@@ -33,10 +33,10 @@ class CehrBertModelOutput(ModelOutput):
             layer weights are trained from the next sentence prediction (classification) objective during pretraining.
     """
     loss: Optional[torch.FloatTensor] = None
-    last_hidden_state: torch.FloatTensor = None
-    pooler_output: torch.FloatTensor = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     prediction_logits: Optional[torch.FloatTensor] = None
+    pooler_output: torch.FloatTensor = None
+    last_hidden_state: torch.FloatTensor = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
