@@ -1,12 +1,19 @@
 import logging
+from enum import Enum
 from abc import abstractmethod, ABC
 from typing import Dict, Any
 import collections
 import random
 import numpy as np
+import copy
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 
 logger = logging.getLogger(__name__)
+
+
+class TruncationType(Enum):
+    RANDOM = 'random'
+    TAIL = 'tail'
 
 
 class DatasetMapping(ABC):
@@ -78,9 +85,11 @@ class SortPatientSequenceMapping(DatasetMapping):
 class GenerateStartEndIndexMapping(DatasetMapping):
     def __init__(
             self,
-            max_sequence_length
+            max_sequence_length,
+            truncate_type=TruncationType.RANDOM
     ):
         self._max_sequence_length = max_sequence_length
+        self._truncate_type = truncate_type
 
     def transform(
             self,
@@ -94,7 +103,7 @@ class GenerateStartEndIndexMapping(DatasetMapping):
 
         seq_length = len(record['concept_ids'])
         new_max_length = self._max_sequence_length - 1  # Subtract one for the [CLS] token
-        if seq_length > new_max_length:
+        if seq_length > new_max_length and self._truncate_type == TruncationType.RANDOM:
             start_index = random.randint(0, seq_length - new_max_length)
             end_index = min(seq_length, start_index + new_max_length)
             record['start_index'] = start_index
@@ -102,7 +111,6 @@ class GenerateStartEndIndexMapping(DatasetMapping):
         else:
             record['start_index'] = max(0, seq_length - new_max_length)
             record['end_index'] = seq_length
-
         return record
 
 
@@ -136,15 +144,21 @@ class HFMaskedLanguageModellingMapping(DatasetMapping):
                 new_record[k] = v[start_index:end_index]
 
         input_ids = self._concept_tokenizer.encode(new_record['concept_ids'])
-        masked_input_ids, output_mask = self._mask_concepts(input_ids, new_record['mlm_skip_values'])
-        masks = np.empty_like(masked_input_ids, dtype=np.int32)
-        # -100 is ignored by the torch CrossEntropyLoss
-        masks.fill(-100)
-        labels = np.where(output_mask == 1, input_ids, masks)
+
         new_record.update({
-            'input_ids': masked_input_ids.tolist(),
-            'labels': labels.tolist()
+            'input_ids': input_ids
         })
+
+        if self._is_pretraining:
+            masked_input_ids, output_mask = self._mask_concepts(input_ids, new_record['mlm_skip_values'])
+            masks = np.empty_like(masked_input_ids, dtype=np.int32)
+            # -100 is ignored by the torch CrossEntropyLoss
+            masks.fill(-100)
+            labels = np.where(output_mask == 1, input_ids, masks)
+            new_record.update({
+                'input_ids': masked_input_ids.tolist(),
+                'labels': labels.tolist()
+            })
 
         return new_record
 
@@ -160,23 +174,41 @@ class HFMaskedLanguageModellingMapping(DatasetMapping):
         masked_concepts = np.asarray(concepts).copy()
         output_mask = np.zeros((len(concepts),), dtype=int)
 
-        if self._is_pretraining:
-            for word_pos in range(0, len(concepts)):
-                # Check if this position needs to be skipped
-                if mlm_skip_values[word_pos] == 1:
-                    continue
-                if concepts[word_pos] == self._concept_tokenizer.unused_token_index:
-                    break
-                if random.random() < 0.15:
-                    dice = random.random()
-                    if dice < 0.8:
-                        masked_concepts[word_pos] = self._concept_tokenizer.mask_token_index
-                    elif dice < 0.9:
-                        masked_concepts[word_pos] = random.randint(
-                            0,
-                            self._concept_tokenizer.vocab_size - 1
-                        )
-                    # else: 10% of the time we just leave the word as is
-                    output_mask[word_pos] = 1
+        for word_pos in range(0, len(concepts)):
+            # Check if this position needs to be skipped
+            if mlm_skip_values[word_pos] == 1:
+                continue
+            if concepts[word_pos] == self._concept_tokenizer.unused_token_index:
+                break
+            if random.random() < 0.15:
+                dice = random.random()
+                if dice < 0.8:
+                    masked_concepts[word_pos] = self._concept_tokenizer.mask_token_index
+                elif dice < 0.9:
+                    masked_concepts[word_pos] = random.randint(
+                        0,
+                        self._concept_tokenizer.vocab_size - 1
+                    )
+                # else: 10% of the time we just leave the word as is
+                output_mask[word_pos] = 1
 
         return masked_concepts, output_mask
+
+
+class HFFineTuningMapping(DatasetMapping):
+    def transform(
+            self,
+            record: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        if 'start_index' not in record:
+            raise ValueError('Missing start_index in row')
+
+        if 'end_index' not in record:
+            raise ValueError('Missing end_index in row')
+
+        new_record = copy.deepcopy(record)
+        new_record.update({
+            'age_at_index': record['age'],
+            'classifier_label': record['label']
+        })
+        return new_record

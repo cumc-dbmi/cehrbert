@@ -6,7 +6,7 @@ from torch.nn import functional as f
 from transformers.models.bert.modeling_bert import BertEncoder, BertPooler, BertOnlyMLMHead
 from transformers import PreTrainedModel
 from models.hf_models.config import CehrBertConfig
-from models.hf_models.hf_modeling_outputs import CehrBertModelOutput
+from models.hf_models.hf_modeling_outputs import CehrBertModelOutput, CehrBertSequenceClassifierOutput
 from transformers.utils import logging
 
 logger = logging.get_logger("transformers")
@@ -326,7 +326,7 @@ class CehrBertForClassification(CehrBertPreTrainedModel):
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
         self.dropout = nn.Dropout(classifier_dropout)
-        self.classifier = nn.Linear(config.hidden_size, 1)
+        self.classifier = nn.Linear(config.hidden_size + 1, 1)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -335,7 +335,7 @@ class CehrBertForClassification(CehrBertPreTrainedModel):
             self,
             input_ids: torch.LongTensor,
             attention_mask: torch.Tensor,
-            age_at_index: torch.Tensor,
+            age_at_index: torch.FloatTensor,
             ages: Optional[torch.LongTensor] = None,
             dates: Optional[torch.LongTensor] = None,
             visit_concept_orders: Optional[torch.LongTensor] = None,
@@ -343,8 +343,9 @@ class CehrBertForClassification(CehrBertPreTrainedModel):
             concept_value_masks: Optional[torch.FloatTensor] = None,
             visit_segments: Optional[torch.LongTensor] = None,
             output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None
-    ) -> torch.Tensor:
+            output_hidden_states: Optional[bool] = None,
+            classifier_label: Optional[torch.FloatTensor] = None
+    ) -> CehrBertSequenceClassifierOutput:
         normalized_age = self.age_batch_norm(age_at_index)
 
         cehrbert_output = self.bert(
@@ -360,6 +361,18 @@ class CehrBertForClassification(CehrBertPreTrainedModel):
             output_hidden_states
         )
 
-        next_input = torch.cat([cehrbert_output.pooler_output, normalized_age.unsqueeze(1)], dim=1)
+        next_input = torch.cat([cehrbert_output.pooler_output, normalized_age], dim=1)
         next_input = self.dropout(next_input)
-        return self.classifier(next_input)
+        logits = self.classifier(next_input)
+
+        loss = None
+        if classifier_label is not None:
+            loss_fct = nn.BCEWithLogitsLoss()
+            loss = loss_fct(logits, classifier_label)
+
+        return CehrBertSequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=cehrbert_output.last_hidden_state,
+            attentions=cehrbert_output.attentions
+        )

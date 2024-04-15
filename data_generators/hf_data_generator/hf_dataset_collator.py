@@ -110,4 +110,16 @@ class CehrBertDataCollator:
                 dim=1
             )
 
+        if 'age_at_index' in examples[0]:
+            batch['age_at_index'] = torch.cat(
+                [example['age_at_index'].reshape(-1, 1) for example in examples],
+                dim=0
+            ).to(torch.float)
+
+        if 'classifier_label' in examples[0]:
+            batch['classifier_label'] = torch.cat(
+                [example['classifier_label'].reshape(-1, 1) for example in examples],
+                dim=0
+            ).to(torch.float)
+
         return batch

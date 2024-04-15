@@ -175,7 +175,7 @@ class CehrBertTokenizer(PushToHubMixin):
     @classmethod
     def train_tokenizer(
             cls,
-            dataset: Dataset,
+            dataset: Union[Dataset, DatasetDict],
             feature_names: List[str],
             concept_name_mapping: Dict[str, str]
     ):

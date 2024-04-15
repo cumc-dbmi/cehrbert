@@ -15,7 +15,7 @@ from transformers import HfArgumentParser, TrainingArguments, EvalPrediction
 
 from runner.hf_runner_argument_dataclass import DataTrainingArguments, ModelArguments
 from data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
-from data_generators.hf_data_generator.hf_dataset import create_cehrbert_dataset
+from data_generators.hf_data_generator.hf_dataset import create_cehrbert_pretraining_dataset
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from models.hf_models.config import CehrBertConfig
 from models.hf_models.hf_cehrbert import CehrBertForPreTraining
@@ -114,7 +114,7 @@ def main():
         if data_args.validation_split_percentage:
             dataset = dataset.train_test_split(test_size=data_args.validation_split_percentage, seed=training_args.seed)
 
-        processed_dataset = create_cehrbert_dataset(
+        processed_dataset = create_cehrbert_pretraining_dataset(
             dataset=dataset,
             concept_tokenizer=tokenizer,
             max_sequence_length=model_args.max_position_embeddings,
