@@ -21,7 +21,9 @@ from data_generators.hf_data_generator.hf_dataset import create_cehrbert_finetun
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from models.hf_models.config import CehrBertConfig
 from models.hf_models.hf_cehrbert import CehrBertPreTrainedModel, CehrBertForClassification
-from runner.runner_util import get_last_hf_checkpoint, load_parquet_as_dataset, generate_prepared_ds_path
+from runner.runner_util import (
+    get_last_hf_checkpoint, load_parquet_as_dataset, generate_prepared_ds_path, parse_runner_args
+)
 
 LOG = logging.get_logger("transformers")
 
@@ -84,15 +86,7 @@ def load_pretrained_model_and_tokenizer(data_args, model_args) -> Tuple[CehrBert
 
 
 def main():
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
-    if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
-        # If we pass only one argument to the script and it's the path to a json file,
-        # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
-    elif len(sys.argv) == 2 and sys.argv[1].endswith(".yaml"):
-        model_args, data_args, training_args = parser.parse_yaml_file(yaml_file=os.path.abspath(sys.argv[1]))
-    else:
-        model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+    data_args, model_args, training_args = parse_runner_args()
 
     model, tokenizer = load_pretrained_model_and_tokenizer(data_args, model_args)
 

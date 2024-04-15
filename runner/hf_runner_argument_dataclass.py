@@ -79,13 +79,15 @@ class ModelArguments:
                 "dtype will be automatically derived from the model's weights."
             ),
             "choices": ["auto", "bfloat16", "float16", "float32"],
-        },
+        }
     )
-    num_hidden_layers: Optional[str] = field(
-        default=12
+    num_hidden_layers: Optional[int] = field(
+        default=12,
+        metadata={"help": "The number of layers used in the transformer model"}
     )
-    max_position_embeddings: Optional[str] = field(
-        default=512
+    max_position_embeddings: Optional[int] = field(
+        default=512,
+        metadata={"help": "The maximum length of the sequence allowed for the transformer model"}
     )
 
     def as_dict(self) -> Dict[str, Any]:

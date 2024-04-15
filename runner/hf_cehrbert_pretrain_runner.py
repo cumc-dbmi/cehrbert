@@ -1,5 +1,4 @@
 import os
-import sys
 import glob
 
 from typing import Tuple
@@ -9,16 +8,14 @@ from scipy.special import softmax
 from datasets import load_dataset, load_from_disk, DatasetDict
 from transformers.utils import logging
 from transformers import AutoConfig, Trainer, set_seed
-from transformers.trainer_utils import get_last_checkpoint
-from transformers import HfArgumentParser, TrainingArguments, EvalPrediction
+from transformers import EvalPrediction
 
-from runner.hf_runner_argument_dataclass import DataTrainingArguments, ModelArguments
 from data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
 from data_generators.hf_data_generator.hf_dataset import create_cehrbert_pretraining_dataset
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from models.hf_models.config import CehrBertConfig
 from models.hf_models.hf_cehrbert import CehrBertForPreTraining
-from runner.runner_util import generate_prepared_ds_path, load_parquet_as_dataset, get_last_hf_checkpoint
+from runner.runner_util import generate_prepared_ds_path, load_parquet_as_dataset, get_last_hf_checkpoint, parse_runner_args
 
 LOG = logging.get_logger("transformers")
 
@@ -65,15 +62,7 @@ def load_model_and_tokenizer(data_args, model_args) -> Tuple[CehrBertForPreTrain
 
 
 def main():
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
-    if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
-        # If we pass only one argument to the script and it's the path to a json file,
-        # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
-    elif len(sys.argv) == 2 and sys.argv[1].endswith(".yaml"):
-        model_args, data_args, training_args = parser.parse_yaml_file(yaml_file=os.path.abspath(sys.argv[1]))
-    else:
-        model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+    data_args, model_args, training_args = parse_runner_args()
 
     model, tokenizer = load_model_and_tokenizer(data_args, model_args)
 
