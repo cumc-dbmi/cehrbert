@@ -21,7 +21,7 @@ hospitalization_baseline.py
 hospitalization_prediction-new-data-generator.py
 build/
 concept_embeddings.egg-info/
-*.parquet
+
 *.out
 *.egg-info/
 
@@ -31,5 +31,6 @@ cehr_transformers.egg-info/requires.txt
 cehr_transformers.egg-info/SOURCES.txt
 cehr_transformers.egg-info/top_level.txt
 
+test_data
 test_dataset_prepared
 test*results
