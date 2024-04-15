@@ -16,13 +16,12 @@ from transformers import HfArgumentParser, TrainingArguments
 from transformers import EarlyStoppingCallback
 
 from runner.hf_runner_argument_dataclass import DataTrainingArguments, ModelArguments
-from runner.hf_cehrbert_pretrain_runner import generate_prepared_ds_path
 from data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
 from data_generators.hf_data_generator.hf_dataset import create_cehrbert_finetuning_dataset
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from models.hf_models.config import CehrBertConfig
 from models.hf_models.hf_cehrbert import CehrBertPreTrainedModel, CehrBertForClassification
-from runner.runner_util import get_last_hf_checkpoint, load_parquet_as_dataset
+from runner.runner_util import get_last_hf_checkpoint, load_parquet_as_dataset, generate_prepared_ds_path
 
 LOG = logging.get_logger("transformers")
 

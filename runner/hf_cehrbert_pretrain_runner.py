@@ -1,10 +1,8 @@
 import os
 import sys
 import glob
-from pathlib import Path
 
 from typing import Tuple
-import hashlib
 
 import torch
 from datasets import load_dataset, load_from_disk, DatasetDict
@@ -19,6 +17,7 @@ from data_generators.hf_data_generator.hf_dataset import create_cehrbert_pretrai
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from models.hf_models.config import CehrBertConfig
 from models.hf_models.hf_cehrbert import CehrBertForPreTraining
+from runner.runner_util import generate_prepared_ds_path
 
 LOG = logging.get_logger("transformers")
 
@@ -30,33 +29,6 @@ def compute_metrics(eval_pred: EvalPrediction):
     # Calculate perplexity as the exponential of the average loss
     perplexity = torch.exp(torch.mean(cross_entropy)).item()
     return {"perplexity": perplexity}
-
-
-def md5(to_hash: str, encoding: str = "utf-8") -> str:
-    try:
-        return hashlib.md5(to_hash.encode(encoding), usedforsecurity=False).hexdigest()
-    except TypeError:
-        return hashlib.md5(to_hash.encode(encoding)).hexdigest()
-
-
-def generate_prepared_ds_path(data_args, model_args) -> Path:
-    ds_hash = str(
-        md5(
-            (
-                str(model_args.max_position_embeddings)
-                + "|"
-                + os.path.abspath(data_args.data_folder)
-                + "|"
-                + os.path.abspath(model_args.tokenizer_name_or_path)
-                + "|"
-                + str(data_args.validation_split_percentage) if data_args.validation_split_percentage else ""
-            )
-        )
-    )
-    prepared_ds_path = (
-            Path(os.path.abspath(data_args.dataset_prepared_path)) / ds_hash
-    )
-    return prepared_ds_path
 
 
 def load_model_and_tokenizer(data_args, model_args) -> Tuple[CehrBertForPreTraining, CehrBertTokenizer]:
