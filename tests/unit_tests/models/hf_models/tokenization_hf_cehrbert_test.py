@@ -1,6 +1,6 @@
 import unittest
 from models.hf_models.tokenization_hf_cehrbert import (
-    CehrBertTokenizer, PAD_TOKEN, MASK_TOKEN, OUT_OF_VOCABULARY_TOKEN
+    CehrBertTokenizer, PAD_TOKEN, MASK_TOKEN, OUT_OF_VOCABULARY_TOKEN, UNUSED_TOKEN, CLS_TOKEN
 )
 
 
@@ -13,8 +13,10 @@ class TestCehrBertTokenizer(unittest.TestCase):
             PAD_TOKEN: 0,
             MASK_TOKEN: 1,
             OUT_OF_VOCABULARY_TOKEN: 2,
-            "hello": 3,
-            "world": 4
+            UNUSED_TOKEN: 3,
+            CLS_TOKEN: 4,
+            "hello": 5,
+            "world": 6
         }
         cls.concept_mapping = {
             "hello": "Hello",
@@ -24,16 +26,16 @@ class TestCehrBertTokenizer(unittest.TestCase):
 
     def test_vocab_size(self):
         # Test the vocabulary size
-        self.assertEqual(self.tokenizer.vocab_size, 5)
+        self.assertEqual(self.tokenizer.vocab_size, 7)
 
     def test_encode(self):
         # Test the encoding method
         encoded = self.tokenizer.encode(["hello", "world"])
-        self.assertEqual(encoded, [3, 4])
+        self.assertEqual(encoded, [5, 6])
 
     def test_decode(self):
         # Test the decoding method
-        decoded = self.tokenizer.decode([3, 4])
+        decoded = self.tokenizer.decode([5, 6])
         self.assertEqual(decoded, ["hello", "world"])
 
     def test_convert_tokens_to_string(self):
