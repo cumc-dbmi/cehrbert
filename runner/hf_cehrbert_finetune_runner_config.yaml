@@ -1,12 +1,13 @@
-model_name_or_path: "test_results"
-tokenizer_name_or_path: "test_results"
+model_name_or_path: "test_finetune_results"
+tokenizer_name_or_path: "test_finetune_results"
 
-data_folder: "sample_data"
+data_folder: "sample_data/finetune/full"
+test_data_folder:
 dataset_prepared_path: "test_dataset_prepared"
-validation_split_percentage: 0.05
+validation_split_percentage: 0.2
+test_eval_ratio: 0.5
 preprocessing_num_workers: 16
 
-do_train: true
 overwrite_output_dir: false
 resume_from_checkpoint: # path to the checkpoint folder
 seed: 42
@@ -14,18 +15,18 @@ seed: 42
 num_hidden_layers: 6
 max_position_embeddings: 128
 
-output_dir: "test_results"
+output_dir: "test_finetune_results"
 evaluation_strategy: "epoch"
 save_strategy: "epoch"
 learning_rate: 0.00005
-per_device_train_batch_size: 4
-per_device_eval_batch_size: 4
+per_device_train_batch_size: 8
+per_device_eval_batch_size: 8
 gradient_accumulation_steps: 1
-num_train_epochs: 2
+num_train_epochs: 10
 warmup_steps: 500
 weight_decay: 0.01
 logging_dir: "./logs"
-logging_steps: 100
+logging_steps: 10
 save_total_limit:
 load_best_model_at_end: true
 metric_for_best_model: "eval_loss"

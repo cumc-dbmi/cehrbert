@@ -32,4 +32,4 @@ cehr_transformers.egg-info/SOURCES.txt
 cehr_transformers.egg-info/top_level.txt
 
 test_dataset_prepared
-test_results
+test*results

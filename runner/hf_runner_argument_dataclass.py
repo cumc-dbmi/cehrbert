@@ -13,8 +13,18 @@ class DataTrainingArguments:
     dataset_prepared_path: Optional[str] = field(
         metadata={"help": "The folder in which the prepared dataset is cached"}
     )
+    test_data_folder: Optional[str] = field(
+        default=None,
+        metadata={"help": "The name of the test dataset to use (via the datasets library)."}
+    )
     validation_split_percentage: Optional[float] = field(
         default=0.05,
+        metadata={
+            "help": "The percentage of the train set used as validation set in case there's no validation split"
+        },
+    )
+    test_eval_ratio: Optional[float] = field(
+        default=0.5,
         metadata={
             "help": "The percentage of the train set used as validation set in case there's no validation split"
         },
