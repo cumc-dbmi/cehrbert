@@ -43,7 +43,7 @@ class TestCehrBert(unittest.TestCase):
         input_ids = torch.randint(0, self.config.vocab_size, (1, 10))
         attention_mask = torch.ones(1, 10)
         ages = torch.randint(0, 100, (1, 10))
-        time_stamps = torch.randint(3000, 3500, (1, 10))
+        dates = torch.randint(3000, 3500, (1, 10))
         visit_concept_orders = torch.randint(0, 10, (1, 10))
         concept_values = torch.rand(1, 10)
         concept_value_masks = torch.randint(0, 2, (1, 10))
@@ -53,7 +53,7 @@ class TestCehrBert(unittest.TestCase):
             input_ids=input_ids,
             attention_mask=attention_mask,
             ages=ages,
-            time_stamps=time_stamps,
+            dates=dates,
             visit_concept_orders=visit_concept_orders,
             concept_values=concept_values,
             concept_value_masks=concept_value_masks,
