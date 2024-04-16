@@ -33,6 +33,14 @@ class DataTrainingArguments:
         default=4,
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
+    is_data_in_med: Optional[bool] = field(
+        default=False,
+        metadata={"help": "The boolean indicator to indicate whether the data is in the MED format"},
+    )
+    include_inpatient_att_token: Optional[bool] = field(
+        default=False,
+        metadata={"help": "The boolean indicator to indicate whether we should include the inpatient ATT tokens"},
+    )
 
 
 @dataclass

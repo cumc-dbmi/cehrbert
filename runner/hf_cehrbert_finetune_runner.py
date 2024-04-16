@@ -127,7 +127,9 @@ def main():
             dataset=final_splits,
             concept_tokenizer=tokenizer,
             max_sequence_length=model_args.max_position_embeddings,
-            num_proc=data_args.preprocessing_num_workers
+            num_proc=data_args.preprocessing_num_workers,
+            is_data_in_med=data_args.is_data_in_med,
+            include_inpatient_att_token=data_args.include_inpatient_att_token
         )
         processed_dataset.save_to_disk(prepared_ds_path)
 
