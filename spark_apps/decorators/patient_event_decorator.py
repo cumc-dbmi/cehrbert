@@ -1,6 +1,7 @@
 import math
 from abc import ABC, abstractmethod
 from enum import Enum
+from typing import Optional
 
 import numpy as np
 from pyspark.sql import DataFrame
@@ -564,7 +565,7 @@ class DeathEventDecorator(PatientEventDecorator):
         return patient_events.unionByName(new_tokens)
 
 
-def time_token_func(time_delta):
+def time_token_func(time_delta) -> Optional[str]:
     if np.isnan(time_delta):
         return None
     if time_delta < 0:
