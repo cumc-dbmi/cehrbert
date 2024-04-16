@@ -8,10 +8,9 @@ import random
 import numpy as np
 import copy
 
-from meds.schema import birth_code
+from med_extension.schema_extension import get_measurements_from_visit
 
 from dateutil.relativedelta import relativedelta
-from spark_apps.decorators.patient_event_decorator import time_token_func
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 
 # OMOP concept ids for inpatient related visits
@@ -91,20 +90,18 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
             'mlm_skip_values': [],
             'visit_concept_ids': []
         }
-        # At least the demographic event should exist and one visit (Event) exists
-        assert len(record['events']) >= 2
-        # The first measurement of the demographic event should be date of birth
-        assert record['events'][0]['measurements'][0]['code'] == birth_code
+        # At least one visit should exist
+        assert len(record['visits']) >= 1
 
         # Extract the demographic information
-        birth_datetime = record['events'][0]['time']
-        gender = record['events'][0]['measurements'][1]['code']
-        race = record['events'][0]['measurements'][2]['code']
+        birth_datetime = record['birth_datetime']
+        gender = record['gender']
+        race = record['race']
 
         if self._include_demographic_prompt:
-            first_visit = record['events'][1]
-            year_str = f'year:{str(first_visit["time"].year)}'
-            age_str = f'age:{str(relativedelta(first_visit["time"], birth_datetime).years)}'
+            first_visit = record['visits'][0]
+            year_str = f'year:{str(first_visit["visit_start_datetime"].year)}'
+            age_str = f'age:{str(relativedelta(first_visit["visit_start_datetime"], birth_datetime).years)}'
             cehrbert_record['concept_ids'].extend([year_str, age_str, gender, race])
             cehrbert_record['ages'].extend([-1, -1, -1, -1])
             cehrbert_record['dates'].extend([0, 0, 0, 0])
@@ -122,28 +119,21 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
         date_cursor = None
 
         # Loop through all the visits excluding the first event containing the demographics
-        for i, visit in enumerate(sorted(record['events'][1:], key=lambda e: e['time'])):
+        for i, visit in enumerate(sorted(record['visits'], key=lambda e: e['visit_start_datetime'])):
+
+            measurements = get_measurements_from_visit(visit)
 
             # Skip this visit if the number measurements in the event is zero
-            if not visit['measurements']:
+            if not measurements:
                 continue
 
-            visit_start_datetime = visit['time']
+            visit_start_datetime = visit['visit_start_datetime']
             time_delta = (visit_start_datetime - date_cursor).days if date_cursor else None
             date_cursor = visit_start_datetime
 
             # We assume the first measurement to be the visit type of the current visit
-            visit_type = visit['measurements'][0]['code']
+            visit_type = visit['visit_type']
             is_inpatient = visit_type in INPATIENT_VISIT_TYPES
-
-            smallest_datetime = min([m['datetime_value'] for m in visit['measurements']])
-            # Manually set visit type to be the smallest timestamp - 1 microsecond of this visit
-            visit['measurements'][0]['datetime_value'] = smallest_datetime - datetime.timedelta(microseconds=1)
-
-            if is_inpatient:
-                largest_datetime = max([m['datetime_value'] for m in visit['measurements']])
-                # Manually set discharge type to be the largest timestamp + 1 microsecond of this visit
-                visit['measurements'][-1]['datetime_value'] = largest_datetime + datetime.timedelta(microseconds=1)
 
             # Add artificial time tokens to the patient timeline if timedelta exists
             if time_delta:
@@ -160,23 +150,23 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                 cehrbert_record['mlm_skip_values'].append(0)
 
             # Add the VS token to the patient timeline to mark the start of a visit
-            age = relativedelta(visit['time'], birth_datetime).years
+            age = relativedelta(visit['visit_start_datetime'], birth_datetime).years
             # Calculate the week number since the epoch time
-            date = (visit['time'] - datetime.datetime(year=1970, month=1, day=1)).days // 7
+            date = (visit['visit_start_datetime'] - datetime.datetime(year=1970, month=1, day=1)).days // 7
             visit_segment = int(visit_segment_indicator) + 1
 
-            cehrbert_record['concept_ids'].append('[VS]')
-            cehrbert_record['ages'].append(age)
-            cehrbert_record['dates'].append(date)
-            cehrbert_record['visit_concept_orders'].append(i + 1)
-            cehrbert_record['visit_segments'].append(visit_segment)
-            cehrbert_record['visit_concept_ids'].append(visit_type)
-            cehrbert_record['concept_value_masks'].append(0)
-            cehrbert_record['concept_values'].append(-1)
-            cehrbert_record['mlm_skip_values'].append(0)
+            cehrbert_record['concept_ids'].extend(['[VS]', visit_type])
+            cehrbert_record['ages'].extend([age] * 2)
+            cehrbert_record['dates'].extend([date] * 2)
+            cehrbert_record['visit_concept_orders'].extend([i + 1] * 2)
+            cehrbert_record['visit_segments'].extend([visit_segment] * 2)
+            cehrbert_record['visit_concept_ids'].extend([visit_type] * 2)
+            cehrbert_record['concept_value_masks'].extend([0] * 2)
+            cehrbert_record['concept_values'].extend([-1] * 2)
+            cehrbert_record['mlm_skip_values'].extend([0] * 2)
 
             # Sort all measurements using time, in case of a tie, we use the natural order of codes to tiebreak
-            for m_i, m in enumerate(sorted(visit['measurements'], key=lambda m: (m['datetime_value'], m['code']))):
+            for m_i, m in enumerate(sorted(measurements, key=lambda m: (m['datetime_value'], m['code']))):
                 # Add a medical token to the patient timeline
                 # If this is an inpatient visit, we use the event time stamps to calculate age and date
                 # because the patient can stay in the hospital for a period of time.
@@ -223,6 +213,22 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                 cehrbert_record['concept_values'].append(concept_value)
                 cehrbert_record['mlm_skip_values'].append(int('numeric_value' in m))
 
+            if is_inpatient:
+                # If visit_end_datetime is populated for the inpatient visit, we update the date_cursor
+                if 'visit_end_datetime' in visit:
+                    date_cursor = visit['visit_end_datetime']
+                # Reuse the age and date calculated for the last event in the patient timeline
+                discharge_facility = visit['discharge_facility'] if 'discharge_facility' in visit else '0'
+                cehrbert_record['concept_ids'].append(discharge_facility)
+                cehrbert_record['ages'].append(age)
+                cehrbert_record['dates'].append(date)
+                cehrbert_record['visit_concept_orders'].append(i + 1)
+                cehrbert_record['visit_segments'].append(visit_segment)
+                cehrbert_record['visit_concept_ids'].append(visit_type)
+                cehrbert_record['concept_value_masks'].append(0)
+                cehrbert_record['concept_values'].append(-1)
+                cehrbert_record['mlm_skip_values'].append(0)
+
             # Reuse the age and date calculated for the last event in the patient timeline
             cehrbert_record['concept_ids'].append('[VE]')
             cehrbert_record['ages'].append(age)
@@ -242,7 +248,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
 
         # Add some count information for this sequence
         cehrbert_record['num_of_concepts'] = len(cehrbert_record['concept_ids'])
-        cehrbert_record['num_of_visits'] = len(record['events'][1:])
+        cehrbert_record['num_of_visits'] = len(record['visits'])
 
         # Add demographics for this patient
         cehrbert_record['birth_datetime'] = birth_datetime

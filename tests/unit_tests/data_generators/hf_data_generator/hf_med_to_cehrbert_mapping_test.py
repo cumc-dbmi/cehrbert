@@ -1,5 +1,6 @@
 import unittest
-from meds.schema import Patient, Event, Measurement
+from meds.schema import Event, Measurement
+from med_extension.schema_extension import PatientExtension, Visit
 from datetime import datetime
 from data_generators.hf_data_generator.hf_dataset_mapping import MedToCehrBertDatasetMapping
 from spark_apps.decorators.patient_event_decorator import time_token_func, time_day_token
@@ -9,42 +10,52 @@ from spark_apps.decorators.patient_event_decorator import time_token_func, time_
 class TestMedToCehrBertDatasetMapping(unittest.TestCase):
 
     def setUp(self):
-        demographic_event = Event(
-            time=datetime(1980, 4, 14, 0, 0),
-            measurements=[
-                Measurement(code='SNOMED/184099003'),
-                Measurement(code='8507'),
-                Measurement(code='0')
+        outpatient_visit = Visit(
+            visit_type='9202',
+            visit_start_datetime=datetime(2024, 4, 14, 0, 0),
+            events=[
+                Event(
+                    time=datetime(2024, 4, 14, 0, 0),
+                    measurements=[
+                        Measurement(code='320128', datetime_value=datetime(2024, 4, 14, 1, 0))
+                    ]
+                )
             ]
         )
 
-        outpatient_visit = Event(
-            time=datetime(2024, 4, 14, 0, 0),
-            measurements=[
-                Measurement(code='9202', datetime_value=datetime(2024, 4, 14, 0, 0)),
-                Measurement(code='320128', datetime_value=datetime(2024, 4, 14, 1, 0))
-            ]
-        )
-
-        inpatient_visit = Event(
-            time=datetime(2024, 4, 21, 0, 0),
-            measurements=[
-                Measurement(code='9201', datetime_value=datetime(2024, 4, 21, 0, 0)),
-                Measurement(code='320128', datetime_value=datetime(2024, 4, 21, 0, 0)),
-                Measurement(
-                    code='4134120',
-                    datetime_value=datetime(2024, 4, 22, 0, 0),
-                    numeric_value=0.5
+        inpatient_visit = Visit(
+            visit_type='9201',
+            visit_start_datetime=datetime(2024, 4, 21, 0, 0),
+            visit_end_datetime=datetime(2024, 4, 22, 0, 0),
+            discharge_facility='8536',
+            events=[
+                Event(
+                    time=datetime(2024, 4, 21, 0, 0),
+                    measurements=[
+                        Measurement(code='320128', datetime_value=datetime(2024, 4, 21, 0, 0))
+                    ]
                 ),
-                Measurement(code='8536', datetime_value=datetime(2024, 4, 22, 0, 0))
+                Event(
+                    time=datetime(2024, 4, 22, 0, 0),
+                    measurements=[
+                        Measurement(
+                            code='4134120',
+                            datetime_value=datetime(2024, 4, 22, 0, 0),
+                            numeric_value=0.5
+                        )
+                    ]
+                )
             ]
         )
 
         # Intentionally disturb the chronological order of visits by putting outpatient_visit after inpatient_visit,
         # the mapping function should be able to re-order the events based on their time stamps first
-        self.patient = Patient(
+        self.patient = PatientExtension(
             patient_id=0,
-            events=[demographic_event, inpatient_visit, outpatient_visit],
+            visits=[inpatient_visit, outpatient_visit],
+            birth_datetime=datetime(1980, 4, 14, 0, 0),
+            gender='8507',
+            race='0',
             static_measurements=[]
         )
 
