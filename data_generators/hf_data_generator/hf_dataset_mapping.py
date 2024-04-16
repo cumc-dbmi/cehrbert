@@ -56,7 +56,20 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
         - the first measurement contains the code indicating a standard OMOP Visit concept_id (e.g. 9201, 9202)
         - in case of an inpatient visit, the last measurement is assumed to
             contain the standard OMOP concept id for discharge facilities (e.g 8536)
+        - in case of an inpatient visit, datetime_value of the last measurement stores visit_end_datetime
     """
+
+    def __init__(
+            self,
+            time_token_function,
+            include_inpatient_att,
+            inpatient_time_token_function=None
+    ):
+        self._time_token_function = time_token_function
+        self._include_inpatient_att = include_inpatient_att
+        if include_inpatient_att and not inpatient_time_token_function:
+            raise ValueError('inpatient_time_token_function needs to be provided when include_inpatient_att is True')
+        self._inpatient_time_token_function = inpatient_time_token_function
 
     def transform(
             self,
@@ -93,7 +106,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
         date_cursor = None
 
         # Loop through all the visits excluding the first event containing the demographics
-        for i, visit in enumerate(record['events'][1:]):
+        for i, visit in enumerate(sorted(record['events'][1:], key=lambda e: e['time'])):
 
             # Skip this visit if the number measurements in the event is zero
             if not visit['measurements']:
@@ -118,7 +131,8 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
 
             # Add artificial time tokens to the patient timeline if timedelta exists
             if time_delta:
-                att_token = time_token_func(time_delta)
+                # This generates an artificial time token depending on the choice of the time token functions
+                att_token = self._time_token_function(time_delta)
                 cehrbert_record['concept_ids'].append(att_token)
                 cehrbert_record['ages'].append(-1)
                 cehrbert_record['dates'].append(0)
@@ -146,9 +160,8 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
             cehrbert_record['mlm_skip_values'].append(0)
 
             # Sort all measurements using time, in case of a tie, we use the natural order of codes to tiebreak
-            for m in sorted(visit['measurements'], key=lambda m: (m['datetime_value'], m['code'])):
+            for m_i, m in enumerate(sorted(visit['measurements'], key=lambda m: (m['datetime_value'], m['code']))):
                 # Add a medical token to the patient timeline
-
                 # If this is an inpatient visit, we use the event time stamps to calculate age and date
                 # because the patient can stay in the hospital for a period of time.
                 if is_inpatient:
@@ -160,6 +173,25 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                     # For outpatient visits, we use the visit time stamp to calculate age and time because we assume
                     # the outpatient visits start and end on the same day
                     pass
+
+                # Calculate the time diff in days w.r.t the previous measurement
+                meas_time_diff = relativedelta(m['datetime_value'], date_cursor).days
+                # Update the date_cursor if the time diff between two neighboring measurements is greater than and
+                # equal to 1 day
+                if meas_time_diff > 0:
+                    date_cursor = m['datetime_value']
+                    if self._include_inpatient_att:
+                        # This generates an artificial time token depending on the choice of the time token functions
+                        att_token = f'i-{self._inpatient_time_token_function(time_delta)}'
+                        cehrbert_record['concept_ids'].append(att_token)
+                        cehrbert_record['ages'].append(-1)
+                        cehrbert_record['dates'].append(0)
+                        cehrbert_record['visit_concept_orders'].append(i + 1)
+                        cehrbert_record['visit_segments'].append(visit_segment)
+                        cehrbert_record['visit_concept_ids'].append(visit_type)
+                        cehrbert_record['concept_value_masks'].append(0)
+                        cehrbert_record['concept_values'].append(-1)
+                        cehrbert_record['mlm_skip_values'].append(0)
 
                 # If numeric_value exists, this is a concept/value tuple, we indicate this using a concept_value_mask
                 concept_value_mask = int('numeric_value' in m)
