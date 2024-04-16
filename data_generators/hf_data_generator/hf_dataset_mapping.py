@@ -54,22 +54,24 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
     - From the second event onward
         - the time of the event is visit_start_datetime.
         - the first measurement contains the code indicating a standard OMOP Visit concept_id (e.g. 9201, 9202)
-        - in case of an inpatient visit, the last measurement is assumed to
+        - in case of inpatient visits, the last measurement is assumed to
             contain the standard OMOP concept id for discharge facilities (e.g 8536)
-        - in case of an inpatient visit, datetime_value of the last measurement stores visit_end_datetime
+        - in case of inpatient visits, datetime_value of the last measurement stores visit_end_datetime
     """
 
     def __init__(
             self,
             time_token_function,
-            include_inpatient_att,
-            inpatient_time_token_function=None
+            include_inpatient_att: bool = False,
+            inpatient_time_token_function=None,
+            include_demographic_prompt: bool = False
     ):
         self._time_token_function = time_token_function
         self._include_inpatient_att = include_inpatient_att
         if include_inpatient_att and not inpatient_time_token_function:
             raise ValueError('inpatient_time_token_function needs to be provided when include_inpatient_att is True')
         self._inpatient_time_token_function = inpatient_time_token_function
+        self._include_demographic_prompt = include_demographic_prompt
 
     def transform(
             self,
@@ -89,8 +91,8 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
             'mlm_skip_values': [],
             'visit_concept_ids': []
         }
-        # At least the demographic event should exist
-        assert len(record['events']) >= 1
+        # At least the demographic event should exist and one visit (Event) exists
+        assert len(record['events']) >= 2
         # The first measurement of the demographic event should be date of birth
         assert record['events'][0]['measurements'][0]['code'] == birth_code
 
@@ -98,6 +100,20 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
         birth_datetime = record['events'][0]['time']
         gender = record['events'][0]['measurements'][1]['code']
         race = record['events'][0]['measurements'][2]['code']
+
+        if self._include_demographic_prompt:
+            first_visit = record['events'][1]
+            year_str = f'year:{str(first_visit["time"].year)}'
+            age_str = f'age:{str(relativedelta(first_visit["time"], birth_datetime).years)}'
+            cehrbert_record['concept_ids'].extend([year_str, age_str, gender, race])
+            cehrbert_record['ages'].extend([-1, -1, -1, -1])
+            cehrbert_record['dates'].extend([0, 0, 0, 0])
+            cehrbert_record['visit_concept_orders'].extend([0, 0, 0, 0])
+            cehrbert_record['visit_segments'].extend([0, 0, 0, 0])
+            cehrbert_record['visit_concept_ids'].extend(['0', '0', '0', '0'])
+            cehrbert_record['concept_value_masks'].extend([0, 0, 0, 0])
+            cehrbert_record['concept_values'].extend([-1, -1, -1, -1])
+            cehrbert_record['mlm_skip_values'].extend([0, 0, 0, 0])
 
         # A bool indicator to toggle between 1 and 2
         visit_segment_indicator = False
