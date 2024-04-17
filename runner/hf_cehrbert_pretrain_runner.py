@@ -15,7 +15,8 @@ from data_generators.hf_data_generator.hf_dataset import create_cehrbert_pretrai
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from models.hf_models.config import CehrBertConfig
 from models.hf_models.hf_cehrbert import CehrBertForPreTraining
-from runner.runner_util import generate_prepared_ds_path, load_parquet_as_dataset, get_last_hf_checkpoint, parse_runner_args
+from runner.runner_util import generate_prepared_ds_path, load_parquet_as_dataset, get_last_hf_checkpoint, \
+    parse_runner_args
 
 LOG = logging.get_logger("transformers")
 
@@ -84,9 +85,7 @@ def main():
             dataset=dataset,
             concept_tokenizer=tokenizer,
             max_sequence_length=model_args.max_position_embeddings,
-            num_proc=data_args.preprocessing_num_workers,
-            is_data_in_med=data_args.is_data_in_med,
-            include_inpatient_att_token=data_args.include_inpatient_att_token
+            data_args=data_args
         )
         processed_dataset.save_to_disk(prepared_ds_path)
 

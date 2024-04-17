@@ -8,6 +8,13 @@ validation_split_percentage: 0.2
 test_eval_ratio: 0.5
 preprocessing_num_workers: 16
 
+# Below is a list of Med-to-CehrBert related arguments
+att_function_type: "cehr_bert"
+is_data_in_med: false
+inpatient_att_function_type: "none"
+include_auxiliary_token: true
+include_demographic_prompt: false
+
 overwrite_output_dir: false
 resume_from_checkpoint: # path to the checkpoint folder
 seed: 42
