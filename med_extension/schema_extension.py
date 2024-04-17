@@ -3,7 +3,6 @@ from meds.schema import Event, Measurement
 from typing import TypedDict, List
 from typing_extensions import NotRequired
 import datetime
-import itertools
 
 
 class Visit(TypedDict):

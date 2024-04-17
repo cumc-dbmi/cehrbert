@@ -1,4 +1,3 @@
-import logging
 import datetime
 from enum import Enum
 from abc import abstractmethod, ABC
@@ -8,10 +7,11 @@ import random
 import numpy as np
 import copy
 
+from spark_apps.decorators.patient_event_decorator import get_att_function
 from med_extension.schema_extension import get_measurements_from_visit
-
 from dateutil.relativedelta import relativedelta
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
+from runner.hf_runner_argument_dataclass import DataTrainingArguments
 
 # OMOP concept ids for inpatient related visits
 INPATIENT_VISIT_TYPES = [
@@ -46,8 +46,17 @@ class DatasetMapping(ABC):
 
 
 class MedToCehrBertDatasetMapping(DatasetMapping):
+    def __init__(
+            self,
+            data_args: DataTrainingArguments
+    ):
+        self._time_token_function = get_att_function(data_args.att_function_type)
+        self._include_auxiliary_token = data_args.include_auxiliary_token
+        self._inpatient_time_token_function = get_att_function(data_args.inpatient_att_function_type)
+        self._include_demographic_prompt = data_args.include_demographic_prompt
+
     """
-    This mapping function converts the MED (https://github.com/Medical-Event-Data-Standard/meds/tree/main)
+    This mapping function converts the MED (https://github.com/Medical-Event-Data-Standard/meds/tree/main) extension
     to the CehrBert format. We make several assumptions
     - The first event contains the demographic information
     - From the second event onward
@@ -57,20 +66,6 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
             contain the standard OMOP concept id for discharge facilities (e.g 8536)
         - in case of inpatient visits, datetime_value of the last measurement stores visit_end_datetime
     """
-
-    def __init__(
-            self,
-            time_token_function,
-            include_inpatient_att: bool = False,
-            inpatient_time_token_function=None,
-            include_demographic_prompt: bool = False
-    ):
-        self._time_token_function = time_token_function
-        self._include_inpatient_att = include_inpatient_att
-        if include_inpatient_att and not inpatient_time_token_function:
-            raise ValueError('inpatient_time_token_function needs to be provided when include_inpatient_att is True')
-        self._inpatient_time_token_function = inpatient_time_token_function
-        self._include_demographic_prompt = include_demographic_prompt
 
     def transform(
             self,
@@ -155,15 +150,26 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
             date = (visit['visit_start_datetime'] - datetime.datetime(year=1970, month=1, day=1)).days // 7
             visit_segment = int(visit_segment_indicator) + 1
 
-            cehrbert_record['concept_ids'].extend(['[VS]', visit_type])
-            cehrbert_record['ages'].extend([age] * 2)
-            cehrbert_record['dates'].extend([date] * 2)
-            cehrbert_record['visit_concept_orders'].extend([i + 1] * 2)
-            cehrbert_record['visit_segments'].extend([visit_segment] * 2)
-            cehrbert_record['visit_concept_ids'].extend([visit_type] * 2)
-            cehrbert_record['concept_value_masks'].extend([0] * 2)
-            cehrbert_record['concept_values'].extend([-1] * 2)
-            cehrbert_record['mlm_skip_values'].extend([0] * 2)
+            cehrbert_record['concept_ids'].append('[VS]')
+            cehrbert_record['ages'].append(age)
+            cehrbert_record['dates'].append(date)
+            cehrbert_record['visit_concept_orders'].append(i + 1)
+            cehrbert_record['visit_segments'].append(visit_segment)
+            cehrbert_record['visit_concept_ids'].append(visit_type)
+            cehrbert_record['concept_value_masks'].append(0)
+            cehrbert_record['concept_values'].append(-1)
+            cehrbert_record['mlm_skip_values'].append(0)
+
+            if self._include_auxiliary_token:
+                cehrbert_record['concept_ids'].append(visit_type)
+                cehrbert_record['ages'].append(age)
+                cehrbert_record['dates'].append(date)
+                cehrbert_record['visit_concept_orders'].append(i + 1)
+                cehrbert_record['visit_segments'].append(visit_segment)
+                cehrbert_record['visit_concept_ids'].append(visit_type)
+                cehrbert_record['concept_value_masks'].append(0)
+                cehrbert_record['concept_values'].append(-1)
+                cehrbert_record['mlm_skip_values'].append(0)
 
             # Sort all measurements using time, in case of a tie, we use the natural order of codes to tiebreak
             for m_i, m in enumerate(sorted(measurements, key=lambda m: (m['datetime_value'], m['code']))):
@@ -186,7 +192,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                 # equal to 1 day
                 if meas_time_diff > 0:
                     date_cursor = m['datetime_value']
-                    if self._include_inpatient_att:
+                    if self._inpatient_time_token_function:
                         # This generates an artificial time token depending on the choice of the time token functions
                         att_token = f'i-{self._inpatient_time_token_function(time_delta)}'
                         cehrbert_record['concept_ids'].append(att_token)
@@ -215,19 +221,23 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
 
             if is_inpatient:
                 # If visit_end_datetime is populated for the inpatient visit, we update the date_cursor
-                if 'visit_end_datetime' in visit:
-                    date_cursor = visit['visit_end_datetime']
-                # Reuse the age and date calculated for the last event in the patient timeline
-                discharge_facility = visit['discharge_facility'] if 'discharge_facility' in visit else '0'
-                cehrbert_record['concept_ids'].append(discharge_facility)
-                cehrbert_record['ages'].append(age)
-                cehrbert_record['dates'].append(date)
-                cehrbert_record['visit_concept_orders'].append(i + 1)
-                cehrbert_record['visit_segments'].append(visit_segment)
-                cehrbert_record['visit_concept_ids'].append(visit_type)
-                cehrbert_record['concept_value_masks'].append(0)
-                cehrbert_record['concept_values'].append(-1)
-                cehrbert_record['mlm_skip_values'].append(0)
+                visit_end_datetime = visit.get('visit_end_datetime', None)
+                if visit_end_datetime:
+                    date_cursor = visit_end_datetime
+
+                if self._include_auxiliary_token:
+                    # Reuse the age and date calculated for the last event in the patient timeline for the discharge
+                    # facility event
+                    discharge_facility = visit['discharge_facility'] if 'discharge_facility' in visit else '0'
+                    cehrbert_record['concept_ids'].append(discharge_facility)
+                    cehrbert_record['ages'].append(age)
+                    cehrbert_record['dates'].append(date)
+                    cehrbert_record['visit_concept_orders'].append(i + 1)
+                    cehrbert_record['visit_segments'].append(visit_segment)
+                    cehrbert_record['visit_concept_ids'].append(visit_type)
+                    cehrbert_record['concept_value_masks'].append(0)
+                    cehrbert_record['concept_values'].append(-1)
+                    cehrbert_record['mlm_skip_values'].append(0)
 
             # Reuse the age and date calculated for the last event in the patient timeline
             cehrbert_record['concept_ids'].append('[VE]')

@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field, asdict
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Literal
+from spark_apps.decorators.patient_event_decorator import AttType
 
 
 @dataclass
@@ -33,13 +34,40 @@ class DataTrainingArguments:
         default=4,
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
+    att_function_type: Literal[AttType.CEHR_BERT.value, AttType.DAY.value, AttType.NONE.value] = field(
+        default=AttType.CEHR_BERT.value,
+        metadata={
+            "help": "The ATT type to choose the level of granularity to use for creating the "
+                    "artificial time tokens between visits",
+            "choices": f"choices={[e.value for e in AttType]}"
+        }
+    )
     is_data_in_med: Optional[bool] = field(
         default=False,
-        metadata={"help": "The boolean indicator to indicate whether the data is in the MED format"},
+        metadata={"help": "The boolean indicator to indicate whether the data is in the MED format"}
     )
-    include_inpatient_att_token: Optional[bool] = field(
+    inpatient_att_function_type: Literal[AttType.CEHR_BERT.value, AttType.DAY.value, AttType.NONE.value] = field(
+        default=AttType.NONE,
+        metadata={
+            "help": "The ATT type to choose the level of granularity to use for creating the "
+                    "artificial time tokens between neighboring events within inpatient visits."
+                    "Default to None, meaning the inpatient artificial time tokens are not created.",
+            "choices": f"choices={[e.value for e in AttType]}"
+        }
+    )
+    include_auxiliary_token: Optional[bool] = field(
         default=False,
-        metadata={"help": "The boolean indicator to indicate whether we should include the inpatient ATT tokens"},
+        metadata={
+            "help": "The boolean indicator to indicate whether visit type should be included "
+                    "at the beginning of the visit and discharge facility should be included at the end of the visit"
+        }
+    )
+    include_demographic_prompt: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "The boolean indicator to indicate whether the demographic tokens should be added "
+                    "at the beginning of the sequence including start_year, start_age, gender, race"
+        }
     )
 
 
