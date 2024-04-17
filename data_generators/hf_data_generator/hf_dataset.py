@@ -9,7 +9,7 @@ from data_generators.hf_data_generator.hf_dataset_mapping import (
     HFFineTuningMapping,
     TruncationType
 )
-from spark_apps.decorators.patient_event_decorator import time_token_func, time_day_token
+from runner.hf_runner_argument_dataclass import DataTrainingArguments
 
 CEHRBERT_COLUMNS = [
     'concept_ids', 'ages', 'dates', 'visit_segments',
@@ -25,28 +25,23 @@ def create_cehrbert_pretraining_dataset(
         dataset: Union[Dataset, DatasetDict],
         concept_tokenizer: CehrBertTokenizer,
         max_sequence_length: int,
-        is_pretraining: bool = True,
-        num_proc: int = 4,
-        is_data_in_med: bool = False,
-        include_inpatient_att_token: bool = False
+        data_args: DataTrainingArguments
 ) -> Dataset:
     required_columns = TRANSFORMER_COLUMNS + CEHRBERT_COLUMNS
     mapping_functions = [
         SortPatientSequenceMapping(),
         GenerateStartEndIndexMapping(max_sequence_length),
-        HFMaskedLanguageModellingMapping(concept_tokenizer, is_pretraining)
+        HFMaskedLanguageModellingMapping(concept_tokenizer, True)
     ]
 
-    if is_data_in_med:
+    if data_args.is_data_in_med:
         med_to_cehrbert_mapping = MedToCehrBertDatasetMapping(
-            time_token_function=time_token_func,
-            include_inpatient_att=include_inpatient_att_token,
-            inpatient_time_token_function=time_day_token
+            data_args
         )
         mapping_functions.insert(0, med_to_cehrbert_mapping)
 
     for mapping_function in mapping_functions:
-        dataset = dataset.map(mapping_function.transform, num_proc=num_proc)
+        dataset = dataset.map(mapping_function.transform, num_proc=data_args.preprocessing_num_workers)
 
     if isinstance(dataset, DatasetDict):
         all_columns = dataset['train'].column_names
@@ -62,9 +57,7 @@ def create_cehrbert_finetuning_dataset(
         dataset: Union[Dataset, DatasetDict],
         concept_tokenizer: CehrBertTokenizer,
         max_sequence_length: int,
-        num_proc: int = 4,
-        is_data_in_med: bool = False,
-        include_inpatient_att_token: bool = False
+        data_args: DataTrainingArguments
 ) -> Dataset:
     required_columns = TRANSFORMER_COLUMNS + CEHRBERT_COLUMNS + FINETUNING_COLUMNS
     mapping_functions = [
@@ -74,16 +67,14 @@ def create_cehrbert_finetuning_dataset(
         HFFineTuningMapping()
     ]
 
-    if is_data_in_med:
+    if data_args.is_data_in_med:
         med_to_cehrbert_mapping = MedToCehrBertDatasetMapping(
-            time_token_function=time_token_func,
-            include_inpatient_att=include_inpatient_att_token,
-            inpatient_time_token_function=time_day_token
+            data_args
         )
         mapping_functions.insert(0, med_to_cehrbert_mapping)
 
     for mapping_function in mapping_functions:
-        dataset = dataset.map(mapping_function.transform, num_proc=num_proc)
+        dataset = dataset.map(mapping_function.transform, num_proc=data_args.preprocessing_num_workers)
 
     if isinstance(dataset, DatasetDict):
         all_columns = dataset['train'].column_names
