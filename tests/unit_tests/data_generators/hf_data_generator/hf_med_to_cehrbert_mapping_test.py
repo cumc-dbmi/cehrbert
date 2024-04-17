@@ -5,7 +5,7 @@ from datetime import datetime
 
 from runner.hf_runner_argument_dataclass import DataTrainingArguments
 from data_generators.hf_data_generator.hf_dataset_mapping import MedToCehrBertDatasetMapping
-from spark_apps.decorators.patient_event_decorator import time_token_func, time_day_token, AttType
+from spark_apps.decorators.patient_event_decorator import AttType
 
 
 # Actual test class
