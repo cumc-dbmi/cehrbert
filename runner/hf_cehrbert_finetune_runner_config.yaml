@@ -20,7 +20,7 @@ resume_from_checkpoint: # path to the checkpoint folder
 seed: 42
 
 num_hidden_layers: 6
-max_position_embeddings: 128
+max_position_embeddings: 512
 
 output_dir: "test_finetune_results"
 evaluation_strategy: "epoch"
