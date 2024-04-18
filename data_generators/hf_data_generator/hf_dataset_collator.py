@@ -30,69 +30,84 @@ class CehrBertDataCollator:
             batch_first=True,
             padding_value=self.tokenizer.pad_token_index
         )
-        batch['input_ids'] = torch.cat(
-            [torch.full((batch_size, 1), self.tokenizer.cls_token_index), batch['input_ids']],
-            dim=1
-        )
         batch['attention_mask'] = pad_sequence(
             batch_attention_mask,
             batch_first=True,
             padding_value=0.
-        )
-        batch['attention_mask'] = torch.cat(
-            [torch.full((batch_size, 1), 1.0), batch['attention_mask']],
-            dim=1
         )
         batch['ages'] = pad_sequence(
             batch_ages,
             batch_first=True,
             padding_value=0
         )
-        batch['ages'] = torch.cat(
-            [batch['ages'][:, 0:1], batch['ages']],
-            dim=1
-        )
         batch['dates'] = pad_sequence(
             batch_dates,
             batch_first=True,
             padding_value=0
-        )
-        batch['dates'] = torch.cat(
-            [batch['dates'][:, 0:1], batch['dates']],
-            dim=1
         )
         batch['visit_concept_orders'] = pad_sequence(
             batch_visit_concept_orders,
             batch_first=True,
             padding_value=self.max_length - 1
         )
-        batch['visit_concept_orders'] = torch.cat(
-            [torch.full((batch_size, 1), 0), batch['visit_concept_orders']],
-            dim=1
-        )
         batch['concept_values'] = pad_sequence(
             batch_concept_values,
             batch_first=True,
             padding_value=0.
-        )
-        batch['concept_values'] = torch.cat(
-            [torch.full((batch_size, 1), 0.), batch['concept_values']],
-            dim=1
         )
         batch['concept_value_masks'] = pad_sequence(
             batch_concept_value_masks,
             batch_first=True,
             padding_value=0.
         )
-        batch['concept_value_masks'] = torch.cat(
-            [torch.full((batch_size, 1), 0.), batch['concept_value_masks']],
-            dim=1
-        )
         batch['visit_segments'] = pad_sequence(
             batch_visit_segments,
             batch_first=True,
             padding_value=0
         )
+
+        # Prepend the CLS token and their associated values to the corresponding time series features
+        batch['input_ids'] = torch.cat(
+            [torch.full((batch_size, 1), self.tokenizer.cls_token_index), batch['input_ids']],
+            dim=1
+        )
+        # The attention_mask is set to 1 to enable attention for the CLS token
+        batch['attention_mask'] = torch.cat(
+            [torch.full((batch_size, 1), 1.0), batch['attention_mask']],
+            dim=1
+        )
+        # Set the age of the CLS token to the starting age
+        batch['ages'] = torch.cat(
+            [batch['ages'][:, 0:1], batch['ages']],
+            dim=1
+        )
+        # Set the age of the CLS token to the starting date
+        batch['dates'] = torch.cat(
+            [batch['dates'][:, 0:1], batch['dates']],
+            dim=1
+        )
+        # Set the visit_concept_order of the CLS token to the first visit_concept_order in the sequence subtract by 1
+        visit_concept_orders_first = batch['visit_concept_orders'][:, 0:1] - 1
+        visit_concept_orders_first = torch.maximum(
+            visit_concept_orders_first,
+            torch.zeros_like(visit_concept_orders_first)
+        )
+        batch['visit_concept_orders'] = torch.cat(
+            [visit_concept_orders_first, batch['visit_concept_orders']],
+            dim=1
+        )
+        # Set the concept_value of the CLS token to a default value -1.0.
+        batch['concept_values'] = torch.cat(
+            [torch.full((batch_size, 1), -1.), batch['concept_values']],
+            dim=1
+        )
+        # Set the concept_value of the CLS token to a default value 0.0 indicating that
+        # there is no value associated with this token
+        batch['concept_value_masks'] = torch.cat(
+            [torch.full((batch_size, 1), 0.), batch['concept_value_masks']],
+            dim=1
+        )
+        # Set the visit_segments of the CLS token to a default value 0 because this doesn't belong to a visit
         batch['visit_segments'] = torch.cat(
             [torch.full((batch_size, 1), 0), batch['visit_segments']],
             dim=1

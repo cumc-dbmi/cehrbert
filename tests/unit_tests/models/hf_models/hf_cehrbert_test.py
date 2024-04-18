@@ -19,6 +19,16 @@ class TestCehrBert(unittest.TestCase):
         output = layer(torch.randint(0, seq_length, (1, seq_length)))
         self.assertEqual(output.shape, (1, seq_length, embedding_size))
 
+    def test_positional_encoding_layer_output_large_positions(self):
+        # Test the shape of the output from the PositionalEncodingLayer
+        layer = self.model.bert.cehr_bert_embeddings.positional_embedding_layer
+        seq_length = 10  # example sequence length
+        embedding_size = self.config.n_time_embd
+        visit_concept_orders = torch.arange(10, 15).unsqueeze(0).repeat(2, 1)
+        visit_concept_orders = torch.cat([visit_concept_orders, torch.full((2, 1), 5)], dim=-1)
+        output = layer(visit_concept_orders)
+        self.assertEqual(output.shape, (1, seq_length, embedding_size))
+
     def test_time_embedding_layer_output_shape(self):
         # Test the output shape of the TimeEmbeddingLayer
         layer = self.model.bert.cehr_bert_embeddings.time_embedding_layer

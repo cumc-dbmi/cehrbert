@@ -20,6 +20,7 @@ class PositionalEncodingLayer(nn.Module):
     ):
         super(PositionalEncodingLayer, self).__init__()
 
+        self.max_sequence_length = max_sequence_length
         position = torch.arange(max_sequence_length).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, embedding_size, 2) * (-math.log(10000.0) / embedding_size))
         pe = torch.zeros(max_sequence_length, embedding_size)
@@ -32,11 +33,10 @@ class PositionalEncodingLayer(nn.Module):
             visit_concept_orders: torch.IntTensor
     ) -> torch.Tensor:
         # Normalize the visit_orders using the smallest visit_concept_orders
-        # Take the absolute value to make sure the padded values are not negative after
-        # normalization
-        min_vals = torch.min(visit_concept_orders, dim=-1)[0]
-        visit_concept_orders = torch.abs(
-            visit_concept_orders - min_vals.unsqueeze(-1)
+        first_vals = visit_concept_orders[:, 0:1]
+        visit_concept_orders = visit_concept_orders - first_vals
+        visit_concept_orders = torch.maximum(
+            visit_concept_orders, torch.zeros_like(visit_concept_orders)
         )
         # Get the same positional encodings for the concepts with the same visit_order
         positional_embeddings = self.pe[visit_concept_orders]
