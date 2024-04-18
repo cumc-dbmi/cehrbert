@@ -41,15 +41,29 @@ def create_cehrbert_pretraining_dataset(
         mapping_functions.insert(0, med_to_cehrbert_mapping)
 
     for mapping_function in mapping_functions:
-        dataset = dataset.map(mapping_function.transform, num_proc=data_args.preprocessing_num_workers)
+        if data_args.streaming:
+            if isinstance(dataset, DatasetDict):
+                for dataset_name in dataset.keys():
+                    dataset[dataset_name] = (
+                        dataset[dataset_name].map(mapping_function.transform)
+                    )
+            else:
+                dataset = dataset.map(mapping_function.batch_transform, batched=True)
+        else:
+            dataset = dataset.map(
+                mapping_function.transform,
+                num_proc=data_args.preprocessing_num_workers
+            )
 
     if isinstance(dataset, DatasetDict):
         all_columns = dataset['train'].column_names
     else:
         all_columns = dataset.column_names
 
-    columns_to_remove = [_ for _ in all_columns if _ not in required_columns]
-    dataset = dataset.remove_columns(columns_to_remove)
+    if not data_args.streaming:
+        columns_to_remove = [_ for _ in all_columns if _ not in required_columns]
+        dataset = dataset.remove_columns(columns_to_remove)
+
     return dataset
 
 

@@ -76,9 +76,17 @@ def main():
     else:
         data_abspath = os.path.abspath(data_args.data_folder)
         data_files = glob.glob(os.path.join(data_abspath, "*.parquet"))
-        dataset = load_dataset('parquet', data_files=data_files, split='train')
+        dataset = load_dataset('parquet', data_files=data_files, split='train', streaming=data_args.streaming)
 
-        if data_args.validation_split_percentage:
+        if data_args.streaming and data_args.validation_split_num:
+            dataset = dataset.shuffle(buffer_size=10_000)
+            train_set = dataset.skip(data_args.validation_split_num)
+            val_set = dataset.take(data_args.validation_split_num)
+            dataset = DatasetDict({
+                'train': train_set,
+                'test': val_set
+            })
+        elif data_args.validation_split_percentage:
             dataset = dataset.train_test_split(test_size=data_args.validation_split_percentage, seed=training_args.seed)
 
         processed_dataset = create_cehrbert_pretraining_dataset(
@@ -87,7 +95,8 @@ def main():
             max_sequence_length=model_args.max_position_embeddings,
             data_args=data_args
         )
-        processed_dataset.save_to_disk(prepared_ds_path)
+        if not data_args.streaming:
+            processed_dataset.save_to_disk(prepared_ds_path)
 
     collator = CehrBertDataCollator(tokenizer, model_args.max_position_embeddings)
 
@@ -97,7 +106,8 @@ def main():
     # Set seed before initializing model.
     set_seed(training_args.seed)
 
-    processed_dataset.set_format('pt')
+    if not data_args.streaming:
+        processed_dataset.set_format('pt')
 
     eval_dataset = None
     if isinstance(processed_dataset, DatasetDict):

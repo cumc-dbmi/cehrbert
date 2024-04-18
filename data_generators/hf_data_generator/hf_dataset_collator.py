@@ -1,3 +1,4 @@
+from typing import Any
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from torch.nn.utils.rnn import pad_sequence
 import torch
@@ -8,21 +9,29 @@ class CehrBertDataCollator:
         self.tokenizer = tokenizer
         self.max_length = max_length
 
+    @staticmethod
+    def _convert_to_tensor(features: Any) -> torch.Tensor:
+        if isinstance(features, torch.Tensor):
+            return features
+        else:
+            return torch.tensor(features)
+
     def __call__(self, examples):
         batch = {}
-
         batch_size = len(examples)
-
         has_label = 'labels' in examples[0]
+
         # Assume that each example in the batch is a dictionary with 'input_ids' and 'attention_mask'
-        batch_input_ids = [example['input_ids'] for example in examples]
-        batch_attention_mask = [torch.ones_like(example['input_ids'], dtype=torch.float) for example in examples]
-        batch_ages = [example['ages'] for example in examples]
-        batch_dates = [example['dates'] for example in examples]
-        batch_visit_concept_orders = [example['visit_concept_orders'] for example in examples]
-        batch_concept_values = [example['concept_values'] for example in examples]
-        batch_concept_value_masks = [example['concept_value_masks'] for example in examples]
-        batch_visit_segments = [example['visit_segments'] for example in examples]
+        batch_input_ids = [self._convert_to_tensor(example['input_ids']) for example in examples]
+        batch_attention_mask = [torch.ones_like(self._convert_to_tensor(example['input_ids']), dtype=torch.float) for
+                                example in
+                                examples]
+        batch_ages = [self._convert_to_tensor(example['ages']) for example in examples]
+        batch_dates = [self._convert_to_tensor(example['dates']) for example in examples]
+        batch_visit_concept_orders = [self._convert_to_tensor(example['visit_concept_orders']) for example in examples]
+        batch_concept_values = [self._convert_to_tensor(example['concept_values']) for example in examples]
+        batch_concept_value_masks = [self._convert_to_tensor(example['concept_value_masks']) for example in examples]
+        batch_visit_segments = [self._convert_to_tensor(example['visit_segments']) for example in examples]
 
         # Pad sequences to the max length in the batch
         batch['input_ids'] = pad_sequence(
@@ -114,7 +123,7 @@ class CehrBertDataCollator:
         )
 
         if has_label:
-            batch_labels = [example['labels'] for example in examples]
+            batch_labels = [self._convert_to_tensor(example['labels']) for example in examples]
             batch['labels'] = pad_sequence(
                 batch_labels,
                 batch_first=True,
@@ -127,13 +136,13 @@ class CehrBertDataCollator:
 
         if 'age_at_index' in examples[0]:
             batch['age_at_index'] = torch.cat(
-                [example['age_at_index'].reshape(-1, 1) for example in examples],
+                [self._convert_to_tensor(example['age_at_index']).reshape(-1, 1) for example in examples],
                 dim=0
             ).to(torch.float)
 
         if 'classifier_label' in examples[0]:
             batch['classifier_label'] = torch.cat(
-                [example['classifier_label'].reshape(-1, 1) for example in examples],
+                [self._convert_to_tensor(example['classifier_label']).reshape(-1, 1) for example in examples],
                 dim=0
             ).to(torch.float)
 

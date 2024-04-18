@@ -4,7 +4,9 @@ tokenizer_name_or_path: "test_results"
 data_folder: "sample_data/pretrain"
 dataset_prepared_path: "test_dataset_prepared"
 validation_split_percentage: 0.05
+validation_split_num: 1000
 preprocessing_num_workers: 16
+streaming: False
 
 # Below is a list of Med-to-CehrBert related arguments
 att_function_type: "cehr_bert"
@@ -12,7 +14,6 @@ is_data_in_med: false
 inpatient_att_function_type: "none"
 include_auxiliary_token: true
 include_demographic_prompt: false
-
 
 do_train: true
 overwrite_output_dir: false
@@ -30,6 +31,9 @@ per_device_train_batch_size: 4
 per_device_eval_batch_size: 4
 gradient_accumulation_steps: 1
 num_train_epochs: 2
+# When streaming is set to True, max_steps needs to be provided
+# max_steps: 4000
+
 warmup_steps: 500
 weight_decay: 0.01
 logging_dir: "./logs"

@@ -1,7 +1,7 @@
 import datetime
 from enum import Enum
 from abc import abstractmethod, ABC
-from typing import Dict, Any
+from typing import Dict, List, Any
 import collections
 import random
 import numpy as np
@@ -35,6 +35,12 @@ class TruncationType(Enum):
 
 
 class DatasetMapping(ABC):
+
+    def batch_transform(
+            self,
+            records: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        return [self.transform(_) for _ in records]
 
     @abstractmethod
     def transform(

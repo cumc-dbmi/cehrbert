@@ -24,6 +24,12 @@ class DataTrainingArguments:
             "help": "The percentage of the train set used as validation set in case there's no validation split"
         },
     )
+    validation_split_num: Optional[int] = field(
+        default=1000,
+        metadata={
+            "help": "The number of the train set used as validation set in case there's no validation split"
+        },
+    )
     test_eval_ratio: Optional[float] = field(
         default=0.5,
         metadata={
@@ -67,6 +73,12 @@ class DataTrainingArguments:
         metadata={
             "help": "The boolean indicator to indicate whether the demographic tokens should be added "
                     "at the beginning of the sequence including start_year, start_age, gender, race"
+        }
+    )
+    streaming: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "The boolean indicator to indicate whether the data should be streamed"
         }
     )
 
