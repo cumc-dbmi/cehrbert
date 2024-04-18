@@ -6,10 +6,11 @@ import collections
 import random
 import numpy as np
 import copy
-
-from spark_apps.decorators.patient_event_decorator import get_att_function
-from med_extension.schema_extension import get_measurements_from_visit
 from dateutil.relativedelta import relativedelta
+
+from meds.schema import Patient
+from med_extension.schema_extension import get_measurements_from_visit, Visit, PatientExtension
+from spark_apps.decorators.patient_event_decorator import get_att_function
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from runner.hf_runner_argument_dataclass import DataTrainingArguments
 
@@ -17,10 +18,15 @@ from runner.hf_runner_argument_dataclass import DataTrainingArguments
 INPATIENT_VISIT_TYPES = [
     '9201', '262', '8971', '8920', '38004311'
 ]
+INPATIENT_VISIT_TYPE_CODES = [
+    'Visit/IP', 'Visit/ERIP', 'Visit/51', 'Visit/61', 'NUCC/315D00000X'
+]
 DISCHARGE_FACILITY_TYPES = [
     '8536', '8863', '44814650', '4161979', '38004519', '4216643', '8717', '8920', '4021968',
     '8546', '8971', '8970', '44814649', '8827', '8676', '38003619', '8870', '4146681'
 ]
+
+DATE_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 
 
 class TruncationType(Enum):
@@ -43,6 +49,73 @@ class DatasetMapping(ABC):
             A dictionary from names to numpy arrays to be used by pytorch.
         """
         pass
+
+
+def med_to_cehrbert_extension(med_record: Patient) -> PatientExtension:
+    """
+
+    """
+    patient_id = med_record['patient_id']
+    static_measurements = med_record['static_measurements']
+    events = med_record['events']
+
+    assert len(events) >= 1
+
+    birth_datetime = events[0]['time']
+    race = None
+    gender = None
+    ethnicity = None
+
+    for measurement in events[0]['measurements']:
+        code = measurement['code']
+        if 'race' in code.lower():
+            race = code
+        elif 'gender' in code.lower():
+            gender = code
+        elif 'ethnicity' in code.lower():
+            ethnicity = code
+
+    visit_mapping = dict()
+    # Iterate over all measurements
+    for m, time in [(m, e['time']) for e in events for m in e['measurements']]:
+        if m['metadata']['table'] == 'visit':
+            visit_type = m['code']
+            is_inpatient = m['code'] in INPATIENT_VISIT_TYPE_CODES or m['code'] in INPATIENT_VISIT_TYPES
+            visit_end_datetime = (
+                datetime.datetime.strptime(m['metadata']['end'], DATE_FORMAT) if m['metadata']['end'] else None
+            )
+            discharge_facility = m['metadata']['discharge_facility'] if is_inpatient else None
+            visit_id = m['metadata']['visit_id']
+            visit_mapping[visit_id] = Visit(
+                visit_type=visit_type,
+                visit_start_datetime=time,
+                visit_end_datetime=visit_end_datetime,
+                discharge_facility=discharge_facility,
+                events=[]
+            )
+
+    for e in events:
+        events_with_visit = copy.deepcopy(e)
+        for m in e['measurements']:
+            # Remove the measurements without a visit_id
+            # Remove the visit measurement from the event
+            if not m['metadata']['visit_id'] or m['metadata']['table'] == 'visit':
+                events_with_visit['measurements'].remove(m)
+
+        # add this event to the corresponding Visit
+        if events_with_visit['measurements']:
+            visit_id = events_with_visit['measurements'][0]['metadata']['visit_id']
+            visit_mapping[visit_id]['events'].append(events_with_visit)
+
+    return PatientExtension(
+        patient_id=patient_id,
+        static_measurements=static_measurements,
+        birth_datetime=birth_datetime,
+        visits=list(visit_mapping.values()),
+        race=race,
+        gender=gender,
+        ethnicity=ethnicity
+    )
 
 
 class MedToCehrBertDatasetMapping(DatasetMapping):
@@ -92,8 +165,10 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
 
     def transform(
             self,
-            record: Dict[str, Any]
+            med_record: Dict[str, Any]
     ) -> Dict[str, Any]:
+
+        record = med_to_cehrbert_extension(med_record)
 
         cehrbert_record = {
             'person_id': record['patient_id'],
@@ -147,7 +222,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
 
             # We assume the first measurement to be the visit type of the current visit
             visit_type = visit['visit_type']
-            is_inpatient = visit_type in INPATIENT_VISIT_TYPES
+            is_inpatient = visit_type in INPATIENT_VISIT_TYPES or visit_type in INPATIENT_VISIT_TYPE_CODES
 
             # Add artificial time tokens to the patient timeline if timedelta exists
             if time_delta:

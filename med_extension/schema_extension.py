@@ -19,6 +19,7 @@ class PatientExtension(TypedDict):
     birth_datetime: datetime.datetime
     gender: str
     race: str
+    ethnicity: str
     visits: List[Visit]
 
 
