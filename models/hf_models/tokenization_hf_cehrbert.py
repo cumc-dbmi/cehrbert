@@ -1,11 +1,13 @@
 import os
 import json
-from tqdm import tqdm
-import collections
 import transformers
-from transformers.tokenization_utils_base import PushToHubMixin
 from typing import Sequence, Union, List, Dict
 from datasets import Dataset, DatasetDict
+from tokenizers import Tokenizer
+from tokenizers.models import WordLevel
+from tokenizers.trainers import WordLevelTrainer
+from tokenizers.pre_tokenizers import Whitespace
+from transformers.tokenization_utils_base import PushToHubMixin
 
 PAD_TOKEN = "[PAD]"
 CLS_TOKEN = "[CLS]"
@@ -15,7 +17,7 @@ OUT_OF_VOCABULARY_TOKEN = "[OOV]"
 VS_TOKEN = "[VS]"
 VE_TOKEN = "[VE]"
 
-VOCAB_FILE_NAME = "vocab.json"
+TOKENIZER_FILE_NAME = "tokenizer.json"
 CONCEPT_MAPPING_FILE_NAME = "concept_name_mapping.json"
 
 
@@ -35,23 +37,22 @@ class CehrBertTokenizer(PushToHubMixin):
 
     def __init__(
             self,
-            word_index: Dict[str, int],
+            tokenizer: Tokenizer,
             concept_name_mapping: Dict[str, str]
     ):
-        self._word_index = word_index
+        self._tokenizer = tokenizer
         self._concept_name_mapping = concept_name_mapping
-        self._index_word = collections.OrderedDict([(ids, tok) for tok, ids in self._word_index.items()])
-        self._oov_token_index = self._word_index[OUT_OF_VOCABULARY_TOKEN]
-        self._padding_token_index = self._word_index[PAD_TOKEN]
-        self._mask_token_index = self._word_index[MASK_TOKEN]
-        self._unused_token_index = self._word_index[UNUSED_TOKEN]
-        self._cls_token_index = self._word_index[CLS_TOKEN]
+        self._oov_token_index = self._tokenizer.token_to_id(OUT_OF_VOCABULARY_TOKEN)
+        self._padding_token_index = self._tokenizer.token_to_id(PAD_TOKEN)
+        self._mask_token_index = self._tokenizer.token_to_id(MASK_TOKEN)
+        self._unused_token_index = self._tokenizer.token_to_id(UNUSED_TOKEN)
+        self._cls_token_index = self._tokenizer.token_to_id(CLS_TOKEN)
 
         super().__init__()
 
     @property
     def vocab_size(self):
-        return len(self._word_index)
+        return self._tokenizer.get_vocab_size()
 
     @property
     def mask_token_index(self):
@@ -70,18 +71,21 @@ class CehrBertTokenizer(PushToHubMixin):
         return self._cls_token_index
 
     def encode(self, concept_ids: Sequence[str]) -> Sequence[int]:
-        return list(map(self._convert_token_to_id, concept_ids))
+        encoded = self._tokenizer.encode(concept_ids, is_pretokenized=True)
+        return encoded.ids
 
     def decode(self, concept_token_ids: List[int]) -> List[str]:
-        return list(map(self._convert_id_to_token, concept_token_ids))
+        return self._tokenizer.decode(concept_token_ids).split(' ')
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
-        return self._word_index.get(token, self._oov_token_index)
+        token_id = self._tokenizer.token_to_id(token)
+        return token_id if token_id else self._oov_token_index
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
-        return self._index_word.get(index, OUT_OF_VOCABULARY_TOKEN)
+        token = self._tokenizer.id_to_token(index)
+        return token if token else OUT_OF_VOCABULARY_TOKEN
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
@@ -115,8 +119,7 @@ class CehrBertTokenizer(PushToHubMixin):
             repo_id = self._create_repo(repo_id, **kwargs)
             files_timestamps = self._get_files_timestamps(save_directory)
 
-        with open(os.path.join(save_directory, VOCAB_FILE_NAME), "w") as f:
-            json.dump(self._word_index, f)
+        self._tokenizer.save(os.path.join(save_directory, TOKENIZER_FILE_NAME))
 
         with open(os.path.join(save_directory, CONCEPT_MAPPING_FILE_NAME), "w") as f:
             json.dump(self._concept_name_mapping, f)
@@ -153,14 +156,14 @@ class CehrBertTokenizer(PushToHubMixin):
             A CehrBert Tokenizer
         """
 
-        vocab_file = transformers.utils.hub.cached_file(
-            pretrained_model_name_or_path, VOCAB_FILE_NAME, **kwargs
+        tokenizer_file = transformers.utils.hub.cached_file(
+            pretrained_model_name_or_path, TOKENIZER_FILE_NAME, **kwargs
         )
 
-        if not vocab_file:
+        if not tokenizer_file:
             return None
 
-        word_index = load_json_file(vocab_file)
+        tokenizer = Tokenizer.from_file(tokenizer_file)
 
         concept_name_mapping_file = transformers.utils.hub.cached_file(
             pretrained_model_name_or_path, CONCEPT_MAPPING_FILE_NAME, **kwargs
@@ -170,26 +173,30 @@ class CehrBertTokenizer(PushToHubMixin):
 
         concept_name_mapping = load_json_file(concept_name_mapping_file)
 
-        return CehrBertTokenizer(word_index, concept_name_mapping)
+        return CehrBertTokenizer(tokenizer, concept_name_mapping)
 
     @classmethod
     def train_tokenizer(
             cls,
             dataset: Union[Dataset, DatasetDict],
             feature_names: List[str],
-            concept_name_mapping: Dict[str, str]
+            concept_name_mapping: Dict[str, str],
+            num_proc=16
     ):
-
         if isinstance(dataset, DatasetDict):
             dataset = dataset['train']
 
-        words = set()
-        for record in tqdm(dataset, total=len(dataset)):
-            for feature_name in feature_names:
-                for concept_id in record[feature_name]:
-                    words.add(concept_id)
-
-        vocabulary = [PAD_TOKEN, MASK_TOKEN, OUT_OF_VOCABULARY_TOKEN, CLS_TOKEN, UNUSED_TOKEN, VS_TOKEN, VE_TOKEN]
-        vocabulary.extend(words)
-        word_index = collections.OrderedDict(zip(vocabulary, list(range(0, len(vocabulary)))))
-        return CehrBertTokenizer(word_index, concept_name_mapping)
+        # Use the Fast Tokenizer from the Huggingface tokenizers Rust implementation.
+        # https://github.com/huggingface/tokenizers
+        tokenizer = Tokenizer(WordLevel(unk_token=OUT_OF_VOCABULARY_TOKEN, vocab=dict()))
+        tokenizer.pre_tokenizer = Whitespace()
+        trainer = WordLevelTrainer(
+            special_tokens=[PAD_TOKEN, MASK_TOKEN, OUT_OF_VOCABULARY_TOKEN, CLS_TOKEN, UNUSED_TOKEN, VS_TOKEN, VE_TOKEN]
+        )
+        for feature in feature_names:
+            concatenated_features = dataset.map(
+                lambda x: {feature: ' '.join(map(str, x[feature]))}, num_proc=num_proc,
+                remove_columns=dataset.column_names
+            )
+            tokenizer.train_from_iterator(concatenated_features[feature], trainer=trainer)
+        return CehrBertTokenizer(tokenizer, concept_name_mapping)

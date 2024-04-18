@@ -1,4 +1,7 @@
 import unittest
+from tokenizers import Tokenizer
+from tokenizers.models import WordLevel
+from tokenizers.pre_tokenizers import Whitespace
 from models.hf_models.tokenization_hf_cehrbert import (
     CehrBertTokenizer, PAD_TOKEN, MASK_TOKEN, OUT_OF_VOCABULARY_TOKEN, UNUSED_TOKEN, CLS_TOKEN
 )
@@ -9,7 +12,7 @@ class TestCehrBertTokenizer(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # Setup with a small example vocabulary and concept mapping
-        cls.vocab = {
+        vocab = {
             PAD_TOKEN: 0,
             MASK_TOKEN: 1,
             OUT_OF_VOCABULARY_TOKEN: 2,
@@ -18,11 +21,14 @@ class TestCehrBertTokenizer(unittest.TestCase):
             "hello": 5,
             "world": 6
         }
-        cls.concept_mapping = {
+        tokenizer = Tokenizer(WordLevel(unk_token=OUT_OF_VOCABULARY_TOKEN, vocab=vocab))
+        tokenizer.pre_tokenizer = Whitespace()
+
+        concept_mapping = {
             "hello": "Hello",
             "world": "World"
         }
-        cls.tokenizer = CehrBertTokenizer(cls.vocab, cls.concept_mapping)
+        cls.tokenizer = CehrBertTokenizer(tokenizer, concept_mapping)
 
     def test_vocab_size(self):
         # Test the vocabulary size
