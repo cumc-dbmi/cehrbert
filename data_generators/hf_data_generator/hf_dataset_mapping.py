@@ -87,9 +87,11 @@ def meds_to_cehrbert_extension(meds_record: Patient) -> CehrBertPatient:
         if m['metadata']['table'] == 'visit':
             visit_type = m['code']
             is_inpatient = m['code'] in INPATIENT_VISIT_TYPE_CODES or m['code'] in INPATIENT_VISIT_TYPES
-            visit_end_datetime = (
-                datetime.datetime.strptime(m['metadata']['end'], DATE_FORMAT) if m['metadata']['end'] else None
-            )
+
+            visit_end_datetime = m['metadata']['end']
+            if isinstance(visit_end_datetime, str):
+                visit_end_datetime = datetime.datetime.strptime(visit_end_datetime, DATE_FORMAT)
+
             discharge_facility = m['metadata']['discharge_facility'] if is_inpatient else None
             visit_id = m['metadata']['visit_id']
             visit_mapping[visit_id] = Visit(

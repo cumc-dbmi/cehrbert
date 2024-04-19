@@ -1,5 +1,5 @@
 import unittest
-from meds.schema import Event, Measurement
+from meds.schema import Event, Measurement, Patient, birth_code
 from med_extension.schema_extension import CehrBertPatient, Visit
 from datetime import datetime
 
@@ -12,53 +12,86 @@ from spark_apps.decorators.patient_event_decorator import AttType
 class TestMedToCehrBertDatasetMapping(unittest.TestCase):
 
     def setUp(self):
-        outpatient_visit = Visit(
-            visit_type='9202',
-            visit_start_datetime=datetime(2024, 4, 14, 0, 0),
-            events=[
-                Event(
-                    time=datetime(2024, 4, 14, 0, 0),
-                    measurements=[
-                        Measurement(code='320128', datetime_value=datetime(2024, 4, 14, 1, 0))
-                    ]
+        demographic_event = Event(
+            time=datetime(1980, 4, 14, 0, 0),
+            measurements=[
+                Measurement(
+                    code=birth_code,
+                    metadata={'table': 'person', 'visit_id': None}
+                ),
+                Measurement(
+                    code='Gender/F',
+                    metadata={'table': 'person', 'visit_id': None}
+                ),
+                Measurement(
+                    code='Race/unknown',
+                    metadata={'table': 'person', 'visit_id': None}
                 )
             ]
         )
 
-        inpatient_visit = Visit(
-            visit_type='9201',
-            visit_start_datetime=datetime(2024, 4, 21, 0, 0),
-            visit_end_datetime=datetime(2024, 4, 22, 0, 0),
-            discharge_facility='8536',
-            events=[
-                Event(
-                    time=datetime(2024, 4, 21, 0, 0),
-                    measurements=[
-                        Measurement(code='320128', datetime_value=datetime(2024, 4, 21, 0, 0))
-                    ]
+        outpatient_events = Event(
+            time=datetime(2024, 4, 14, 0, 0),
+            measurements=[
+                Measurement(
+                    code='9202',
+                    datetime_value=datetime(2024, 4, 14, 0, 0),
+                    metadata={
+                        'table': 'visit',
+                        'visit_id': 1,
+                        'end': datetime(2024, 4, 14, 0, 0),
+                        'discharge_facility': None
+                    }
                 ),
-                Event(
-                    time=datetime(2024, 4, 22, 0, 0),
-                    measurements=[
-                        Measurement(
-                            code='4134120',
-                            datetime_value=datetime(2024, 4, 22, 0, 0),
-                            numeric_value=0.5
-                        )
-                    ]
+                Measurement(
+                    code='320128',
+                    datetime_value=datetime(2024, 4, 14, 0, 0),
+                    metadata={'table': 'condition', 'visit_id': 1}
+                )
+            ]
+        )
+
+        inpatient_event_1 = Event(
+            time=datetime(2024, 4, 21, 0, 0),
+            measurements=[
+                Measurement(
+                    code='9201',
+                    datetime_value=datetime(2024, 4, 21, 0, 0),
+                    metadata={
+                        'table': 'visit',
+                        'visit_id': 2,
+                        'end': datetime(2024, 4, 22, 0, 0),
+                        'discharge_facility': '8536'
+                    }
+                ),
+                Measurement(
+                    code='320128',
+                    datetime_value=datetime(2024, 4, 21, 0, 0),
+                    metadata={'table': 'condition', 'visit_id': 2}
+                )
+            ]
+        )
+
+        inpatient_event_2 = Event(
+            time=datetime(2024, 4, 22, 0, 0),
+            measurements=[
+                Measurement(
+                    code='4134120',
+                    numeric_value=0.5,
+                    datetime_value=datetime(2024, 4, 22, 0, 0),
+                    metadata={'table': 'measurement', 'visit_id': 2}
                 )
             ]
         )
 
         # Intentionally perturb the chronological order of visits by putting outpatient_visit after inpatient_visit,
         # the mapping function should be able to re-order the events based on their time stamps first
-        self.patient = CehrBertPatient(
+        self.patient = Patient(
             patient_id=0,
-            visits=[inpatient_visit, outpatient_visit],
-            birth_datetime=datetime(1980, 4, 14, 0, 0),
-            gender='8507',
-            race='0',
-            static_measurements=[]
+            static_measurements=[],
+            events=[
+                demographic_event, inpatient_event_1, inpatient_event_2, outpatient_events
+            ]
         )
 
     def test_transform_cehrbert_with_auxiliary_token(self):
@@ -78,8 +111,8 @@ class TestMedToCehrBertDatasetMapping(unittest.TestCase):
 
         # Assert
         self.assertEqual(transformed_record['person_id'], 0)
-        self.assertEqual(transformed_record['gender'], '8507')
-        self.assertEqual(transformed_record['race'], '0')
+        self.assertEqual(transformed_record['gender'], 'Gender/F')
+        self.assertEqual(transformed_record['race'], 'Race/unknown')
 
         # Test concept_ids
         self.assertListEqual(
@@ -145,8 +178,8 @@ class TestMedToCehrBertDatasetMapping(unittest.TestCase):
 
         # Assert
         self.assertEqual(transformed_record['person_id'], 0)
-        self.assertEqual(transformed_record['gender'], '8507')
-        self.assertEqual(transformed_record['race'], '0')
+        self.assertEqual(transformed_record['gender'], 'Gender/F')
+        self.assertEqual(transformed_record['race'], 'Race/unknown')
 
         # Test concept_ids
         self.assertListEqual(
@@ -210,11 +243,10 @@ class TestMedToCehrBertDatasetMapping(unittest.TestCase):
             data_args
         )
         transformed_record = mapper.transform(self.patient)
-
         # Test concept_ids
         self.assertListEqual(
             transformed_record['concept_ids'],
-            ['year:2024', 'age:44', '8507', '0', '[VS]', '9202', '320128', '[VE]',
+            ['year:2024', 'age:44', 'Gender/F', 'Race/unknown', '[VS]', '9202', '320128', '[VE]',
              'D7', '[VS]', '9201', '320128', 'i-D7', '4134120', '8536', '[VE]']
         )
 
@@ -279,8 +311,8 @@ class TestMedToCehrBertDatasetMapping(unittest.TestCase):
 
         # Assert
         self.assertEqual(transformed_record['person_id'], 0)
-        self.assertEqual(transformed_record['gender'], '8507')
-        self.assertEqual(transformed_record['race'], '0')
+        self.assertEqual(transformed_record['gender'], 'Gender/F')
+        self.assertEqual(transformed_record['race'], 'Race/unknown')
 
         # Test concept_ids
         self.assertListEqual(
