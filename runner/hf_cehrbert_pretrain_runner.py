@@ -3,8 +3,8 @@ import glob
 
 from typing import Tuple
 
-import numpy as np
-from scipy.special import softmax
+import torch
+import torch.nn.functional as F
 from datasets import load_dataset, load_from_disk, DatasetDict
 from transformers.utils import logging
 from transformers import AutoConfig, Trainer, set_seed
@@ -28,16 +28,30 @@ def compute_metrics(eval_pred: EvalPrediction):
     logits = outputs[0]
     # Exclude entries where labels == -100
     mask = labels != -100
-    # Convert logits to probabilities using the numerically stable softmax from SciPy
-    probabilities = softmax(logits[mask], axis=1)
+    valid_logits = logits[mask]
+    valid_labels = labels[mask]
+
+    # Convert logits to probabilities using the numerically stable softmax
+    probabilities = F.softmax(valid_logits, dim=1)
+
     # Prepare labels for valid (non-masked) entries
-    labels_one_hot = np.eye(probabilities.shape[1])[labels[mask]]
+    # Note: PyTorch can calculate cross-entropy directly from logits,
+    # so converting logits to probabilities is unnecessary for loss calculation.
+    # However, we will calculate manually to follow the specified steps.
+
+    # Convert labels to one-hot encoding
+    labels_one_hot = F.one_hot(valid_labels, num_classes=probabilities.shape[1]).float()
+
+    # Compute log probabilities (log softmax is more numerically stable than log(softmax))
+    log_probs = F.log_softmax(valid_logits, dim=1)
+
     # Compute cross-entropy loss for valid entries
-    log_probs = np.log(probabilities + 1e-9)  # Adding a small constant for numerical stability
-    cross_entropy_loss = -np.sum(labels_one_hot * log_probs, axis=1)
+    cross_entropy_loss = -torch.sum(labels_one_hot * log_probs, dim=1)
+
     # Calculate perplexity
-    perplexity = np.exp(np.mean(cross_entropy_loss))
-    return {"perplexity": perplexity}
+    perplexity = torch.exp(torch.mean(cross_entropy_loss))
+
+    return {"perplexity": perplexity.item()}  # Use .item() to extract the scalar value from the tensor
 
 
 def load_model_and_tokenizer(data_args, model_args) -> Tuple[CehrBertForPreTraining, CehrBertTokenizer]:
@@ -122,7 +136,7 @@ def main():
         data_collator=collator,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        # compute_metrics=compute_metrics,
+        compute_metrics=compute_metrics,
         args=training_args
     )
 
