@@ -122,7 +122,7 @@ def main():
         data_collator=collator,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        compute_metrics=compute_metrics,
+        # compute_metrics=compute_metrics,
         args=training_args
     )
 
