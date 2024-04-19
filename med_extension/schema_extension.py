@@ -13,7 +13,7 @@ class Visit(TypedDict):
     events: List[Event]
 
 
-class PatientExtension(TypedDict):
+class CehrBertPatient(TypedDict):
     patient_id: int
     static_measurements: List[Measurement]
     birth_datetime: datetime.datetime

@@ -1,11 +1,11 @@
 from datasets import load_from_disk, DatasetDict
 from meds import Patient, Event, Measurement, birth_code
 
-from med_extension.schema_extension import PatientExtension
+from med_extension.schema_extension import CehrBertPatient
 
 
 def convert_med_extension_to_med(
-        patient_extension: PatientExtension
+        patient_extension: CehrBertPatient
 ) -> Patient:
     birth_date = patient_extension['birth_datetime']
     gender = patient_extension['gender']

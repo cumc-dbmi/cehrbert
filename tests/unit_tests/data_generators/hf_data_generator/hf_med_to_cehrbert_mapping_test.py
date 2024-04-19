@@ -1,6 +1,6 @@
 import unittest
 from meds.schema import Event, Measurement
-from med_extension.schema_extension import PatientExtension, Visit
+from med_extension.schema_extension import CehrBertPatient, Visit
 from datetime import datetime
 
 from runner.hf_runner_argument_dataclass import DataTrainingArguments
@@ -52,7 +52,7 @@ class TestMedToCehrBertDatasetMapping(unittest.TestCase):
 
         # Intentionally perturb the chronological order of visits by putting outpatient_visit after inpatient_visit,
         # the mapping function should be able to re-order the events based on their time stamps first
-        self.patient = PatientExtension(
+        self.patient = CehrBertPatient(
             patient_id=0,
             visits=[inpatient_visit, outpatient_visit],
             birth_datetime=datetime(1980, 4, 14, 0, 0),

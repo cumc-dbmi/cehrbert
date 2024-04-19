@@ -9,7 +9,7 @@ import copy
 from dateutil.relativedelta import relativedelta
 
 from meds.schema import Patient
-from med_extension.schema_extension import get_measurements_from_visit, Visit, PatientExtension
+from med_extension.schema_extension import get_measurements_from_visit, Visit, CehrBertPatient
 from spark_apps.decorators.patient_event_decorator import get_att_function
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from runner.hf_runner_argument_dataclass import DataTrainingArguments
@@ -57,13 +57,13 @@ class DatasetMapping(ABC):
         pass
 
 
-def med_to_cehrbert_extension(med_record: Patient) -> PatientExtension:
+def meds_to_cehrbert_extension(meds_record: Patient) -> CehrBertPatient:
     """
-
+    Convert the MEDS Patient to the CerBertPatient extension, where the patient timeline is organized around visits
     """
-    patient_id = med_record['patient_id']
-    static_measurements = med_record['static_measurements']
-    events = med_record['events']
+    patient_id = meds_record['patient_id']
+    static_measurements = meds_record['static_measurements']
+    events = meds_record['events']
 
     assert len(events) >= 1
 
@@ -82,7 +82,7 @@ def med_to_cehrbert_extension(med_record: Patient) -> PatientExtension:
             ethnicity = code
 
     visit_mapping = dict()
-    # Iterate over all measurements
+    # Iterate through all measurements
     for m, time in [(m, e['time']) for e in events for m in e['measurements']]:
         if m['metadata']['table'] == 'visit':
             visit_type = m['code']
@@ -103,8 +103,8 @@ def med_to_cehrbert_extension(med_record: Patient) -> PatientExtension:
     for e in events:
         events_with_visit = copy.deepcopy(e)
         for m in e['measurements']:
-            # Remove the measurements without a visit_id
-            # Remove the visit measurement from the event
+            # Remove the measurements without a visit_id, maybe these measurements should be connected to
+            # the same visit_id since they have the same timestamp?
             if not m['metadata']['visit_id'] or m['metadata']['table'] == 'visit':
                 events_with_visit['measurements'].remove(m)
 
@@ -113,7 +113,7 @@ def med_to_cehrbert_extension(med_record: Patient) -> PatientExtension:
             visit_id = events_with_visit['measurements'][0]['metadata']['visit_id']
             visit_mapping[visit_id]['events'].append(events_with_visit)
 
-    return PatientExtension(
+    return CehrBertPatient(
         patient_id=patient_id,
         static_measurements=static_measurements,
         birth_datetime=birth_datetime,
@@ -174,7 +174,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
             med_record: Dict[str, Any]
     ) -> Dict[str, Any]:
 
-        record = med_to_cehrbert_extension(med_record)
+        record = meds_to_cehrbert_extension(med_record)
 
         cehrbert_record = {
             'person_id': record['patient_id'],

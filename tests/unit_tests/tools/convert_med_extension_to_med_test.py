@@ -4,7 +4,7 @@ from datetime import datetime
 from datasets import Dataset, DatasetDict
 
 from tools.convert_med_extension_to_med import convert_med_extension_to_med
-from med_extension.schema_extension import PatientExtension, Visit
+from med_extension.schema_extension import CehrBertPatient, Visit
 
 
 # Actual test class
@@ -51,7 +51,7 @@ class TestMedToCehrBertDatasetMapping(unittest.TestCase):
 
         # Intentionally perturb the chronological order of visits by putting outpatient_visit after inpatient_visit,
         # the mapping function should be able to re-order the events based on their time stamps first
-        patient = PatientExtension(
+        patient = CehrBertPatient(
             patient_id=0,
             visits=[inpatient_visit, outpatient_visit],
             birth_datetime=datetime(1980, 4, 14, 0, 0),
