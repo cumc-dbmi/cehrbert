@@ -8,7 +8,7 @@ import numpy as np
 import copy
 from dateutil.relativedelta import relativedelta
 
-from meds.schema import Patient
+from meds.schema import Patient, Event, birth_code
 from med_extension.schema_extension import get_measurements_from_visit, Visit, CehrBertPatient
 from spark_apps.decorators.patient_event_decorator import get_att_function
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
@@ -67,53 +67,54 @@ def meds_to_cehrbert_extension(meds_record: Patient) -> CehrBertPatient:
 
     assert len(events) >= 1
 
-    birth_datetime = events[0]['time']
+    birth_datetime = None
     race = None
     gender = None
     ethnicity = None
 
-    for measurement in events[0]['measurements']:
-        code = measurement['code']
-        if 'race' in code.lower():
-            race = code
-        elif 'gender' in code.lower():
-            gender = code
-        elif 'ethnicity' in code.lower():
-            ethnicity = code
-
     visit_mapping = dict()
     # Iterate through all measurements
     for m, time in [(m, e['time']) for e in events for m in e['measurements']]:
+        code = m['code']
+
+        # Retrieve the demographics, the reason we are doing this is that the demographics
+        # may not be stored in the first event.
+        if code == birth_code:
+            birth_datetime = time
+        elif code.startswith('Race/'):
+            race = code
+        elif code.startswith('Gender/'):
+            gender = code
+        elif code.startswith('Ethnicity/'):
+            ethnicity = code
+
         if m['metadata']['table'] == 'visit':
-            visit_type = m['code']
-            is_inpatient = m['code'] in INPATIENT_VISIT_TYPE_CODES or m['code'] in INPATIENT_VISIT_TYPES
+            is_inpatient = code in INPATIENT_VISIT_TYPE_CODES or code in INPATIENT_VISIT_TYPES
 
             visit_end_datetime = m['metadata']['end']
             if isinstance(visit_end_datetime, str):
                 visit_end_datetime = datetime.datetime.strptime(visit_end_datetime, DATE_FORMAT)
 
             discharge_facility = m['metadata']['discharge_facility'] if is_inpatient else None
-            visit_id = m['metadata']['visit_id']
-            visit_mapping[visit_id] = Visit(
-                visit_type=visit_type,
+            visit_mapping[m['metadata']['visit_id']] = Visit(
+                visit_type=code,
                 visit_start_datetime=time,
                 visit_end_datetime=visit_end_datetime,
                 discharge_facility=discharge_facility,
                 events=[]
             )
 
+    # Add the events/measurements to the corresponding visit
     for e in events:
-        events_with_visit = copy.deepcopy(e)
         for m in e['measurements']:
             # Remove the measurements without a visit_id, maybe these measurements should be connected to
             # the same visit_id since they have the same timestamp?
-            if not m['metadata']['visit_id'] or m['metadata']['table'] == 'visit':
-                events_with_visit['measurements'].remove(m)
+            if m['metadata']['visit_id'] and m['metadata']['table'] != 'visit':
+                visit_mapping[m['metadata']['visit_id']]['events'].append(Event(time=e['time'], measurements=[m]))
 
-        # add this event to the corresponding Visit
-        if events_with_visit['measurements']:
-            visit_id = events_with_visit['measurements'][0]['metadata']['visit_id']
-            visit_mapping[visit_id]['events'].append(events_with_visit)
+    # Sort the events by timestamps
+    for v in visit_mapping.values():
+        v['events'] = sorted(v['events'], key=lambda e: e['time'])
 
     return CehrBertPatient(
         patient_id=patient_id,
