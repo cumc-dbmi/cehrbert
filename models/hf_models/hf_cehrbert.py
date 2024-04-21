@@ -440,7 +440,7 @@ class CehrBertLstmForClassification(CehrBertPreTrainedModel):
             enforce_sorted=False
         )
         _, (h_n, c_n) = self.lstm(packed_input)
-        next_input = torch.cat([h_n.view(h_n.shape[1], -1), normalized_age], dim=1)
+        next_input = torch.cat([h_n.transpose(1, 0).reshape([h_n.shape[1], -1]), normalized_age], dim=1)
         next_input = self.dropout(next_input)
         logits = self.classifier(next_input)
 
