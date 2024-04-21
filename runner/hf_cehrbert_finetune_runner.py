@@ -1,5 +1,4 @@
 import os
-import sys
 import glob
 import json
 
@@ -12,15 +11,16 @@ from scipy.special import expit as sigmoid
 from datasets import load_dataset, load_from_disk, DatasetDict
 from transformers.utils import logging
 from transformers import Trainer, set_seed
-from transformers import HfArgumentParser, TrainingArguments
 from transformers import EarlyStoppingCallback
 
-from runner.hf_runner_argument_dataclass import DataTrainingArguments, ModelArguments
 from data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
 from data_generators.hf_data_generator.hf_dataset import create_cehrbert_finetuning_dataset
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from models.hf_models.config import CehrBertConfig
-from models.hf_models.hf_cehrbert import CehrBertPreTrainedModel, CehrBertForClassification
+from models.hf_models.hf_cehrbert import (
+    CehrBertPreTrainedModel, CehrBertForClassification, CehrBertLstmForClassification
+)
+from runner.hf_runner_argument_dataclass import FineTuneModelType
 from runner.runner_util import (
     get_last_hf_checkpoint, load_parquet_as_dataset, generate_prepared_ds_path, parse_runner_args
 )
@@ -73,14 +73,23 @@ def load_pretrained_model_and_tokenizer(data_args, model_args) -> Tuple[CehrBert
         tokenizer = CehrBertTokenizer.train_tokenizer(dataset, ['concept_ids'], {})
         tokenizer.save_pretrained(os.path.abspath(model_args.tokenizer_name_or_path))
 
+    if model_args.finetune_model_type == FineTuneModelType.POOLING.value:
+        finetune_model_cls = CehrBertForClassification
+    elif model_args.finetune_model_type == FineTuneModelType.LSTM.value:
+        finetune_model_cls = CehrBertLstmForClassification
+    else:
+        raise ValueError(
+            f'finetune_model_type can be one of the following types {[e.value for e in FineTuneModelType]}'
+        )
+
     # Try to load the pretrained model
     try:
         model_abspath = os.path.abspath(model_args.model_name_or_path)
-        model = CehrBertForClassification.from_pretrained(model_abspath)
+        model = finetune_model_cls.from_pretrained(model_abspath)
     except Exception as e:
         LOG.warning(e)
         model_config = CehrBertConfig(vocab_size=tokenizer.vocab_size, **model_args.as_dict())
-        model = CehrBertForClassification(model_config)
+        model = finetune_model_cls(model_config)
 
     return model, tokenizer
 

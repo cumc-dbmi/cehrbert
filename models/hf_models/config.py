@@ -24,6 +24,7 @@ class CehrBertConfig(PretrainedConfig):
             tie_word_embeddings=True,
             num_labels=2,
             classifier_dropout=0.1,
+            bidirectional=True,
             **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -43,5 +44,6 @@ class CehrBertConfig(PretrainedConfig):
         self.tie_word_embeddings = tie_word_embeddings
         self.num_labels = num_labels
         self.classifier_dropout = classifier_dropout
+        self.bidirectional = bidirectional
 
         super().__init__(pad_token_id=pad_token_id, **kwargs)

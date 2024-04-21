@@ -1,6 +1,12 @@
 from dataclasses import dataclass, field, asdict
+from enum import Enum
 from typing import Optional, Dict, Any, Literal
 from spark_apps.decorators.patient_event_decorator import AttType
+
+
+class FineTuneModelType(Enum):
+    POOLING = "pooling"
+    LSTM = "lstm"
 
 
 @dataclass
@@ -136,6 +142,13 @@ class ModelArguments:
     max_position_embeddings: Optional[int] = field(
         default=512,
         metadata={"help": "The maximum length of the sequence allowed for the transformer model"}
+    )
+    finetune_model_type: Literal[FineTuneModelType.POOLING.value, FineTuneModelType.LSTM.value] = field(
+        default=FineTuneModelType.POOLING.value,
+        metadata={
+            "help": "The finetune model type to choose from",
+            "choices": f"choices={[e.value for e in FineTuneModelType]}"
+        }
     )
 
     def as_dict(self) -> Dict[str, Any]:

@@ -3,6 +3,8 @@ from typing import Optional
 import torch
 from torch import nn
 from torch.nn import functional as f
+from torch.nn.utils.rnn import pack_padded_sequence
+
 from transformers.models.bert.modeling_bert import BertEncoder, BertPooler, BertOnlyMLMHead
 from transformers import PreTrainedModel
 from models.hf_models.config import CehrBertConfig
@@ -362,6 +364,83 @@ class CehrBertForClassification(CehrBertPreTrainedModel):
         )
 
         next_input = torch.cat([cehrbert_output.pooler_output, normalized_age], dim=1)
+        next_input = self.dropout(next_input)
+        logits = self.classifier(next_input)
+
+        loss = None
+        if classifier_label is not None:
+            loss_fct = nn.BCEWithLogitsLoss()
+            loss = loss_fct(logits, classifier_label)
+
+        return CehrBertSequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=cehrbert_output.last_hidden_state,
+            attentions=cehrbert_output.attentions
+        )
+
+
+class CehrBertLstmForClassification(CehrBertPreTrainedModel):
+
+    def __init__(self, config: CehrBertConfig):
+        super().__init__(config)
+
+        self.bert = CehrBert(config)
+        self.age_batch_norm = torch.nn.BatchNorm1d(1)
+
+        self.lstm = nn.LSTM(
+            input_size=config.hidden_size,
+            hidden_size=config.hidden_size,
+            batch_first=True,
+            bidirectional=config.bidirectional
+        )
+
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
+        self.classifier = nn.Linear(config.hidden_size * (config.bidirectional + 1) + 1, 1)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(
+            self,
+            input_ids: torch.LongTensor,
+            attention_mask: torch.Tensor,
+            age_at_index: torch.FloatTensor,
+            ages: Optional[torch.LongTensor] = None,
+            dates: Optional[torch.LongTensor] = None,
+            visit_concept_orders: Optional[torch.LongTensor] = None,
+            concept_values: Optional[torch.FloatTensor] = None,
+            concept_value_masks: Optional[torch.FloatTensor] = None,
+            visit_segments: Optional[torch.LongTensor] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            classifier_label: Optional[torch.FloatTensor] = None
+    ) -> CehrBertSequenceClassifierOutput:
+        normalized_age = self.age_batch_norm(age_at_index)
+
+        cehrbert_output = self.bert(
+            input_ids,
+            attention_mask,
+            ages,
+            dates,
+            visit_concept_orders,
+            concept_values,
+            concept_value_masks,
+            visit_segments,
+            output_attentions,
+            output_hidden_states
+        )
+        lengths = torch.sum(attention_mask, dim=-1)
+        packed_input = pack_padded_sequence(
+            cehrbert_output.last_hidden_state, lengths.cpu(),
+            batch_first=True,
+            enforce_sorted=False
+        )
+        _, (h_n, c_n) = self.lstm(packed_input)
+        next_input = torch.cat([h_n.view(h_n.shape[1], -1), normalized_age], dim=1)
         next_input = self.dropout(next_input)
         logits = self.classifier(next_input)
 
