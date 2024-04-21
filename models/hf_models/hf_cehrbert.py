@@ -328,7 +328,9 @@ class CehrBertForClassification(CehrBertPreTrainedModel):
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
         self.dropout = nn.Dropout(classifier_dropout)
-        self.classifier = nn.Linear(config.hidden_size + 1, 1)
+        self.dense_layer = nn.Linear(config.hidden_size + 1, config.hidden_size // 2)
+        self.dense_dropout = nn.Dropout(classifier_dropout)
+        self.classifier = nn.Linear(config.hidden_size // 2, 1)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -363,8 +365,11 @@ class CehrBertForClassification(CehrBertPreTrainedModel):
             output_hidden_states
         )
 
-        next_input = torch.cat([cehrbert_output.pooler_output, normalized_age], dim=1)
-        next_input = self.dropout(next_input)
+        next_input = self.dropout(cehrbert_output.pooler_output)
+        next_input = torch.cat([next_input, normalized_age], dim=1)
+        next_input = self.dense_layer(next_input)
+        next_input = nn.functional.relu(next_input)
+        next_input = self.dense_dropout(next_input)
         logits = self.classifier(next_input)
 
         loss = None
@@ -399,7 +404,9 @@ class CehrBertLstmForClassification(CehrBertPreTrainedModel):
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
         self.dropout = nn.Dropout(classifier_dropout)
-        self.classifier = nn.Linear(config.hidden_size * (config.bidirectional + 1) + 1, 1)
+        self.dense_layer = nn.Linear(config.hidden_size * (1 + config.bidirectional) + 1, config.hidden_size // 2)
+        self.dense_dropout = nn.Dropout(classifier_dropout)
+        self.classifier = nn.Linear(config.hidden_size // 2, 1)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -440,8 +447,11 @@ class CehrBertLstmForClassification(CehrBertPreTrainedModel):
             enforce_sorted=False
         )
         _, (h_n, c_n) = self.lstm(packed_input)
-        next_input = torch.cat([h_n.transpose(1, 0).reshape([h_n.shape[1], -1]), normalized_age], dim=1)
-        next_input = self.dropout(next_input)
+        next_input = self.dropout(h_n.transpose(1, 0).reshape([h_n.shape[1], -1]))
+        next_input = torch.cat([next_input, normalized_age], dim=1)
+        next_input = self.dense_layer(next_input)
+        next_input = nn.functional.relu(next_input)
+        next_input = self.dense_dropout(next_input)
         logits = self.classifier(next_input)
 
         loss = None
