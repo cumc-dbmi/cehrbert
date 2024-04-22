@@ -26,7 +26,8 @@ def main(
         apply_age_filter: bool,
         include_death: bool,
         att_type: AttType,
-        include_sequence_information_content: bool = True
+        include_sequence_information_content: bool = True,
+        exclude_demographic: bool = False
 ):
     spark = SparkSession.builder.appName('Generate CEHR-BERT Training Data').getOrCreate()
 
@@ -138,7 +139,8 @@ def main(
             exclude_visit_tokens=exclude_visit_tokens,
             patient_demographic=person if gpt_patient_sequence else None,
             death=death,
-            att_type=att_type
+            att_type=att_type,
+            exclude_demographic=exclude_demographic
         )
     else:
         sequence_data = create_sequence_data(
@@ -251,7 +253,8 @@ if __name__ == '__main__':
         '--exclude_visit_tokens',
         dest='exclude_visit_tokens',
         action='store_true',
-        help='Specify whether or not to exclude the VS and VE tokens')
+        help='Specify whether or not to exclude the VS and VE tokens'
+    )
     parser.add_argument(
         '--include_prolonged_length_stay',
         dest='include_prolonged_stay',
@@ -280,6 +283,11 @@ if __name__ == '__main__':
         action='store_true'
     )
     parser.add_argument(
+        '--exclude_demographic',
+        dest='exclude_demographic',
+        action='store_true'
+    )
+    parser.add_argument(
         '--att_type',
         dest='att_type',
         action='store',
@@ -295,5 +303,6 @@ if __name__ == '__main__':
         ARGS.gpt_patient_sequence,
         ARGS.apply_age_filter,
         ARGS.include_death,
-        AttType(ARGS.att_type)
+        AttType(ARGS.att_type),
+        ARGS.exclude_demographic
     )
