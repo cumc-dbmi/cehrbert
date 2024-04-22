@@ -478,9 +478,20 @@ class HFTokenizationMapping(DatasetMapping):
                 new_record[k] = v[start_index:end_index]
 
         input_ids = self._concept_tokenizer.encode(new_record['concept_ids'])
+        labels = copy.deepcopy(input_ids)
+        if 'mlm_skip_values' in record:
+            mlm_skip_values = new_record['mlm_skip_values']
+            if len(input_ids) != len(mlm_skip_values):
+                self._concept_tokenizer.encode(new_record['concept_ids'])
+            assert len(input_ids) == len(mlm_skip_values), \
+                f"The following equality must be true: len(input_ids) == len(mlm_skip_values)"
+            for i, (input_id, mlm_skip_value) in enumerate(zip(input_ids, mlm_skip_values)):
+                if mlm_skip_value == 1:
+                    labels[i] = -100
 
         new_record.update({
-            'input_ids': input_ids
+            'input_ids': input_ids,
+            'labels': labels
         })
         return new_record
 

@@ -30,8 +30,7 @@ class CehrBertDataCollator:
         # Assume that each example in the batch is a dictionary with 'input_ids' and 'attention_mask'
         batch_input_ids = [self._convert_to_tensor(example['input_ids']) for example in examples]
         batch_attention_mask = [torch.ones_like(self._convert_to_tensor(example['input_ids']), dtype=torch.float) for
-                                example in
-                                examples]
+                                example in examples]
         batch_ages = [self._convert_to_tensor(example['ages']) for example in examples]
         batch_dates = [self._convert_to_tensor(example['dates']) for example in examples]
         batch_visit_concept_orders = [self._convert_to_tensor(example['visit_concept_orders']) for example in examples]
@@ -128,21 +127,21 @@ class CehrBertDataCollator:
         )
 
         if self.is_pretraining:
-            if 'mlm_skip_values' in examples[0]:
-                batch_mlm_skip_values = [self._convert_to_tensor(example['mlm_skip_values']) for example in examples]
-                batch_mlm_skip_values = pad_sequence(
-                    batch_mlm_skip_values,
+            if 'labels' in examples[0]:
+                batch_labels = [self._convert_to_tensor(example['labels']) for example in examples]
+                batch['labels'] = pad_sequence(
+                    batch_labels,
                     batch_first=True,
-                    padding_value=0
+                    padding_value=-100
                 )
-                batch_mlm_skip_values = torch.cat(
-                    [torch.full((batch_size, 1), 0), batch_mlm_skip_values],
+                batch['labels'] = torch.cat(
+                    [torch.full((batch_size, 1), -100), batch['labels']],
                     dim=1
                 )
             else:
-                batch_mlm_skip_values = torch.zeros_like(batch['input_ids'])
+                batch['labels'] = batch['input_ids'].clone()
 
-            batch['input_ids'], batch['labels'] = self.torch_mask_tokens(batch['input_ids'], batch_mlm_skip_values)
+            batch['input_ids'], batch['labels'] = self.torch_mask_tokens(batch['input_ids'], batch['labels'])
 
         if 'age_at_index' in examples[0]:
             batch['age_at_index'] = torch.cat(
@@ -158,16 +157,15 @@ class CehrBertDataCollator:
 
         return batch
 
-    def torch_mask_tokens(self, inputs: torch.Tensor, mlm_skip_values: torch.Tensor) -> Tuple[Any, Any]:
+    def torch_mask_tokens(self, inputs: torch.Tensor, labels: torch.Tensor) -> Tuple[Any, Any]:
         """
         Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
         """
-        labels = inputs.clone()
         # We sample a few tokens in each sequence for MLM training (with probability `self.mlm_probability`)
         probability_matrix = torch.full(labels.shape, self.mlm_probability)
-        mask = torch.logical_and(labels == self.tokenizer.pad_token_index, mlm_skip_values.bool())
+        pad_token_mask = inputs == self.tokenizer.pad_token_index
 
-        probability_matrix.masked_fill_(mask, value=0.0)
+        probability_matrix.masked_fill_(pad_token_mask, value=0.0)
         masked_indices = torch.bernoulli(probability_matrix).bool()
         labels[~masked_indices] = -100  # We only compute loss on masked tokens
 

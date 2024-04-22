@@ -13,7 +13,8 @@ from runner.hf_runner_argument_dataclass import DataTrainingArguments
 
 CEHRBERT_COLUMNS = [
     'concept_ids', 'ages', 'dates', 'visit_segments',
-    'visit_concept_orders', 'concept_values', 'concept_value_masks'
+    'visit_concept_orders', 'concept_values', 'concept_value_masks',
+    'mlm_skip_values'
 ]
 
 TRANSFORMER_COLUMNS = ['input_ids', 'labels']
