@@ -6,7 +6,7 @@ from datasets import Dataset, DatasetDict
 from tokenizers import Tokenizer
 from tokenizers.models import WordLevel
 from tokenizers.trainers import WordLevelTrainer
-from tokenizers.pre_tokenizers import Whitespace
+from tokenizers.pre_tokenizers import WhitespaceSplit
 from transformers.tokenization_utils_base import PushToHubMixin
 
 PAD_TOKEN = "[PAD]"
@@ -189,7 +189,7 @@ class CehrBertTokenizer(PushToHubMixin):
         # Use the Fast Tokenizer from the Huggingface tokenizers Rust implementation.
         # https://github.com/huggingface/tokenizers
         tokenizer = Tokenizer(WordLevel(unk_token=OUT_OF_VOCABULARY_TOKEN, vocab=dict()))
-        tokenizer.pre_tokenizer = Whitespace()
+        tokenizer.pre_tokenizer = WhitespaceSplit()
         trainer = WordLevelTrainer(
             special_tokens=[PAD_TOKEN, MASK_TOKEN, OUT_OF_VOCABULARY_TOKEN, CLS_TOKEN, UNUSED_TOKEN, VS_TOKEN, VE_TOKEN]
         )
