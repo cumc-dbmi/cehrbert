@@ -126,7 +126,12 @@ class CehrBertDataCollator:
             dim=1
         )
 
+        # This is the most crucial logic for generating the training labels
         if self.is_pretraining:
+            # If the labels field is already provided, we will build the MLM labels off of that.
+            # The labels value indicates the positions that are not allowed for MLM.
+            # For example, the mlm_skip_values=1, this means this is a lab value and
+            # we don't want to predict the tokens at this position
             if 'labels' in examples[0]:
                 batch_labels = [self._convert_to_tensor(example['labels']) for example in examples]
                 batch['labels'] = pad_sequence(
@@ -139,6 +144,8 @@ class CehrBertDataCollator:
                     dim=1
                 )
             else:
+                # If the labels is not already provided, we assume all the tokens are subject to
+                # the MLM and simply clone the input_ids
                 batch['labels'] = batch['input_ids'].clone()
 
             batch['input_ids'], batch['labels'] = self.torch_mask_tokens(batch['input_ids'], batch['labels'])
