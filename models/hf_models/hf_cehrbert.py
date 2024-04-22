@@ -12,6 +12,7 @@ from models.hf_models.hf_modeling_outputs import CehrBertModelOutput, CehrBertSe
 from transformers.utils import logging
 
 logger = logging.get_logger("transformers")
+LARGE_POSITION_VALUE = 1000000
 
 
 class PositionalEncodingLayer(nn.Module):
@@ -35,7 +36,12 @@ class PositionalEncodingLayer(nn.Module):
             visit_concept_orders: torch.IntTensor
     ) -> torch.Tensor:
         # Normalize the visit_orders using the smallest visit_concept_orders
-        first_vals = visit_concept_orders[:, 0:1]
+        masked_visit_concept_orders = torch.where(
+            visit_concept_orders > 0,
+            visit_concept_orders,
+            torch.tensor(LARGE_POSITION_VALUE)
+        )
+        first_vals = torch.min(masked_visit_concept_orders, dim=1).values.unsqueeze(dim=-1)
         visit_concept_orders = visit_concept_orders - first_vals
         visit_concept_orders = torch.maximum(
             visit_concept_orders, torch.zeros_like(visit_concept_orders)
