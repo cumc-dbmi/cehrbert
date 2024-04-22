@@ -62,7 +62,10 @@ def load_model_and_tokenizer(data_args, model_args) -> Tuple[CehrBertForPreTrain
     except Exception as e:
         LOG.warning(e)
         dataset = load_parquet_as_dataset(data_args.data_folder)
-        tokenizer = CehrBertTokenizer.train_tokenizer(dataset, ['concept_ids'], {})
+        tokenizer = CehrBertTokenizer.train_tokenizer(
+            dataset, ['concept_ids'], {},
+            num_proc=data_args.preprocessing_num_workers
+        )
         tokenizer.save_pretrained(os.path.abspath(model_args.tokenizer_name_or_path))
 
     # Try to load the pretrained model
