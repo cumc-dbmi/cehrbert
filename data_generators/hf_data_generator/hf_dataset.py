@@ -5,7 +5,7 @@ from data_generators.hf_data_generator.hf_dataset_mapping import (
     MedToCehrBertDatasetMapping,
     SortPatientSequenceMapping,
     GenerateStartEndIndexMapping,
-    HFMaskedLanguageModellingMapping,
+    HFTokenizationMapping,
     HFFineTuningMapping,
     TruncationType
 )
@@ -31,7 +31,7 @@ def create_cehrbert_pretraining_dataset(
     mapping_functions = [
         SortPatientSequenceMapping(),
         GenerateStartEndIndexMapping(max_sequence_length),
-        HFMaskedLanguageModellingMapping(concept_tokenizer, True)
+        HFTokenizationMapping(concept_tokenizer, True)
     ]
 
     if data_args.is_data_in_med:
@@ -77,7 +77,7 @@ def create_cehrbert_finetuning_dataset(
     mapping_functions = [
         SortPatientSequenceMapping(),
         GenerateStartEndIndexMapping(max_sequence_length, truncate_type=TruncationType.TAIL),
-        HFMaskedLanguageModellingMapping(concept_tokenizer, False),
+        HFTokenizationMapping(concept_tokenizer, False),
         HFFineTuningMapping()
     ]
 

@@ -1,7 +1,7 @@
 import unittest
 import random
 from unittest.mock import MagicMock
-from data_generators.hf_data_generator.hf_dataset_mapping import HFMaskedLanguageModellingMapping
+from data_generators.hf_data_generator.hf_dataset_mapping import HFTokenizationMapping
 
 
 # Assuming the module containing your classes is named 'your_module'
@@ -17,7 +17,7 @@ class TestHFMaskedLanguageModellingMapping(unittest.TestCase):
         self.mock_tokenizer.encode.return_value = [10, 20, 30]  # Example token IDs
 
         # Create an instance of the mapping class with pretraining enabled
-        self.mapping = HFMaskedLanguageModellingMapping(self.mock_tokenizer, is_pretraining=True)
+        self.mapping = HFTokenizationMapping(self.mock_tokenizer, is_pretraining=True)
 
     def test_transform_with_valid_indices(self):
         # Given a valid record with start and end indices

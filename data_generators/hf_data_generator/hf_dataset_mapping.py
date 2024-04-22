@@ -448,7 +448,7 @@ class GenerateStartEndIndexMapping(DatasetMapping):
         return record
 
 
-class HFMaskedLanguageModellingMapping(DatasetMapping):
+class HFTokenizationMapping(DatasetMapping):
     def __init__(
             self,
             concept_tokenizer: CehrBertTokenizer,
@@ -482,51 +482,7 @@ class HFMaskedLanguageModellingMapping(DatasetMapping):
         new_record.update({
             'input_ids': input_ids
         })
-
-        if self._is_pretraining:
-            masked_input_ids, output_mask = self._mask_concepts(input_ids, new_record['mlm_skip_values'])
-            masks = np.empty_like(masked_input_ids, dtype=np.int32)
-            # -100 is ignored by the torch CrossEntropyLoss
-            masks.fill(-100)
-            labels = np.where(output_mask == 1, input_ids, masks)
-            new_record.update({
-                'input_ids': masked_input_ids.tolist(),
-                'labels': labels.tolist()
-            })
-
         return new_record
-
-    def _mask_concepts(self, concepts, mlm_skip_values):
-        """
-        Mask out 15% of the concepts
-
-        :param concepts:
-        :param mlm_skip_values:
-        :return:
-        """
-
-        masked_concepts = np.asarray(concepts).copy()
-        output_mask = np.zeros((len(concepts),), dtype=int)
-
-        for word_pos in range(0, len(concepts)):
-            # Check if this position needs to be skipped
-            if mlm_skip_values[word_pos] == 1:
-                continue
-            if concepts[word_pos] == self._concept_tokenizer.unused_token_index:
-                break
-            if random.random() < 0.15:
-                dice = random.random()
-                if dice < 0.8:
-                    masked_concepts[word_pos] = self._concept_tokenizer.mask_token_index
-                elif dice < 0.9:
-                    masked_concepts[word_pos] = random.randint(
-                        0,
-                        self._concept_tokenizer.vocab_size - 1
-                    )
-                # else: 10% of the time we just leave the word as is
-                output_mask[word_pos] = 1
-
-        return masked_concepts, output_mask
 
 
 class HFFineTuningMapping(DatasetMapping):
