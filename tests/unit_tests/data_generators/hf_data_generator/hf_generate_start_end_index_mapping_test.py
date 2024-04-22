@@ -14,11 +14,13 @@ class TestGenerateStartEndIndexMapping(unittest.TestCase):
     def test_long_sequence(self):
         # Test with a sequence longer than max_sequence_length
         record = {
-            'concept_ids': list(range(20))  # Longer than max_sequence_length
+            'concept_ids': ['VS', '1', 'VE', 'D1', 'VS', '2', '21', '22', '23', '24',
+                            'VE', 'D2', 'VS', '4', 'VE', 'D2', 'VS', '5', 'VE']
         }
         result = self.mapper.transform(record)
-        self.assertEqual(result['start_index'], 10)
-        self.assertEqual(result['end_index'], 19)
+        self.assertIn(result['start_index'], [0, 4, 12, 16])
+        self.assertIn(result['end_index'], [9, 13, 18, 18])
+
 
     def test_short_sequence(self):
         # Test with a sequence shorter than max_sequence_length

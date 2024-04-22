@@ -4,7 +4,6 @@ from abc import abstractmethod, ABC
 from typing import Dict, List, Any
 import collections
 import random
-import numpy as np
 import copy
 from dateutil.relativedelta import relativedelta
 
@@ -30,7 +29,9 @@ DATE_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 
 
 class TruncationType(Enum):
-    RANDOM = 'random'
+    RANDOM_COMPLETE = "random_complete"
+    RANDOM_RIGHT_TRUNCATION = "random_right_truncation"
+    RANDOM_TRUNCATION = "random_truncation"
     TAIL = 'tail'
 
 
@@ -420,7 +421,7 @@ class GenerateStartEndIndexMapping(DatasetMapping):
     def __init__(
             self,
             max_sequence_length,
-            truncate_type=TruncationType.RANDOM
+            truncate_type=TruncationType.RANDOM_RIGHT_TRUNCATION
     ):
         self._max_sequence_length = max_sequence_length
         self._truncate_type = truncate_type
@@ -434,17 +435,39 @@ class GenerateStartEndIndexMapping(DatasetMapping):
 
         Adding the start and end indices to extract a portion of the patient sequence
         """
-
         seq_length = len(record['concept_ids'])
         new_max_length = self._max_sequence_length - 1  # Subtract one for the [CLS] token
-        if seq_length > new_max_length and self._truncate_type == TruncationType.RANDOM:
+        if seq_length > new_max_length and self._truncate_type == TruncationType.RANDOM_TRUNCATION:
             start_index = random.randint(0, seq_length - new_max_length)
             end_index = min(seq_length, start_index + new_max_length)
-            record['start_index'] = start_index
-            record['end_index'] = end_index
+        elif seq_length > new_max_length and self._truncate_type in (
+                TruncationType.RANDOM_RIGHT_TRUNCATION, TruncationType.RANDOM_COMPLETE
+        ):
+            starting_points = []
+            for i in range(seq_length):
+                current_token = record['concept_ids'][i]
+                if current_token == 'VS':
+                    starting_points.append(i)
+            start_index = random.choice(starting_points)
+            end_index = min(start_index + new_max_length, seq_length - 1)
+
+            if self._truncate_type == TruncationType.RANDOM_COMPLETE:
+                for i in reversed(list(range(start_index + 1, end_index))):
+                    current_token = record['concept_ids'][i]
+                    if current_token == 'VE':
+                        end_index = i
+                        break
         else:
-            record['start_index'] = max(0, seq_length - new_max_length)
-            record['end_index'] = seq_length
+            start_index = max(0, seq_length - new_max_length)
+            end_index = seq_length
+            for i in range(start_index, seq_length):
+                current_token = record['concept_ids'][i]
+                if current_token == 'VS':
+                    start_index = i
+                    break
+
+        record['start_index'] = start_index
+        record['end_index'] = end_index
         return record
 
 
@@ -476,6 +499,9 @@ class HFTokenizationMapping(DatasetMapping):
         for k, v in record.items():
             if isinstance(v, list) and len(v) == seq_length:
                 new_record[k] = v[start_index:end_index]
+
+        assert max(record['visit_concept_ids']) - min(record['visit_concept_ids']) < 512, \
+            f"start_index: {start_index}, end_index: {end_index}, person_id: {record['person_id']}"
 
         input_ids = self._concept_tokenizer.encode(new_record['concept_ids'])
         labels = copy.deepcopy(input_ids)
