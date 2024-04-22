@@ -14,8 +14,8 @@ CLS_TOKEN = "[CLS]"
 MASK_TOKEN = "[MASK]"
 UNUSED_TOKEN = '[UNUSED]'
 OUT_OF_VOCABULARY_TOKEN = "[OOV]"
-VS_TOKEN = "[VS]"
-VE_TOKEN = "[VE]"
+VS_TOKEN = "VS"
+VE_TOKEN = "VE"
 
 TOKENIZER_FILE_NAME = "tokenizer.json"
 CONCEPT_MAPPING_FILE_NAME = "concept_name_mapping.json"
