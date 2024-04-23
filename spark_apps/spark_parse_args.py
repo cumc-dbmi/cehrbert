@@ -198,4 +198,8 @@ def create_spark_args():
                         dest='att_type',
                         action='store',
                         choices=[e.value for e in AttType])
+    parser.add_argument('--exclude_demographic',
+                        dest='exclude_demographic',
+                        action='store_true',
+                        help='Indicate whether we should exclude the demographic prompt of the patient sequence')
     return parser.parse_args()

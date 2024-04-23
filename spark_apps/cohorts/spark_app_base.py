@@ -255,7 +255,8 @@ class NestedCohortBuilder:
             is_prediction_window_unbounded: bool = False,
             is_observation_window_unbounded: bool = False,
             is_population_estimation: bool = False,
-            att_type: AttType = AttType.CEHR_BERT
+            att_type: AttType = AttType.CEHR_BERT,
+            exclude_demographic: bool = True
     ):
         self._cohort_name = cohort_name
         self._input_folder = input_folder
@@ -290,6 +291,7 @@ class NestedCohortBuilder:
                                                        self._cohort_name.lower()))
         self._is_population_estimation = is_population_estimation
         self._att_type = att_type
+        self._exclude_demographic = exclude_demographic
 
         self.get_logger().info(
             f'cohort_name: {cohort_name}\n'
@@ -318,7 +320,8 @@ class NestedCohortBuilder:
             f'include_concept_list: {include_concept_list}\n'
             f'is_observation_window_unbounded: {is_observation_window_unbounded}\n'
             f'is_population_estimation: {is_population_estimation}\n'
-            f'att_type: {att_type}'
+            f'att_type: {att_type}\n'
+            f'exclude_demographic: {exclude_demographic}'
         )
 
         self.spark = SparkSession.builder.appName(f'Generate {self._cohort_name}').getOrCreate()
@@ -510,7 +513,8 @@ class NestedCohortBuilder:
                 include_visit_type=self._include_visit_type,
                 exclude_visit_tokens=self._exclude_visit_tokens,
                 patient_demographic=patient_demographic if self._gpt_patient_sequence else None,
-                att_type=self._att_type
+                att_type=self._att_type,
+                exclude_demographic=self._exclude_demographic
             )
 
         return create_sequence_data(
@@ -630,5 +634,6 @@ def create_prediction_cohort(
         is_remove_index_prediction_starts=is_remove_index_prediction_starts,
         is_observation_window_unbounded=is_observation_window_unbounded,
         is_population_estimation=spark_args.is_population_estimation,
-        att_type=AttType(spark_args.att_type)
+        att_type=AttType(spark_args.att_type),
+        exclude_demographic=spark_args.exclude_demographic
     ).build()
