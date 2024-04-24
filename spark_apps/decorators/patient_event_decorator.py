@@ -363,7 +363,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
             .withColumn('time_delta', inpatient_time_delta_udf) \
             .where(F.col('time_delta') != 0) \
             .where(F.col('prev_date').isNotNull()) \
-            .withColumn('standard_concept_id', F.concat(F.lit('VS-'), time_token_udf('time_delta'), F.lit('-VE'))) \
+            .withColumn('standard_concept_id', F.concat(F.lit('i-'), time_token_udf('time_delta'))) \
             .withColumn('visit_concept_order', F.col('visit_concept_order')) \
             .withColumn('priority', F.col('priority') - 0.01) \
             .drop('prev_date', 'time_delta', 'is_span_boundary')
