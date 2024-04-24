@@ -1,5 +1,7 @@
 import collections
+import copy
 import random
+import numpy as np
 from typing import Any, Tuple, Dict
 import torch
 from torch.nn.utils.rnn import pad_sequence
@@ -217,12 +219,14 @@ class CehrBertDataCollator:
         if seq_length <= new_max_length:
             return record
 
+        # If it is random truncate, we don't care if we slice at the start or end of a visit
         if self.truncate_type == TruncationType.RANDOM_TRUNCATION:
             start_index = random.randint(0, seq_length - new_max_length)
             end_index = min(seq_length, start_index + new_max_length)
         elif self.truncate_type in (
                 TruncationType.RANDOM_RIGHT_TRUNCATION, TruncationType.RANDOM_COMPLETE
         ):
+            # We randomly pick a [VS] token
             starting_points = []
             for i in range(seq_length - new_max_length):
                 current_token = record['input_ids'][i]
@@ -231,6 +235,7 @@ class CehrBertDataCollator:
             start_index = random.choice(starting_points)
             end_index = min(start_index + new_max_length, seq_length)
 
+            # We randomly backtrack to a [VE] token so the sample is complete
             if self.truncate_type == TruncationType.RANDOM_COMPLETE:
                 for i in reversed(list(range(start_index + 1, end_index))):
                     current_token = record['input_ids'][i]
@@ -248,8 +253,13 @@ class CehrBertDataCollator:
 
         new_record = collections.OrderedDict()
         for k, v in record.items():
-            if len(v) == seq_length:
-                new_record[k] = v[start_index:end_index]
+            if (
+                    isinstance(v, list) or
+                    isinstance(v, np.ndarray) or
+                    (isinstance(v, torch.Tensor) and v.dim() > 0)
+            ):
+                if len(v) == seq_length:
+                    new_record[k] = v[start_index:end_index]
             else:
                 new_record[k] = v
         return new_record
