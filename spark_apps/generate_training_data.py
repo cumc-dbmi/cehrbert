@@ -11,7 +11,7 @@ PERSON = 'person'
 DEATH = 'death'
 
 
-def main(
+def  main(
         input_folder,
         output_folder,
         domain_table_list,
@@ -46,7 +46,8 @@ def main(
         f'gpt_patient_sequence: {gpt_patient_sequence}\n'
         f'apply_age_filter: {apply_age_filter}\n'
         f'include_death: {include_death}\n'
-        f'att_type: {att_type}'
+        f'att_type: {att_type}\n'
+        f'exclude_demographic: {exclude_demographic}\n'
     )
 
     domain_tables = []
@@ -304,5 +305,5 @@ if __name__ == '__main__':
         ARGS.apply_age_filter,
         ARGS.include_death,
         AttType(ARGS.att_type),
-        ARGS.exclude_demographic
+        exclude_demographic=ARGS.exclude_demographic
     )
