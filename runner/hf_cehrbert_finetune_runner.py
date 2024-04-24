@@ -140,7 +140,7 @@ def main():
         )
         processed_dataset.save_to_disk(prepared_ds_path)
 
-    collator = CehrBertDataCollator(tokenizer, model_args.max_position_embeddings)
+    collator = CehrBertDataCollator(tokenizer, model_args.max_position_embeddings, is_pretraining=False)
 
     # Set seed before initializing model.
     set_seed(training_args.seed)
