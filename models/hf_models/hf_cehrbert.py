@@ -46,6 +46,9 @@ class PositionalEncodingLayer(nn.Module):
         visit_concept_orders = torch.maximum(
             visit_concept_orders, torch.zeros_like(visit_concept_orders)
         )
+        visit_concept_orders = torch.minimum(
+            visit_concept_orders, torch.tensor(self.max_sequence_length) - 1
+        )
         # Get the same positional encodings for the concepts with the same visit_order
         positional_embeddings = self.pe[visit_concept_orders]
         return positional_embeddings
