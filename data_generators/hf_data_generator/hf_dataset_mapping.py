@@ -500,8 +500,11 @@ class HFTokenizationMapping(DatasetMapping):
             if isinstance(v, list) and len(v) == seq_length:
                 new_record[k] = v[start_index:end_index]
 
-        assert max(record['visit_concept_ids']) - min(record['visit_concept_ids']) < 512, \
-            f"start_index: {start_index}, end_index: {end_index}, person_id: {record['person_id']}"
+        assert max(record['visit_concept_orders']) - min(record['visit_concept_orders']) < 512, \
+            (f"start_index: {start_index}, end_index: {end_index}, person_id: {record['person_id']}\n"
+             f"max visit_concept_order: {max(record['visit_concept_orders'])}\n"
+             f"min visit_concept_order: {min(record['visit_concept_orders'])}\n"
+             f"visit_concept_order: {record['visit_concept_orders']}")
 
         input_ids = self._concept_tokenizer.encode(new_record['concept_ids'])
         labels = copy.deepcopy(input_ids)
