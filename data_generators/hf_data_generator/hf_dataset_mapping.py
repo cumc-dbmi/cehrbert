@@ -500,31 +500,35 @@ class HFTokenizationMapping(DatasetMapping):
             if isinstance(v, list) and len(v) == seq_length:
                 new_record[k] = v[start_index:end_index]
 
-        assert max(record['visit_concept_orders']) - min(record['visit_concept_orders']) < 512, \
-            (f"start_index: {start_index}, end_index: {end_index}, person_id: {record['person_id']}\n"
-             f"max visit_concept_order: {max(record['visit_concept_orders'])}\n"
-             f"min visit_concept_order: {min(record['visit_concept_orders'])}\n"
-             f"visit_concept_order: {record['visit_concept_orders']}")
+        assert max(new_record['visit_concept_orders']) - min(new_record['visit_concept_orders']) < 512, \
+            (f"start_index: {start_index}, end_index: {end_index}, person_id: {new_record['person_id']}\n"
+             f"max visit_concept_order: {max(new_record['visit_concept_orders'])}\n"
+             f"min visit_concept_order: {min(new_record['visit_concept_orders'])}\n"
+             f"visit_concept_order: {new_record['visit_concept_orders']}")
 
         input_ids = self._concept_tokenizer.encode(new_record['concept_ids'])
-        labels = copy.deepcopy(input_ids)
+        new_record['input_ids'] = input_ids
 
         # If mlm_skip_value=1, this indicates there is a value associated with this position and
         # hence we block the MLM to randomly pick this token to be predicted
         if self._is_pretraining:
             if 'mlm_skip_values' in record:
+                labels = copy.deepcopy(input_ids)
                 mlm_skip_values = new_record['mlm_skip_values']
                 if len(input_ids) != len(mlm_skip_values):
                     self._concept_tokenizer.encode(new_record['concept_ids'])
+
                 assert len(input_ids) == len(mlm_skip_values), \
                     f"The following equality must be true: len(input_ids) == len(mlm_skip_values)"
+
                 for i, (input_id, mlm_skip_value) in enumerate(zip(input_ids, mlm_skip_values)):
                     if mlm_skip_value == 1:
                         labels[i] = -100
-            new_record.update({
-                'input_ids': input_ids,
-                'labels': labels
-            })
+
+                new_record.update({
+                    'input_ids': input_ids,
+                    'labels': labels
+                })
 
         return new_record
 
