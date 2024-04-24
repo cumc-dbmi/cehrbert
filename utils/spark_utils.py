@@ -474,7 +474,7 @@ def create_sequence_data_with_att(
         DeathEventDecorator(death, att_type)
     ]
 
-    if exclude_demographic:
+    if not exclude_demographic:
         decorators.append(DemographicPromptDecorator(patient_demographic))
 
     for decorator in decorators:
