@@ -4,10 +4,8 @@ from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from data_generators.hf_data_generator.hf_dataset_mapping import (
     MedToCehrBertDatasetMapping,
     SortPatientSequenceMapping,
-    GenerateStartEndIndexMapping,
     HFTokenizationMapping,
-    HFFineTuningMapping,
-    TruncationType
+    HFFineTuningMapping
 )
 from runner.hf_runner_argument_dataclass import DataTrainingArguments
 
@@ -25,13 +23,11 @@ FINETUNING_COLUMNS = ['age_at_index', 'classifier_label']
 def create_cehrbert_pretraining_dataset(
         dataset: Union[Dataset, DatasetDict],
         concept_tokenizer: CehrBertTokenizer,
-        max_sequence_length: int,
         data_args: DataTrainingArguments
 ) -> Dataset:
     required_columns = TRANSFORMER_COLUMNS + CEHRBERT_COLUMNS
     mapping_functions = [
         SortPatientSequenceMapping(),
-        GenerateStartEndIndexMapping(max_sequence_length),
         HFTokenizationMapping(concept_tokenizer, True)
     ]
 
@@ -71,13 +67,11 @@ def create_cehrbert_pretraining_dataset(
 def create_cehrbert_finetuning_dataset(
         dataset: Union[Dataset, DatasetDict],
         concept_tokenizer: CehrBertTokenizer,
-        max_sequence_length: int,
         data_args: DataTrainingArguments
 ) -> Dataset:
     required_columns = TRANSFORMER_COLUMNS + CEHRBERT_COLUMNS + FINETUNING_COLUMNS
     mapping_functions = [
         SortPatientSequenceMapping(),
-        GenerateStartEndIndexMapping(max_sequence_length, truncate_type=TruncationType.TAIL),
         HFTokenizationMapping(concept_tokenizer, False),
         HFFineTuningMapping()
     ]

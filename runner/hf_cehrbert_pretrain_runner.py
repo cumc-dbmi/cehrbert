@@ -109,13 +109,16 @@ def main():
         processed_dataset = create_cehrbert_pretraining_dataset(
             dataset=dataset,
             concept_tokenizer=tokenizer,
-            max_sequence_length=model_args.max_position_embeddings,
             data_args=data_args
         )
         if not data_args.streaming:
             processed_dataset.save_to_disk(prepared_ds_path)
 
-    collator = CehrBertDataCollator(tokenizer, model_args.max_position_embeddings)
+    collator = CehrBertDataCollator(
+        tokenizer=tokenizer,
+        max_length=model_args.max_position_embeddings,
+        is_pretraining=True
+    )
 
     # Detecting last checkpoint.
     last_checkpoint = get_last_hf_checkpoint(training_args)

@@ -135,7 +135,6 @@ def main():
         processed_dataset = create_cehrbert_finetuning_dataset(
             dataset=final_splits,
             concept_tokenizer=tokenizer,
-            max_sequence_length=model_args.max_position_embeddings,
             data_args=data_args
         )
         processed_dataset.save_to_disk(prepared_ds_path)

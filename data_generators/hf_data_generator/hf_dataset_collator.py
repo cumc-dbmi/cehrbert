@@ -1,7 +1,11 @@
-from typing import Any, Tuple
-from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
-from torch.nn.utils.rnn import pad_sequence
+import collections
+import random
+from typing import Any, Tuple, Dict
 import torch
+from torch.nn.utils.rnn import pad_sequence
+
+from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
+from data_generators.hf_data_generator.hf_dataset_mapping import TruncationType
 
 
 class CehrBertDataCollator:
@@ -9,12 +13,19 @@ class CehrBertDataCollator:
             self, tokenizer: CehrBertTokenizer,
             max_length: int,
             mlm_probability: float = 0.15,
-            is_pretraining: bool = True
+            is_pretraining: bool = True,
+            truncate_type: TruncationType = TruncationType.RANDOM_RIGHT_TRUNCATION
     ):
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.mlm_probability = mlm_probability
         self.is_pretraining = is_pretraining
+        # We only enable random truncations during pretraining
+        # We always take the most recent history during finetuning indicated by TruncationType.TAIL
+        self.truncate_type = truncate_type if is_pretraining else TruncationType.TAIL
+        # Pre-compute these so we can use them later on
+        self.vs_token_id = tokenizer._convert_token_to_id('VS')
+        self.ve_token_id = tokenizer._convert_token_to_id('VE')
 
     @staticmethod
     def _convert_to_tensor(features: Any) -> torch.Tensor:
@@ -24,6 +35,8 @@ class CehrBertDataCollator:
             return torch.tensor(features)
 
     def __call__(self, examples):
+
+        examples = [self.generate_start_end_index(_) for _ in examples]
         batch = {}
         batch_size = len(examples)
 
@@ -187,3 +200,56 @@ class CehrBertDataCollator:
 
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
         return inputs, labels
+
+    def generate_start_end_index(
+            self,
+            record: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Adapted from https://github.com/OHDSI/Apollo/blob/main/data_loading/data_transformer.py
+
+        Adding the start and end indices to extract a portion of the patient sequence
+        """
+        seq_length = len(record['input_ids'])
+        new_max_length = self.max_length - 1  # Subtract one for the [CLS] token
+
+        # Return the record directly if the actual sequence length is less than the max sequence
+        if seq_length <= new_max_length:
+            return record
+
+        if self.truncate_type == TruncationType.RANDOM_TRUNCATION:
+            start_index = random.randint(0, seq_length - new_max_length)
+            end_index = min(seq_length, start_index + new_max_length)
+        elif self.truncate_type in (
+                TruncationType.RANDOM_RIGHT_TRUNCATION, TruncationType.RANDOM_COMPLETE
+        ):
+            starting_points = []
+            for i in range(seq_length - new_max_length):
+                current_token = record['input_ids'][i]
+                if current_token == self.vs_token_id:
+                    starting_points.append(i)
+            start_index = random.choice(starting_points)
+            end_index = min(start_index + new_max_length, seq_length)
+
+            if self.truncate_type == TruncationType.RANDOM_COMPLETE:
+                for i in reversed(list(range(start_index + 1, end_index))):
+                    current_token = record['input_ids'][i]
+                    if current_token == self.ve_token_id:
+                        end_index = i
+                        break
+        else:
+            start_index = max(0, seq_length - new_max_length)
+            end_index = seq_length
+            for i in range(start_index, seq_length):
+                current_token = record['input_ids'][i]
+                if current_token == self.vs_token_id:
+                    start_index = i
+                    break
+
+        new_record = collections.OrderedDict()
+        for k, v in record.items():
+            if len(v) == seq_length:
+                new_record[k] = v[start_index:end_index]
+            else:
+                new_record[k] = v
+        return new_record

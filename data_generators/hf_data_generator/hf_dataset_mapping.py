@@ -3,7 +3,6 @@ from enum import Enum
 from abc import abstractmethod, ABC
 from typing import Dict, List, Any
 import collections
-import random
 import copy
 from dateutil.relativedelta import relativedelta
 
@@ -417,60 +416,6 @@ class SortPatientSequenceMapping(DatasetMapping):
         return new_record
 
 
-class GenerateStartEndIndexMapping(DatasetMapping):
-    def __init__(
-            self,
-            max_sequence_length,
-            truncate_type=TruncationType.RANDOM_RIGHT_TRUNCATION
-    ):
-        self._max_sequence_length = max_sequence_length
-        self._truncate_type = truncate_type
-
-    def transform(
-            self,
-            record: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """
-        Adapted from https://github.com/OHDSI/Apollo/blob/main/data_loading/data_transformer.py
-
-        Adding the start and end indices to extract a portion of the patient sequence
-        """
-        seq_length = len(record['concept_ids'])
-        new_max_length = self._max_sequence_length - 1  # Subtract one for the [CLS] token
-        if seq_length > new_max_length and self._truncate_type == TruncationType.RANDOM_TRUNCATION:
-            start_index = random.randint(0, seq_length - new_max_length)
-            end_index = min(seq_length, start_index + new_max_length)
-        elif seq_length > new_max_length and self._truncate_type in (
-                TruncationType.RANDOM_RIGHT_TRUNCATION, TruncationType.RANDOM_COMPLETE
-        ):
-            starting_points = []
-            for i in range(seq_length):
-                current_token = record['concept_ids'][i]
-                if current_token == 'VS':
-                    starting_points.append(i)
-            start_index = random.choice(starting_points)
-            end_index = min(start_index + new_max_length, seq_length - 1)
-
-            if self._truncate_type == TruncationType.RANDOM_COMPLETE:
-                for i in reversed(list(range(start_index + 1, end_index))):
-                    current_token = record['concept_ids'][i]
-                    if current_token == 'VE':
-                        end_index = i
-                        break
-        else:
-            start_index = max(0, seq_length - new_max_length)
-            end_index = seq_length
-            for i in range(start_index, seq_length):
-                current_token = record['concept_ids'][i]
-                if current_token == 'VS':
-                    start_index = i
-                    break
-
-        record['start_index'] = start_index
-        record['end_index'] = end_index
-        return record
-
-
 class HFTokenizationMapping(DatasetMapping):
     def __init__(
             self,
@@ -485,38 +430,38 @@ class HFTokenizationMapping(DatasetMapping):
             record: Dict[str, Any]
     ) -> Dict[str, Any]:
 
-        if 'start_index' not in record:
-            raise ValueError('Missing start_index in row')
+        # if 'start_index' not in record:
+        #     raise ValueError('Missing start_index in row')
+        #
+        # if 'end_index' not in record:
+        #     raise ValueError('Missing end_index in row')
+        #
+        # start_index = record['start_index']
+        # end_index = record['end_index']
+        #
+        # seq_length = len(record['concept_ids'])
+        # new_record = collections.OrderedDict()
+        # for k, v in record.items():
+        #     if isinstance(v, list) and len(v) == seq_length:
+        #         new_record[k] = v[start_index:end_index]
+        #
+        # assert max(new_record['visit_concept_orders']) - min(new_record['visit_concept_orders']) < 512, \
+        #     (f"start_index: {start_index}, end_index: {end_index}, person_id: {new_record['person_id']}\n"
+        #      f"max visit_concept_order: {max(new_record['visit_concept_orders'])}\n"
+        #      f"min visit_concept_order: {min(new_record['visit_concept_orders'])}\n"
+        #      f"visit_concept_order: {new_record['visit_concept_orders']}")
 
-        if 'end_index' not in record:
-            raise ValueError('Missing end_index in row')
-
-        start_index = record['start_index']
-        end_index = record['end_index']
-
-        seq_length = len(record['concept_ids'])
-        new_record = collections.OrderedDict()
-        for k, v in record.items():
-            if isinstance(v, list) and len(v) == seq_length:
-                new_record[k] = v[start_index:end_index]
-
-        assert max(new_record['visit_concept_orders']) - min(new_record['visit_concept_orders']) < 512, \
-            (f"start_index: {start_index}, end_index: {end_index}, person_id: {new_record['person_id']}\n"
-             f"max visit_concept_order: {max(new_record['visit_concept_orders'])}\n"
-             f"min visit_concept_order: {min(new_record['visit_concept_orders'])}\n"
-             f"visit_concept_order: {new_record['visit_concept_orders']}")
-
-        input_ids = self._concept_tokenizer.encode(new_record['concept_ids'])
-        new_record['input_ids'] = input_ids
+        input_ids = self._concept_tokenizer.encode(record['concept_ids'])
+        record['input_ids'] = input_ids
 
         # If mlm_skip_value=1, this indicates there is a value associated with this position and
         # hence we block the MLM to randomly pick this token to be predicted
         if self._is_pretraining:
             if 'mlm_skip_values' in record:
                 labels = copy.deepcopy(input_ids)
-                mlm_skip_values = new_record['mlm_skip_values']
+                mlm_skip_values = record['mlm_skip_values']
                 if len(input_ids) != len(mlm_skip_values):
-                    self._concept_tokenizer.encode(new_record['concept_ids'])
+                    self._concept_tokenizer.encode(record['concept_ids'])
 
                 assert len(input_ids) == len(mlm_skip_values), \
                     f"The following equality must be true: len(input_ids) == len(mlm_skip_values)"
@@ -525,12 +470,12 @@ class HFTokenizationMapping(DatasetMapping):
                     if mlm_skip_value == 1:
                         labels[i] = -100
 
-                new_record.update({
+                record.update({
                     'input_ids': input_ids,
                     'labels': labels
                 })
 
-        return new_record
+        return record
 
 
 class HFFineTuningMapping(DatasetMapping):
@@ -538,11 +483,11 @@ class HFFineTuningMapping(DatasetMapping):
             self,
             record: Dict[str, Any]
     ) -> Dict[str, Any]:
-        if 'start_index' not in record:
-            raise ValueError('Missing start_index in row')
-
-        if 'end_index' not in record:
-            raise ValueError('Missing end_index in row')
+        # if 'start_index' not in record:
+        #     raise ValueError('Missing start_index in row')
+        #
+        # if 'end_index' not in record:
+        #     raise ValueError('Missing end_index in row')
 
         new_record = copy.deepcopy(record)
         new_record.update({
