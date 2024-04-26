@@ -179,7 +179,8 @@ class CehrBertTokenizer(PushToHubMixin):
             dataset: Union[Dataset, DatasetDict],
             feature_names: List[str],
             concept_name_mapping: Dict[str, str],
-            num_proc=16
+            num_proc: int = 16,
+            vocab_size: int = 50_000
     ):
         if isinstance(dataset, DatasetDict):
             dataset = dataset['train']
@@ -189,7 +190,8 @@ class CehrBertTokenizer(PushToHubMixin):
         tokenizer = Tokenizer(WordLevel(unk_token=OUT_OF_VOCABULARY_TOKEN, vocab=dict()))
         tokenizer.pre_tokenizer = WhitespaceSplit()
         trainer = WordLevelTrainer(
-            special_tokens=[PAD_TOKEN, MASK_TOKEN, OUT_OF_VOCABULARY_TOKEN, CLS_TOKEN, UNUSED_TOKEN]
+            special_tokens=[PAD_TOKEN, MASK_TOKEN, OUT_OF_VOCABULARY_TOKEN, CLS_TOKEN, UNUSED_TOKEN],
+            vocab_size=vocab_size
         )
         for feature in feature_names:
             concatenated_features = dataset.map(
