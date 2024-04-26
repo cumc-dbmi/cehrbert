@@ -49,6 +49,7 @@ def main(
         f'include_death: {include_death}\n'
         f'att_type: {att_type}\n'
         f'exclude_demographic: {exclude_demographic}\n'
+        f'use_age_group: {use_age_group}\n'
     )
 
     domain_tables = []
