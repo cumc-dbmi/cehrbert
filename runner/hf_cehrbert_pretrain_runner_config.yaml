@@ -8,6 +8,10 @@ validation_split_num: 1000
 preprocessing_num_workers: 16
 streaming: False
 
+#Tokenizer
+vocab_size: 50000
+min_frequency: 0
+
 # Below is a list of Med-to-CehrBert related arguments
 att_function_type: "cehr_bert"
 is_data_in_med: false

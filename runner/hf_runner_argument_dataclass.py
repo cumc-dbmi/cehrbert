@@ -87,6 +87,14 @@ class DataTrainingArguments:
             "help": "The boolean indicator to indicate whether the data should be streamed"
         }
     )
+    vocab_size: Optional[int] = field(
+        default=50_000,
+        metadata={"help": "The maximum vocab size allowed for the tokenizer trainer to use"}
+    )
+    min_frequency: Optional[int] = field(
+        default=0,
+        metadata={"help": "The minimum frequency for concepts to be kept by the tokenizer"}
+    )
 
 
 @dataclass

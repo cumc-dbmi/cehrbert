@@ -64,7 +64,9 @@ def load_model_and_tokenizer(data_args, model_args) -> Tuple[CehrBertForPreTrain
         dataset = load_parquet_as_dataset(data_args.data_folder)
         tokenizer = CehrBertTokenizer.train_tokenizer(
             dataset, ['concept_ids'], {},
-            num_proc=data_args.preprocessing_num_workers
+            num_proc=data_args.preprocessing_num_workers,
+            vocab_size=data_args.vocab_size,
+            min_frequency=data_args.min_frequency
         )
         tokenizer.save_pretrained(os.path.abspath(model_args.tokenizer_name_or_path))
 

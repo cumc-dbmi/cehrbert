@@ -180,8 +180,13 @@ class CehrBertTokenizer(PushToHubMixin):
             feature_names: List[str],
             concept_name_mapping: Dict[str, str],
             num_proc: int = 16,
-            vocab_size: int = 50_000
+            vocab_size: int = 50_000,
+            min_frequency: int = 0
     ):
+        """
+        Train a huggingface word level tokenizer. To use their tokenizer, we need to concatenate all the concepts
+        together and treat it as a sequence.
+        """
         if isinstance(dataset, DatasetDict):
             dataset = dataset['train']
 
@@ -191,7 +196,8 @@ class CehrBertTokenizer(PushToHubMixin):
         tokenizer.pre_tokenizer = WhitespaceSplit()
         trainer = WordLevelTrainer(
             special_tokens=[PAD_TOKEN, MASK_TOKEN, OUT_OF_VOCABULARY_TOKEN, CLS_TOKEN, UNUSED_TOKEN],
-            vocab_size=vocab_size
+            vocab_size=vocab_size,
+            min_frequency=min_frequency
         )
         for feature in feature_names:
             concatenated_features = dataset.map(
