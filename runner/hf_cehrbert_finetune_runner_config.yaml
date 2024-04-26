@@ -10,7 +10,7 @@ preprocessing_num_workers: 16
 
 #LORA
 use_lora: True
-lora_rank: 16
+lora_rank: 4
 lora_alpha: 16
 target_modules: [ "query", "value" ]
 lora_dropout: 0.1
