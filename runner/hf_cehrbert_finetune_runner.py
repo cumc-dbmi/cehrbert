@@ -92,8 +92,26 @@ def load_pretrained_model_and_tokenizer(data_args, model_args) -> Tuple[CehrBert
         model_config = CehrBertConfig(vocab_size=tokenizer.vocab_size, **model_args.as_dict())
         model = finetune_model_cls(model_config)
 
+    return model, tokenizer
+
+
+def main():
+    data_args, model_args, training_args = parse_runner_args()
+
+    model, tokenizer = load_pretrained_model_and_tokenizer(data_args, model_args)
+
+    prepared_ds_path = generate_prepared_ds_path(data_args, model_args)
+
     # If lora is enabled, we add LORA adapters to the model
     if model_args.use_lora:
+        # When LORA is used, the trainer could not automatically find this label,
+        # therefore we need to manually set label_names to "classifier_label" so the model
+        # can compute the loss during the evaluation
+        if training_args.label_names:
+            training_args.label_names.append("classifier_label")
+        else:
+            training_args.label_names = ["classifier_label"]
+
         if model_args.finetune_model_type == FineTuneModelType.POOLING.value:
             config = LoraConfig(
                 r=model_args.lora_rank,
@@ -106,16 +124,6 @@ def load_pretrained_model_and_tokenizer(data_args, model_args) -> Tuple[CehrBert
             model = get_peft_model(model, config)
         else:
             raise ValueError(f'The LORA adapter is not supported for {model_args.finetune_model_type}')
-
-    return model, tokenizer
-
-
-def main():
-    data_args, model_args, training_args = parse_runner_args()
-
-    model, tokenizer = load_pretrained_model_and_tokenizer(data_args, model_args)
-
-    prepared_ds_path = generate_prepared_ds_path(data_args, model_args)
 
     if any(prepared_ds_path.glob("*")):
         LOG.info(f"Loading prepared dataset from disk at {prepared_ds_path}...")
