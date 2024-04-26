@@ -232,6 +232,7 @@ class CehrBertDataCollator:
                 current_token = record['input_ids'][i]
                 if current_token == self.vs_token_id:
                     starting_points.append(i)
+            assert len(starting_points) > 0, f"{record['input_ids']}"
             start_index = random.choice(starting_points)
             end_index = min(start_index + new_max_length, seq_length)
 
