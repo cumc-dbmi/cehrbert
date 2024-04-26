@@ -197,7 +197,8 @@ class CehrBertTokenizer(PushToHubMixin):
         trainer = WordLevelTrainer(
             special_tokens=[PAD_TOKEN, MASK_TOKEN, OUT_OF_VOCABULARY_TOKEN, CLS_TOKEN, UNUSED_TOKEN],
             vocab_size=vocab_size,
-            min_frequency=min_frequency
+            min_frequency=min_frequency,
+            show_progress=True
         )
         for feature in feature_names:
             concatenated_features = dataset.map(
