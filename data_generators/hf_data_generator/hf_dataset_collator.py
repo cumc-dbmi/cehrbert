@@ -154,6 +154,7 @@ class CehrBertDataCollator:
                     batch_first=True,
                     padding_value=-100
                 )
+                # Disable MLM for the CLS token
                 batch['labels'] = torch.cat(
                     [torch.full((batch_size, 1), -100), batch['labels']],
                     dim=1
