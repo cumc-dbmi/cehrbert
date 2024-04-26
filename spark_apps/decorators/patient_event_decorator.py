@@ -392,9 +392,11 @@ class DemographicPromptDecorator(
 ):
     def __init__(
             self,
-            patient_demographic
+            patient_demographic,
+            use_age_group: bool = False
     ):
         self._patient_demographic = patient_demographic
+        self._use_age_group = use_age_group
 
     def _decorate(
             self,
@@ -439,9 +441,25 @@ class DemographicPromptDecorator(
 
         sequence_start_year_token.cache()
 
-        age_at_first_visit_udf = F.ceil(
-            F.months_between(F.col('date'), F.col('birth_datetime')) / F.lit(12)
-        )
+        if self._use_age_group:
+            calculate_age_group_at_first_visit_udf = F.ceil(
+                F.floor(F.months_between(F.col('date'), F.col('birth_datetime')) / F.lit(12) / 10)
+            )
+            age_at_first_visit_udf = F.concat(
+                F.lit('age:'),
+                (calculate_age_group_at_first_visit_udf * 10).cast(T.StringType()),
+                F.lit('-'),
+                ((calculate_age_group_at_first_visit_udf + 1) * 10).cast(T.StringType())
+            )
+        else:
+            calculate_age_at_first_visit_udf = F.ceil(
+                F.months_between(F.col('date'), F.col('birth_datetime')) / F.lit(12)
+            )
+            age_at_first_visit_udf = F.concat(
+                F.lit('age:'),
+                calculate_age_at_first_visit_udf.cast(T.StringType())
+            )
+
         sequence_age_token = self._patient_demographic.select(
             F.col('person_id'),
             F.col('birth_datetime')
@@ -450,7 +468,7 @@ class DemographicPromptDecorator(
             'person_id'
         ).withColumn(
             'standard_concept_id',
-            F.concat(F.lit('age:'), age_at_first_visit_udf.cast(T.StringType()))
+            age_at_first_visit_udf
         ).withColumn('priority', F.lit(-9)).drop('birth_datetime')
 
         sequence_gender_token = self._patient_demographic.select(

@@ -11,7 +11,7 @@ PERSON = 'person'
 DEATH = 'death'
 
 
-def  main(
+def main(
         input_folder,
         output_folder,
         domain_table_list,
@@ -27,7 +27,8 @@ def  main(
         include_death: bool,
         att_type: AttType,
         include_sequence_information_content: bool = True,
-        exclude_demographic: bool = False
+        exclude_demographic: bool = False,
+        use_age_group: bool = False
 ):
     spark = SparkSession.builder.appName('Generate CEHR-BERT Training Data').getOrCreate()
 
@@ -141,7 +142,8 @@ def  main(
             patient_demographic=person if gpt_patient_sequence else None,
             death=death,
             att_type=att_type,
-            exclude_demographic=exclude_demographic
+            exclude_demographic=exclude_demographic,
+            use_age_group=use_age_group
         )
     else:
         sequence_data = create_sequence_data(
@@ -289,6 +291,11 @@ if __name__ == '__main__':
         action='store_true'
     )
     parser.add_argument(
+        '--use_age_group',
+        dest='use_age_group',
+        action='store_true'
+    )
+    parser.add_argument(
         '--att_type',
         dest='att_type',
         action='store',
@@ -305,5 +312,6 @@ if __name__ == '__main__':
         ARGS.apply_age_filter,
         ARGS.include_death,
         AttType(ARGS.att_type),
-        exclude_demographic=ARGS.exclude_demographic
+        exclude_demographic=ARGS.exclude_demographic,
+        use_age_group=ARGS.use_age_group
     )

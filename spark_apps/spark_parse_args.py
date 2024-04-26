@@ -202,4 +202,9 @@ def create_spark_args():
                         dest='exclude_demographic',
                         action='store_true',
                         help='Indicate whether we should exclude the demographic prompt of the patient sequence')
+    parser.add_argument('--use_age_group',
+                        dest='use_age_group',
+                        action='store_true',
+                        help='Indicate whether we should age group to represent the age at the first event in the '
+                             'patient sequence')
     return parser.parse_args()

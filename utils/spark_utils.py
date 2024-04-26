@@ -442,7 +442,8 @@ def create_sequence_data_with_att(
         patient_demographic=None,
         death=None,
         att_type: AttType = AttType.CEHR_BERT,
-        exclude_demographic: bool = True
+        exclude_demographic: bool = True,
+        use_age_group: bool = False
 ):
     """
     Create a sequence of the events associated with one patient in a chronological order
@@ -456,6 +457,7 @@ def create_sequence_data_with_att(
     :param death:
     :param att_type:
     :param exclude_demographic:
+    :param use_age_group:
 
     :return:
     """
@@ -475,7 +477,7 @@ def create_sequence_data_with_att(
     ]
 
     if not exclude_demographic:
-        decorators.append(DemographicPromptDecorator(patient_demographic))
+        decorators.append(DemographicPromptDecorator(patient_demographic, use_age_group))
 
     for decorator in decorators:
         patient_events = decorator.decorate(patient_events)

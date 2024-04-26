@@ -256,7 +256,8 @@ class NestedCohortBuilder:
             is_observation_window_unbounded: bool = False,
             is_population_estimation: bool = False,
             att_type: AttType = AttType.CEHR_BERT,
-            exclude_demographic: bool = True
+            exclude_demographic: bool = True,
+            use_age_group: bool = False
     ):
         self._cohort_name = cohort_name
         self._input_folder = input_folder
@@ -292,6 +293,7 @@ class NestedCohortBuilder:
         self._is_population_estimation = is_population_estimation
         self._att_type = att_type
         self._exclude_demographic = exclude_demographic
+        self._use_age_group = use_age_group
 
         self.get_logger().info(
             f'cohort_name: {cohort_name}\n'
@@ -321,7 +323,8 @@ class NestedCohortBuilder:
             f'is_observation_window_unbounded: {is_observation_window_unbounded}\n'
             f'is_population_estimation: {is_population_estimation}\n'
             f'att_type: {att_type}\n'
-            f'exclude_demographic: {exclude_demographic}'
+            f'exclude_demographic: {exclude_demographic}\n'
+            f'use_age_group: {use_age_group}\n'
         )
 
         self.spark = SparkSession.builder.appName(f'Generate {self._cohort_name}').getOrCreate()
@@ -514,7 +517,8 @@ class NestedCohortBuilder:
                 exclude_visit_tokens=self._exclude_visit_tokens,
                 patient_demographic=patient_demographic if self._gpt_patient_sequence else None,
                 att_type=self._att_type,
-                exclude_demographic=self._exclude_demographic
+                exclude_demographic=self._exclude_demographic,
+                use_age_group=self._use_age_group
             )
 
         return create_sequence_data(
@@ -635,5 +639,6 @@ def create_prediction_cohort(
         is_observation_window_unbounded=is_observation_window_unbounded,
         is_population_estimation=spark_args.is_population_estimation,
         att_type=AttType(spark_args.att_type),
-        exclude_demographic=spark_args.exclude_demographic
+        exclude_demographic=spark_args.exclude_demographic,
+        use_age_group=spark_args.use_age_group
     ).build()
