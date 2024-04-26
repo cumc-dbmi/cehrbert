@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field, asdict
 from enum import Enum
-from typing import Optional, Dict, Any, Literal
+from typing import Optional, Dict, Any, Literal, List
 from spark_apps.decorators.patient_event_decorator import AttType
 
 
@@ -149,6 +149,34 @@ class ModelArguments:
             "help": "The finetune model type to choose from",
             "choices": f"choices={[e.value for e in FineTuneModelType]}"
         }
+    )
+    use_lora: Optional[bool] = field(
+        default=False,
+        metadata={"help": "The flag to indicate whether or not to use the Lora adapter for finetuning"}
+    )
+    lora_rank: Optional[int] = field(
+        default=16,
+        metadata={"help": "Lora attention dimension (the “rank”)."}
+    )
+    lora_alpha: Optional[int] = field(
+        default=16,
+        metadata={"help": "The alpha parameter for Lora scaling."}
+    )
+    target_modules: Optional[List[str]] = field(
+        default_factory=lambda: ["query", "value"],
+        metadata={
+            "help":
+                "The names of the modules to apply the adapter to. If this is specified, only the modules with the "
+                "specified names will be replaced. When passing a string, a regex match will be performed. When "
+                "passing a list of strings, either an exact match will be performed or it is checked if the name "
+                "of the module ends with any of the passed strings. If this is specified as ‘all-linear’, "
+                "then all linear/Conv1D modules are chosen, excluding the output layer. If this is not specified, "
+                "modules will be chosen according to the model architecture. If the architecture is not known, "
+                "an error will be raised — in this case, you should specify the target modules manually."}
+    )
+    lora_dropout: Optional[float] = field(
+        default=0.1,
+        metadata={"help": "The dropout probability for Lora layers"}
     )
 
     def as_dict(self) -> Dict[str, Any]:

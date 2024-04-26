@@ -12,6 +12,7 @@ from datasets import load_dataset, load_from_disk, DatasetDict
 from transformers.utils import logging
 from transformers import Trainer, set_seed
 from transformers import EarlyStoppingCallback
+from peft import LoraConfig, get_peft_model
 
 from data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
 from data_generators.hf_data_generator.hf_dataset import create_cehrbert_finetuning_dataset
@@ -90,6 +91,21 @@ def load_pretrained_model_and_tokenizer(data_args, model_args) -> Tuple[CehrBert
         LOG.warning(e)
         model_config = CehrBertConfig(vocab_size=tokenizer.vocab_size, **model_args.as_dict())
         model = finetune_model_cls(model_config)
+
+    # If lora is enabled, we add LORA adapters to the model
+    if model_args.use_lora:
+        if model_args.finetune_model_type == FineTuneModelType.POOLING.value:
+            config = LoraConfig(
+                r=model_args.lora_rank,
+                lora_alpha=model_args.lora_alpha,
+                target_modules=model_args.target_modules,
+                lora_dropout=model_args.lora_dropout,
+                bias="none",
+                modules_to_save=["classifier", "age_batch_norm", "dense_layer"]
+            )
+            model = get_peft_model(model, config)
+        else:
+            raise ValueError(f'The LORA adapter is not supported for {model_args.finetune_model_type}')
 
     return model, tokenizer
 
