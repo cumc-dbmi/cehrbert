@@ -26,7 +26,7 @@ def main(
         apply_age_filter: bool,
         include_death: bool,
         att_type: AttType,
-        include_sequence_information_content: bool = True,
+        include_sequence_information_content: bool = False,
         exclude_demographic: bool = False,
         use_age_group: bool = False
 ):
