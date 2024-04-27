@@ -114,6 +114,11 @@ def preprocess_domain_table(spark, input_folder, domain_table_name, with_rollup=
     domain_table = domain_table.select(
         [F.col(f_n).alias(f_n.lower()) for f_n in domain_table.schema.fieldNames()])
 
+    if domain_table_name == 'visit_occurrence':
+        # This is CDM 5.2, we need to rename this column to be CDM 5.3 compatible
+        if 'discharge_to_concept_id' in domain_table.schema.fieldNames():
+            domain_table = domain_table.withColumnRenamed('discharge_to_concept_id', 'discharged_to_concept_id')
+
     # Always roll up the drug concepts to the ingredient level
     if domain_table_name == 'drug_exposure' \
             and path.exists(create_file_path(input_folder, 'concept')) \
