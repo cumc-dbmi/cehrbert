@@ -86,7 +86,7 @@ def join_domain_tables(domain_tables):
         domain_table = domain_table.select(
             domain_table['person_id'],
             domain_table[concept_id_field].alias('standard_concept_id'),
-            domain_table['date'],
+            domain_table['date'].cast('date'),
             domain_table['visit_occurrence_id'],
             F.lit(table_domain_field).alias('domain'),
             F.lit(-1).alias('concept_value')
@@ -113,6 +113,14 @@ def preprocess_domain_table(spark, input_folder, domain_table_name, with_rollup=
     # lowercase the schema fields
     domain_table = domain_table.select(
         [F.col(f_n).alias(f_n.lower()) for f_n in domain_table.schema.fieldNames()])
+
+    for f_n in domain_table.schema.fieldNames():
+        if 'date' in f_n and 'datetime' not in f_n:
+            # convert date columns to the date type
+            domain_table = domain_table.withColumn(f_n, F.to_date(f_n))
+        elif 'datetime' in f_n:
+            # convert date columns to the datetime type
+            domain_table = domain_table.withColumn(f_n, F.to_timestamp(f_n))
 
     if domain_table_name == 'visit_occurrence':
         # This is CDM 5.2, we need to rename this column to be CDM 5.3 compatible
