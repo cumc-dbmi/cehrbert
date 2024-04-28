@@ -1,8 +1,7 @@
 import collections
-import copy
 import random
 import numpy as np
-from typing import Any, Tuple, Dict
+from typing import Any, Tuple, Dict, Union, List
 import torch
 from torch.nn.utils.rnn import pad_sequence
 
@@ -220,6 +219,14 @@ class CehrBertDataCollator:
         if seq_length <= new_max_length:
             return record
 
+        first_token = self.tokenizer._convert_id_to_token(record['input_ids'][0])
+        # This indicates that there is a demographic prompt at the beginning
+        # e.g. [year:2009][age:30-40][gender][race]
+        if first_token.lower().startswith('year:'):
+            demographic_tokens = record['input_ids'][0:4]
+        else:
+            demographic_tokens = None
+
         # If it is random truncate, we don't care if we slice at the start or end of a visit
         if self.truncate_type == TruncationType.RANDOM_TRUNCATION:
             start_index = random.randint(0, seq_length - new_max_length)
@@ -230,7 +237,11 @@ class CehrBertDataCollator:
             # We randomly pick a [VS] token
             starting_points = []
             # Plus 4 due to the potential presence of the demographic prompt at the beginning
-            for i in range(seq_length - new_max_length + 4):
+            for i in range(
+                    seq_length - new_max_length + 4
+                    if demographic_tokens is not None
+                    else seq_length - new_max_length
+            ):
                 current_token = record['input_ids'][i]
                 if current_token == self.vs_token_id:
                     starting_points.append(i)
@@ -247,8 +258,15 @@ class CehrBertDataCollator:
                         end_index = i
                         break
         else:
-            start_index = max(0, seq_length - new_max_length)
+            # The start_index id decided by whether the patient sequence contains demographic tokens. If it does,
+            # we need shift the start_index to the right by 4 tokens.
+            start_index = (
+                max(4, seq_length - new_max_length + 4)
+                if demographic_tokens is not None
+                else max(0, seq_length - new_max_length)
+            )
             end_index = seq_length
+            # Identify the first VS token and mark it as the starting point
             for i in range(start_index, seq_length):
                 current_token = record['input_ids'][i]
                 if current_token == self.vs_token_id:
@@ -264,6 +282,48 @@ class CehrBertDataCollator:
             ):
                 if len(v) == seq_length:
                     new_record[k] = v[start_index:end_index]
+                    # Shift the demographic tokens and concatenate them to the rest of sequence
+                    if demographic_tokens is not None and self.truncate_type == TruncationType.TAIL:
+                        if k == 'input_ids':
+                            starting_year = int(first_token.split(':')[1])
+                            age_token = self.tokenizer._convert_id_to_token(demographic_tokens[1])
+                            starting_age_group = age_token.split(':')[1]
+                            year_diff = (record['dates'][start_index] - record['dates'][4]) // 52
+                            # If the week diff is grater than 52 weeks (year), we need to update the year and age tokens
+                            if year_diff > 0:
+                                starting_year += year_diff
+                                if starting_age_group.isnumeric():
+                                    starting_age_group = str(int(starting_age_group) + year_diff)
+                                else:
+                                    age_lower, age_upper = starting_age_group.split('-')
+                                    age_lower = str(int(age_lower) + year_diff)
+                                    age_upper = str(int(age_upper) + year_diff)
+                                    starting_age_group = f'{age_lower}-{age_upper}'
+
+                                year_token = f'year:{starting_year}'
+                                age_token = f'age:{starting_age_group}'
+                                demographic_tokens[0] = self.tokenizer._convert_token_to_id(year_token)
+                                demographic_tokens[1] = self.tokenizer._convert_token_to_id(age_token)
+
+                            new_record[k] = self._concatenate(demographic_tokens, new_record[k])
+                        else:
+                            new_record[k] = self._concatenate(v[:4], new_record[k])
             else:
                 new_record[k] = v
         return new_record
+
+    @staticmethod
+    def _concatenate(
+            first_element: Union[list, np.ndarray, torch.Tensor],
+            second_element: Union[list, np.ndarray, torch.Tensor]
+    ) -> Union[list, np.ndarray, torch.Tensor]:
+        assert type(first_element) == type(second_element)
+
+        if isinstance(first_element, list):
+            return first_element + second_element
+        elif isinstance(first_element, np.ndarray):
+            return np.concatenate([first_element, second_element], axis=0)
+        elif isinstance(first_element, torch.Tensor):
+            return torch.concat([first_element, second_element], dim=0)
+        else:
+            raise ValueError(f'first element has to be a list, np.ndarray, torch Tensor')
