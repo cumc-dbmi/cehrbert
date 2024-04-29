@@ -69,8 +69,7 @@ def load_pretrained_model_and_tokenizer(data_args, model_args) -> Tuple[CehrBert
     except Exception as e:
         LOG.warning(e)
         data_folder_abspath = os.path.abspath(data_args.data_folder)
-        data_files = glob.glob(os.path.join(data_folder_abspath, "*.parquet"))
-        dataset = load_dataset('parquet', data_files=data_files, split='train')
+        dataset = load_parquet_as_dataset(data_folder_abspath)
         tokenizer = CehrBertTokenizer.train_tokenizer(
             dataset,
             ['concept_ids'],
@@ -142,8 +141,25 @@ def main():
         if data_args.test_data_folder:
             test_set = load_parquet_as_dataset(data_args.test_data_folder)
 
-        # Split the dataset into train/val
-        train_val = dataset.train_test_split(test_size=data_args.validation_split_percentage, seed=training_args.seed)
+        if data_args.chronological_split:
+            dataset = dataset.sort('index_date')
+            # Determine the split index
+            total_size = len(dataset)
+            split_index = int((1 - data_args.validation_split_percentage) * total_size)
+            # Perform the chronological split, use the historical data for training and future data
+            # for validation/testing
+            train_dataset = dataset.select(range(0, split_index))
+            val_test_dataset = dataset.select(range(split_index, total_size))
+            train_val = DatasetDict({
+                'train': train_dataset,
+                'test': val_test_dataset,
+            })
+        else:
+            # Split the dataset into train/val
+            train_val = dataset.train_test_split(
+                test_size=data_args.validation_split_percentage,
+                seed=training_args.seed
+            )
 
         # If the test set is not provided, split the validation further into val/test sets.
         if not test_set:

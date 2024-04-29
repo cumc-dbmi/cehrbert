@@ -24,11 +24,19 @@ class DataTrainingArguments:
         default=None,
         metadata={"help": "The name of the test dataset to use (via the datasets library)."}
     )
+    chronological_split: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "A flag to indicate whether the data will be split chronologically, "
+                    "where the historical data is used for training "
+                    "and the future data is used for validation adn testing"
+        }
+    )
     validation_split_percentage: Optional[float] = field(
         default=0.05,
         metadata={
             "help": "The percentage of the train set used as validation set in case there's no validation split"
-        },
+        }
     )
     validation_split_num: Optional[int] = field(
         default=1000,
