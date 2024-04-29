@@ -257,7 +257,8 @@ class NestedCohortBuilder:
             is_population_estimation: bool = False,
             att_type: AttType = AttType.CEHR_BERT,
             exclude_demographic: bool = True,
-            use_age_group: bool = False
+            use_age_group: bool = False,
+            single_contribution: bool = False
     ):
         self._cohort_name = cohort_name
         self._input_folder = input_folder
@@ -294,6 +295,7 @@ class NestedCohortBuilder:
         self._att_type = att_type
         self._exclude_demographic = exclude_demographic
         self._use_age_group = use_age_group
+        self._single_contribution = single_contribution
 
         self.get_logger().info(
             f'cohort_name: {cohort_name}\n'
@@ -325,6 +327,7 @@ class NestedCohortBuilder:
             f'att_type: {att_type}\n'
             f'exclude_demographic: {exclude_demographic}\n'
             f'use_age_group: {use_age_group}\n'
+            f'single_contribution: {single_contribution}\n'
         )
 
         self.spark = SparkSession.builder.appName(f'Generate {self._cohort_name}').getOrCreate()
@@ -427,6 +430,16 @@ class NestedCohortBuilder:
         cohort = cohort.withColumn('row_rank', row_rank) \
             .where('row_rank == 1') \
             .drop('row_rank')
+
+        # We only allow the patient to contribute once to the dataset
+        # If the patient has any positive outcomes, we will take the most recent positive outcome,
+        # otherwise we will take the most recent negative outcome
+        if self._single_contribution:
+            record_rank = F.row_number().over(
+                Window.partitionBy('person_id').orderBy(F.desc('label'), F.desc('index_date')))
+            cohort = cohort.withColumn('record_rank', record_rank) \
+                .where('record_rank == 1') \
+                .drop('record_rank')
 
         ehr_records_for_cohorts = self.extract_ehr_records_for_cohort(cohort)
         # ehr_records_for_cohorts.show()
@@ -640,5 +653,6 @@ def create_prediction_cohort(
         is_population_estimation=spark_args.is_population_estimation,
         att_type=AttType(spark_args.att_type),
         exclude_demographic=spark_args.exclude_demographic,
-        use_age_group=spark_args.use_age_group
+        use_age_group=spark_args.use_age_group,
+        single_contribution=spark_args.single_contribution
     ).build()

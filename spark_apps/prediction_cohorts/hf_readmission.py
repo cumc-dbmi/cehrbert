@@ -26,22 +26,6 @@ WHERE v.visit_concept_id IN (9201, 262, 8971, 8920) --inpatient, er-inpatient
     AND v.visit_end_date >= '{date_lower_bound}'
 """
 
-HF_INPATIENT_POST_QUERY = """
-SELECT
-    hf.person_id,
-    hf.visit_occurrence_id,
-    hf.index_date
-FROM (
-    SELECT
-        hf.person_id,
-        hf.visit_occurrence_id,
-        hf.index_date,
-        ROW_NUMBER() OVER(PARTITION BY person_id ORDER BY index_date DESC) AS rn
-    FROM global_temp.hf_hospitalization AS hf
-) AS hf
-WHERE hf.rn = 1
-"""
-
 HOSPITALIZATION_QUERY = """
 SELECT DISTINCT
     v.person_id,
@@ -64,22 +48,10 @@ def main(spark_args):
         parameters={'date_lower_bound': spark_args.date_lower_bound}
     )
 
-    hf_inpatient_target_query_most_recent = QuerySpec(
-        table_name=HF_HOSPITALIZATION_COHORT,
-        query_template=HF_INPATIENT_POST_QUERY,
-        parameters={}
-    )
-
-    if spark_args.use_most_recent_target_event:
-        post_queries = [hf_inpatient_target_query_most_recent]
-    else:
-        post_queries = []
-
     hf_inpatient_target_querybuilder = QueryBuilder(
         cohort_name=HF_HOSPITALIZATION_COHORT,
         dependency_list=DEPENDENCY_LIST,
-        query=hf_inpatient_target_query,
-        post_queries=post_queries
+        query=hf_inpatient_target_query
     )
 
     hospitalization_query = QuerySpec(
