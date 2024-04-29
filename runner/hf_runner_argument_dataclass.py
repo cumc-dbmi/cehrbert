@@ -32,6 +32,13 @@ class DataTrainingArguments:
                     "and the future data is used for validation adn testing"
         }
     )
+    split_by_patient: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "A flag to indicate whether the records associated with the same person_id "
+                    "should end up in the same split"
+        }
+    )
     validation_split_percentage: Optional[float] = field(
         default=0.05,
         metadata={

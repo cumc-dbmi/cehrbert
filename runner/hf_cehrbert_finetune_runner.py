@@ -1,14 +1,14 @@
 import os
-import glob
 import json
 
 from typing import Tuple
 
 import numpy as np
 from sklearn.metrics import accuracy_score, roc_auc_score, precision_recall_curve, auc
+from sklearn.model_selection import train_test_split
 from scipy.special import expit as sigmoid
 
-from datasets import load_dataset, load_from_disk, DatasetDict
+from datasets import load_from_disk, DatasetDict
 from transformers.utils import logging
 from transformers import Trainer, set_seed
 from transformers import EarlyStoppingCallback
@@ -154,6 +154,53 @@ def main():
                 'train': train_dataset,
                 'test': val_test_dataset,
             })
+        elif data_args.split_by_patient:
+
+            LOG.info(f"Using the split_by_patient strategy")
+            unique_patient_ids = np.unique(dataset['person_id'])
+            LOG.info(f"There are {len(unique_patient_ids)} num of patients in total")
+            np.random.shuffle(unique_patient_ids)
+            train_ratio = 1 - data_args.validation_split_percentage
+            test_ratio = data_args.validation_split_percentage * data_args.test_eval_ratio
+            val_ratio = data_args.validation_split_percentage - test_ratio
+            # Calculate split indices
+            train_end = int(len(unique_patient_ids) * train_ratio)
+            val_end = train_end + int(len(unique_patient_ids) * val_ratio)
+            # Split patient IDs
+            train_patient_ids = set(unique_patient_ids[:train_end])
+            val_patient_ids = set(unique_patient_ids[train_end:val_end])
+            test_patient_ids = set(unique_patient_ids[val_end:])
+
+            def assign_split(example):
+                pid = example['person_id']
+                if pid in train_patient_ids:
+                    return 'train'
+                elif pid in val_patient_ids:
+                    return 'validation'
+                elif pid in test_patient_ids:
+                    return 'test'
+                else:
+                    raise ValueError(f"Unknown patient {pid}")
+
+            # Apply the function to assign splits
+            dataset = dataset.map(
+                lambda example: {'split': assign_split(example)},
+                remove_columns=['person_id'],
+                num_proc=data_args.preprocessing_num_workers
+            )
+            train_dataset = dataset.filter(
+                lambda example: example['split'] == 'train',
+                num_proc=data_args.preprocessing_num_workers
+            )
+            val_dataset = dataset.filter(
+                lambda example: example['split'] == 'validation',
+                num_proc=data_args.preprocessing_num_workers
+            )
+            train_val = DatasetDict({'train': train_dataset, 'test': val_dataset})
+            test_set = dataset.filter(
+                lambda example: example['split'] == 'test',
+                num_proc=data_args.preprocessing_num_workers
+            )
         else:
             # Split the dataset into train/val
             train_val = dataset.train_test_split(
