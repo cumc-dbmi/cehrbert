@@ -207,4 +207,8 @@ def create_spark_args():
                         action='store_true',
                         help='Indicate whether we should age group to represent the age at the first event in the '
                              'patient sequence')
+    parser.add_argument('--use_most_recent_target_event',
+                        dest='use_most_recent_target_event',
+                        action='store_true',
+                        help='Indicate whether we should use the most recent target event of a patient sequence')
     return parser.parse_args()
