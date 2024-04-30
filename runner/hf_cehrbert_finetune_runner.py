@@ -185,7 +185,6 @@ def main():
             # Apply the function to assign splits
             dataset = dataset.map(
                 lambda example: {'split': assign_split(example)},
-                remove_columns=['person_id'],
                 num_proc=data_args.preprocessing_num_workers
             )
             train_dataset = dataset.filter(
