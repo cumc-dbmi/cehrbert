@@ -159,6 +159,7 @@ def main():
             LOG.info(f"Using the split_by_patient strategy")
             unique_patient_ids = np.unique(dataset['person_id'])
             LOG.info(f"There are {len(unique_patient_ids)} num of patients in total")
+            np.random.seed(training_args.seed)
             np.random.shuffle(unique_patient_ids)
             train_ratio = 1 - data_args.validation_split_percentage
             test_ratio = data_args.validation_split_percentage * data_args.test_eval_ratio
