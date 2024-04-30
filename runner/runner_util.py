@@ -157,6 +157,12 @@ def generate_prepared_ds_path(data_args, model_args) -> Path:
                 + os.path.abspath(model_args.tokenizer_name_or_path)
                 + "|"
                 + str(data_args.validation_split_percentage) if data_args.validation_split_percentage else ""
+                + "|"
+                + f"test_eval_ratio={str(data_args.test_eval_ratio)}"
+                + "|"
+                + f"split_by_patient={str(data_args.split_by_patient)}"
+                + "|"
+                + f"chronological_split={str(data_args.chronological_split)}"
             )
         )
     )
