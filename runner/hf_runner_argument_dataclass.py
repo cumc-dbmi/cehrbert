@@ -158,6 +158,10 @@ class ModelArguments:
             "choices": ["auto", "bfloat16", "float16", "float32"],
         }
     )
+    hidden_size: Optional[int] = field(
+        default=128,
+        metadata={"help": "The embedding and hidden size for the transformer block"}
+    )
     num_hidden_layers: Optional[int] = field(
         default=12,
         metadata={"help": "The number of layers used in the transformer model"}
