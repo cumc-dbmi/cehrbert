@@ -17,7 +17,7 @@ CEHRBERT_COLUMNS = [
 
 TRANSFORMER_COLUMNS = ['input_ids', 'labels']
 
-FINETUNING_COLUMNS = ['age_at_index', 'classifier_label', 'index_date']
+FINETUNING_COLUMNS = ['age_at_index', 'classifier_label', 'index_date', 'person_id']
 
 
 def create_cehrbert_pretraining_dataset(
