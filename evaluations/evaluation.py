@@ -297,6 +297,9 @@ def evaluate_sequence_models(args):
 def evaluate_baseline_models(args):
     # Load the training data
     dataset = pd.read_parquet(args.data_path)
+    test_person_ids = None
+    if args.test_person_ids_path:
+        test_person_ids = pd.read_parquet(args.test_person_ids_path)
 
     LogisticRegressionModelEvaluator(
         dataset=dataset,
@@ -305,6 +308,7 @@ def evaluate_baseline_models(args):
         is_transfer_learning=args.is_transfer_learning,
         training_percentage=args.training_percentage,
         k_fold_test=args.k_fold_test,
+        test_person_ids=test_person_ids
     ).eval_model()
 
     XGBClassifierEvaluator(
@@ -314,6 +318,7 @@ def evaluate_baseline_models(args):
         is_transfer_learning=args.is_transfer_learning,
         training_percentage=args.training_percentage,
         k_fold_test=args.k_fold_test,
+        test_person_ids=test_person_ids
     ).eval_model()
 
 

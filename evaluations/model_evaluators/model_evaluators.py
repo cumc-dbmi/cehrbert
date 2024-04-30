@@ -19,16 +19,19 @@ def get_metrics():
 
 
 class AbstractModelEvaluator(AbstractModel):
-    def __init__(self,
-                 dataset,
-                 evaluation_folder,
-                 num_of_folds,
-                 is_transfer_learning: bool = False,
-                 training_percentage: float = 1.0,
-                 learning_rate: float = 1e-4,
-                 is_chronological_test: bool = False,
-                 k_fold_test: bool = False,
-                 *args, **kwargs):
+    def __init__(
+            self,
+            dataset,
+            evaluation_folder,
+            num_of_folds,
+            is_transfer_learning: bool = False,
+            training_percentage: float = 1.0,
+            learning_rate: float = 1e-4,
+            is_chronological_test: bool = False,
+            k_fold_test: bool = False,
+            test_person_ids=None,
+            *args, **kwargs
+    ):
         self._dataset = copy.copy(dataset)
         self._evaluation_folder = evaluation_folder
         self._num_of_folds = num_of_folds
@@ -37,6 +40,7 @@ class AbstractModelEvaluator(AbstractModel):
         self._learning_rate = learning_rate
         self._is_chronological_test = is_chronological_test
         self._k_fold_test = k_fold_test
+        self._test_person_ids = test_person_ids
 
         if is_transfer_learning:
             extension = 'transfer_learning_{:.2f}'.format(self._training_percentage).replace('.',

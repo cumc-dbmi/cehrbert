@@ -31,6 +31,11 @@ def create_evaluation_args():
                              action='store',
                              help='The training data path',
                              required=baseline_model_required)
+    main_parser.add_argument('--test_person_ids_path',
+                             dest='test_person_ids_path',
+                             action='store',
+                             help='The test person_ids data',
+                             required=False)
     main_parser.add_argument('-ef',
                              '--evaluation_folder',
                              dest='evaluation_folder',

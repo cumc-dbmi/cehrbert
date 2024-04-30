@@ -24,23 +24,42 @@ class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
         pass
 
     def eval_model(self):
-        inputs, age, labels = self.extract_model_inputs()
-        for train, test in self.k_fold(
-                features=(inputs, age),
-                labels=labels
-        ):
-            x, y = train
+        inputs, age, labels, person_ids = self.extract_model_inputs()
+
+        if self._test_person_ids is not None:
+            test_person_ids = self._test_person_ids.person_id.to_numpy()()
+            test_mask = np.isin(person_ids, test_person_ids)
+            train = np.where(~test_mask)[0]
+            val_test = np.where(test_mask)[0]
+            x, y = csr_matrix(hstack([inputs[train], age[train]])), labels[train]
+            test_data = (csr_matrix(hstack([inputs[val_test], age[val_test]])), labels[val_test])
             self._model = self._create_model()
             if isinstance(self._model, GridSearchCV):
                 self._model = self._model.fit(x, y)
             else:
                 self._model.fit(x, y)
-
             compute_binary_metrics(
                 self._model,
-                test,
+                test_data,
                 self.get_model_metrics_folder()
             )
+        else:
+            for train, test in self.k_fold(
+                    features=(inputs, age),
+                    labels=labels
+            ):
+                x, y = train
+                self._model = self._create_model()
+                if isinstance(self._model, GridSearchCV):
+                    self._model = self._model.fit(x, y)
+                else:
+                    self._model.fit(x, y)
+
+                compute_binary_metrics(
+                    self._model,
+                    test,
+                    self.get_model_metrics_folder()
+                )
 
     def get_model_name(self):
         return type(self._model).__name__
@@ -50,7 +69,7 @@ class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
 
     def k_fold(self, features, labels):
 
-        (inputs, age) = features
+        (inputs, age, person_ids) = features
 
         if self._k_fold_test:
             stratified_splitter = StratifiedKFold(
@@ -111,7 +130,7 @@ class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
 
         y = dataset['label'].to_numpy()
 
-        return normalized_concept_freq_count, scaled_age, y
+        return normalized_concept_freq_count, scaled_age, y, self._dataset.person_id.to_numpy()
 
 
 class LogisticRegressionModelEvaluator(BaselineModelEvaluator):
