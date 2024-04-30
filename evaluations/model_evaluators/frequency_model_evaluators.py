@@ -27,7 +27,7 @@ class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
         inputs, age, labels, person_ids = self.extract_model_inputs()
 
         if self._test_person_ids is not None:
-            test_person_ids = self._test_person_ids.person_id.to_numpy()()
+            test_person_ids = self._test_person_ids.person_id.to_numpy()
             test_mask = np.isin(person_ids, test_person_ids)
             train = np.where(~test_mask)[0]
             val_test = np.where(test_mask)[0]
