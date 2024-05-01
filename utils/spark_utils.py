@@ -1,5 +1,6 @@
 import argparse
 from os import path
+from typing import List, Tuple
 
 import pandas as pd
 import pyspark.sql.functions as F
@@ -19,23 +20,27 @@ from spark_apps.sql_templates import measurement_unit_stats_query
 from utils.logging_utils import *
 
 DOMAIN_KEY_FIELDS = {
-    'condition_occurrence_id': ('condition_concept_id', 'condition_start_date', 'condition'),
-    'procedure_occurrence_id': ('procedure_concept_id', 'procedure_date', 'procedure'),
-    'drug_exposure_id': ('drug_concept_id', 'drug_exposure_start_date', 'drug'),
-    'measurement_id': ('measurement_concept_id', 'measurement_date', 'measurement'),
-    'person_id': ('person_id', 'death_date', 'death')
+    'condition_occurrence_id': [('condition_concept_id', 'condition_start_date', 'condition')],
+    'procedure_occurrence_id': [('procedure_concept_id', 'procedure_date', 'procedure')],
+    'drug_exposure_id': [('drug_concept_id', 'drug_exposure_start_date', 'drug')],
+    'measurement_id': [('measurement_concept_id', 'measurement_date', 'measurement')],
+    'death_date': [('person_id', 'death_date', 'death')],
+    'visit_concept_id': [
+        ('visit_concept_id', 'visit_start_date', 'visit'),
+        ('discharged_to_concept_id', 'visit_end_date', 'visit')
+    ]
 }
 
 LOGGER = logging.getLogger(__name__)
 
 
-def get_key_fields(domain_table):
+def get_key_fields(domain_table) -> List[Tuple[str, str, str]]:
     field_names = domain_table.schema.fieldNames()
     for k, v in DOMAIN_KEY_FIELDS.items():
         if k in field_names:
             return v
-    return (get_concept_id_field(domain_table), get_domain_date_field(domain_table),
-            get_domain_field(domain_table))
+    return [(get_concept_id_field(domain_table), get_domain_date_field(domain_table),
+             get_domain_field(domain_table))]
 
 
 def get_domain_date_field(domain_table):
@@ -78,28 +83,34 @@ def join_domain_tables(domain_tables):
     for domain_table in domain_tables:
         # extract the domain concept_id from the table fields. E.g. condition_concept_id from
         # condition_occurrence extract the domain start_date column extract the name of the table
-        concept_id_field, date_field, table_domain_field = get_key_fields(domain_table)
-        # standardize the output columns
-        domain_table = domain_table.where(F.col(concept_id_field).cast('string') != '0') \
-            .withColumn('date', F.to_date(F.col(date_field)))
+        for concept_id_field, date_field, table_domain_field in get_key_fields(domain_table):
+            # standardize the output columns
 
-        domain_table = domain_table.select(
-            domain_table['person_id'],
-            domain_table[concept_id_field].alias('standard_concept_id'),
-            domain_table['date'].cast('date'),
-            domain_table['visit_occurrence_id'],
-            F.lit(table_domain_field).alias('domain'),
-            F.lit(-1).alias('concept_value')
-        ).distinct()
+            # Remove records that don't have a date or standard_concept_id
+            sub_domain_table = domain_table \
+                .where(F.col(date_field).isNotNull()) \
+                .where(F.col(concept_id_field).isNotNull())
 
-        # Remove "Patient Died" from condition_occurrence
-        if domain_table == 'condition_occurrence':
-            domain_table = domain_table.where('condition_concept_id != 4216643')
+            sub_domain_table = sub_domain_table.where(F.col(concept_id_field).cast('string') != '0') \
+                .withColumn('date', F.to_date(F.col(date_field)))
 
-        if patient_event is None:
-            patient_event = domain_table
-        else:
-            patient_event = patient_event.union(domain_table)
+            sub_domain_table = sub_domain_table.select(
+                sub_domain_table['person_id'],
+                sub_domain_table[concept_id_field].alias('standard_concept_id'),
+                sub_domain_table['date'].cast('date'),
+                sub_domain_table['visit_occurrence_id'],
+                F.lit(table_domain_field).alias('domain'),
+                F.lit(-1).alias('concept_value')
+            ).distinct()
+
+            # Remove "Patient Died" from condition_occurrence
+            if sub_domain_table == 'condition_occurrence':
+                sub_domain_table = sub_domain_table.where('condition_concept_id != 4216643')
+
+            if patient_event is None:
+                patient_event = sub_domain_table
+            else:
+                patient_event = patient_event.union(sub_domain_table)
 
     return patient_event
 
