@@ -1,5 +1,6 @@
 import hashlib
 import os
+import re
 import glob
 import sys
 from typing import Tuple
@@ -156,8 +157,10 @@ def generate_prepared_ds_path(data_args, model_args) -> Path:
             "|" + f"split_by_patient={str(data_args.split_by_patient)}" +
             "|" + f"chronological_split={str(data_args.chronological_split)}"
     )
+    basename = os.path.basename(data_args.data_folder)
+    cleaned_basename = re.sub(r'[^a-zA-Z0-9_]', '', basename)
     LOG.info(f"concatenated_str: {concatenated_str}")
-    ds_hash = str(md5(concatenated_str))
+    ds_hash = f"{cleaned_basename}_{str(md5(concatenated_str))}"
     LOG.info(f"ds_hash: {ds_hash}")
     prepared_ds_path = (
             Path(os.path.abspath(data_args.dataset_prepared_path)) / ds_hash
