@@ -147,25 +147,18 @@ def generate_prepared_ds_path(data_args, model_args) -> Path:
        paths of the data folder and tokenizer, and the validation split percentage. If `validation_split_percentage`
        is None or zero, it is omitted from the hash to maintain consistency.
     """
-    ds_hash = str(
-        md5(
-            (
-                str(model_args.max_position_embeddings)
-                + "|"
-                + os.path.abspath(data_args.data_folder)
-                + "|"
-                + os.path.abspath(model_args.tokenizer_name_or_path)
-                + "|"
-                + str(data_args.validation_split_percentage) if data_args.validation_split_percentage else ""
-                + "|"
-                + f"test_eval_ratio={str(data_args.test_eval_ratio)}"
-                + "|"
-                + f"split_by_patient={str(data_args.split_by_patient)}"
-                + "|"
-                + f"chronological_split={str(data_args.chronological_split)}"
-            )
-        )
+    concatenated_str = (
+            str(model_args.max_position_embeddings) +
+            "|" + os.path.abspath(data_args.data_folder) +
+            "|" + os.path.abspath(model_args.tokenizer_name_or_path) +
+            "|" + (str(data_args.validation_split_percentage) if data_args.validation_split_percentage else "") +
+            "|" + f"test_eval_ratio={str(data_args.test_eval_ratio)}" +
+            "|" + f"split_by_patient={str(data_args.split_by_patient)}" +
+            "|" + f"chronological_split={str(data_args.chronological_split)}"
     )
+    LOG.info(f"concatenated_str: {concatenated_str}")
+    ds_hash = str(md5(concatenated_str))
+    LOG.info(f"ds_hash: {ds_hash}")
     prepared_ds_path = (
             Path(os.path.abspath(data_args.dataset_prepared_path)) / ds_hash
     )
