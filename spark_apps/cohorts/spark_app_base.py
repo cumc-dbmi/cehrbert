@@ -467,6 +467,11 @@ class NestedCohortBuilder:
             self._include_concept_list
         )
 
+        # Duplicate the records for cohorts that allow multiple entries
+        ehr_records = ehr_records.join(cohort, 'person_id').select(
+            [ehr_records[field_name] for field_name in ehr_records.schema.fieldNames()] + ['cohort_member_id']
+        )
+
         # Only allow the data records that occurred between the index date and the prediction window
         if self._is_population_estimation:
             if self._is_prediction_window_unbounded:
@@ -494,9 +499,12 @@ class NestedCohortBuilder:
                         F.date_sub(cohort['index_date'], self._hold_off_window)
                     )
 
-        cohort_ehr_records = ehr_records.join(cohort, 'person_id').where(record_window_filter) \
-            .select([ehr_records[field_name] for field_name in ehr_records.schema.fieldNames()]
-                    + ['cohort_member_id'])
+        cohort_ehr_records = ehr_records.join(
+            cohort,
+            (ehr_records.person_id == cohort.person_id) &
+            (ehr_records.cohort_member_id == cohort.cohort_member_id)
+        ).where(record_window_filter) \
+            .select([ehr_records[field_name] for field_name in ehr_records.schema.fieldNames()])
 
         if self._is_hierarchical_bert:
             return create_hierarchical_sequence_data(
