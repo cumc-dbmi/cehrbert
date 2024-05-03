@@ -76,18 +76,26 @@ class PatientEventBaseDecorator(
 
         # todo: create an assertion the dataframe contains the above columns
 
-        valid_visit_ids = patient_events.select('visit_occurrence_id').distinct()
+        valid_visit_ids = patient_events.select(
+            'visit_occurrence_id', 'cohort_member_id'
+        ).distinct()
 
         # Add visit_start_date to the patient_events dataframe and create the visit rank
         visit_rank_udf = F.row_number().over(
-            W.partitionBy('person_id').orderBy(
+            W.partitionBy('person_id', 'cohort_member_id').orderBy(
                 'visit_start_datetime', 'is_inpatient', 'expired', 'visit_occurrence_id'
             )
         )
         visit_segment_udf = F.col('visit_rank_order') % F.lit(2) + 1
 
-        visits = self._visit_occurrence.join(valid_visit_ids, 'visit_occurrence_id').select(
+        # The visit records are joined to the cohort members (there could be multiple entries for the same patient)
+        # if multiple entries are present, we duplicate the visit records for those.
+        visits = self._visit_occurrence.join(
+            valid_visit_ids,
+            'visit_occurrence_id'
+        ).select(
             'person_id',
+            'cohort_member_id',
             'visit_occurrence_id',
             'visit_end_date',
             F.col('visit_start_date').cast(T.DateType()).alias('visit_start_date'),
@@ -100,17 +108,19 @@ class PatientEventBaseDecorator(
             .drop('person_id', 'expired')
 
         # Determine the concept order depending on the visit type. For outpatient visits, we assume the concepts to
-        # have the same order, whereas for inpatient visits, the concept order is determined by the time stamp
+        # have the same order, whereas for inpatient visits, the concept order is determined by the time stamp.
+        # the concept order needs to be generated per each cohort member because the same visit could be used
+        # in multiple cohort's histories of the same patient
         concept_order_udf = F.when(
             F.col('is_inpatient') == 1,
-            F.dense_rank().over(W.partitionBy('visit_occurrence_id').orderBy('date'))
+            F.dense_rank().over(W.partitionBy('cohort_member_id', 'visit_occurrence_id').orderBy('date'))
         ).otherwise(F.lit(1))
 
         # Determine the global visit concept order for each patient, this takes both visit_rank_order and concept_order
         # into account when assigning this new order.
         # e.g. visit_rank_order = [1, 1, 2, 2], concept_order = [1, 1, 1, 2] -> visit_concept_order = [1, 1, 2, 3]
         visit_concept_order_udf = F.dense_rank().over(
-            W.partitionBy('person_id').orderBy(
+            W.partitionBy('person_id', 'cohort_member_id').orderBy(
                 'visit_rank_order', 'concept_order'
             )
         )
@@ -121,7 +131,10 @@ class PatientEventBaseDecorator(
         visit_end_date_udf = F.when(
             F.col('is_inpatient') == 1, F.coalesce(
                 F.col('visit_end_date'),
-                F.max('date').over(W.partitionBy('visit_occurrence_id'))
+                F.max('date').over(W.partitionBy(
+                    'cohort_member_id',
+                    'visit_occurrence_id')
+                )
             )
         ).otherwise(F.col('visit_start_date'))
 
@@ -131,8 +144,7 @@ class PatientEventBaseDecorator(
             F.when(F.col('date') > F.col('visit_end_date'), F.col('visit_end_date')).otherwise(F.col('date'))
         )
 
-        patient_events = patient_events \
-            .join(visits, 'visit_occurrence_id') \
+        patient_events = patient_events.join(visits, ['cohort_member_id', 'visit_occurrence_id']) \
             .withColumn('visit_end_date', visit_end_date_udf) \
             .withColumn('date', bound_medical_event_date) \
             .withColumn('concept_order', concept_order_udf) \
@@ -187,7 +199,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
         # visit_concept_id, visit_start_date, visit_occurrence_id, domain, concept_value)
         cohort_member_person_pair = patient_events.select('person_id', 'cohort_member_id').distinct()
         valid_visit_ids = patient_events \
-            .groupby('visit_occurrence_id', 'visit_segment', 'visit_rank_order') \
+            .groupby('cohort_member_id', 'visit_occurrence_id', 'visit_segment', 'visit_rank_order') \
             .agg(F.min('visit_concept_order').alias('min_visit_concept_order'),
                  F.max('visit_concept_order').alias('max_visit_concept_order'),
                  F.min('concept_order').alias('min_concept_order'),
@@ -208,7 +220,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
             'age',
             'discharged_to_concept_id'
         ).join(valid_visit_ids, 'visit_occurrence_id') \
-            .join(cohort_member_person_pair, 'person_id')
+            .join(cohort_member_person_pair, ['person_id', 'cohort_member_id'])
 
         # We assume outpatient visits end on the same day, therefore we start visit_end_date to visit_start_date due
         # to bad date
@@ -250,7 +262,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
 
         # Get the prev days_since_epoch
         prev_visit_end_date_udf = F.lag('visit_end_date').over(
-            W.partitionBy('person_id').orderBy('visit_rank_order')
+            W.partitionBy('person_id', 'cohort_member_id').orderBy('visit_rank_order')
         )
 
         # Compute the time difference between the current record and the previous record
@@ -308,9 +320,12 @@ class PatientEventAttDecorator(PatientEventDecorator):
         # Retrieving the events that are ONLY linked to inpatient visits
         inpatient_visits = visit_occurrence.where(F.col('visit_concept_id').isin([9201, 262, 8971, 8920])).select(
             'visit_occurrence_id',
-            'visit_end_date'
+            'visit_end_date',
+            'cohort_member_id'
         )
-        inpatient_events = patient_events.join(inpatient_visits, 'visit_occurrence_id')
+        inpatient_events = patient_events.join(
+            inpatient_visits, ['visit_occurrence_id', 'cohort_member_id']
+        )
 
         # Fill in the visit_end_date if null (because some visits are still ongoing at the time of data extraction)
         # Bound the event dates within visit_start_date and visit_end_date
@@ -318,7 +333,8 @@ class PatientEventAttDecorator(PatientEventDecorator):
         # Update the priority for each span
         inpatient_events = inpatient_events.withColumn(
             'visit_end_date',
-            F.coalesce('visit_end_date', F.max('date').over(W.partitionBy('visit_occurrence_id')))
+            F.coalesce('visit_end_date', F.max('date').over(
+                W.partitionBy('cohort_member_id', 'visit_occurrence_id')))
         ).withColumn(
             'date',
             F.when(F.col('date') < F.col('visit_start_date'), F.col('visit_start_date')).otherwise(
@@ -332,7 +348,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
 
         # Get the prev days_since_epoch
         inpatient_prev_date_udf = F.lag('date').over(
-            W.partitionBy('visit_occurrence_id').orderBy('concept_order')
+            W.partitionBy('cohort_member_id', 'visit_occurrence_id').orderBy('concept_order')
         )
 
         # Compute the time difference between the current record and the previous record
@@ -357,7 +373,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
         # Create ATT tokens within the inpatient visits
         inpatient_att_events = inpatient_events \
             .withColumn('is_span_boundary', F.row_number().over(
-            W.partitionBy('visit_occurrence_id', 'concept_order').orderBy('priority'))) \
+            W.partitionBy('cohort_member_id', 'visit_occurrence_id', 'concept_order').orderBy('priority'))) \
             .where(F.col('is_span_boundary') == 1) \
             .withColumn('prev_date', inpatient_prev_date_udf) \
             .withColumn('time_delta', inpatient_time_delta_udf) \
@@ -373,8 +389,8 @@ class PatientEventAttDecorator(PatientEventDecorator):
 
         # Retrieving the events that are NOT linked to inpatient visits
         other_events = patient_events.join(
-            inpatient_visits.select('visit_occurrence_id'),
-            'visit_occurrence_id',
+            inpatient_visits.select('visit_occurrence_id', 'cohort_member_id'),
+            ['visit_occurrence_id', 'cohort_member_id'],
             how='left_anti'
         )
 
@@ -524,7 +540,8 @@ class DeathEventDecorator(PatientEventDecorator):
         )
 
         last_ve_record = death_records.where(F.col('standard_concept_id') == 'VE').withColumn(
-            'record_rank', F.row_number().over(W.partitionBy('person_id').orderBy(F.desc('date')))
+            'record_rank',
+            F.row_number().over(W.partitionBy('person_id', 'cohort_member_id').orderBy(F.desc('date')))
         ).where(F.col('record_rank') == 1).drop('record_rank')
 
         last_ve_record.cache()
@@ -534,11 +551,13 @@ class DeathEventDecorator(PatientEventDecorator):
         #      'visit_segment', 'priority', 'date_in_week', 'concept_value_mask',
         #      'mlm_skip_value', 'age', 'visit_concept_id'])
 
+        artificial_visit_id = (
+                F.row_number().over(W.partitionBy(F.lit(0)).orderBy('person_id', 'cohort_member_id'))
+                + F.col('max_visit_occurrence_id')
+        )
         death_records = last_ve_record \
             .crossJoin(max_visit_occurrence_id) \
-            .withColumn('visit_occurrence_id',
-                        F.row_number().over(W.partitionBy(F.lit(0)).orderBy('person_id')) + F.col(
-                            'max_visit_occurrence_id')) \
+            .withColumn('visit_occurrence_id', artificial_visit_id) \
             .withColumn('standard_concept_id', F.lit('[DEATH]')) \
             .withColumn('domain', F.lit('death')) \
             .withColumn('visit_rank_order', F.lit(1) + F.col('visit_rank_order')) \
