@@ -1,16 +1,18 @@
 import os
 import json
 
-from typing import Tuple
+from typing import Tuple, Union
 
 import numpy as np
+import pandas as pd
 from sklearn.metrics import accuracy_score, roc_auc_score, precision_recall_curve, auc
-from sklearn.model_selection import train_test_split
 from scipy.special import expit as sigmoid
 
-from datasets import load_from_disk, DatasetDict
+import torch
+from torch.utils.data import DataLoader
+from datasets import load_from_disk, DatasetDict, Dataset
 from transformers.utils import logging
-from transformers import Trainer, set_seed
+from transformers import Trainer, set_seed, TrainingArguments
 from transformers import EarlyStoppingCallback
 from peft import LoraConfig, get_peft_model
 
@@ -21,7 +23,7 @@ from models.hf_models.config import CehrBertConfig
 from models.hf_models.hf_cehrbert import (
     CehrBertPreTrainedModel, CehrBertForClassification, CehrBertLstmForClassification
 )
-from runner.hf_runner_argument_dataclass import FineTuneModelType
+from runner.hf_runner_argument_dataclass import FineTuneModelType, DataTrainingArguments
 from runner.runner_util import (
     get_last_hf_checkpoint, load_parquet_as_dataset, generate_prepared_ds_path, parse_runner_args
 )
@@ -259,13 +261,31 @@ def main():
     trainer.save_metrics("train", metrics)
     trainer.save_state()
 
-    test_results = trainer.evaluate(processed_dataset['test'])
+    test_results = trainer.predict(processed_dataset['test'])
     # Save results to JSON
     test_results_path = os.path.join(training_args.output_dir, 'test_results.json')
     with open(test_results_path, 'w') as f:
-        json.dump(test_results, f, indent=4)
+        json.dump(test_results.metrics, f, indent=4)
 
-    LOG.info(f'Test results: {test_results}')
+    LOG.info(f'Test results: {test_results.metrics}')
+    person_ids = processed_dataset['test']['person_id']
+
+    if isinstance(test_results.predictions, np.ndarray):
+        predictions = np.squeeze(test_results.predictions).tolist()
+    else:
+        predictions = np.squeeze(test_results.predictions[0]).tolist()
+    if isinstance(test_results.label_ids, np.ndarray):
+        labels = np.squeeze(test_results.label_ids).tolist()
+    else:
+        labels = np.squeeze(test_results.label_ids[0]).tolist()
+
+    prediction_pd = pd.DataFrame(
+        {'person_id ': person_ids, 'prediction': predictions, 'label': labels}
+    )
+    prediction_pd.to_csv(
+        os.path.join(training_args.output_dir, 'test_predictions.csv'),
+        index=False
+    )
 
 
 if __name__ == "__main__":
