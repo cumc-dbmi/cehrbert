@@ -1,18 +1,16 @@
 import os
 import json
 
-from typing import Tuple, Union
+from typing import Tuple
 
 import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score, roc_auc_score, precision_recall_curve, auc
 from scipy.special import expit as sigmoid
 
-import torch
-from torch.utils.data import DataLoader
-from datasets import load_from_disk, DatasetDict, Dataset
+from datasets import load_from_disk, DatasetDict
 from transformers.utils import logging
-from transformers import Trainer, set_seed, TrainingArguments
+from transformers import Trainer, set_seed
 from transformers import EarlyStoppingCallback
 from peft import LoraConfig, get_peft_model
 
@@ -23,7 +21,7 @@ from models.hf_models.config import CehrBertConfig
 from models.hf_models.hf_cehrbert import (
     CehrBertPreTrainedModel, CehrBertForClassification, CehrBertLstmForClassification
 )
-from runner.hf_runner_argument_dataclass import FineTuneModelType, DataTrainingArguments
+from runner.hf_runner_argument_dataclass import FineTuneModelType
 from runner.runner_util import (
     get_last_hf_checkpoint, load_parquet_as_dataset, generate_prepared_ds_path, parse_runner_args
 )
@@ -252,8 +250,8 @@ def main():
         args=training_args
     )
 
+    checkpoint = get_last_hf_checkpoint(training_args)
     if training_args.do_train:
-        checkpoint = get_last_hf_checkpoint(training_args)
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()  # Saves the tokenizer too for easy upload
         metrics = train_result.metrics
@@ -263,6 +261,11 @@ def main():
         trainer.save_state()
 
     if training_args.do_predict:
+        # If do_train is set to False, we need to load the model from the checkpoint.
+        if not training_args.do_train:
+            LOG.info(f"The do_train flag is set to False. Loading the weights form {training_args.output_dir}")
+            trainer._load_from_checkpoint(training_args.output_dir)
+
         test_results = trainer.predict(processed_dataset['test'])
         # Save results to JSON
         test_results_path = os.path.join(training_args.output_dir, 'test_results.json')
