@@ -33,6 +33,9 @@ seed: 42
 num_hidden_layers: 6
 max_position_embeddings: 512
 
+do_train: True
+do_predict: True
+
 output_dir: "test_finetune_results"
 evaluation_strategy: "epoch"
 save_strategy: "epoch"

@@ -252,40 +252,42 @@ def main():
         args=training_args
     )
 
-    checkpoint = get_last_hf_checkpoint(training_args)
-    train_result = trainer.train(resume_from_checkpoint=checkpoint)
-    trainer.save_model()  # Saves the tokenizer too for easy upload
-    metrics = train_result.metrics
+    if training_args.do_train:
+        checkpoint = get_last_hf_checkpoint(training_args)
+        train_result = trainer.train(resume_from_checkpoint=checkpoint)
+        trainer.save_model()  # Saves the tokenizer too for easy upload
+        metrics = train_result.metrics
 
-    trainer.log_metrics("train", metrics)
-    trainer.save_metrics("train", metrics)
-    trainer.save_state()
+        trainer.log_metrics("train", metrics)
+        trainer.save_metrics("train", metrics)
+        trainer.save_state()
 
-    test_results = trainer.predict(processed_dataset['test'])
-    # Save results to JSON
-    test_results_path = os.path.join(training_args.output_dir, 'test_results.json')
-    with open(test_results_path, 'w') as f:
-        json.dump(test_results.metrics, f, indent=4)
+    if training_args.do_predict:
+        test_results = trainer.predict(processed_dataset['test'])
+        # Save results to JSON
+        test_results_path = os.path.join(training_args.output_dir, 'test_results.json')
+        with open(test_results_path, 'w') as f:
+            json.dump(test_results.metrics, f, indent=4)
 
-    LOG.info(f'Test results: {test_results.metrics}')
-    person_ids = processed_dataset['test']['person_id']
+        LOG.info(f'Test results: {test_results.metrics}')
+        person_ids = processed_dataset['test']['person_id']
 
-    if isinstance(test_results.predictions, np.ndarray):
-        predictions = np.squeeze(test_results.predictions).tolist()
-    else:
-        predictions = np.squeeze(test_results.predictions[0]).tolist()
-    if isinstance(test_results.label_ids, np.ndarray):
-        labels = np.squeeze(test_results.label_ids).tolist()
-    else:
-        labels = np.squeeze(test_results.label_ids[0]).tolist()
+        if isinstance(test_results.predictions, np.ndarray):
+            predictions = np.squeeze(test_results.predictions).tolist()
+        else:
+            predictions = np.squeeze(test_results.predictions[0]).tolist()
+        if isinstance(test_results.label_ids, np.ndarray):
+            labels = np.squeeze(test_results.label_ids).tolist()
+        else:
+            labels = np.squeeze(test_results.label_ids[0]).tolist()
 
-    prediction_pd = pd.DataFrame(
-        {'person_id ': person_ids, 'prediction': predictions, 'label': labels}
-    )
-    prediction_pd.to_csv(
-        os.path.join(training_args.output_dir, 'test_predictions.csv'),
-        index=False
-    )
+        prediction_pd = pd.DataFrame(
+            {'person_id ': person_ids, 'prediction': predictions, 'label': labels}
+        )
+        prediction_pd.to_csv(
+            os.path.join(training_args.output_dir, 'test_predictions.csv'),
+            index=False
+        )
 
 
 if __name__ == "__main__":
