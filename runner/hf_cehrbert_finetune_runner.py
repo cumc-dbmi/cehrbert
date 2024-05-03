@@ -274,10 +274,6 @@ def main():
 
         LOG.info(f'Test results: {test_results.metrics}')
         person_ids = processed_dataset['test']['person_id']
-        index_dates = processed_dataset['test'].map(
-            lambda record: {"index_date": str(record['index_date'])},
-            num_proc=data_args.preprocessing_num_workers
-        )['index_date']
 
         if isinstance(test_results.predictions, np.ndarray):
             predictions = np.squeeze(test_results.predictions).tolist()
@@ -291,7 +287,6 @@ def main():
         prediction_pd = pd.DataFrame(
             {
                 'person_id ': person_ids,
-                'index_date': pd.to_datetime(index_dates),
                 'prediction': predictions,
                 'label': labels
             }
