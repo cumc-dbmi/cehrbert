@@ -45,7 +45,7 @@ class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
             )
         else:
             for train, test in self.k_fold(
-                    features=(inputs, age),
+                    features=(inputs, age, person_ids),
                     labels=labels
             ):
                 x, y = train
