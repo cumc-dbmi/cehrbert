@@ -61,6 +61,10 @@ class DataTrainingArguments:
         default=4,
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
+    preprocessing_batch_size: Optional[int] = field(
+        default=10000,
+        metadata={"help": "The batch size to use for preprocessing a streaming dataset"}
+    )
     att_function_type: Literal[AttType.CEHR_BERT.value, AttType.DAY.value, AttType.NONE.value] = field(
         default=AttType.CEHR_BERT.value,
         metadata={

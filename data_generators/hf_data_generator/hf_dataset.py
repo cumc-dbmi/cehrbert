@@ -45,7 +45,11 @@ def create_cehrbert_pretraining_dataset(
                         dataset[dataset_name].map(mapping_function.transform)
                     )
             else:
-                dataset = dataset.map(mapping_function.batch_transform, batched=True)
+                dataset = dataset.map(
+                    mapping_function.batch_transform,
+                    batched=True,
+                    batch_size=data_args.preprocessing_batch_size
+                )
         else:
             dataset = dataset.map(
                 mapping_function.transform,
