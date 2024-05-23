@@ -1,11 +1,11 @@
 import os
 import glob
 
-from typing import Tuple
+from typing import Tuple, Union, Optional
 
 import torch
 import torch.nn.functional as F
-from datasets import load_dataset, load_from_disk, DatasetDict
+from datasets import load_dataset, load_from_disk, DatasetDict, Dataset
 from transformers.utils import logging
 from transformers import AutoConfig, Trainer, set_seed
 from transformers import EvalPrediction
@@ -17,6 +17,7 @@ from models.hf_models.config import CehrBertConfig
 from models.hf_models.hf_cehrbert import CehrBertForPreTraining
 from runner.runner_util import generate_prepared_ds_path, load_parquet_as_dataset, get_last_hf_checkpoint, \
     parse_runner_args
+from runner.hf_runner_argument_dataclass import DataTrainingArguments, ModelArguments
 
 LOG = logging.get_logger("transformers")
 
@@ -54,16 +55,34 @@ def compute_metrics(eval_pred: EvalPrediction):
     return {"perplexity": perplexity.item()}  # Use .item() to extract the scalar value from the tensor
 
 
-def load_model_and_tokenizer(model_args) -> Tuple[CehrBertForPreTraining, CehrBertTokenizer]:
+def load_and_create_tokenizer(
+        data_args: DataTrainingArguments,
+        model_args: ModelArguments,
+        dataset: Optional[Union[Dataset, DatasetDict]] = None
+) -> CehrBertTokenizer:
     # Try to load the pretrained tokenizer
+    tokenizer_abspath = os.path.abspath(model_args.tokenizer_name_or_path)
     try:
-        tokenizer_abspath = os.path.abspath(model_args.tokenizer_name_or_path)
         tokenizer = CehrBertTokenizer.from_pretrained(tokenizer_abspath)
     except Exception as e:
         LOG.warning(e)
-        raise e
+        if dataset is None:
+            raise RuntimeError(
+                f"Failed to load the tokenizer from {tokenizer_abspath} with the error \n{e}\n"
+                f"Tried to create the tokenizer, however the dataset is not provided."
+            )
+        tokenizer = CehrBertTokenizer.train_tokenizer(
+            dataset, ['concept_ids'], {}, data_args
+        )
+        tokenizer.save_pretrained(tokenizer_abspath)
 
-    # Try to load the pretrained model
+    return tokenizer
+
+
+def load_and_create_model(
+        model_args: ModelArguments,
+        tokenizer: CehrBertTokenizer
+) -> CehrBertForPreTraining:
     try:
         model_abspath = os.path.abspath(model_args.model_name_or_path)
         model_config = AutoConfig.from_pretrained(model_abspath)
@@ -71,7 +90,7 @@ def load_model_and_tokenizer(model_args) -> Tuple[CehrBertForPreTraining, CehrBe
         LOG.warning(e)
         model_config = CehrBertConfig(vocab_size=tokenizer.vocab_size, **model_args.as_dict())
 
-    return CehrBertForPreTraining(model_config), tokenizer
+    return CehrBertForPreTraining(model_config)
 
 
 def main():
@@ -83,11 +102,17 @@ def main():
         LOG.info(f"Loading prepared dataset from disk at {prepared_ds_path}...")
         processed_dataset = load_from_disk(str(prepared_ds_path))
         LOG.info("Prepared dataset loaded from disk...")
+        # If the data has been processed in the past, it's assume the tokenizer has been created before.
+        # we load the CEHR-BERT tokenizer from the output folder.
+        tokenizer = load_and_create_tokenizer(
+            data_args=data_args,
+            model_args=model_args
+        )
     else:
-        data_abspath = os.path.abspath(data_args.data_folder)
-        data_files = glob.glob(os.path.join(data_abspath, "*.parquet"))
-        dataset = load_dataset('parquet', data_files=data_files, split='train', streaming=data_args.streaming)
 
+        # Load the dataset from the parquet files
+        dataset = load_parquet_as_dataset(data_args.data_folder, split='train', streaming=data_args.streaming)
+        # If streaming is enabled, we need to manually split the data into train/val
         if data_args.streaming and data_args.validation_split_num:
             dataset = dataset.shuffle(buffer_size=10_000, seed=training_args.seed)
             train_set = dataset.skip(data_args.validation_split_num)
@@ -98,24 +123,38 @@ def main():
             })
         elif data_args.validation_split_percentage:
             dataset = dataset.train_test_split(test_size=data_args.validation_split_percentage, seed=training_args.seed)
+        else:
+            raise RuntimeError(
+                f"Can not split the data. If streaming is enabled, validation_split_num needs to be "
+                f"defined, otherwise validation_split_percentage needs to be provided. "
+                f"The current values are:\n"
+                f"validation_split_percentage: {data_args.validation_split_percentage}\n"
+                f"validation_split_num: {data_args.validation_split_num}\n"
+                f"streaming: {data_args.streaming}"
+            )
 
+        # If the data is in the MEDS format, we need to convert it to the CEHR-BERT format
         if data_args.is_data_in_med:
             dataset = convert_meds_to_cehrbert(dataset, data_args)
 
-        tokenizer = CehrBertTokenizer.train_tokenizer(
-            dataset, ['concept_ids'], {}, data_args
+        # Create the CEHR-BERT tokenizer if it's not available in the output folder
+        tokenizer = load_and_create_tokenizer(
+            data_args=data_args,
+            model_args=model_args,
+            dataset=dataset
         )
-        tokenizer.save_pretrained(os.path.abspath(model_args.tokenizer_name_or_path))
 
+        # sort the patient features chronologically and tokenize the data
         processed_dataset = create_cehrbert_pretraining_dataset(
             dataset=dataset,
             concept_tokenizer=tokenizer,
             data_args=data_args
         )
+        # only save the data to the disk if it is not streaming
         if not data_args.streaming:
             processed_dataset.save_to_disk(prepared_ds_path)
 
-    model, tokenizer = load_model_and_tokenizer(model_args)
+    model = load_and_create_model(model_args, tokenizer)
 
     collator = CehrBertDataCollator(
         tokenizer=tokenizer,

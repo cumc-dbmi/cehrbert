@@ -3,10 +3,10 @@ import os
 import re
 import glob
 import sys
-from typing import Tuple
+from typing import Tuple, Union
 from pathlib import Path
 
-from datasets import load_dataset
+from datasets import load_dataset, Dataset, IterableDataset
 from transformers import HfArgumentParser, TrainingArguments
 from transformers.utils import logging
 from transformers.trainer_utils import get_last_checkpoint
@@ -16,7 +16,7 @@ from runner.hf_runner_argument_dataclass import ModelArguments, DataTrainingArgu
 LOG = logging.get_logger("transformers")
 
 
-def load_parquet_as_dataset(data_folder, split="train"):
+def load_parquet_as_dataset(data_folder, split="train", streaming=False) -> Union[Dataset, IterableDataset]:
     """
     Loads a dataset from Parquet files located within a specified folder into a Hugging Face `datasets.Dataset`.
 
@@ -28,6 +28,7 @@ def load_parquet_as_dataset(data_folder, split="train"):
                            files within this directory.
         split (str, optional): The split of the dataset to load. Default is 'train'. This can typically be 'train',
                                'test', or 'validation', depending on how you wish to use the dataset.
+        streaming (bool, optional): Indicate whether we want to stream the dataset
 
     Returns:
         datasets.Dataset: A dataset object containing the data from all Parquet files found in the specified folder.
@@ -47,7 +48,7 @@ def load_parquet_as_dataset(data_folder, split="train"):
     """
     data_abspath = os.path.abspath(data_folder)
     data_files = glob.glob(os.path.join(data_abspath, "*.parquet"))
-    dataset = load_dataset('parquet', data_files=data_files, split=split)
+    dataset = load_dataset('parquet', data_files=data_files, split=split, streaming=streaming)
     return dataset
 
 
