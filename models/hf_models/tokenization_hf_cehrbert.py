@@ -1,13 +1,16 @@
 import os
 import json
-import transformers
+from functools import partial
 from typing import Sequence, Union, List, Dict
+
+import transformers
 from datasets import Dataset, DatasetDict
 from tokenizers import Tokenizer
 from tokenizers.models import WordLevel
 from tokenizers.trainers import WordLevelTrainer
 from tokenizers.pre_tokenizers import WhitespaceSplit
 from transformers.tokenization_utils_base import PushToHubMixin
+from runner.hf_runner_argument_dataclass import DataTrainingArguments
 
 PAD_TOKEN = "[PAD]"
 CLS_TOKEN = "[CLS]"
@@ -179,9 +182,7 @@ class CehrBertTokenizer(PushToHubMixin):
             dataset: Union[Dataset, DatasetDict],
             feature_names: List[str],
             concept_name_mapping: Dict[str, str],
-            num_proc: int = 16,
-            vocab_size: int = 50_000,
-            min_frequency: int = 0
+            data_args: DataTrainingArguments
     ):
         """
         Train a huggingface word level tokenizer. To use their tokenizer, we need to concatenate all the concepts
@@ -196,14 +197,28 @@ class CehrBertTokenizer(PushToHubMixin):
         tokenizer.pre_tokenizer = WhitespaceSplit()
         trainer = WordLevelTrainer(
             special_tokens=[PAD_TOKEN, MASK_TOKEN, OUT_OF_VOCABULARY_TOKEN, CLS_TOKEN, UNUSED_TOKEN],
-            vocab_size=vocab_size,
-            min_frequency=min_frequency,
+            vocab_size=data_args.vocab_size,
+            min_frequency=data_args.min_frequency,
             show_progress=True
         )
-        for feature in feature_names:
-            concatenated_features = dataset.map(
-                lambda x: {feature: ' '.join(map(str, x[feature]))}, num_proc=num_proc,
-                remove_columns=dataset.column_names
-            )
-            tokenizer.train_from_iterator(concatenated_features[feature], trainer=trainer)
+        for feature_name in feature_names:
+            func = partial(cls.batch_concat_concepts, feature_name=feature_name)
+            if data_args.streaming:
+                concatenated_features = dataset.map(
+                    func,
+                    batched=True,
+                    batch_size=data_args.preprocessing_batch_size
+                )
+            else:
+                concatenated_features = dataset.map(
+                    func,
+                    num_proc=data_args.preprocessing_num_workers,
+                    batched=True,
+                    remove_columns=dataset.column_names
+                )
+            tokenizer.train_from_iterator(concatenated_features[feature_name], trainer=trainer)
         return CehrBertTokenizer(tokenizer, concept_name_mapping)
+
+    @classmethod
+    def batch_concat_concepts(cls, records: Dict[str, List], feature_name) -> Dict[str, List]:
+        return {feature_name: [" ".join(map(str, _)) for _ in records[feature_name]]}

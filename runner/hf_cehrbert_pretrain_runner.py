@@ -11,7 +11,7 @@ from transformers import AutoConfig, Trainer, set_seed
 from transformers import EvalPrediction
 
 from data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
-from data_generators.hf_data_generator.hf_dataset import create_cehrbert_pretraining_dataset
+from data_generators.hf_data_generator.hf_dataset import create_cehrbert_pretraining_dataset, convert_meds_to_cehrbert
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from models.hf_models.config import CehrBertConfig
 from models.hf_models.hf_cehrbert import CehrBertForPreTraining
@@ -54,21 +54,14 @@ def compute_metrics(eval_pred: EvalPrediction):
     return {"perplexity": perplexity.item()}  # Use .item() to extract the scalar value from the tensor
 
 
-def load_model_and_tokenizer(data_args, model_args) -> Tuple[CehrBertForPreTraining, CehrBertTokenizer]:
+def load_model_and_tokenizer(model_args) -> Tuple[CehrBertForPreTraining, CehrBertTokenizer]:
     # Try to load the pretrained tokenizer
     try:
         tokenizer_abspath = os.path.abspath(model_args.tokenizer_name_or_path)
         tokenizer = CehrBertTokenizer.from_pretrained(tokenizer_abspath)
     except Exception as e:
         LOG.warning(e)
-        dataset = load_parquet_as_dataset(data_args.data_folder)
-        tokenizer = CehrBertTokenizer.train_tokenizer(
-            dataset, ['concept_ids'], {},
-            num_proc=data_args.preprocessing_num_workers,
-            vocab_size=data_args.vocab_size,
-            min_frequency=data_args.min_frequency
-        )
-        tokenizer.save_pretrained(os.path.abspath(model_args.tokenizer_name_or_path))
+        raise e
 
     # Try to load the pretrained model
     try:
@@ -84,8 +77,6 @@ def load_model_and_tokenizer(data_args, model_args) -> Tuple[CehrBertForPreTrain
 def main():
     data_args, model_args, training_args = parse_runner_args()
 
-    model, tokenizer = load_model_and_tokenizer(data_args, model_args)
-
     prepared_ds_path = generate_prepared_ds_path(data_args, model_args)
 
     if any(prepared_ds_path.glob("*")):
@@ -98,7 +89,7 @@ def main():
         dataset = load_dataset('parquet', data_files=data_files, split='train', streaming=data_args.streaming)
 
         if data_args.streaming and data_args.validation_split_num:
-            dataset = dataset.shuffle(buffer_size=10_000)
+            dataset = dataset.shuffle(buffer_size=10_000, seed=training_args.seed)
             train_set = dataset.skip(data_args.validation_split_num)
             val_set = dataset.take(data_args.validation_split_num)
             dataset = DatasetDict({
@@ -108,6 +99,14 @@ def main():
         elif data_args.validation_split_percentage:
             dataset = dataset.train_test_split(test_size=data_args.validation_split_percentage, seed=training_args.seed)
 
+        if data_args.is_data_in_med:
+            dataset = convert_meds_to_cehrbert(dataset, data_args)
+
+        tokenizer = CehrBertTokenizer.train_tokenizer(
+            dataset, ['concept_ids'], {}, data_args
+        )
+        tokenizer.save_pretrained(os.path.abspath(model_args.tokenizer_name_or_path))
+
         processed_dataset = create_cehrbert_pretraining_dataset(
             dataset=dataset,
             concept_tokenizer=tokenizer,
@@ -115,6 +114,8 @@ def main():
         )
         if not data_args.streaming:
             processed_dataset.save_to_disk(prepared_ds_path)
+
+    model, tokenizer = load_model_and_tokenizer(model_args)
 
     collator = CehrBertDataCollator(
         tokenizer=tokenizer,

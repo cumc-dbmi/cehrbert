@@ -1,4 +1,4 @@
-from meds.schema import Event, Measurement
+from meds.schema import Event
 
 from typing import TypedDict, List
 from typing_extensions import NotRequired
@@ -15,16 +15,8 @@ class Visit(TypedDict):
 
 class CehrBertPatient(TypedDict):
     patient_id: int
-    static_measurements: List[Measurement]
     birth_datetime: datetime.datetime
     gender: str
     race: str
     ethnicity: str
     visits: List[Visit]
-
-
-def get_measurements_from_visit(visit: Visit) -> List[Measurement]:
-    measurements = []
-    for event in visit['events']:
-        measurements.extend(event['measurements'])
-    return measurements

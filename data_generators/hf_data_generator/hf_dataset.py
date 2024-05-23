@@ -20,6 +20,39 @@ TRANSFORMER_COLUMNS = ['input_ids', 'labels']
 FINETUNING_COLUMNS = ['age_at_index', 'classifier_label', 'index_date', 'person_id']
 
 
+def convert_meds_to_cehrbert(
+        meds_dataset: Union[Dataset, DatasetDict],
+        data_args: DataTrainingArguments
+) -> Dataset:
+    if data_args.is_data_in_med:
+        med_to_cehrbert_mapping = MedToCehrBertDatasetMapping(
+            data_args
+        )
+        if data_args.streaming:
+            cehrbert_dataset = meds_dataset.map(
+                med_to_cehrbert_mapping.batch_transform,
+                batched=True,
+                batch_size=data_args.preprocessing_batch_size
+            ).filter(
+                lambda records: [r >= 1 for r in records['num_of_visits']],
+                batched=True,
+                batch_size=data_args.preprocessing_batch_size
+            )
+        else:
+            cehrbert_dataset = meds_dataset.map(
+                med_to_cehrbert_mapping.transform,
+                num_proc=data_args.preprocessing_num_workers,
+            ).filter(
+                lambda records: [r >= 1 for r in records['num_of_visits']],
+                num_proc=data_args.preprocessing_num_workers,
+                batched=True,
+                batch_size=data_args.preprocessing_batch_size
+            )
+        return cehrbert_dataset
+    else:
+        raise RuntimeError(f"is_data_in_med is not set to True in DataTrainingArguments: {data_args}")
+
+
 def create_cehrbert_pretraining_dataset(
         dataset: Union[Dataset, DatasetDict],
         concept_tokenizer: CehrBertTokenizer,
@@ -30,19 +63,16 @@ def create_cehrbert_pretraining_dataset(
         SortPatientSequenceMapping(),
         HFTokenizationMapping(concept_tokenizer, True)
     ]
-
-    if data_args.is_data_in_med:
-        med_to_cehrbert_mapping = MedToCehrBertDatasetMapping(
-            data_args
-        )
-        mapping_functions.insert(0, med_to_cehrbert_mapping)
-
     for mapping_function in mapping_functions:
         if data_args.streaming:
             if isinstance(dataset, DatasetDict):
                 for dataset_name in dataset.keys():
                     dataset[dataset_name] = (
-                        dataset[dataset_name].map(mapping_function.transform)
+                        dataset[dataset_name].map(
+                            mapping_function.batch_transform,
+                            batched=True,
+                            batch_size=data_args.preprocessing_batch_size
+                        )
                     )
             else:
                 dataset = dataset.map(

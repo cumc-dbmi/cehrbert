@@ -38,7 +38,7 @@ transformers~=4.39.3
 femr
 torch~=2.4.0.dev20240413
 datasets~=2.16.1
-meds~=0.1.3
+meds
 python-dateutil~=2.8.2
 tokenizers~=0.15.2
 peft~=0.10.0
