@@ -5,9 +5,9 @@ data_folder: "sample_data/pretrain"
 dataset_prepared_path: "test_dataset_prepared"
 validation_split_percentage: 0.05
 validation_split_num: 1000
-preprocessing_num_workers: 16
+preprocessing_num_workers: 8
 preprocessing_batch_size: 10000
-streaming: False
+streaming: True
 
 #Tokenizer
 vocab_size: 50000
@@ -28,6 +28,9 @@ seed: 42
 num_hidden_layers: 6
 max_position_embeddings: 512
 
+# torch dataloader configs
+dataloader_num_workers: 8
+
 output_dir: "test_results"
 evaluation_strategy: "epoch"
 save_strategy: "epoch"
@@ -37,7 +40,7 @@ per_device_eval_batch_size: 4
 gradient_accumulation_steps: 1
 num_train_epochs: 2
 # When streaming is set to True, max_steps needs to be provided
-# max_steps: 4000
+max_steps: 4000
 
 warmup_steps: 500
 weight_decay: 0.01
