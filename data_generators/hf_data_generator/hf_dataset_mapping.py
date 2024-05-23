@@ -5,6 +5,7 @@ from typing import Dict, List, Any, Union
 import collections
 import copy
 
+import numpy as np
 import pandas as pd
 from dateutil.relativedelta import relativedelta
 from pandas import Series
@@ -45,8 +46,12 @@ class DatasetMapping(ABC):
             records: LazyBatch
     ) -> List[Dict[str, Any]]:
         dataframe = records.pa_table.to_pandas()
-        applied_dataframe = dataframe.apply(self.transform, axis=1)
+        applied_dataframe = dataframe.apply(self.transform_pandas_series, axis=1)
         return applied_dataframe.to_dict(orient='list')
+
+    def transform_pandas_series(self, series: Series) -> Series:
+        record = self.transform(series.to_dict())
+        return pd.Series(record)
 
     @abstractmethod
     def transform(
@@ -63,7 +68,7 @@ class DatasetMapping(ABC):
         pass
 
 
-def meds_to_cehrbert_extension(meds_record: Union[Patient, Series]) -> CehrBertPatient:
+def meds_to_cehrbert_extension(meds_record: Patient) -> CehrBertPatient:
     """
     Convert the MEDS Patient to the CerBertPatient extension, where the patient timeline is organized around visits
     """
@@ -78,7 +83,6 @@ def meds_to_cehrbert_extension(meds_record: Union[Patient, Series]) -> CehrBertP
     ethnicity = None
 
     visit_mapping = dict()
-    static_events = []
     # Iterate through all events
     for e in events:
         code = e['code']
@@ -178,8 +182,8 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
 
     def transform(
             self,
-            med_record: Union[Dict[str, Any], Series]
-    ) -> Union[Dict[str, Any], Series]:
+            med_record: Dict[str, Any]
+    ) -> Dict[str, Any]:
 
         record = meds_to_cehrbert_extension(med_record)
 
@@ -367,11 +371,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
         cehrbert_record['birth_datetime'] = birth_datetime
         cehrbert_record['gender'] = gender
         cehrbert_record['race'] = race
-
-        if isinstance(med_record, Series):
-            return pd.Series(cehrbert_record)
-        else:
-            return cehrbert_record
+        return cehrbert_record
 
 
 class SortPatientSequenceMapping(DatasetMapping):
@@ -391,10 +391,10 @@ class SortPatientSequenceMapping(DatasetMapping):
         do nothing.
         """
         sorting_columns = record.get('orders', None)
-        if not sorting_columns:
+        if sorting_columns is None:
             sorting_columns = record.get('dates', None)
 
-        if not sorting_columns:
+        if sorting_columns is None:
             return record
 
         sorting_columns = list(map(int, sorting_columns))
@@ -405,7 +405,7 @@ class SortPatientSequenceMapping(DatasetMapping):
         for k, v in record.items():
             if k in column_names:
                 continue
-            if isinstance(v, list) and len(v) == seq_length:
+            if isinstance(v, (list, np.ndarray)) and len(v) == seq_length:
                 column_names.append(k)
                 column_values.append(v)
 
@@ -435,27 +435,6 @@ class HFTokenizationMapping(DatasetMapping):
             self,
             record: Dict[str, Any]
     ) -> Dict[str, Any]:
-
-        # if 'start_index' not in record:
-        #     raise ValueError('Missing start_index in row')
-        #
-        # if 'end_index' not in record:
-        #     raise ValueError('Missing end_index in row')
-        #
-        # start_index = record['start_index']
-        # end_index = record['end_index']
-        #
-        # seq_length = len(record['concept_ids'])
-        # new_record = collections.OrderedDict()
-        # for k, v in record.items():
-        #     if isinstance(v, list) and len(v) == seq_length:
-        #         new_record[k] = v[start_index:end_index]
-        #
-        # assert max(new_record['visit_concept_orders']) - min(new_record['visit_concept_orders']) < 512, \
-        #     (f"start_index: {start_index}, end_index: {end_index}, person_id: {new_record['person_id']}\n"
-        #      f"max visit_concept_order: {max(new_record['visit_concept_orders'])}\n"
-        #      f"min visit_concept_order: {min(new_record['visit_concept_orders'])}\n"
-        #      f"visit_concept_order: {new_record['visit_concept_orders']}")
 
         input_ids = self._concept_tokenizer.encode(record['concept_ids'])
         record['input_ids'] = input_ids
@@ -487,12 +466,6 @@ class HFFineTuningMapping(DatasetMapping):
             self,
             record: Dict[str, Any]
     ) -> Dict[str, Any]:
-        # if 'start_index' not in record:
-        #     raise ValueError('Missing start_index in row')
-        #
-        # if 'end_index' not in record:
-        #     raise ValueError('Missing end_index in row')
-
         new_record = copy.deepcopy(record)
         new_record.update({
             'age_at_index': record['age'],
