@@ -5,8 +5,8 @@ data_folder: "sample_data/pretrain"
 dataset_prepared_path: "test_dataset_prepared"
 validation_split_percentage: 0.05
 validation_split_num: 1000
-preprocessing_num_workers: 8
-preprocessing_batch_size: 10000
+preprocessing_num_workers: 4
+preprocessing_batch_size: 1000
 streaming: True
 
 #Tokenizer
@@ -29,7 +29,8 @@ num_hidden_layers: 6
 max_position_embeddings: 512
 
 # torch dataloader configs
-dataloader_num_workers: 8
+dataloader_num_workers: 4
+dataloader_prefetch_factor: 4
 
 output_dir: "test_results"
 evaluation_strategy: "epoch"

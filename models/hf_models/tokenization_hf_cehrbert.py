@@ -2,6 +2,7 @@ import os
 import json
 from functools import partial
 from typing import Sequence, Union, List, Dict
+from itertools import islice
 
 import transformers
 from datasets import Dataset, DatasetDict
@@ -188,6 +189,7 @@ class CehrBertTokenizer(PushToHubMixin):
         Train a huggingface word level tokenizer. To use their tokenizer, we need to concatenate all the concepts
         together and treat it as a sequence.
         """
+
         if isinstance(dataset, DatasetDict):
             dataset = dataset['train']
 
@@ -202,21 +204,38 @@ class CehrBertTokenizer(PushToHubMixin):
             show_progress=True
         )
         for feature_name in feature_names:
-            func = partial(cls.batch_concat_concepts, feature_name=feature_name)
+            batch_concat_concepts_partial_func = partial(cls.batch_concat_concepts, feature_name=feature_name)
             if data_args.streaming:
                 concatenated_features = dataset.map(
-                    func,
+                    batch_concat_concepts_partial_func,
                     batched=True,
                     batch_size=data_args.preprocessing_batch_size
                 )
+
+                def batched_generator():
+                    iterator = iter(concatenated_features)
+                    while True:
+                        batch = list(islice(iterator, data_args.preprocessing_batch_size))
+                        if not batch:
+                            break
+                        yield [
+                            example[feature_name] for example in batch
+                        ]
+
+                # We pass a generator of list of texts (concatenated concept_ids) to train_from_iterator
+                # for efficient training
+                generator = batched_generator()
             else:
                 concatenated_features = dataset.map(
-                    func,
+                    batch_concat_concepts_partial_func,
                     num_proc=data_args.preprocessing_num_workers,
                     batched=True,
+                    batch_size=data_args.preprocessing_batch_size,
                     remove_columns=dataset.column_names
                 )
-            tokenizer.train_from_iterator(concatenated_features[feature_name], trainer=trainer)
+                generator = concatenated_features[feature_name]
+
+            tokenizer.train_from_iterator(generator, trainer=trainer)
         return CehrBertTokenizer(tokenizer, concept_name_mapping)
 
     @classmethod

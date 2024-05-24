@@ -43,9 +43,12 @@ class DatasetMapping(ABC):
 
     def batch_transform(
             self,
-            records: LazyBatch
+            records: Union[LazyBatch, Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
-        dataframe = records.pa_table.to_pandas()
+        if isinstance(records, LazyBatch):
+            dataframe = records.pa_table.to_pandas()
+        else:
+            dataframe = pd.DataFrame(records)
         applied_dataframe = dataframe.apply(self.transform_pandas_series, axis=1)
         return applied_dataframe.to_dict(orient='list')
 

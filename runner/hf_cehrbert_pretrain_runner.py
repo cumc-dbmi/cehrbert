@@ -1,11 +1,10 @@
 import os
-import glob
 
-from typing import Tuple, Union, Optional
+from typing import Union, Optional
 
 import torch
 import torch.nn.functional as F
-from datasets import load_dataset, load_from_disk, DatasetDict, Dataset
+from datasets import load_from_disk, DatasetDict, Dataset
 from transformers.utils import logging
 from transformers import AutoConfig, Trainer, set_seed
 from transformers import EvalPrediction
@@ -71,6 +70,7 @@ def load_and_create_tokenizer(
                 f"Failed to load the tokenizer from {tokenizer_abspath} with the error \n{e}\n"
                 f"Tried to create the tokenizer, however the dataset is not provided."
             )
+
         tokenizer = CehrBertTokenizer.train_tokenizer(
             dataset, ['concept_ids'], {}, data_args
         )
@@ -96,6 +96,14 @@ def load_and_create_model(
 def main():
     data_args, model_args, training_args = parse_runner_args()
 
+    if data_args.streaming:
+        # This is for disabling the warning message https://github.com/huggingface/transformers/issues/5486
+        # This happens only when streaming is enabled
+        os.environ["TOKENIZERS_PARALLELISM"] = "false"
+        # The iterable dataset doesn't have sharding implemented, so the number of works has to be set to 0
+        # Otherwise the trainer will throw an error
+        training_args.dataloader_num_workers = 0
+
     prepared_ds_path = generate_prepared_ds_path(data_args, model_args)
 
     if any(prepared_ds_path.glob("*")):
@@ -106,10 +114,10 @@ def main():
         # we load the CEHR-BERT tokenizer from the output folder.
         tokenizer = load_and_create_tokenizer(
             data_args=data_args,
-            model_args=model_args
+            model_args=model_args,
+            dataset=processed_dataset
         )
     else:
-
         # Load the dataset from the parquet files
         dataset = load_parquet_as_dataset(data_args.data_folder, split='train', streaming=data_args.streaming)
         # If streaming is enabled, we need to manually split the data into train/val
@@ -143,7 +151,6 @@ def main():
             model_args=model_args,
             dataset=dataset
         )
-
         # sort the patient features chronologically and tokenize the data
         processed_dataset = create_cehrbert_pretraining_dataset(
             dataset=dataset,
