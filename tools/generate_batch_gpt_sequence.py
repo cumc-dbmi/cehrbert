@@ -152,7 +152,7 @@ def main(
     data = pd.read_parquet(
         args.demographic_data_path
     )
-    data = data[data.num_of_concepts >= args.min_num_of_concepts]
+    # data = data[data.num_of_concepts >= args.min_num_of_concepts]
     demographic_info = data.concept_ids.apply(lambda concept_list: concept_list[0:4])
     demographic_info = tokenizer.encode(map(list, demographic_info))
 
