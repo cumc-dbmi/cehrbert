@@ -475,3 +475,21 @@ class HFFineTuningMapping(DatasetMapping):
             'classifier_label': record['label']
         })
         return new_record
+
+
+class HFCehrGptTokenizationMapping(DatasetMapping):
+    def __init__(
+            self,
+            concept_tokenizer: CehrBertTokenizer,
+            is_pretraining: bool
+    ):
+        self._concept_tokenizer = concept_tokenizer
+        self._is_pretraining = is_pretraining
+
+    def transform(
+            self,
+            record: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        input_ids = self._concept_tokenizer.encode(record['concept_ids'])
+        record['input_ids'] = input_ids
+        return record

@@ -167,7 +167,7 @@ class ModelArguments:
         metadata={"help": "The embedding and hidden size for the transformer block"}
     )
     num_hidden_layers: Optional[int] = field(
-        default=12,
+        default=6,
         metadata={"help": "The number of layers used in the transformer model"}
     )
     max_position_embeddings: Optional[int] = field(
