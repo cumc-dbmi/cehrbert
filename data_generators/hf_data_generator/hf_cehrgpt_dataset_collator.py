@@ -93,8 +93,9 @@ class CehrGptDataCollator:
                 new_max_length
             )
             if start_index != end_index:
+                demographic_token_ids = self.tokenizer.encode(demographic_tokens)
                 record['input_ids'] = torch.concat(
-                    [self._convert_to_tensor(demographic_tokens),
+                    [self._convert_to_tensor(demographic_token_ids),
                      self._convert_to_tensor(record['input_ids'][start_index:end_index + 1])
                      ]
                 )
@@ -109,8 +110,3 @@ class CehrGptDataCollator:
                 break
 
         record['input_ids'] = record['input_ids'][0:end_index]
-        return record
-
-
-def concatenate(elements: List[Any]):
-    assert type(elements)

@@ -1,8 +1,8 @@
-model_name_or_path: "/Users/cp3016/Documents/cehr-bert/test_results"
-tokenizer_name_or_path: "/Users/cp3016/Documents/cehr-bert/test_results"
+model_name_or_path: "test_results"
+tokenizer_name_or_path: "test_results"
 
-data_folder: "/Users/cp3016/Documents/cehr-bert/sample_data/pretrain"
-dataset_prepared_path: "/Users/cp3016/Documents/cehr-bert/test_dataset_prepared"
+data_folder: "sample_data/pretrain"
+dataset_prepared_path: "test_dataset_prepared"
 validation_split_percentage: 0.05
 validation_split_num: 1000
 preprocessing_num_workers: 4
@@ -32,7 +32,7 @@ max_position_embeddings: 512
 dataloader_num_workers: 4
 dataloader_prefetch_factor: 4
 
-output_dir: "/Users/cp3016/Documents/cehr-bert/test_results"
+output_dir: "test_results"
 evaluation_strategy: "epoch"
 save_strategy: "epoch"
 learning_rate: 0.00005
