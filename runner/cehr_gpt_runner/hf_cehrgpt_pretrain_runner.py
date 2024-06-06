@@ -71,6 +71,7 @@ def main():
         # The iterable dataset doesn't have sharding implemented, so the number of works has to be set to 0
         # Otherwise the trainer will throw an error
         training_args.dataloader_num_workers = 0
+        training_args.dataloader_prefetch_factor = 0
 
     prepared_ds_path = generate_prepared_ds_path(data_args, model_args)
 
@@ -128,12 +129,25 @@ def main():
     def filter_func(examples):
         return [_ >= data_args.min_num_tokens for _ in examples['num_of_concepts']]
 
-    processed_dataset = processed_dataset.filter(
-        filter_func,
-        batched=True,
-        batch_size=data_args.preprocessing_batch_size,
-        num_proc=data_args.preprocessing_num_workers if not data_args.streaming else None
-    )
+    # Create the args for batched filtering
+    filter_args = {
+        'batched': True,
+        'batch_size': data_args.preprocessing_batch_size
+    }
+    # If the dataset is not in a streaming mode, we could add num_proc to enable parallelization
+    if not data_args.streaming:
+        filter_args['num_proc'] = data_args.preprocessing_num_workers
+
+    # The filter can't be applied to a DatasetDict of IterableDataset (in case of streaming)
+    # we need to iterate through all the datasets and apply the filter separately
+    if isinstance(processed_dataset, DatasetDict):
+        for key in processed_dataset.keys():
+            processed_dataset[key] = processed_dataset[key].filter(filter_func, **filter_args)
+    else:
+        processed_dataset = processed_dataset.filter(
+            filter_func,
+            **filter_args
+        )
 
     model = load_and_create_model(model_args, tokenizer)
 
