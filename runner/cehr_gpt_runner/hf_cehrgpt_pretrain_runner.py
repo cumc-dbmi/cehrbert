@@ -12,7 +12,7 @@ from data_generators.hf_data_generator.hf_cehrgpt_dataset_collator import CehrGp
 from data_generators.hf_data_generator.hf_cehrgpt_dataset import create_cehrgpt_pretraining_dataset
 from models.hf_models.tokenization_hf_cehrgpt import CehrGptTokenizer
 from runner.runner_util import generate_prepared_ds_path, load_parquet_as_dataset, get_last_hf_checkpoint, \
-    parse_runner_args
+    parse_runner_args, compute_metrics
 from runner.hf_runner_argument_dataclass import DataTrainingArguments, ModelArguments
 
 LOG = logging.get_logger("transformers")
@@ -176,7 +176,8 @@ def main():
         ),
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        args=training_args
+        args=training_args,
+        compute_metrics=compute_metrics
     )
 
     checkpoint = None

@@ -10,7 +10,7 @@ from transformers import GPT2LMHeadModel, GenerationConfig
 
 import pandas as pd
 
-from models.gpt_model import TopKStrategy, TopPStrategy
+from models.gpt_model import TopKStrategy, TopPStrategy, TopMixStrategy
 
 
 def generate_single_batch(
@@ -31,7 +31,7 @@ def generate_single_batch(
     with torch.no_grad():
         generation_config = GenerationConfig(
             repetition_penalty=1.1,
-            max_new_tokens=max_new_tokens,
+            max_new_tokens=max_new_tokens - 5,
             temperature=temperature,
             top_p=top_p,
             top_k=top_k,
@@ -57,7 +57,7 @@ def generate_single_batch(
 def main(
         args
 ):
-    cehrgpt_tokenizer = CehrGptTokenizer.from_pretrained(args.model_folder)
+    cehrgpt_tokenizer = CehrGptTokenizer.from_pretrained(args.tokenizer_folder)
     cehrgpt_model = GPT2LMHeadModel.from_pretrained(args.model_folder)
 
     if args.sampling_strategy == TopKStrategy.__name__:
@@ -70,6 +70,7 @@ def main(
             folder_name,
             'generated_sequences'
         )
+        args.top_p = 1.0
     elif args.sampling_strategy == TopPStrategy.__name__:
         folder_name = (
             f'top_p{int(args.top_p * 100)}_temp_{int(args.temperature * 1000)}'
@@ -80,6 +81,7 @@ def main(
             folder_name,
             'generated_sequences'
         )
+        args.top_k = cehrgpt_tokenizer.vocab_size
     else:
         raise RuntimeError(
             'sampling_strategy has to be one of the following two options TopKStrategy or TopPStrategy'
@@ -147,6 +149,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Arguments for generating patient sequences')
 
     parser.add_argument(
+        '--tokenizer_folder',
+        dest='tokenizer_folder',
+        action='store',
+        help='The path for your model_folder',
+        required=True
+    )
+    parser.add_argument(
         '--model_folder',
         dest='model_folder',
         action='store',
@@ -200,6 +209,14 @@ if __name__ == "__main__":
         type=int,
         default=1,
         required=False
+    )
+    parser.add_argument(
+        '--sampling_strategy',
+        dest='sampling_strategy',
+        action='store',
+        choices=[TopPStrategy.__name__, TopKStrategy.__name__, TopMixStrategy.__name__],
+        help='Pick the sampling strategy between top_k and top_p',
+        required=True
     )
     parser.add_argument(
         '--top_k',

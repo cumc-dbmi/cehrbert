@@ -2,12 +2,9 @@ import os
 
 from typing import Union, Optional
 
-import torch
-import torch.nn.functional as F
 from datasets import load_from_disk, DatasetDict, Dataset
 from transformers.utils import logging
 from transformers import AutoConfig, Trainer, set_seed
-from transformers import EvalPrediction
 
 from data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
 from data_generators.hf_data_generator.hf_dataset import create_cehrbert_pretraining_dataset, convert_meds_to_cehrbert
@@ -19,39 +16,6 @@ from runner.runner_util import generate_prepared_ds_path, load_parquet_as_datase
 from runner.hf_runner_argument_dataclass import DataTrainingArguments, ModelArguments
 
 LOG = logging.get_logger("transformers")
-
-
-def compute_metrics(eval_pred: EvalPrediction):
-    outputs, labels = eval_pred
-    # Transformers Trainer will remove the loss from the model output
-    # We need to take the first entry of the model output, which is logits
-    logits = outputs[0]
-    # Exclude entries where labels == -100
-    mask = labels != -100
-    valid_logits = logits[mask]
-    valid_labels = labels[mask]
-
-    # Convert logits to probabilities using the numerically stable softmax
-    probabilities = F.softmax(valid_logits, dim=1)
-
-    # Prepare labels for valid (non-masked) entries
-    # Note: PyTorch can calculate cross-entropy directly from logits,
-    # so converting logits to probabilities is unnecessary for loss calculation.
-    # However, we will calculate manually to follow the specified steps.
-
-    # Convert labels to one-hot encoding
-    labels_one_hot = F.one_hot(valid_labels, num_classes=probabilities.shape[1]).float()
-
-    # Compute log probabilities (log softmax is more numerically stable than log(softmax))
-    log_probs = F.log_softmax(valid_logits, dim=1)
-
-    # Compute cross-entropy loss for valid entries
-    cross_entropy_loss = -torch.sum(labels_one_hot * log_probs, dim=1)
-
-    # Calculate perplexity
-    perplexity = torch.exp(torch.mean(cross_entropy_loss))
-
-    return {"perplexity": perplexity.item()}  # Use .item() to extract the scalar value from the tensor
 
 
 def load_and_create_tokenizer(
