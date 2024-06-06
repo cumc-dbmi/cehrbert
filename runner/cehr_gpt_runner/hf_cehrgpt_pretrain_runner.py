@@ -125,6 +125,16 @@ def main():
         if not data_args.streaming:
             processed_dataset.save_to_disk(prepared_ds_path)
 
+    def filter_func(examples):
+        return [_ >= data_args.min_num_tokens for _ in examples['num_of_concepts']]
+
+    processed_dataset = processed_dataset.filter(
+        filter_func,
+        batched=True,
+        batch_size=data_args.preprocessing_batch_size,
+        num_proc=data_args.preprocessing_num_workers if not data_args.streaming else None
+    )
+
     model = load_and_create_model(model_args, tokenizer)
 
     # Detecting last checkpoint.

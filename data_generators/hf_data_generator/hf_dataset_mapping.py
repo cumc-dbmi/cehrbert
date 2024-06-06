@@ -15,6 +15,7 @@ from meds.schema import Patient, birth_code
 from med_extension.schema_extension import Visit, CehrBertPatient
 from spark_apps.decorators.patient_event_decorator import get_att_function
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
+from models.hf_models.tokenization_hf_cehrgpt import CehrGptTokenizer
 from runner.hf_runner_argument_dataclass import DataTrainingArguments
 
 # OMOP concept ids for inpatient related visits
@@ -480,7 +481,7 @@ class HFFineTuningMapping(DatasetMapping):
 class HFCehrGptTokenizationMapping(DatasetMapping):
     def __init__(
             self,
-            concept_tokenizer: CehrBertTokenizer,
+            concept_tokenizer: CehrGptTokenizer,
             is_pretraining: bool
     ):
         self._concept_tokenizer = concept_tokenizer

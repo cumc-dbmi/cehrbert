@@ -110,3 +110,4 @@ class CehrGptDataCollator:
                 break
 
         record['input_ids'] = record['input_ids'][0:end_index]
+        return record

@@ -114,6 +114,10 @@ class DataTrainingArguments:
         default=0,
         metadata={"help": "The minimum frequency for concepts to be kept by the tokenizer"}
     )
+    min_num_tokens: Optional[int] = field(
+        default=20,
+        metadata={"help": "The minimum num of tokens required in a sequences to be included for training"}
+    )
 
 
 @dataclass

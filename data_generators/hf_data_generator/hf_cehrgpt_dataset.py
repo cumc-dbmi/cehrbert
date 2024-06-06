@@ -7,7 +7,7 @@ from data_generators.hf_data_generator.hf_dataset_mapping import (
 from runner.hf_runner_argument_dataclass import DataTrainingArguments
 
 CEHRGPT_COLUMNS = [
-    'concept_ids', 'concept_values', 'concept_value_masks', 'mlm_skip_values'
+    'concept_ids', 'concept_values', 'concept_value_masks', 'mlm_skip_values', 'num_of_concepts', 'num_of_visits'
 ]
 
 TRANSFORMER_COLUMNS = ['input_ids', 'concept_ids']
