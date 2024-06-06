@@ -44,16 +44,18 @@ class CehrGptDataCollator:
         batch['input_ids'] = pad_sequence(
             batch_input_ids,
             batch_first=True,
-            padding_value=self.tokenizer.pad_token_index
+            padding_value=self.tokenizer.pad_token_id
         ).to(torch.int)
         batch['attention_mask'] = pad_sequence(
             batch_attention_mask,
             batch_first=True,
             padding_value=0.
         )
+        assert (batch['input_ids'].shape[1] <= self.max_length)
+        assert (batch['attention_mask'].shape[1] <= self.max_length)
         # Prepend the START token and their associated values to the corresponding time series features
         batch['input_ids'] = torch.cat(
-            [torch.full((batch_size, 1), self.tokenizer.start_token_index), batch['input_ids']],
+            [torch.full((batch_size, 1), self.tokenizer.start_token_id), batch['input_ids']],
             dim=1
         )
         # The attention_mask is set to 1 to enable attention for the CLS token
@@ -72,14 +74,14 @@ class CehrGptDataCollator:
         Adding the start and end indices to extract a portion of the patient sequence
         """
         seq_length = len(record['input_ids'])
-        new_max_length = self.max_length - 1  # Subtract one for [START] tokens
+        new_max_length = self.max_length - 2  # Subtract one for [START] and [END] tokens
 
         # Return the record directly if the actual sequence length is less than the max sequence
 
         if seq_length <= new_max_length:
             record['input_ids'] = torch.concat(
                 [self._convert_to_tensor(record['input_ids']),
-                 self._convert_to_tensor([self.tokenizer.end_token_index])]
+                 self._convert_to_tensor([self.tokenizer.end_token_id])]
             )
             return record
 

@@ -43,10 +43,10 @@ class CehrGptTokenizer(PushToHubMixin):
     ):
         self._tokenizer = tokenizer
         self._concept_name_mapping = concept_name_mapping
-        self._oov_token_index = self._tokenizer.token_to_id(OUT_OF_VOCABULARY_TOKEN)
-        self._padding_token_index = self._tokenizer.token_to_id(PAD_TOKEN)
-        self._start_token_index = self._tokenizer.token_to_id(START_TOKEN)
-        self._end_token_index = self._tokenizer.token_to_id(END_TOKEN)
+        self._oov_token_id = self._tokenizer.token_to_id(OUT_OF_VOCABULARY_TOKEN)
+        self._padding_token_id = self._tokenizer.token_to_id(PAD_TOKEN)
+        self._start_token_id = self._tokenizer.token_to_id(START_TOKEN)
+        self._end_token_id = self._tokenizer.token_to_id(END_TOKEN)
 
         super().__init__()
 
@@ -55,16 +55,16 @@ class CehrGptTokenizer(PushToHubMixin):
         return self._tokenizer.get_vocab_size()
 
     @property
-    def start_token_index(self):
-        return self._start_token_index
+    def start_token_id(self):
+        return self._start_token_id
 
     @property
-    def end_token_index(self):
-        return self._end_token_index
+    def end_token_id(self):
+        return self._end_token_id
 
     @property
-    def pad_token_index(self):
-        return self._padding_token_index
+    def pad_token_id(self):
+        return self._padding_token_id
 
     def encode(self, concept_ids: Sequence[str]) -> Sequence[int]:
         encoded = self._tokenizer.encode(concept_ids, is_pretokenized=True)
@@ -76,7 +76,7 @@ class CehrGptTokenizer(PushToHubMixin):
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
         token_id = self._tokenizer.token_to_id(token)
-        return token_id if token_id else self._oov_token_index
+        return token_id if token_id else self._oov_token_id
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
