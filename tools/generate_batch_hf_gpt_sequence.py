@@ -89,6 +89,16 @@ def main(
             'generated_sequences'
         )
         args.top_k = cehrgpt_tokenizer.vocab_size
+    elif args.sampling_strategy == TopMixStrategy.__name__:
+        folder_name = (
+            f'top_mix_p{int(args.top_p * 100)}_k{args.top_k}_temp_{int(args.temperature * 1000)}'
+            if args.temperature != 1.0 else f'top_mix_p{int(args.top_p * 1000)}_k{args.top_k}'
+        )
+        output_folder_name = os.path.join(
+            args.output_folder,
+            folder_name,
+            'generated_sequences'
+        )
     else:
         raise RuntimeError(
             'sampling_strategy has to be one of the following two options TopKStrategy or TopPStrategy'
