@@ -3,6 +3,7 @@ import datetime
 import os
 import random
 import uuid
+from typing import Any
 
 import torch
 from models.hf_models.tokenization_hf_cehrgpt import CehrGptTokenizer
@@ -21,7 +22,8 @@ def generate_single_batch(
         max_new_tokens=512,
         top_p=0.95,
         top_k=50,
-        temperature=1.0
+        temperature=1.0,
+        device: Any = 'cpu'
 ):
     random_prompts = random.sample(
         demographic_info,
@@ -45,7 +47,7 @@ def generate_single_batch(
             output_hidden_states=False,
             output_scores=False,
         )
-        batched_prompts = torch.tensor(random_prompts)
+        batched_prompts = torch.tensor(random_prompts).to(device)
         results = model.generate(
             inputs=batched_prompts,
             generation_config=generation_config,
@@ -57,8 +59,13 @@ def generate_single_batch(
 def main(
         args
 ):
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
+
     cehrgpt_tokenizer = CehrGptTokenizer.from_pretrained(args.tokenizer_folder)
-    cehrgpt_model = GPT2LMHeadModel.from_pretrained(args.model_folder)
+    cehrgpt_model = GPT2LMHeadModel.from_pretrained(args.model_folder).eval().to(device)
 
     if args.sampling_strategy == TopKStrategy.__name__:
         folder_name = (
@@ -123,7 +130,8 @@ def main(
             max_new_tokens=args.context_window,
             top_p=args.top_p,
             top_k=args.top_k,
-            temperature=args.temperature
+            temperature=args.temperature,
+            device=device
         )
         for seq in batch_sequences:
             sequence_to_flush.append({'concept_ids': seq, 'person_id': current_person_id})
