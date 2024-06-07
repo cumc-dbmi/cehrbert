@@ -32,8 +32,8 @@ def generate_single_batch(
 
     with torch.no_grad():
         generation_config = GenerationConfig(
-            repetition_penalty=1.1,
-            max_new_tokens=max_new_tokens - 5,
+            # repetition_penalty=1.1,
+            max_length=max_new_tokens,
             temperature=temperature,
             top_p=top_p,
             top_k=top_k,
@@ -46,6 +46,7 @@ def generate_single_batch(
             output_attentions=False,
             output_hidden_states=False,
             output_scores=False,
+            renormalize_logits=True
         )
         batched_prompts = torch.tensor(random_prompts).to(device)
         results = model.generate(
