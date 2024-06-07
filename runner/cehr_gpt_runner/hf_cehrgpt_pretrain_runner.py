@@ -177,7 +177,7 @@ def main():
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         args=training_args,
-        compute_metrics=compute_metrics
+        # compute_metrics=compute_metrics
     )
 
     checkpoint = None
