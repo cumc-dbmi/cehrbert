@@ -23,6 +23,7 @@ def generate_single_batch(
         top_p=0.95,
         top_k=50,
         temperature=1.0,
+        repetition_penalty=1.0,
         device: Any = 'cpu'
 ):
     random_prompts = random.sample(
@@ -32,7 +33,7 @@ def generate_single_batch(
 
     with torch.no_grad():
         generation_config = GenerationConfig(
-            # repetition_penalty=1.1,
+            repetition_penalty=repetition_penalty,
             max_length=max_new_tokens,
             temperature=temperature,
             top_p=top_p,
@@ -116,6 +117,7 @@ def main(
     print(f'{datetime.datetime.now()}: Write sequences to {output_folder_name}')
     print(f'{datetime.datetime.now()}: Context window {args.context_window}')
     print(f'{datetime.datetime.now()}: Temperature {args.temperature}')
+    print(f'{datetime.datetime.now()}: Repetition Penalty {args.repetition_penalty}')
     print(f'{datetime.datetime.now()}: Sampling Strategy {args.sampling_strategy}')
     print(f'{datetime.datetime.now()}: Top P {args.top_p}')
     print(f'{datetime.datetime.now()}: Top K {args.top_k}')
@@ -142,6 +144,7 @@ def main(
             top_p=args.top_p,
             top_k=args.top_k,
             temperature=args.temperature,
+            repetition_penalty=args.repetition_penalty,
             device=device
         )
         for seq in batch_sequences:
@@ -269,6 +272,15 @@ if __name__ == "__main__":
         default=1.0,
         type=float,
         help='The temperature parameter for softmax',
+        required=False
+    )
+    parser.add_argument(
+        '--repetition_penalty',
+        dest='repetition_penalty',
+        action='store',
+        default=1.0,
+        type=float,
+        help='The repetition penalty during decoding',
         required=False
     )
     main(parser.parse_args())
