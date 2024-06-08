@@ -147,6 +147,10 @@ def main(
             repetition_penalty=args.repetition_penalty,
             device=device
         )
+
+        # Clear the cache
+        torch.cuda.empty_cache()
+
         for seq in batch_sequences:
             sequence_to_flush.append({'concept_ids': seq, 'person_id': current_person_id})
             current_person_id += 1
