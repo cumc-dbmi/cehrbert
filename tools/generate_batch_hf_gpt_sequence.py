@@ -70,41 +70,29 @@ def main(
     cehrgpt_model = GPT2LMHeadModel.from_pretrained(args.model_folder).eval().to(device)
 
     if args.sampling_strategy == TopKStrategy.__name__:
-        folder_name = (
-            f'top_k{args.top_k}_temp_{int(args.temperature * 1000)}'
-            if args.temperature != 1.0 else f'top_k{args.top_k}'
-        )
-        output_folder_name = os.path.join(
-            args.output_folder,
-            folder_name,
-            'generated_sequences'
-        )
+        folder_name = f'top_k{args.top_k}'
         args.top_p = 1.0
     elif args.sampling_strategy == TopPStrategy.__name__:
-        folder_name = (
-            f'top_p{int(args.top_p * 100)}_temp_{int(args.temperature * 1000)}'
-            if args.temperature != 1.0 else f'top_p{int(args.top_p * 1000)}'
-        )
-        output_folder_name = os.path.join(
-            args.output_folder,
-            folder_name,
-            'generated_sequences'
-        )
+        folder_name = f'top_p{int(args.top_p * 1000)}'
         args.top_k = cehrgpt_tokenizer.vocab_size
     elif args.sampling_strategy == TopMixStrategy.__name__:
-        folder_name = (
-            f'top_mix_p{int(args.top_p * 100)}_k{args.top_k}_temp_{int(args.temperature * 1000)}'
-            if args.temperature != 1.0 else f'top_mix_p{int(args.top_p * 1000)}_k{args.top_k}'
-        )
-        output_folder_name = os.path.join(
-            args.output_folder,
-            folder_name,
-            'generated_sequences'
-        )
+        folder_name = f'top_mix_p{int(args.top_p * 1000)}_k{args.top_k}'
     else:
         raise RuntimeError(
             'sampling_strategy has to be one of the following two options TopKStrategy or TopPStrategy'
         )
+
+    if args.temperature != 1.0:
+        folder_name = f'{folder_name}_temp_{int(args.temperature * 1000)}'
+
+    if args.repetition_penalty != 1.0:
+        folder_name = f'{folder_name}_repetition_penalty_{int(args.repetition_penalty * 1000)}'
+
+    output_folder_name = os.path.join(
+        args.output_folder,
+        folder_name,
+        'generated_sequences'
+    )
 
     if not os.path.exists(output_folder_name):
         os.makedirs(output_folder_name)
