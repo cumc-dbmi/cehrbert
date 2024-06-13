@@ -20,6 +20,7 @@ def generate_single_batch(
         batch_size,
         demographic_info,
         max_new_tokens=512,
+        mini_num_of_concepts=1,
         top_p=0.95,
         top_k=50,
         temperature=1.0,
@@ -35,6 +36,7 @@ def generate_single_batch(
         generation_config = GenerationConfig(
             repetition_penalty=repetition_penalty,
             max_length=max_new_tokens,
+            min_length=mini_num_of_concepts,
             temperature=temperature,
             top_p=top_p,
             top_k=top_k,
@@ -129,6 +131,7 @@ def main(
             args.batch_size,
             demographic_info,
             max_new_tokens=args.context_window,
+            mini_num_of_concepts=args.min_num_of_concepts,
             top_p=args.top_p,
             top_k=args.top_k,
             temperature=args.temperature,
