@@ -118,6 +118,10 @@ class DataTrainingArguments:
         default=20,
         metadata={"help": "The minimum num of tokens required in a sequences to be included for training"}
     )
+    shuffle_records: Optional[bool] = field(
+        default=False,
+        metadata={"help": "Indicates whether to randomly shuffle the records that have the same rank"}
+    )
 
 
 @dataclass

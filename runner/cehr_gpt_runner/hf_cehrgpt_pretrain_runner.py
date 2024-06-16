@@ -55,6 +55,8 @@ def load_and_create_model(
         model_config = GPT2Config(
             vocab_size=tokenizer.vocab_size,
             n_head=8,
+            bos_token_id=tokenizer.end_token_id,
+            eos_token_id=tokenizer.end_token_id,
             **model_args.as_dict()
         )
     return GPT2LMHeadModel(model_config)
@@ -172,7 +174,8 @@ def main():
         model=model,
         data_collator=CehrGptDataCollator(
             tokenizer=tokenizer,
-            max_length=model_args.max_position_embeddings
+            max_length=model_args.max_position_embeddings,
+            shuffle_records=data_args.shuffle_records
         ),
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,

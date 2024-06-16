@@ -1,5 +1,6 @@
 import random
-from typing import Any, Dict, List
+import numpy as np
+from typing import Any, Dict
 import torch
 from torch.nn.utils.rnn import pad_sequence
 
@@ -9,14 +10,17 @@ from data_generators.gpt_utils import random_slice_gpt_sequence
 
 class CehrGptDataCollator:
     def __init__(
-            self, tokenizer: CehrGptTokenizer,
-            max_length: int
+            self,
+            tokenizer: CehrGptTokenizer,
+            max_length: int,
+            shuffle_records: bool = False
     ):
         self.tokenizer = tokenizer
         self.max_length = max_length
         # Pre-compute these so we can use them later on
         self.vs_token_id = tokenizer._convert_token_to_id('VS')
         self.ve_token_id = tokenizer._convert_token_to_id('VE')
+        self.shuffle_records = shuffle_records
 
     @staticmethod
     def _convert_to_tensor(features: Any) -> torch.Tensor:
@@ -28,6 +32,7 @@ class CehrGptDataCollator:
     def __call__(self, examples):
 
         examples = [self.generate_start_end_index(_) for _ in examples]
+        examples = [self.random_sort(_) for _ in examples]
         batch = {}
         batch_size = len(examples)
 
@@ -65,6 +70,24 @@ class CehrGptDataCollator:
         )
         batch['labels'] = batch['input_ids'].clone()
         return batch
+
+    def random_sort(self, record: Dict[str, Any]) -> Dict[str, Any]:
+
+        if not self.shuffle_records:
+            return record
+
+        if 'record_ranks' not in record:
+            return record
+
+        sorting_column = record['record_ranks']
+        random_order = np.random.rand(len(sorting_column))
+        iterator = zip(
+            sorting_column, random_order, record['input_ids']
+        )
+        sorted_list = sorted(iterator, key=lambda tup2: (tup2[0], tup2[1], tup2[2]))
+        _, _, sorted_input_ids = zip(*list(sorted_list))
+        record['input_ids'] = self._convert_to_tensor(sorted_input_ids)
+        return record
 
     def generate_start_end_index(
             self,
