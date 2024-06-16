@@ -54,7 +54,6 @@ def load_and_create_model(
         LOG.warning(e)
         model_config = GPT2Config(
             vocab_size=tokenizer.vocab_size,
-            n_head=8,
             bos_token_id=tokenizer.end_token_id,
             eos_token_id=tokenizer.end_token_id,
             **model_args.as_dict()

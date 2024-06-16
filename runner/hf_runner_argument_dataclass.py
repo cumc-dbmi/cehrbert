@@ -178,6 +178,10 @@ class ModelArguments:
         default=6,
         metadata={"help": "The number of layers used in the transformer model"}
     )
+    n_head: Optional[int] = field(
+        default=8,
+        metadata={"help": "The number of heads in Multi-Head Attention"}
+    )
     max_position_embeddings: Optional[int] = field(
         default=512,
         metadata={"help": "The maximum length of the sequence allowed for the transformer model"}
