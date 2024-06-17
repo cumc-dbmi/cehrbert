@@ -25,6 +25,8 @@ def generate_single_batch(
         top_k=50,
         temperature=1.0,
         repetition_penalty=1.0,
+        num_beams=1,
+        num_beam_groups=1,
         device: Any = 'cpu'
 ):
     random_prompts = random.sample(
@@ -49,7 +51,9 @@ def generate_single_batch(
             output_attentions=False,
             output_hidden_states=False,
             output_scores=False,
-            renormalize_logits=True
+            renormalize_logits=True,
+            num_beams=num_beams,
+            num_beam_groups=num_beam_groups
         )
         batched_prompts = torch.tensor(random_prompts).to(device)
         results = model.generate(
@@ -90,6 +94,12 @@ def main(
     if args.repetition_penalty != 1.0:
         folder_name = f'{folder_name}_repetition_penalty_{int(args.repetition_penalty * 1000)}'
 
+    if args.num_beams > 1:
+        folder_name = f'{folder_name}_num_beams_{int(args.num_beams)}'
+
+    if args.num_beam_groups > 1:
+        folder_name = f'{folder_name}_num_beam_groups_{int(args.num_beam_groups)}'
+
     output_folder_name = os.path.join(
         args.output_folder,
         folder_name,
@@ -109,6 +119,8 @@ def main(
     print(f'{datetime.datetime.now()}: Temperature {args.temperature}')
     print(f'{datetime.datetime.now()}: Repetition Penalty {args.repetition_penalty}')
     print(f'{datetime.datetime.now()}: Sampling Strategy {args.sampling_strategy}')
+    print(f'{datetime.datetime.now()}: Num beam {args.num_beams}')
+    print(f'{datetime.datetime.now()}: Num beam groups {args.num_beam_groups}')
     print(f'{datetime.datetime.now()}: Top P {args.top_p}')
     print(f'{datetime.datetime.now()}: Top K {args.top_k}')
     print(f'{datetime.datetime.now()}: Loading demographic_info at {args.demographic_data_path}')
@@ -136,6 +148,8 @@ def main(
             top_k=args.top_k,
             temperature=args.temperature,
             repetition_penalty=args.repetition_penalty,
+            num_beams=args.num_beams,
+            num_beam_groups=args.num_beam_groups,
             device=device
         )
 
@@ -276,6 +290,22 @@ if __name__ == "__main__":
         default=1.0,
         type=float,
         help='The repetition penalty during decoding',
+        required=False
+    )
+    parser.add_argument(
+        '--num_beams',
+        dest='num_beams',
+        action='store',
+        default=1,
+        type=int,
+        required=False
+    )
+    parser.add_argument(
+        '--num_beam_groups',
+        dest='num_beam_groups',
+        action='store',
+        default=1,
+        type=int,
         required=False
     )
     main(parser.parse_args())
