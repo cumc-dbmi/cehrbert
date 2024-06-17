@@ -27,6 +27,7 @@ def generate_single_batch(
         repetition_penalty=1.0,
         num_beams=1,
         num_beam_groups=1,
+        epsilon_cutoff=0.0,
         device: Any = 'cpu'
 ):
     random_prompts = random.sample(
@@ -53,7 +54,8 @@ def generate_single_batch(
             output_scores=False,
             renormalize_logits=True,
             num_beams=num_beams,
-            num_beam_groups=num_beam_groups
+            num_beam_groups=num_beam_groups,
+            epsilon_cutoff=epsilon_cutoff
         )
         batched_prompts = torch.tensor(random_prompts).to(device)
         results = model.generate(
@@ -100,6 +102,9 @@ def main(
     if args.num_beam_groups > 1:
         folder_name = f'{folder_name}_num_beam_groups_{int(args.num_beam_groups)}'
 
+    if args.epsilon_cutoff > 0.0:
+        folder_name = f'{folder_name}_epsilon_cutoff_{int(args.epsilon_cutoff * 10000)}'
+
     output_folder_name = os.path.join(
         args.output_folder,
         folder_name,
@@ -121,6 +126,7 @@ def main(
     print(f'{datetime.datetime.now()}: Sampling Strategy {args.sampling_strategy}')
     print(f'{datetime.datetime.now()}: Num beam {args.num_beams}')
     print(f'{datetime.datetime.now()}: Num beam groups {args.num_beam_groups}')
+    print(f'{datetime.datetime.now()}: Epsilon cutoff {args.epsilon_cutoff}')
     print(f'{datetime.datetime.now()}: Top P {args.top_p}')
     print(f'{datetime.datetime.now()}: Top K {args.top_k}')
     print(f'{datetime.datetime.now()}: Loading demographic_info at {args.demographic_data_path}')
@@ -150,6 +156,7 @@ def main(
             repetition_penalty=args.repetition_penalty,
             num_beams=args.num_beams,
             num_beam_groups=args.num_beam_groups,
+            epsilon_cutoff=args.epsilon_cutoff,
             device=device
         )
 
@@ -306,6 +313,14 @@ if __name__ == "__main__":
         action='store',
         default=1,
         type=int,
+        required=False
+    )
+    parser.add_argument(
+        '--epsilon_cutoff',
+        dest='epsilon_cutoff',
+        action='store',
+        default=0.0,
+        type=float,
         required=False
     )
     main(parser.parse_args())
