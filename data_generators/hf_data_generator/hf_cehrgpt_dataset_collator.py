@@ -110,7 +110,7 @@ class CehrGptDataCollator:
 
         # The default employs a right truncation strategy, where the demographic prompt is reserved
         end_index = new_max_length
-        for i in range(0, end_index):
+        for i in reversed(list(range(0, end_index))):
             current_token = record['input_ids'][i]
             if current_token == self.ve_token_id:
                 end_index = i
