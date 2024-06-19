@@ -49,7 +49,7 @@ class CehrGptDataCollator:
             batch_input_ids,
             batch_first=True,
             padding_value=self.tokenizer.pad_token_id
-        ).to(torch.int)
+        ).to(torch.int64)
         batch['attention_mask'] = pad_sequence(
             batch_attention_mask,
             batch_first=True,
@@ -86,7 +86,7 @@ class CehrGptDataCollator:
         Adding the start and end indices to extract a portion of the patient sequence
         """
         seq_length = len(record['input_ids'])
-        new_max_length = self.max_length - 1  # Subtract one for [START] and [END] tokens
+        new_max_length = self.max_length - 1  # Subtract one for the [END] token
 
         # Return the record directly if the actual sequence length is less than the max sequence
 
