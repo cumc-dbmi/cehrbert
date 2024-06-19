@@ -62,9 +62,10 @@ class CEHRGPTPreTrainedModel(PreTrainedModel):
 
 
 class CEHRGPT2Model(CEHRGPTPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CEHRGPTConfig):
         super().__init__(config)
 
+        self.exclude_position_ids = config.exclude_position_ids
         self.embed_dim = config.hidden_size
 
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
@@ -168,7 +169,8 @@ class CEHRGPT2Model(CEHRGPTPreTrainedModel):
             past_key_values = tuple([None] * len(self.h))
         else:
             past_length = past_key_values[0][0].size(-2)
-        if position_ids is None:
+
+        if position_ids is None and not self.exclude_position_ids:
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0)
 
@@ -197,9 +199,11 @@ class CEHRGPT2Model(CEHRGPTPreTrainedModel):
         # attention_probs has shape bsz x n_heads x N x N
         # head_mask has shape n_layer x batch x n_heads x N x N
         head_mask = self.get_head_mask(head_mask, self.config.n_layer)
-        inputs_embeds = self.wte(input_ids)
-        position_embeds = self.wpe(position_ids)
-        hidden_states = inputs_embeds + position_embeds
+        hidden_states = self.wte(input_ids)
+
+        if not self.exclude_position_ids:
+            position_embeds = self.wpe(position_ids)
+            hidden_states = hidden_states + position_embeds
 
         hidden_states = self.drop(hidden_states)
 
@@ -292,7 +296,7 @@ class CEHRGPT2Model(CEHRGPTPreTrainedModel):
 class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config):
+    def __init__(self, config: CEHRGPTConfig):
         super().__init__(config)
         self.cehrgpt = CEHRGPT2Model(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)

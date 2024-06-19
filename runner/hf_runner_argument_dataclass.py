@@ -221,6 +221,10 @@ class ModelArguments:
         default=0.1,
         metadata={"help": "The dropout probability for Lora layers"}
     )
+    exclude_position_ids: Optional[bool] = field(
+        default=False,
+        metadata={"help": "Whether or not to exclude position ids from the transformer model"}
+    )
 
     def as_dict(self) -> Dict[str, Any]:
         return asdict(self)
