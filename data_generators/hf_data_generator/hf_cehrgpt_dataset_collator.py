@@ -34,7 +34,6 @@ class CehrGptDataCollator:
         examples = [self.generate_start_end_index(_) for _ in examples]
         examples = [self.random_sort(_) for _ in examples]
         batch = {}
-        batch_size = len(examples)
 
         # Assume that each example in the batch is a dictionary with 'input_ids' and 'attention_mask'
         batch_input_ids = [
@@ -58,16 +57,6 @@ class CehrGptDataCollator:
         )
         assert (batch['input_ids'].shape[1] <= self.max_length)
         assert (batch['attention_mask'].shape[1] <= self.max_length)
-        # Prepend the START token and their associated values to the corresponding time series features
-        batch['input_ids'] = torch.cat(
-            [torch.full((batch_size, 1), self.tokenizer.start_token_id), batch['input_ids']],
-            dim=1
-        )
-        # The attention_mask is set to 1 to enable attention for the CLS token
-        batch['attention_mask'] = torch.cat(
-            [torch.full((batch_size, 1), 1.0), batch['attention_mask']],
-            dim=1
-        )
         batch['labels'] = batch['input_ids'].clone()
         return batch
 
@@ -97,7 +86,7 @@ class CehrGptDataCollator:
         Adding the start and end indices to extract a portion of the patient sequence
         """
         seq_length = len(record['input_ids'])
-        new_max_length = self.max_length - 2  # Subtract one for [START] and [END] tokens
+        new_max_length = self.max_length - 1  # Subtract one for [START] and [END] tokens
 
         # Return the record directly if the actual sequence length is less than the max sequence
 
@@ -116,12 +105,7 @@ class CehrGptDataCollator:
                 new_max_length
             )
             if start_index != end_index:
-                demographic_token_ids = self.tokenizer.encode(demographic_tokens)
-                record['input_ids'] = torch.concat(
-                    [self._convert_to_tensor(demographic_token_ids),
-                     self._convert_to_tensor(record['input_ids'][start_index:end_index + 1])
-                     ]
-                )
+                record['input_ids'] = self._convert_to_tensor(record['input_ids'][start_index:end_index + 1])
                 return record
 
         # The default employs a right truncation strategy, where the demographic prompt is reserved

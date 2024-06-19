@@ -136,7 +136,7 @@ def main(
     )
     # data = data[data.num_of_concepts >= args.min_num_of_concepts]
     demographic_info = data.concept_ids.apply(lambda concept_list: concept_list[0:4])
-    demographic_info = [[cehrgpt_tokenizer.start_token_id] + cehrgpt_tokenizer.encode(_) for _ in demographic_info]
+    demographic_info = [cehrgpt_tokenizer.encode(_) for _ in demographic_info]
 
     num_of_batches = args.num_of_patients // args.batch_size + 1
     sequence_to_flush = []
