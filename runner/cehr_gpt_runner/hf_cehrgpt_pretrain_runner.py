@@ -5,11 +5,11 @@ from typing import Union, Optional
 from datasets import load_from_disk, DatasetDict, Dataset
 from transformers.utils import logging
 from transformers import AutoConfig, Trainer, set_seed
-from transformers.models.gpt2.configuration_gpt2 import GPT2Config
-from transformers.models.gpt2.modeling_gpt2 import GPT2LMHeadModel
 
 from data_generators.hf_data_generator.hf_cehrgpt_dataset_collator import CehrGptDataCollator
 from data_generators.hf_data_generator.hf_cehrgpt_dataset import create_cehrgpt_pretraining_dataset
+from models.hf_models.config import CEHRGPTConfig
+from models.hf_models.hf_cehrgpt import CEHRGPT2LMHeadModel
 from models.hf_models.tokenization_hf_cehrgpt import CehrGptTokenizer
 from runner.runner_util import generate_prepared_ds_path, load_parquet_as_dataset, get_last_hf_checkpoint, \
     parse_runner_args, compute_metrics
@@ -46,19 +46,19 @@ def load_and_create_tokenizer(
 def load_and_create_model(
         model_args: ModelArguments,
         tokenizer: CehrGptTokenizer
-) -> GPT2LMHeadModel:
+) -> CEHRGPT2LMHeadModel:
     try:
         model_abspath = os.path.abspath(model_args.model_name_or_path)
         model_config = AutoConfig.from_pretrained(model_abspath)
     except Exception as e:
         LOG.warning(e)
-        model_config = GPT2Config(
+        model_config = CEHRGPTConfig(
             vocab_size=tokenizer.vocab_size,
             bos_token_id=tokenizer.end_token_id,
             eos_token_id=tokenizer.end_token_id,
             **model_args.as_dict()
         )
-    return GPT2LMHeadModel(model_config)
+    return CEHRGPT2LMHeadModel(model_config)
 
 
 def main():
