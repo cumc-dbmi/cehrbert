@@ -1,5 +1,5 @@
 import warnings
-from typing import Tuple, Optional, Union
+from typing import Tuple, Optional, Union, List
 
 import torch
 import math
@@ -8,13 +8,65 @@ from transformers import PreTrainedModel
 from transformers.pytorch_utils import Conv1D
 from transformers.models.gpt2.modeling_gpt2 import GPT2Block
 from transformers.utils.model_parallel_utils import assert_device_map, get_device_map
+from transformers.activations import gelu_new
 from transformers.utils import logging
 from torch.nn import CrossEntropyLoss
 
-from models.hf_models.hf_modeling_outputs import CehrGptOutputWithPast, CehrGptCausalLMOutput
+from transformers.generation.stopping_criteria import validate_stopping_criteria, StoppingCriteriaList
+from transformers.generation.logits_process import LogitsProcessorList
+
+from models.hf_models.hf_modeling_outputs import (
+    CehrGptOutputWithPast, CehrGptCausalLMOutput, CehrGptGenerateDecoderOnlyOutput
+)
 from models.hf_models.config import CEHRGPTConfig
 
 logger = logging.get_logger(__name__)
+
+
+class ConceptValuePredictionLayer(nn.Module):
+    def __init__(self, embedding_size):
+        super(ConceptValuePredictionLayer, self).__init__()
+        self.embedding_size = embedding_size
+        self.concept_value_decoder_layer = nn.Linear(embedding_size, embedding_size + 1)
+
+    def forward(
+            self,
+            concept_val_embeddings: Optional[torch.FloatTensor]
+    ):
+        # (batch_size, context_window, 1)
+        concept_vals = self.concept_value_decoder_layer(concept_val_embeddings)
+        return concept_vals[..., :self.embedding_size], concept_vals[..., self.embedding_size:]
+
+
+class ConceptValueTransformationLayer(nn.Module):
+    def __init__(self, embedding_size):
+        super(ConceptValueTransformationLayer, self).__init__()
+        self.embedding_size = embedding_size
+        self.merge_value_transformation_layer = nn.Linear(
+            embedding_size + 1,  # +1 for the concept_values concatenation
+            embedding_size
+        )
+
+    def forward(
+            self,
+            concept_embeddings: Optional[torch.FloatTensor],
+            value_indicators: Optional[torch.BoolTensor],
+            concept_values: Optional[torch.FloatTensor]
+    ):
+        # Expand dimensions for concept_values and concept_value_masks
+        concept_values = concept_values.unsqueeze(-1)
+        value_indicators = value_indicators.unsqueeze(-1)
+
+        # Concatenate concept_embeddings and concept_values
+        concept_embeddings_with_val = torch.cat([concept_embeddings, concept_values], dim=-1)
+
+        # Transform concatenated embeddings back to embedding_size
+        transformed_embeddings = self.merge_value_transformation_layer(concept_embeddings_with_val)
+
+        # Apply mask using torch.where
+        concept_embeddings = torch.where(value_indicators, transformed_embeddings, concept_embeddings)
+
+        return concept_embeddings
 
 
 class CEHRGPTPreTrainedModel(PreTrainedModel):
@@ -70,6 +122,7 @@ class CEHRGPT2Model(CEHRGPTPreTrainedModel):
 
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
+        self.concept_value_transformation_layer = ConceptValueTransformationLayer(self.embed_dim)
 
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([GPT2Block(config, layer_idx=i) for i in range(config.num_hidden_layers)])
@@ -141,6 +194,8 @@ class CEHRGPT2Model(CEHRGPTPreTrainedModel):
     def forward(
             self,
             input_ids: Optional[torch.LongTensor],
+            value_indicators: Optional[torch.BoolTensor],
+            values: Optional[torch.FloatTensor],
             past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
             attention_mask: Optional[torch.FloatTensor] = None,
             position_ids: Optional[torch.LongTensor] = None,
@@ -199,11 +254,20 @@ class CEHRGPT2Model(CEHRGPTPreTrainedModel):
         # attention_probs has shape bsz x n_heads x N x N
         # head_mask has shape n_layer x batch x n_heads x N x N
         head_mask = self.get_head_mask(head_mask, self.config.n_layer)
-        hidden_states = self.wte(input_ids)
+        input_embeddings = self.wte(input_ids)
+
+        # Combine the value and concept embeddings together
+        input_embeddings = self.concept_value_transformation_layer(
+            concept_embeddings=input_embeddings,
+            value_indicators=value_indicators,
+            concept_values=values
+        )
 
         if not self.exclude_position_ids:
             position_embeds = self.wpe(position_ids)
-            hidden_states = hidden_states + position_embeds
+            hidden_states = input_embeddings + position_embeds
+        else:
+            hidden_states = input_embeddings
 
         hidden_states = self.drop(hidden_states)
 
@@ -299,6 +363,7 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
     def __init__(self, config: CEHRGPTConfig):
         super().__init__(config)
         self.cehrgpt = CEHRGPT2Model(config)
+        self.concept_value_decoder_layer = ConceptValuePredictionLayer(config.n_embd)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
         # Model parallel
@@ -390,11 +455,15 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
     def forward(
             self,
             input_ids: Optional[torch.LongTensor] = None,
+            value_indicators: Optional[torch.BoolTensor] = None,
+            values: Optional[torch.FloatTensor] = None,
             past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
             attention_mask: Optional[torch.FloatTensor] = None,
             position_ids: Optional[torch.LongTensor] = None,
             head_mask: Optional[torch.FloatTensor] = None,
             labels: Optional[torch.LongTensor] = None,
+            true_value_indicators: Optional[torch.BoolTensor] = None,
+            true_values: Optional[torch.FloatTensor] = None,
             use_cache: Optional[bool] = None,
             output_attentions: Optional[bool] = None,
             output_hidden_states: Optional[bool] = None,
@@ -410,6 +479,8 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
 
         transformer_outputs = self.cehrgpt(
             input_ids,
+            value_indicators=value_indicators,
+            values=values,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -426,7 +497,8 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
             torch.cuda.set_device(self.cehrgpt.first_device)
             hidden_states = hidden_states.to(self.lm_head.weight.device)
 
-        lm_logits = self.lm_head(hidden_states)
+        concept_hidden_states, value_preds = self.concept_value_decoder_layer(hidden_states)
+        lm_logits = self.lm_head(concept_hidden_states)
 
         loss = None
         if labels is not None:
@@ -439,6 +511,16 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
+        if true_values is not None and true_value_indicators is not None:
+            true_values = true_values.to(value_preds.device)
+            shift_value_preds = value_preds.squeeze(-1)[..., :-1].contiguous()
+            shift_value_indicators = true_value_indicators[..., :-1].contiguous()
+            shift_next_values = true_values[..., 1:].contiguous()
+            num_items = torch.sum(shift_value_indicators.to(torch.float32), dim=-1) + 1e-6
+            masked_mse = torch.sum((shift_next_values - shift_value_preds) ** 2 * shift_value_indicators,
+                                   dim=-1) / num_items
+            loss += torch.mean(masked_mse)
+
         if not return_dict:
             output = (lm_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
@@ -446,6 +528,7 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
         return CehrGptCausalLMOutput(
             loss=loss,
             logits=lm_logits,
+            values=value_preds,
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions
@@ -464,3 +547,152 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
             tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
             for layer_past in past_key_values
         )
+
+    def _sample(
+            self,
+            input_ids: torch.LongTensor,
+            logits_processor: Optional[LogitsProcessorList] = None,
+            stopping_criteria: Optional[StoppingCriteriaList] = None,
+            logits_warper: Optional[LogitsProcessorList] = None,
+            max_length: Optional[int] = None,
+            pad_token_id: Optional[int] = None,
+            eos_token_id: Optional[Union[int, List[int]]] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            output_scores: Optional[bool] = None,
+            output_logits: Optional[bool] = None,
+            return_dict_in_generate: Optional[bool] = None,
+            synced_gpus: bool = False,
+            streamer: Optional["BaseStreamer"] = None,
+            **model_kwargs,
+    ) -> Union[CehrGptGenerateDecoderOnlyOutput, torch.LongTensor]:
+
+        # init values
+        logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
+        stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
+        if max_length is not None:
+            warnings.warn(
+                "`max_length` is deprecated in this function, use"
+                " `stopping_criteria=StoppingCriteriaList([MaxLengthCriteria(max_length=max_length)])` instead.",
+                UserWarning,
+            )
+            stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
+        logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
+        pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
+        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
+        eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
+        output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
+        output_logits = output_logits if output_logits is not None else self.generation_config.output_logits
+        output_attentions = (
+            output_attentions if output_attentions is not None else self.generation_config.output_attentions
+        )
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.generation_config.output_hidden_states
+        )
+        return_dict_in_generate = (
+            return_dict_in_generate
+            if return_dict_in_generate is not None
+            else self.generation_config.return_dict_in_generate
+        )
+
+        # init attention / hidden states / scores tuples
+        scores = () if (return_dict_in_generate and output_scores) else None
+        raw_logits = () if (return_dict_in_generate and output_logits) else None
+        decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
+        cross_attentions = () if (return_dict_in_generate and output_attentions) else None
+        decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
+
+        # keep track of which sequences are already finished
+        batch_size, cur_len = input_ids.shape
+        if "inputs_embeds" in model_kwargs:
+            cur_len = model_kwargs["inputs_embeds"].shape[1]
+        this_peer_finished = False
+        unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
+        model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
+
+        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
+            # prepare model inputs
+            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+
+            # forward pass to get next token
+            outputs = self(
+                **model_inputs,
+                return_dict=True,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
+
+            if synced_gpus and this_peer_finished:
+                continue  # don't waste resources running the code we don't need
+
+            next_token_logits = outputs.logits[:, -1, :]
+
+            # pre-process distribution
+            next_token_scores = logits_processor(input_ids, next_token_logits)
+            next_token_scores = logits_warper(input_ids, next_token_scores)
+
+            # Store scores, attentions and hidden_states when required
+            if return_dict_in_generate:
+                if output_scores:
+                    scores += (next_token_scores,)
+                if output_logits:
+                    raw_logits += (next_token_logits,)
+                if output_attentions:
+                    decoder_attentions += (
+                        (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
+                    )
+                    if self.config.is_encoder_decoder:
+                        cross_attentions += (outputs.cross_attentions,)
+
+                if output_hidden_states:
+                    decoder_hidden_states += (
+                        (outputs.decoder_hidden_states,)
+                        if self.config.is_encoder_decoder
+                        else (outputs.hidden_states,)
+                    )
+
+            # sample
+            probs = nn.functional.softmax(next_token_scores, dim=-1)
+            next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
+
+            # finished sentences should have their next token be a padding token
+            if eos_token_id is not None:
+                if pad_token_id is None:
+                    raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
+                next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
+
+            # update generated ids, model inputs, and length for next step
+            input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+            if streamer is not None:
+                streamer.put(next_tokens.cpu())
+            model_kwargs = self._update_model_kwargs_for_generation(
+                outputs,
+                model_kwargs,
+                is_encoder_decoder=self.config.is_encoder_decoder,
+            )
+
+            # if eos_token was found in one sentence, set sentence to finished
+            if eos_token_id_tensor is not None:
+                unfinished_sequences = unfinished_sequences.mul(
+                    next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
+                )
+
+            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
+            this_peer_finished = unfinished_sequences.max() == 0
+
+        if streamer is not None:
+            streamer.end()
+
+        if return_dict_in_generate:
+            return CehrGptGenerateDecoderOnlyOutput(
+                sequences=input_ids,
+                scores=scores,
+                logits=raw_logits,
+                attentions=decoder_attentions,
+                hidden_states=decoder_hidden_states,
+                past_key_values=model_kwargs.get("past_key_values"),
+            )
+        else:
+            return input_ids
