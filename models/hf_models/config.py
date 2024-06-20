@@ -111,6 +111,7 @@ class CEHRGPTConfig(PretrainedConfig):
             scale_attn_by_inverse_layer_idx=False,
             reorder_and_upcast_attn=False,
             exclude_position_ids=False,
+            include_values=False,
             **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -139,6 +140,7 @@ class CEHRGPTConfig(PretrainedConfig):
         self.eos_token_id = eos_token_id
 
         self.exclude_position_ids = exclude_position_ids
+        self.include_values = include_values
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 

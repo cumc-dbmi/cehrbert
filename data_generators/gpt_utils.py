@@ -1,6 +1,9 @@
+import re
 import random
 from datetime import date, timedelta
 from typing import Sequence
+
+inpatient_att_pattern = re.compile(r'(?:VS-|i-)D(\d+)(?:-VE)?')
 
 
 class RandomSampleCache:
@@ -48,7 +51,9 @@ def random_slice_gpt_sequence(
             elif current_token == 'LT':
                 att_date_delta = 365 * 3
                 data_cursor = data_cursor + timedelta(days=att_date_delta)
-            elif current_token[:3] == 'VS-':
+            elif current_token[:3] == 'VS-':  # VS-D7-VE
+                data_cursor = data_cursor + timedelta(days=int(current_token.split('-')[1][1:]))
+            elif current_token[:2] == 'i-':  # i-D7
                 data_cursor = data_cursor + timedelta(days=int(current_token.split('-')[1][1:]))
 
         if len(starting_points) == 0:

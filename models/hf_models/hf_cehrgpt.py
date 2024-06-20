@@ -50,9 +50,11 @@ class ConceptValueTransformationLayer(nn.Module):
     def forward(
             self,
             concept_embeddings: Optional[torch.FloatTensor],
-            value_indicators: Optional[torch.BoolTensor],
-            concept_values: Optional[torch.FloatTensor]
+            value_indicators: Optional[torch.BoolTensor] = None,
+            concept_values: Optional[torch.FloatTensor] = None
     ):
+        if value_indicators is None or concept_values is None:
+            return concept_embeddings
         # Expand dimensions for concept_values and concept_value_masks
         concept_values = concept_values.unsqueeze(-1)
         value_indicators = value_indicators.unsqueeze(-1)
@@ -118,6 +120,7 @@ class CEHRGPT2Model(CEHRGPTPreTrainedModel):
         super().__init__(config)
 
         self.exclude_position_ids = config.exclude_position_ids
+        self.include_values = config.include_values
         self.embed_dim = config.hidden_size
 
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
@@ -256,12 +259,13 @@ class CEHRGPT2Model(CEHRGPTPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.n_layer)
         input_embeddings = self.wte(input_ids)
 
-        # Combine the value and concept embeddings together
-        input_embeddings = self.concept_value_transformation_layer(
-            concept_embeddings=input_embeddings,
-            value_indicators=value_indicators,
-            concept_values=values
-        )
+        if self.include_values:
+            # Combine the value and concept embeddings together
+            input_embeddings = self.concept_value_transformation_layer(
+                concept_embeddings=input_embeddings,
+                value_indicators=value_indicators,
+                concept_values=values
+            )
 
         if not self.exclude_position_ids:
             position_embeds = self.wpe(position_ids)
@@ -363,7 +367,8 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
     def __init__(self, config: CEHRGPTConfig):
         super().__init__(config)
         self.cehrgpt = CEHRGPT2Model(config)
-        self.concept_value_decoder_layer = ConceptValuePredictionLayer(config.n_embd)
+        if self.cehrgpt.include_values:
+            self.concept_value_decoder_layer = ConceptValuePredictionLayer(config.n_embd)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
         # Model parallel
@@ -497,8 +502,12 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
             torch.cuda.set_device(self.cehrgpt.first_device)
             hidden_states = hidden_states.to(self.lm_head.weight.device)
 
-        concept_hidden_states, value_preds = self.concept_value_decoder_layer(hidden_states)
-        lm_logits = self.lm_head(concept_hidden_states)
+        if self.cehrgpt.include_values:
+            concept_hidden_states, value_preds = self.concept_value_decoder_layer(hidden_states)
+            lm_logits = self.lm_head(concept_hidden_states)
+        else:
+            lm_logits = self.lm_head(hidden_states)
+            value_preds = None
 
         loss = None
         if labels is not None:

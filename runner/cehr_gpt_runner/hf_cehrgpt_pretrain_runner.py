@@ -174,7 +174,8 @@ def main():
         data_collator=CehrGptDataCollator(
             tokenizer=tokenizer,
             max_length=model_args.max_position_embeddings,
-            shuffle_records=data_args.shuffle_records
+            shuffle_records=data_args.shuffle_records,
+            include_values=model_args.include_values
         ),
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,

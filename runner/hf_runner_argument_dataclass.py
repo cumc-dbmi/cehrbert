@@ -225,6 +225,10 @@ class ModelArguments:
         default=False,
         metadata={"help": "Whether or not to exclude position ids from the transformer model"}
     )
+    include_values: Optional[bool] = field(
+        default=False,
+        metadata={"help": "Whether or not to include values into the model"}
+    )
 
     def as_dict(self) -> Dict[str, Any]:
         return asdict(self)
