@@ -7,7 +7,8 @@ from typing import Any
 
 import torch
 from models.hf_models.tokenization_hf_cehrgpt import CehrGptTokenizer
-from transformers import GPT2LMHeadModel, GenerationConfig
+from transformers import GenerationConfig
+from models.hf_models.hf_cehrgpt import CEHRGPT2LMHeadModel
 
 import pandas as pd
 
@@ -75,7 +76,7 @@ def main(
         device = torch.device("cpu")
 
     cehrgpt_tokenizer = CehrGptTokenizer.from_pretrained(args.tokenizer_folder)
-    cehrgpt_model = GPT2LMHeadModel.from_pretrained(args.model_folder).eval().to(device)
+    cehrgpt_model = CEHRGPT2LMHeadModel.from_pretrained(args.model_folder).eval().to(device)
 
     if args.sampling_strategy == TopKStrategy.__name__:
         folder_name = f'top_k{args.top_k}'
