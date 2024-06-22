@@ -29,16 +29,18 @@ class ConceptValuePredictionLayer(nn.Module):
         super(ConceptValuePredictionLayer, self).__init__()
         self.embedding_size = embedding_size
         self.concept_value_decoder_layer = nn.Sequential(
-            nn.Linear(embedding_size, embedding_size + 1)
+            nn.Linear(embedding_size, embedding_size // 2),
+            gelu_new,
+            nn.Linear(embedding_size // 2, 1),
         )
 
     def forward(
             self,
-            concept_val_embeddings: Optional[torch.FloatTensor]
+            hidden_states: Optional[torch.FloatTensor]
     ):
         # (batch_size, context_window, 1)
-        concept_vals = self.concept_value_decoder_layer(concept_val_embeddings)
-        return concept_vals[..., :self.embedding_size], concept_vals[..., self.embedding_size:]
+        concept_vals = self.concept_value_decoder_layer(hidden_states)
+        return concept_vals
 
 
 class ConceptValueTransformationLayer(nn.Module):
@@ -528,8 +530,8 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
             hidden_states = hidden_states.to(self.lm_head.weight.device)
 
         if self.cehrgpt.include_values:
-            concept_hidden_states, value_preds = self.concept_value_decoder_layer(hidden_states)
-            lm_logits = self.lm_head(concept_hidden_states)
+            lm_logits = self.lm_head(hidden_states)
+            value_preds = self.concept_value_decoder_layer(hidden_states)
         else:
             lm_logits = self.lm_head(hidden_states)
             value_preds = None
