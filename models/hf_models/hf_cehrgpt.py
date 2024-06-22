@@ -129,7 +129,8 @@ class CEHRGPT2Model(CEHRGPTPreTrainedModel):
 
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
-        self.concept_value_transformation_layer = ConceptValueTransformationLayer(self.embed_dim)
+        if self.include_values:
+            self.concept_value_transformation_layer = ConceptValueTransformationLayer(self.embed_dim)
 
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([GPT2Block(config, layer_idx=i) for i in range(config.num_hidden_layers)])
