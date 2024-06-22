@@ -3,7 +3,7 @@ import datetime
 import os
 import random
 import uuid
-from typing import Any
+from typing import Any, Dict
 
 import torch
 from models.hf_models.tokenization_hf_cehrgpt import CehrGptTokenizer
@@ -30,7 +30,7 @@ def generate_single_batch(
         num_beam_groups=1,
         epsilon_cutoff=0.0,
         device: Any = 'cpu'
-):
+) -> Dict[str, Any]:
     random_prompts = random.sample(
         demographic_info,
         batch_size
@@ -64,7 +64,19 @@ def generate_single_batch(
             generation_config=generation_config,
         )
 
-    return [tokenizer.decode(seq.cpu().numpy()) for seq in results.sequences]
+    sequences = [tokenizer.decode(seq.cpu().numpy()) for seq in results.sequences]
+    value_indicators = None
+    values = None
+    if results.sequence_val_masks is not None:
+        value_indicators = [m[:len(s)] for m, s in zip(results.sequence_val_masks.detach().cpu().numpy(), sequences)]
+    if results.sequence_vals is not None:
+        values = [v[:len(s)] for v, s in zip(results.sequence_vals.detach().cpu().numpy(), sequences)]
+
+    return {
+        'sequences': sequences,
+        'value_indicators': value_indicators,
+        'values': values
+    }
 
 
 def main(
@@ -164,15 +176,26 @@ def main(
         # Clear the cache
         torch.cuda.empty_cache()
 
-        for seq in batch_sequences:
-            sequence_to_flush.append({'concept_ids': seq, 'person_id': current_person_id})
+        for seq, value_indicator, value in zip(
+                batch_sequences["sequences"], batch_sequences["value_indicators"], batch_sequences["values"]
+        ):
+            output = {
+                'concept_ids': seq,
+                'person_id': current_person_id
+            }
+            if value is not None:
+                output['concept_values'] = value
+            if value_indicator is not None:
+                output['concept_value_masks'] = value_indicator
+
+            sequence_to_flush.append(output)
             current_person_id += 1
 
         if len(sequence_to_flush) >= args.buffer_size:
             print(f'{datetime.datetime.now()}: Flushing to the Disk at Batch {i}')
             pd.DataFrame(
                 sequence_to_flush,
-                columns=['concept_ids']
+                columns=['concept_ids', 'person_id', 'concept_values', 'concept_value_masks']
             ).to_parquet(os.path.join(output_folder_name, f'{uuid.uuid4()}.parquet'))
             sequence_to_flush.clear()
 
