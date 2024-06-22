@@ -108,6 +108,7 @@ class CehrGptTokenizer(PushToHubMixin):
     def pad_token_id(self):
         return self._padding_token_id
 
+    @property
     def lab_token_ids(self):
         return self.encode([_['concept_id'] for _ in self._lab_stats])
 

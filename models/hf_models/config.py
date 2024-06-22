@@ -108,6 +108,7 @@ class CEHRGPTConfig(PretrainedConfig):
             use_cache=True,
             bos_token_id=50256,
             eos_token_id=50256,
+            lab_token_ids=None,
             scale_attn_by_inverse_layer_idx=False,
             reorder_and_upcast_attn=False,
             exclude_position_ids=False,
@@ -138,6 +139,7 @@ class CEHRGPTConfig(PretrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.lab_token_ids = lab_token_ids
 
         self.exclude_position_ids = exclude_position_ids
         self.include_values = include_values

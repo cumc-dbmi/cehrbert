@@ -8,7 +8,7 @@ from transformers import PreTrainedModel
 from transformers.pytorch_utils import Conv1D
 from transformers.models.gpt2.modeling_gpt2 import GPT2Block
 from transformers.utils.model_parallel_utils import assert_device_map, get_device_map
-# from transformers.activations import gelu_new
+from transformers.activations import gelu_new
 from transformers.utils import logging
 from torch.nn import CrossEntropyLoss
 
@@ -28,7 +28,9 @@ class ConceptValuePredictionLayer(nn.Module):
     def __init__(self, embedding_size):
         super(ConceptValuePredictionLayer, self).__init__()
         self.embedding_size = embedding_size
-        self.concept_value_decoder_layer = nn.Linear(embedding_size, embedding_size + 1)
+        self.concept_value_decoder_layer = nn.Sequential(
+            nn.Linear(embedding_size, embedding_size + 1)
+        )
 
     def forward(
             self,
@@ -43,9 +45,8 @@ class ConceptValueTransformationLayer(nn.Module):
     def __init__(self, embedding_size):
         super(ConceptValueTransformationLayer, self).__init__()
         self.embedding_size = embedding_size
-        self.merge_value_transformation_layer = nn.Linear(
-            embedding_size + 1,  # +1 for the concept_values concatenation
-            embedding_size
+        self.merge_value_transformation_layer = nn.Sequential(
+            nn.Linear(embedding_size + 1, embedding_size)  # +1 for the concept_values concatenation
         )
 
     def forward(
@@ -447,6 +448,29 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
         else:
             model_inputs = {"input_ids": input_ids}
 
+        if self.cehrgpt.include_values:
+            value_indicators = kwargs.get("value_indicators", torch.zeros_like(input_ids).to(torch.bool))
+            values = kwargs.get("values", torch.zeros_like(input_ids, dtype=torch.float32))
+
+            # Omit tokens covered by past_key_values
+            if past_key_values:
+                past_length = past_key_values[0][0].shape[2]
+                # Some generation methods already pass only the last input ID
+                if value_indicators.shape[1] > past_length:
+                    remove_prefix_length = past_length
+                else:
+                    # Default to old behavior: keep only final ID
+                    remove_prefix_length = value_indicators.shape[1] - 1
+                value_indicators = value_indicators[:, remove_prefix_length:]
+                values = values[:, remove_prefix_length:]
+
+            model_inputs.update(
+                {
+                    "value_indicators": value_indicators,
+                    "values": values
+                }
+            )
+
         model_inputs.update(
             {
                 "past_key_values": past_key_values,
@@ -538,7 +562,7 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
         return CehrGptCausalLMOutput(
             loss=loss,
             logits=lm_logits,
-            values=value_preds,
+            next_values=value_preds,
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions
@@ -575,120 +599,7 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
             synced_gpus: bool = False,
             streamer: Optional["BaseStreamer"] = None,
             **model_kwargs,
-    ) -> Union[GenerateDecoderOnlyOutput, GenerateEncoderDecoderOutput, torch.LongTensor]:
-        r"""
-        Generates sequences of token ids for models with a language modeling head using **multinomial sampling** and
-        can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
-
-        <Tip warning={true}>
-
-        In most cases, you do not need to call [`~generation.GenerationMixin._sample`] directly. Use generate() instead.
-        For an overview of generation strategies and code examples, check the [following
-        guide](../generation_strategies).
-
-        </Tip>
-
-        Parameters:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                The sequence used as a prompt for the generation.
-            logits_processor (`LogitsProcessorList`, *optional*):
-                An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
-                used to modify the prediction scores of the language modeling head applied at each generation step.
-            stopping_criteria (`StoppingCriteriaList`, *optional*):
-                An instance of [`StoppingCriteriaList`]. List of instances of class derived from [`StoppingCriteria`]
-                used to tell if the generation loop should stop.
-            logits_warper (`LogitsProcessorList`, *optional*):
-                An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsWarper`] used
-                to warp the prediction score distribution of the language modeling head applied before multinomial
-                sampling at each generation step.
-            max_length (`int`, *optional*, defaults to 20):
-                **DEPRECATED**. Use `logits_processor` or `stopping_criteria` directly to cap the number of generated
-                tokens. The maximum length of the sequence to be generated.
-            pad_token_id (`int`, *optional*):
-                The id of the *padding* token.
-            eos_token_id (`Union[int, List[int]]`, *optional*):
-                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
-            output_attentions (`bool`, *optional*, defaults to `False`):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more details.
-            output_hidden_states (`bool`, *optional*, defaults to `False`):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more details.
-            output_scores (`bool`, *optional*, defaults to `False`):
-                Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
-            output_logits (`bool`, *optional*, defaults to `False`):
-                Whether or not to return the raw prediction logit scores. See `logits` under returned tensors for
-                more details.
-            return_dict_in_generate (`bool`, *optional*, defaults to `False`):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-            synced_gpus (`bool`, *optional*, defaults to `False`):
-                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
-            streamer (`BaseStreamer`, *optional*):
-                Streamer object that will be used to stream the generated sequences. Generated tokens are passed
-                through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
-            model_kwargs:
-                Additional model specific kwargs will be forwarded to the `forward` function of the model. If model is
-                an encoder-decoder model the kwargs should include `encoder_outputs`.
-
-        Return:
-            [`~generation.GenerateDecoderOnlyOutput`], [`~generation.GenerateEncoderDecoderOutput`] or `torch.LongTensor`:
-            A `torch.LongTensor` containing the generated tokens (default behaviour) or a
-            [`~generation.GenerateDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
-            `return_dict_in_generate=True` or a [`~generation.GenerateEncoderDecoderOutput`] if
-            `model.config.is_encoder_decoder=True`.
-
-        Examples:
-
-        ```python
-        >>> from transformers import (
-        ...     AutoTokenizer,
-        ...     AutoModelForCausalLM,
-        ...     LogitsProcessorList,
-        ...     MinLengthLogitsProcessor,
-        ...     TopKLogitsWarper,
-        ...     TemperatureLogitsWarper,
-        ...     StoppingCriteriaList,
-        ...     MaxLengthCriteria,
-        ... )
-        >>> import torch
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
-        >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
-
-        >>> # set pad_token_id to eos_token_id because GPT2 does not have a EOS token
-        >>> model.config.pad_token_id = model.config.eos_token_id
-        >>> model.generation_config.pad_token_id = model.config.eos_token_id
-
-        >>> input_prompt = "Today is a beautiful day, and"
-        >>> input_ids = tokenizer(input_prompt, return_tensors="pt").input_ids
-
-        >>> # instantiate logits processors
-        >>> logits_processor = LogitsProcessorList(
-        ...     [
-        ...         MinLengthLogitsProcessor(15, eos_token_id=model.generation_config.eos_token_id),
-        ...     ]
-        ... )
-        >>> # instantiate logits processors
-        >>> logits_warper = LogitsProcessorList(
-        ...     [
-        ...         TopKLogitsWarper(50),
-        ...         TemperatureLogitsWarper(0.7),
-        ...     ]
-        ... )
-
-        >>> stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=20)])
-
-        >>> torch.manual_seed(0)  # doctest: +IGNORE_RESULT
-        >>> outputs = model._sample(
-        ...     input_ids,
-        ...     logits_processor=logits_processor,
-        ...     logits_warper=logits_warper,
-        ...     stopping_criteria=stopping_criteria,
-        ... )
-
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Today is a beautiful day, and we must do everything possible to make it a day of celebration.']
-        ```"""
+    ) -> Union[CehrGptGenerateDecoderOnlyOutput, torch.LongTensor]:
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
@@ -726,13 +637,6 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
         cross_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
-        # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
-        if return_dict_in_generate and self.config.is_encoder_decoder:
-            encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
-            encoder_hidden_states = (
-                model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
-            )
-
         # keep track of which sequences are already finished
         batch_size, cur_len = input_ids.shape
         if "inputs_embeds" in model_kwargs:
@@ -740,7 +644,13 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
-
+        lab_token_ids = torch.tensor(
+            [] if self.config.lab_token_ids is None else self.config.lab_token_ids, dtype=torch.int32
+        )
+        value_indicators = torch.zeros_like(input_ids).to(torch.bool)
+        values = torch.zeros_like(input_ids, dtype=torch.float32)
+        model_kwargs['value_indicators'] = value_indicators
+        model_kwargs['values'] = values
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
@@ -794,6 +704,27 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
 
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+
+            if self.cehrgpt.include_values:
+                next_value_indicators = torch.isin(
+                    next_tokens,
+                    lab_token_ids.to(next_tokens.device)
+                )
+                next_values = outputs.next_values[:, -1]
+
+                # update value_indicators
+                value_indicators = torch.cat(
+                    [value_indicators, next_value_indicators[:, None]], dim=-1
+                )
+
+                # update values
+                values = torch.cat(
+                    [values, next_values], dim=-1
+                )
+
+                model_kwargs['value_indicators'] = value_indicators
+                model_kwargs['values'] = values
+
             if streamer is not None:
                 streamer.put(next_tokens.cpu())
             model_kwargs = self._update_model_kwargs_for_generation(
@@ -814,27 +745,13 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
         if streamer is not None:
             streamer.end()
 
-        if return_dict_in_generate:
-            if self.config.is_encoder_decoder:
-                return GenerateEncoderDecoderOutput(
-                    sequences=input_ids,
-                    scores=scores,
-                    logits=raw_logits,
-                    encoder_attentions=encoder_attentions,
-                    encoder_hidden_states=encoder_hidden_states,
-                    decoder_attentions=decoder_attentions,
-                    cross_attentions=cross_attentions,
-                    decoder_hidden_states=decoder_hidden_states,
-                    past_key_values=model_kwargs.get("past_key_values"),
-                )
-            else:
-                return GenerateDecoderOnlyOutput(
-                    sequences=input_ids,
-                    scores=scores,
-                    logits=raw_logits,
-                    attentions=decoder_attentions,
-                    hidden_states=decoder_hidden_states,
-                    past_key_values=model_kwargs.get("past_key_values"),
-                )
-        else:
-            return input_ids
+        return CehrGptGenerateDecoderOnlyOutput(
+            sequences=input_ids,
+            sequence_val_masks=value_indicators.to(torch.bool) if self.cehrgpt.include_values else None,
+            sequence_vals=values.to(torch.float32) if self.cehrgpt.include_values else None,
+            scores=scores,
+            logits=raw_logits,
+            attentions=decoder_attentions,
+            hidden_states=decoder_hidden_states,
+            past_key_values=model_kwargs.get("past_key_values"),
+        )
