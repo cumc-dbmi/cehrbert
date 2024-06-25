@@ -360,7 +360,7 @@ def main(
     test_dataset = dataset['test']
 
     def filter_func(examples):
-        return [_ <= cehrgpt_model.config.n_positions for _ in examples['num_of_concepts']]
+        return [cehrgpt_model.config.n_positions >= _ >= 20 for _ in examples['num_of_concepts']]
 
     test_dataset = test_dataset.filter(
         filter_func,
