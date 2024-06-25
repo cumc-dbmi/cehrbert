@@ -3,12 +3,14 @@ import datetime
 import os
 import json
 import math
+import uuid
 from enum import Enum
 from typing import Union, List, Dict
 from dataclasses import dataclass, asdict
 from collections import Counter
 from tqdm import tqdm
 
+import pandas as pd
 import numpy as np
 import torch
 from transformers import GenerationConfig
@@ -306,20 +308,24 @@ def main(
     time_sensitive_prediction_output_folder_name = os.path.join(
         args.output_folder,
         folder_name,
-        'time_sensitive_predictions.json'
+        'time_sensitive_predictions'
     )
 
     next_visit_type_prediction_folder_name = os.path.join(
         args.output_folder,
         folder_name,
-        'next_visit_type_predictions.json'
+        'next_visit_type_predictions'
     )
 
     code_predictions_output_folder_name = os.path.join(
         args.output_folder,
         folder_name,
-        'code_predictions.json'
+        'code_predictions'
     )
+
+    os.makedirs(time_sensitive_prediction_output_folder_name, exist_ok=True)
+    os.makedirs(next_visit_type_prediction_folder_name, exist_ok=True)
+    os.makedirs(code_predictions_output_folder_name, exist_ok=True)
 
     print(f'{datetime.datetime.now()}: Loading tokenizer at {args.model_folder}')
     print(f'{datetime.datetime.now()}: Loading model at {args.model_folder}')
@@ -360,20 +366,18 @@ def main(
         filter_func,
         batched=True,
         batch_size=1000
-    ).select(range(20))
+    )
 
     person_id = 0
-    tte_visit_output = dict()
-    next_visit_prediction_output = dict()
-    code_prediction_output = dict()
+    tte_visit_output = []
+    next_visit_prediction_output = []
+    code_prediction_output = []
     for record in tqdm(test_dataset, total=len(test_dataset)):
         seq = record["concept_ids"]
         if len(seq) > ts_pred_model.max_sequence:
             continue
         person_id += 1
         visit_counter = 0
-        att_predictions = dict()
-        visit_type_predictions = dict()
         for index, concept_id in enumerate(seq):
             # At the end of the visit, we will create simulations to estimate the probabilities of events
             if concept_id == "VE" and index < len(seq) - 1:
@@ -384,14 +388,16 @@ def main(
                 time_to_next_visit_label = convert_att_to_time_interval(seq[index + 1])
                 if time_to_next_visit_label:
                     tte = ts_pred_model.extract_time_to_next_visit(partial_history, simulated_seqs)
-                    att_predictions[visit_counter] = {
+                    tte_visit_output.append({
+                        "person_id": person_id,
+                        "visit_counter": visit_counter,
                         "time_to_next_visit_label": time_to_next_visit_label,
                         "time_to_next_visit_average": tte.average_time,
                         "time_to_next_visit_std": tte.standard_deviation,
                         "time_to_next_visit_most_likely": tte.most_likely_time,
                         "time_interval_probability_table": tte.time_interval_probability_table,
                         "time_to_next_visit_simulations": tte.num_of_simulations
-                    }
+                    })
 
                 if index + 3 < len(seq) and seq[index + 2] == "VS":
                     visit_type_label = seq[index + 3]
@@ -402,10 +408,13 @@ def main(
                         key=lambda v: v["probability"],
                         reverse=True
                     )
-                    visit_type_predictions[visit_counter] = {
+                    next_visit_prediction_output.append({
+                        'person_id': person_id,
+                        'visit_counter': visit_counter,
+                        'visit_type_label': visit_type_label,
                         'next_visit_type': visit_type_label,
                         'next_visit_predictions': visit_type_prediction
-                    }
+                    })
 
                 # We only do code prediction once the cursor exceeds the half of the patient sequence.
                 # In other words, we use the first half of the patient sequence to predict the second half of
@@ -425,24 +434,55 @@ def main(
                     future_event_labels = sorted(
                         map(asdict, future_event_labels), key=lambda v: v['probability'], reverse=True
                     )
-                    tte_visit_output[person_id] = att_predictions
-                    next_visit_prediction_output[person_id] = visit_type_predictions
-                    code_prediction_output[person_id] = {
+
+                    code_prediction_output.append({
+                        "person_id": person_id,
+                        "visit_counter": visit_counter,
                         "code_labels": future_event_labels,
                         "code_predictions": future_event_predictions
-                    }
+                    })
 
                 # increment the visit number by one
                 visit_counter += 1
 
-    with open(time_sensitive_prediction_output_folder_name, 'w') as json_file:
-        json.dump(tte_visit_output, json_file, indent=4)
+                if len(tte_visit_output) >= args.buffer_size:
+                    print(f'{datetime.datetime.now()}: Flushing time to visit predictions to disk')
+                    pd.DataFrame(
+                        tte_visit_output
+                    ).to_parquet(os.path.join(time_sensitive_prediction_output_folder_name, f'{uuid.uuid4()}.parquet'))
+                    tte_visit_output.clear()
 
-    with open(next_visit_type_prediction_folder_name, 'w') as json_file:
-        json.dump(next_visit_prediction_output, json_file, indent=4)
+                if len(next_visit_prediction_output) >= args.buffer_size:
+                    print(f'{datetime.datetime.now()}: Flushing next visit type predictions to disk')
+                    pd.DataFrame(
+                        next_visit_prediction_output
+                    ).to_parquet(os.path.join(next_visit_type_prediction_folder_name, f'{uuid.uuid4()}.parquet'))
+                    next_visit_prediction_output.clear()
 
-    with open(code_predictions_output_folder_name, 'w') as json_file:
-        json.dump(code_prediction_output, json_file, indent=4)
+                if len(code_prediction_output) >= args.buffer_size:
+                    print(f'{datetime.datetime.now()}: Flushing code predictions to disk')
+                    pd.DataFrame(
+                        code_prediction_output
+                    ).to_parquet(os.path.join(code_predictions_output_folder_name, f'{uuid.uuid4()}.parquet'))
+                    code_prediction_output.clear()
+
+    if len(tte_visit_output) > 0:
+        print(f'{datetime.datetime.now()}: Flushing time to visit predictions to disk at Final Batch')
+        pd.DataFrame(
+            tte_visit_output
+        ).to_parquet(os.path.join(time_sensitive_prediction_output_folder_name, f'{uuid.uuid4()}-last.parquet'))
+
+    if len(next_visit_prediction_output) > 0:
+        print(f'{datetime.datetime.now()}: Flushing next visit type predictions to disk at Final Batch')
+        pd.DataFrame(
+            next_visit_prediction_output
+        ).to_parquet(os.path.join(next_visit_type_prediction_folder_name, f'{uuid.uuid4()}-last.parquet'))
+
+    if len(code_prediction_output) > 0:
+        print(f'{datetime.datetime.now()}: Flushing code predictions to disk at Final Batch')
+        pd.DataFrame(
+            code_prediction_output
+        ).to_parquet(os.path.join(code_predictions_output_folder_name, f'{uuid.uuid4()}-last.parquet'))
 
 
 if __name__ == "__main__":
@@ -493,6 +533,13 @@ if __name__ == "__main__":
     parser.add_argument(
         '--batch_size',
         dest='batch_size',
+        action='store',
+        type=int,
+        required=True
+    )
+    parser.add_argument(
+        '--buffer_size',
+        dest='buffer_size',
         action='store',
         type=int,
         required=True
