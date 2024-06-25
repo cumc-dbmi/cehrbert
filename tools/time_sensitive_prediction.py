@@ -299,7 +299,6 @@ def main(
     print(f'{datetime.datetime.now()}: Loading tokenizer at {args.model_folder}')
     print(f'{datetime.datetime.now()}: Loading model at {args.model_folder}')
     print(f'{datetime.datetime.now()}: Write time sensitive predictions to {output_folder_name}')
-    print(f'{datetime.datetime.now()}: Temperature {args.temperature}')
     print(f'{datetime.datetime.now()}: Top P {args.top_p}')
     print(f'{datetime.datetime.now()}: Top K {args.top_k}')
     print(f'{datetime.datetime.now()}: Loading dataset_folder at {args.dataset_folder}')
