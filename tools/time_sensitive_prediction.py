@@ -1,21 +1,21 @@
 import argparse
 import datetime
 import os
-import uuid
 import json
 from enum import Enum
-from typing import Union, List
+from typing import Union, List, Dict
 from dataclasses import dataclass
 from collections import Counter
 from tqdm import tqdm
 
 import numpy as np
 import torch
-from models.hf_models.tokenization_hf_cehrgpt import CehrGptTokenizer
 from transformers import GenerationConfig
-from models.hf_models.hf_cehrgpt import CEHRGPT2LMHeadModel
 
+from models.hf_models.tokenization_hf_cehrgpt import CehrGptTokenizer
+from models.hf_models.hf_cehrgpt import CEHRGPT2LMHeadModel
 from models.gpt_model import TopKStrategy, TopPStrategy, TopMixStrategy
+from spark_apps.decorators.patient_event_decorator import time_month_token
 
 VISIT_CONCEPT_IDS = [
     '9202', '9203', '581477', '9201', '5083', '262', '38004250', '0', '8883', '38004238', '38004251',
@@ -36,7 +36,9 @@ class PredictionStrategy(Enum):
 class TimeToEvent:
     average_time: float
     standard_deviation: float
+    most_likely_time: int
     num_of_simulations: int
+    time_interval_probability_table: Dict[str, float]
 
 
 @dataclass
@@ -44,6 +46,52 @@ class ConceptProbability:
     concept: str
     probability: float
     num_of_simulations: int
+
+
+def is_artificial_token(token) -> bool:
+    if token in VISIT_CONCEPT_IDS:
+        return True
+    if token in DISCHARGE_CONCEPT_IDS:
+        return True
+    if token in ["VS", "VE"]:
+        return True
+    if token.startswith("D"):
+        return True
+    if token == "LT":
+        return True
+    return False
+
+
+def convert_to_concept_probabilities(concept_ids: List[str]) -> List[ConceptProbability]:
+    # Count the occurrences of each visit concept ID
+    concept_counts = Counter(concept_ids)
+
+    # Total number of simulations
+    total_simulations = len(concept_ids)
+
+    # Create ConceptProbability objects
+    concept_probabilities = []
+    for concept, count in concept_counts.items():
+        probability = count / total_simulations
+        concept_probabilities.append(
+            ConceptProbability(concept=concept, probability=probability, num_of_simulations=count))
+    return concept_probabilities
+
+
+def convert_att_to_time_interval(att_token: str) -> int:
+    att_date_delta = None
+    if att_token[0] == 'D':
+        att_date_delta = int(att_token[1:])
+    elif att_token[0] == 'W':
+        att_date_delta = int(att_token[1:]) * 7
+    elif att_token[0] == 'M':
+        att_date_delta = int(att_token[1:]) * 30
+    elif att_token == 'LT':
+        att_date_delta = 365 * 3
+    # else:
+    # raise ValueError(f"Can't parse the att token {att_token}")
+    # TODO: add logging here
+    return att_date_delta
 
 
 class TimeSensitivePredictionModel:
@@ -61,48 +109,28 @@ class TimeSensitivePredictionModel:
         self.prediction_strategy = prediction_strategy
         self.device = device
 
-    def predict_time_to_next_visit(self, partial_history: Union[np.ndarray, list]) -> TimeToEvent:
-        """
-            Predict the time interval to the next visit based on a partial patient history.
+    def simulate(
+            self,
+            partial_history: Union[np.ndarray, List[str]],
+            max_new_tokens: int = 0
+    ) -> List[List[str]]:
 
-            This method generates predictions for the time interval until the next visit event (VE)
-            using a sequence model. The prediction is based on a provided partial history of
-            patient data.
+        sequence_is_demographics = len(partial_history) == 4 and partial_history[0].startswith("year")
+        sequence_ends_ve = partial_history[-1] == "VE"
 
-            Parameters:
-            -----------
-            partial_history : Union[np.ndarray, list]
-                The partial history of the patient represented as a sequence of tokens. It can be
-                a PyTorch IntTensor, a NumPy array, or a list.
-
-            Returns:
-            --------
-            TimeToEvent
-                An object containing the average time to the next visit, the standard deviation
-                of the predicted times, and the number of simulations used to derive the predictions.
-
-            Notes:
-            ------
-            - The method temporarily modifies the `max_new_tokens` setting of the generation configuration.
-            - The special token "LT" is interpreted as a time interval of 1080 units (days).
-
-            Example Usage:
-            --------------
-            >>> model = MyModel()
-            >>> partial_history = [1, 2, 3, 4, 5]
-            >>> time_to_event = model.predict_time_to_next_visit(partial_history)
-            >>> print(time_to_event.average_time)
-            >>> print(time_to_event.standard_deviation)
-            >>> print(time_to_event.num_of_simulations)
-            """
-
-        if partial_history[-1] != "VE":
-            raise ValueError("The last token of the patient history must be VE.")
+        if not (sequence_is_demographics | sequence_ends_ve):
+            raise ValueError(
+                "There are only two types of sequences allowed. 1) the sequence only contains "
+                "demographics; 2) the sequence ends on VE;"
+            )
 
         seq_length = len(partial_history)
         old_max_new_tokens = self.generation_config.max_new_tokens
-        # Set this to 1 because we only want to predict the time interval after the VE token
-        self.generation_config.max_new_tokens = 1
+
+        # Set this to max sequence
+        self.generation_config.max_new_tokens = (
+            self.model.config.n_positions - seq_length if max_new_tokens == 0 else max_new_tokens
+        )
         token_ids = self.tokenizer.encode(partial_history)
         prompt = torch.tensor(token_ids).unsqueeze(0).to(self.device)
         results = self.model.generate(
@@ -110,25 +138,46 @@ class TimeSensitivePredictionModel:
             generation_config=self.generation_config,
         )
         self.generation_config.max_new_tokens = old_max_new_tokens
+        return [self.tokenizer.decode(seq.cpu().numpy()) for seq in results.sequences]
 
+    @staticmethod
+    def extract_time_to_next_visit(
+            partial_history: Union[np.ndarray, List[str]],
+            simulated_seqs: List[List[str]]
+    ) -> TimeToEvent:
+        seq_length = len(partial_history)
         all_valid_time_intervals = []
-        for seq in results.sequences:
-            concept_ids = self.tokenizer.decode(seq.cpu().numpy())
-            if seq_length < len(concept_ids):
-                next_token = concept_ids[seq_length]
-                time_interval = None
-                if next_token.startswith("D"):
-                    time_interval = int(next_token[1:])
-                elif next_token == "LT":
-                    time_interval = 1080
+
+        # Iterating through all the simulated sequences
+        for simulated_seq in simulated_seqs:
+            # Finding the first artificial time tokens
+            for next_token in simulated_seq[seq_length:]:
+                time_interval = convert_att_to_time_interval(next_token)
                 if time_interval:
                     all_valid_time_intervals.append(time_interval)
+                    break
+        time_buckets = [time_month_token(_) for _ in all_valid_time_intervals]
+        time_bucket_counter = Counter(time_buckets)
+        most_common_item = time_bucket_counter.most_common(1)[0][0]
+        total_count = sum(time_bucket_counter.values())
+        # Generate the probability table
+        probability_table = {item: count / total_count for item, count in time_bucket_counter.items()}
+        sorted_probability_table = dict(sorted(probability_table.items(), key=lambda x: x[1], reverse=True))
 
         return TimeToEvent(
             average_time=np.mean(all_valid_time_intervals),
             standard_deviation=np.std(all_valid_time_intervals),
-            num_of_simulations=len(all_valid_time_intervals)
+            most_likely_time=most_common_item,
+            num_of_simulations=len(all_valid_time_intervals),
+            time_interval_probability_table=sorted_probability_table
         )
+
+    def predict_time_to_next_visit(self, partial_history: Union[np.ndarray, list]) -> TimeToEvent:
+        sequences = self.simulate(
+            partial_history=partial_history,
+            max_new_tokens=1
+        )
+        return self.extract_time_to_next_visit(partial_history, sequences)
 
     def predict_next_visit_type(
             self,
@@ -136,7 +185,7 @@ class TimeSensitivePredictionModel:
     ) -> List[ConceptProbability]:
 
         sequence_is_demographics = len(partial_history) == 4 and partial_history[0].startswith("year")
-        sequence_ends_with_time_interval = partial_history[-1].startswith("D")
+        sequence_ends_with_time_interval = partial_history[-1].startswith("D") or partial_history[-1] == "LT"
         sequence_ends_ve = partial_history[-1] == "VE"
 
         if not (sequence_is_demographics | sequence_ends_with_time_interval | sequence_ends_ve):
@@ -163,7 +212,7 @@ class TimeSensitivePredictionModel:
                 if next_token in VISIT_CONCEPT_IDS:
                     next_visit_type_tokens.append(next_token)
                     break
-        return self.convert_to_concept_probabilities(next_visit_type_tokens)
+        return convert_to_concept_probabilities(next_visit_type_tokens)
 
     def predict_events(
             self,
@@ -172,7 +221,7 @@ class TimeSensitivePredictionModel:
     ) -> List[ConceptProbability]:
 
         sequence_is_demographics = len(partial_history) == 4 and partial_history[0].startswith("year")
-        sequence_ends_with_time_interval = partial_history[-1].startswith("D")
+        sequence_ends_with_time_interval = partial_history[-1].startswith("D") or partial_history[-1] == "LT"
         sequence_ends_ve = partial_history[-1] == "VE"
 
         if not (sequence_is_demographics | sequence_ends_with_time_interval | sequence_ends_ve):
@@ -199,40 +248,9 @@ class TimeSensitivePredictionModel:
             for next_token in generated_seq[seq_length:]:
                 if only_next_visit and next_token == "VE":
                     break
-                if not self.is_artificial_token(next_token):
+                if not is_artificial_token(next_token):
                     all_concepts.append(next_token)
-        return self.convert_to_concept_probabilities(all_concepts)
-
-    @staticmethod
-    def is_artificial_token(token) -> bool:
-        if token in VISIT_CONCEPT_IDS:
-            return True
-        if token in DISCHARGE_CONCEPT_IDS:
-            return True
-        if token in ["VS", "VE"]:
-            return True
-        if token.startswith("D"):
-            return True
-        if token == "LT":
-            return True
-        return False
-
-    @staticmethod
-    def convert_to_concept_probabilities(visit_concept_ids: List[str]) -> List[ConceptProbability]:
-        # Count the occurrences of each visit concept ID
-        concept_counts = Counter(visit_concept_ids)
-
-        # Total number of simulations
-        total_simulations = len(visit_concept_ids)
-
-        # Create ConceptProbability objects
-        concept_probabilities = []
-        for concept, count in concept_counts.items():
-            probability = count / total_simulations
-            concept_probabilities.append(
-                ConceptProbability(concept=concept, probability=probability, num_of_simulations=count))
-
-        return concept_probabilities
+        return convert_to_concept_probabilities(all_concepts)
 
     @staticmethod
     def get_generation_config(
@@ -357,6 +375,8 @@ def main(
                         "time_to_next_visit_label": time_to_next_visit_label,
                         "time_to_next_visit_average": tte.average_time,
                         "time_to_next_visit_std": tte.standard_deviation,
+                        "time_to_next_visit_most_likely": tte.most_likely_time,
+                        "time_interval_probability_table": tte.time_interval_probability_table,
                         "time_to_next_visit_simulations": tte.num_of_simulations
                     }
                 visit_counter += 1
