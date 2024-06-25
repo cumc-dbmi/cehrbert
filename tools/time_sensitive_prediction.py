@@ -352,7 +352,8 @@ def main(
                 elif next_token == "LT":
                     time_to_next_visit_label = 1080
                 if time_to_next_visit_label:
-                    tte = ts_pred_model.predict_time_to_next_visit(seq[:index + 1])
+                    with torch.no_grad():
+                        tte = ts_pred_model.predict_time_to_next_visit(seq[:index + 1])
                     # Clear the cache
                     torch.cuda.empty_cache()
                     att_predictions[visit_counter] = {
