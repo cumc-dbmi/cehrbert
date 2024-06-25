@@ -12,6 +12,7 @@ from tqdm import tqdm
 import numpy as np
 import torch
 from transformers import GenerationConfig
+from datasets import load_from_disk
 
 from models.hf_models.tokenization_hf_cehrgpt import CehrGptTokenizer
 from models.hf_models.hf_cehrgpt import CEHRGPT2LMHeadModel
@@ -111,6 +112,7 @@ class TimeSensitivePredictionModel:
         self.prediction_strategy = prediction_strategy
         self.device = device
         self.batch_size = batch_size
+        self.max_sequence = model.config.n_positions
 
     def simulate(
             self,
@@ -197,40 +199,44 @@ class TimeSensitivePredictionModel:
         )
         return self.extract_time_to_next_visit(partial_history, sequences)
 
-    def predict_next_visit_type(
-            self,
-            partial_history: Union[np.ndarray, list]
+    @staticmethod
+    def extract_next_visit_type(
+            partial_history: Union[np.ndarray, list],
+            simulated_seqs: List[List[str]]
     ) -> List[ConceptProbability]:
-
-        sequence_is_demographics = len(partial_history) == 4 and partial_history[0].startswith("year")
-        sequence_ends_with_time_interval = partial_history[-1].startswith("D") or partial_history[-1] == "LT"
-        sequence_ends_ve = partial_history[-1] == "VE"
-
-        if not (sequence_is_demographics | sequence_ends_with_time_interval | sequence_ends_ve):
-            raise ValueError(
-                "There are only three types of sequences allowed. 1) the sequence only contains "
-                "demographics; 2) the sequence ends on VE; 3) the sequence ends on a time interval"
-            )
-
-        seq_length = len(partial_history)
-        old_max_new_tokens = self.generation_config.max_new_tokens
-        # Set this to 3 because we only want to generate three more tokens, which must cover the next visit type token
-        self.generation_config.max_new_tokens = 3
-        token_ids = self.tokenizer.encode(partial_history)
-        prompt = torch.tensor(token_ids).unsqueeze(0).to(self.device)
-        results = self.model.generate(
-            inputs=prompt,
-            generation_config=self.generation_config,
-        )
-        self.generation_config.max_new_tokens = old_max_new_tokens
         next_visit_type_tokens = []
-        for seq in results.sequences:
-            concept_ids = self.tokenizer.decode(seq.cpu().numpy())
-            for next_token in concept_ids[seq_length:]:
+        for seq in simulated_seqs:
+            for next_token in seq[len(partial_history):]:
                 if next_token in VISIT_CONCEPT_IDS:
                     next_visit_type_tokens.append(next_token)
                     break
         return convert_to_concept_probabilities(next_visit_type_tokens)
+
+    def predict_next_visit_type(
+            self,
+            partial_history: Union[np.ndarray, list]
+    ) -> List[ConceptProbability]:
+        sequences = self.simulate(
+            partial_history=partial_history,
+            max_new_tokens=3
+        )
+        return self.extract_next_visit_type(partial_history, sequences)
+
+    @staticmethod
+    def extract_events(
+            partial_history: Union[np.ndarray, list],
+            simulated_seqs: List[List[str]],
+            only_next_visit: bool = True
+    ):
+        patient_history_length = len(partial_history)
+        all_concepts = []
+        for seq in simulated_seqs:
+            for next_token in seq[patient_history_length:]:
+                if only_next_visit and next_token == "VE":
+                    break
+                if not is_artificial_token(next_token):
+                    all_concepts.append(next_token)
+        return convert_to_concept_probabilities(all_concepts)
 
     def predict_events(
             self,
@@ -238,37 +244,12 @@ class TimeSensitivePredictionModel:
             only_next_visit: bool = True
     ) -> List[ConceptProbability]:
 
-        sequence_is_demographics = len(partial_history) == 4 and partial_history[0].startswith("year")
-        sequence_ends_with_time_interval = partial_history[-1].startswith("D") or partial_history[-1] == "LT"
-        sequence_ends_ve = partial_history[-1] == "VE"
-
-        if not (sequence_is_demographics | sequence_ends_with_time_interval | sequence_ends_ve):
-            raise ValueError(
-                "There are only three types of sequences allowed. 1) the sequence only contains "
-                "demographics; 2) the sequence ends on VE; 3) the sequence ends on a time interval"
-            )
-
-        seq_length = len(partial_history)
-        old_max_new_tokens = self.generation_config.max_new_tokens
-        # Set this to 3 because we only want to generate three more tokens, which must cover the next visit type token
-        self.generation_config.max_new_tokens = self.model.config.n_positions - seq_length
-        token_ids = self.tokenizer.encode(partial_history)
-        prompt = torch.tensor(token_ids).unsqueeze(0).to(self.device)
-        results = self.model.generate(
-            inputs=prompt,
-            generation_config=self.generation_config,
+        patient_history_length = len(partial_history)
+        sequences = self.simulate(
+            partial_history=partial_history,
+            max_new_tokens=self.model.config.n_positions - patient_history_length
         )
-        self.generation_config.max_new_tokens = old_max_new_tokens
-
-        all_concepts = []
-        for seq in results.sequences:
-            generated_seq = self.tokenizer.decode(seq.cpu().numpy())
-            for next_token in generated_seq[seq_length:]:
-                if only_next_visit and next_token == "VE":
-                    break
-                if not is_artificial_token(next_token):
-                    all_concepts.append(next_token)
-        return convert_to_concept_probabilities(all_concepts)
+        return self.extract_events(partial_history, sequences, only_next_visit)
 
     @staticmethod
     def get_generation_config(
@@ -301,8 +282,6 @@ class TimeSensitivePredictionModel:
 def main(
         args
 ):
-    from datasets import load_from_disk
-
     if torch.cuda.is_available():
         device = torch.device("cuda")
     else:
@@ -324,15 +303,28 @@ def main(
             'sampling_strategy has to be one of the following two options TopKStrategy or TopPStrategy'
         )
 
-    output_folder_name = os.path.join(
+    time_sensitive_prediction_output_folder_name = os.path.join(
         args.output_folder,
         folder_name,
         'time_sensitive_predictions.json'
     )
 
+    next_visit_type_prediction_folder_name = os.path.join(
+        args.output_folder,
+        folder_name,
+        'next_visit_type_predictions.json'
+    )
+
+    code_predictions_output_folder_name = os.path.join(
+        args.output_folder,
+        folder_name,
+        'code_predictions.json'
+    )
+
     print(f'{datetime.datetime.now()}: Loading tokenizer at {args.model_folder}')
     print(f'{datetime.datetime.now()}: Loading model at {args.model_folder}')
-    print(f'{datetime.datetime.now()}: Write time sensitive predictions to {output_folder_name}')
+    print(f'{datetime.datetime.now()}: Write time sensitive predictions '
+          f'to {time_sensitive_prediction_output_folder_name}')
     print(f'{datetime.datetime.now()}: Top P {args.top_p}')
     print(f'{datetime.datetime.now()}: Top K {args.top_k}')
     print(f'{datetime.datetime.now()}: Loading dataset_folder at {args.dataset_folder}')
@@ -371,18 +363,27 @@ def main(
     ).select(range(20))
 
     person_id = 0
-    output = dict()
+    tte_visit_output = dict()
+    next_visit_prediction_output = dict()
+    code_prediction_output = dict()
     for record in tqdm(test_dataset, total=len(test_dataset)):
         person_id += 1
         seq = record["concept_ids"]
         visit_counter = 0
         att_predictions = dict()
+        visit_type_predictions = dict()
+        code_predictions = dict()
         for index, concept_id in enumerate(seq):
+            # At the end of the visit, we will create simulations to estimate the probabilities of events
             if concept_id == "VE" and index < len(seq) - 1:
-                next_token = seq[index + 1]
-                time_to_next_visit_label = convert_att_to_time_interval(next_token)
+                max_new_tokens = ts_pred_model.max_sequence - index - 1
+                partial_history = seq[:index + 1]
+                simulated_seqs = ts_pred_model.simulate(partial_history, max_new_tokens)
+
+                # Extract the predictions for time to the next visit
+                time_to_next_visit_label = convert_att_to_time_interval(seq[index + 1])
                 if time_to_next_visit_label:
-                    tte = ts_pred_model.predict_time_to_next_visit(seq[:index + 1])
+                    tte = ts_pred_model.extract_time_to_next_visit(partial_history, simulated_seqs)
                     att_predictions[visit_counter] = {
                         "time_to_next_visit_label": time_to_next_visit_label,
                         "time_to_next_visit_average": tte.average_time,
@@ -391,11 +392,56 @@ def main(
                         "time_interval_probability_table": tte.time_interval_probability_table,
                         "time_to_next_visit_simulations": tte.num_of_simulations
                     }
-                visit_counter += 1
-        output[person_id] = att_predictions
 
-    with open(output_folder_name, 'w') as json_file:
-        json.dump(output, json_file, indent=4)
+                if index + 3 < len(seq) and seq[index + 2] == "VS":
+                    visit_type_label = seq[index + 3]
+                    # Extract the predictions for the next visit type
+                    visit_concept_probs = ts_pred_model.extract_next_visit_type(partial_history, simulated_seqs)
+                    visit_type_prediction = [
+                        {
+                            "visit_type": p.concept,
+                            "probability": p.probability,
+                            "num_of_simulations": p.num_of_simulations
+                        }
+                        for p in visit_concept_probs
+                    ]
+                    visit_type_prediction = sorted(
+                        visit_type_prediction,
+                        key=lambda v: v["probability"],
+                        reverse=True
+                    )
+                    visit_type_predictions[visit_counter] = {
+                        'next_visit_type': visit_type_label,
+                        'next_visit_predictions': visit_type_prediction
+                    }
+
+                future_event_labels = ts_pred_model.extract_events(
+                    partial_history, [seq],
+                    only_next_visit=False
+                )
+                future_event_predictions = ts_pred_model.extract_events(
+                    partial_history, simulated_seqs,
+                    only_next_visit=False
+                )
+                code_predictions[visit_counter] = {
+                    "code_labels": future_event_labels,
+                    "code_predictions": future_event_predictions
+                }
+                # increment the visit number by one
+                visit_counter += 1
+
+        tte_visit_output[person_id] = att_predictions
+        next_visit_prediction_output[person_id] = visit_type_predictions
+        code_prediction_output[person_id] = code_predictions
+
+    with open(time_sensitive_prediction_output_folder_name, 'w') as json_file:
+        json.dump(tte_visit_output, json_file, indent=4)
+
+    with open(next_visit_type_prediction_folder_name, 'w') as json_file:
+        json.dump(next_visit_prediction_output, json_file, indent=4)
+
+    with open(code_predictions_output_folder_name, 'w') as json_file:
+        json.dump(code_prediction_output, json_file, indent=4)
 
 
 if __name__ == "__main__":
