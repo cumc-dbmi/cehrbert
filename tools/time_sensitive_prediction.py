@@ -1,11 +1,10 @@
 import argparse
 import datetime
 import os
-import json
 import math
 import uuid
 from enum import Enum
-from typing import Union, List, Dict
+from typing import Union, List, Dict, Any
 from dataclasses import dataclass, asdict
 from collections import Counter
 from tqdm import tqdm
@@ -42,7 +41,7 @@ class TimeToEvent:
     standard_deviation: float
     most_likely_time: int
     num_of_simulations: int
-    time_interval_probability_table: Dict[str, float]
+    time_interval_probability_table: List[Dict[str, Any]]
 
 
 @dataclass
@@ -184,7 +183,11 @@ class TimeSensitivePredictionModel:
         total_count = sum(time_bucket_counter.values())
         # Generate the probability table
         probability_table = {item: count / total_count for item, count in time_bucket_counter.items()}
-        sorted_probability_table = dict(sorted(probability_table.items(), key=lambda x: x[1], reverse=True))
+        sorted_probability_table = [
+            {"time_interval": k, "probability": v}
+            for k, v in
+            sorted(probability_table.items(), key=lambda x: x[1], reverse=True)
+        ]
 
         return TimeToEvent(
             average_time=np.mean(all_valid_time_intervals),
@@ -236,7 +239,7 @@ class TimeSensitivePredictionModel:
             for next_token in seq[patient_history_length:]:
                 if only_next_visit and next_token == "VE":
                     break
-                if not is_artificial_token(next_token):
+                if not is_artificial_token(next_token) and next_token.isnumeric():
                     all_concepts.append(next_token)
         return convert_to_concept_probabilities(all_concepts)
 
@@ -374,54 +377,58 @@ def main(
     code_prediction_output = []
     for record in tqdm(test_dataset, total=len(test_dataset)):
         seq = record["concept_ids"]
-        if len(seq) > ts_pred_model.max_sequence:
-            continue
+        seq_length = len(seq)
         person_id += 1
         visit_counter = 0
         for index, concept_id in enumerate(seq):
-            # At the end of the visit, we will create simulations to estimate the probabilities of events
-            if concept_id == "VE" and index < len(seq) - 1:
-                partial_history = seq[:index + 1]
-                simulated_seqs = ts_pred_model.simulate(partial_history, 3)
 
-                # Extract the predictions for time to the next visit
-                time_to_next_visit_label = convert_att_to_time_interval(seq[index + 1])
-                if time_to_next_visit_label:
-                    tte = ts_pred_model.extract_time_to_next_visit(partial_history, simulated_seqs)
-                    tte_visit_output.append({
-                        "person_id": person_id,
-                        "visit_counter": visit_counter,
-                        "time_to_next_visit_label": time_to_next_visit_label,
-                        "time_to_next_visit_average": tte.average_time,
-                        "time_to_next_visit_std": tte.standard_deviation,
-                        "time_to_next_visit_most_likely": tte.most_likely_time,
-                        "time_interval_probability_table": tte.time_interval_probability_table,
-                        "time_to_next_visit_simulations": tte.num_of_simulations
-                    })
-
-                if index + 3 < len(seq) and seq[index + 2] == "VS":
-                    visit_type_label = seq[index + 3]
-                    # Extract the predictions for the next visit type
-                    visit_concept_probs = ts_pred_model.extract_next_visit_type(partial_history, simulated_seqs)
-                    visit_type_prediction = sorted(
-                        map(asdict, visit_concept_probs),
-                        key=lambda v: v["probability"],
-                        reverse=True
-                    )
-                    next_visit_prediction_output.append({
-                        'person_id': person_id,
-                        'visit_counter': visit_counter,
-                        'visit_type_label': visit_type_label,
-                        'next_visit_type': visit_type_label,
-                        'next_visit_predictions': visit_type_prediction
-                    })
+            if concept_id == "VE":
+                # increment the visit number by one
+                visit_counter += 1
 
                 # We only do code prediction once the cursor exceeds the half of the patient sequence.
                 # In other words, we use the first half of the patient sequence to predict the second half of
                 # the patient sequence.
-                if index > len(seq) // 2 and person_id not in code_prediction_output:
-                    future_event_predictions = ts_pred_model.predict_events(
+                if seq_length - 1 > index > seq_length // 2:
+                    partial_history = seq[:index + 1]
+                    max_new_tokens = ts_pred_model.max_sequence - len(partial_history)
+                    simulated_seqs = ts_pred_model.simulate(partial_history, max_new_tokens)
+
+                    # Extract the predictions for time to the next visit
+                    time_to_next_visit_label = convert_att_to_time_interval(seq[index + 1])
+                    if time_to_next_visit_label:
+                        tte = ts_pred_model.extract_time_to_next_visit(partial_history, simulated_seqs)
+                        tte_visit_output.append({
+                            "person_id": person_id,
+                            "visit_counter": visit_counter,
+                            "time_to_next_visit_label": time_to_next_visit_label,
+                            "time_to_next_visit_average": tte.average_time,
+                            "time_to_next_visit_std": tte.standard_deviation,
+                            "time_to_next_visit_most_likely": tte.most_likely_time,
+                            "time_interval_probability_table": tte.time_interval_probability_table,
+                            "time_to_next_visit_simulations": tte.num_of_simulations
+                        })
+
+                    if index + 3 < seq_length and seq[index + 2] == "VS":
+                        visit_type_label = seq[index + 3]
+                        # Extract the predictions for the next visit type
+                        visit_concept_probs = ts_pred_model.extract_next_visit_type(partial_history, simulated_seqs)
+                        visit_type_prediction = sorted(
+                            map(asdict, visit_concept_probs),
+                            key=lambda v: v["probability"],
+                            reverse=True
+                        )
+                        next_visit_prediction_output.append({
+                            'person_id': person_id,
+                            'visit_counter': visit_counter,
+                            'visit_type_label': visit_type_label,
+                            'next_visit_type': visit_type_label,
+                            'next_visit_predictions': visit_type_prediction
+                        })
+
+                    future_event_predictions = ts_pred_model.extract_events(
                         partial_history,
+                        simulated_seqs,
                         only_next_visit=False
                     )
                     future_event_predictions = sorted(
@@ -442,46 +449,82 @@ def main(
                         "code_predictions": future_event_predictions
                     })
 
-                # increment the visit number by one
-                visit_counter += 1
+                    # One patient only yield one sample
+                    break
 
-                if len(tte_visit_output) >= args.buffer_size:
-                    print(f'{datetime.datetime.now()}: Flushing time to visit predictions to disk')
-                    pd.DataFrame(
-                        tte_visit_output
-                    ).to_parquet(os.path.join(time_sensitive_prediction_output_folder_name, f'{uuid.uuid4()}.parquet'))
-                    tte_visit_output.clear()
+            if len(tte_visit_output) >= args.buffer_size:
+                print(f'{datetime.datetime.now()}: Flushing time to visit predictions to disk')
+                pd.DataFrame(
+                    tte_visit_output,
+                    columns=[
+                        "person_id", "visit_counter", "time_to_next_visit_label", "time_to_next_visit_average",
+                        "time_to_next_visit_std", "time_to_next_visit_most_likely", "time_interval_probability_table",
+                        "time_to_next_visit_simulations"
+                    ]
+                ).to_parquet(os.path.join(time_sensitive_prediction_output_folder_name, f'{uuid.uuid4()}.parquet'))
+                tte_visit_output.clear()
 
-                if len(next_visit_prediction_output) >= args.buffer_size:
-                    print(f'{datetime.datetime.now()}: Flushing next visit type predictions to disk')
-                    pd.DataFrame(
-                        next_visit_prediction_output
-                    ).to_parquet(os.path.join(next_visit_type_prediction_folder_name, f'{uuid.uuid4()}.parquet'))
-                    next_visit_prediction_output.clear()
+            if len(next_visit_prediction_output) >= args.buffer_size:
+                print(f'{datetime.datetime.now()}: Flushing next visit type predictions to disk')
+                pd.DataFrame(
+                    next_visit_prediction_output,
+                    columns=[
+                        'person_id',
+                        'visit_counter',
+                        'visit_type_label',
+                        'next_visit_type',
+                        'next_visit_predictions'
+                    ]
+                ).to_parquet(os.path.join(next_visit_type_prediction_folder_name, f'{uuid.uuid4()}.parquet'))
+                next_visit_prediction_output.clear()
 
-                if len(code_prediction_output) >= args.buffer_size:
-                    print(f'{datetime.datetime.now()}: Flushing code predictions to disk')
-                    pd.DataFrame(
-                        code_prediction_output
-                    ).to_parquet(os.path.join(code_predictions_output_folder_name, f'{uuid.uuid4()}.parquet'))
-                    code_prediction_output.clear()
+            if len(code_prediction_output) >= args.buffer_size:
+                print(f'{datetime.datetime.now()}: Flushing code predictions to disk')
+                pd.DataFrame(
+                    code_prediction_output,
+                    columns=[
+                        "person_id",
+                        "visit_counter",
+                        "code_labels",
+                        "code_predictions"
+                    ]
+                ).to_parquet(os.path.join(code_predictions_output_folder_name, f'{uuid.uuid4()}.parquet'))
+                code_prediction_output.clear()
 
     if len(tte_visit_output) > 0:
         print(f'{datetime.datetime.now()}: Flushing time to visit predictions to disk at Final Batch')
         pd.DataFrame(
-            tte_visit_output
+            tte_visit_output,
+            columns=[
+                "person_id", "visit_counter", "time_to_next_visit_label", "time_to_next_visit_average",
+                "time_to_next_visit_std", "time_to_next_visit_most_likely", "time_interval_probability_table",
+                "time_to_next_visit_simulations"
+            ]
         ).to_parquet(os.path.join(time_sensitive_prediction_output_folder_name, f'{uuid.uuid4()}-last.parquet'))
 
     if len(next_visit_prediction_output) > 0:
         print(f'{datetime.datetime.now()}: Flushing next visit type predictions to disk at Final Batch')
         pd.DataFrame(
-            next_visit_prediction_output
+            next_visit_prediction_output,
+            columns=[
+                'person_id',
+                'visit_counter',
+                'visit_type_label',
+                'next_visit_type',
+                'next_visit_predictions'
+            ]
         ).to_parquet(os.path.join(next_visit_type_prediction_folder_name, f'{uuid.uuid4()}-last.parquet'))
 
     if len(code_prediction_output) > 0:
         print(f'{datetime.datetime.now()}: Flushing code predictions to disk at Final Batch')
         pd.DataFrame(
-            code_prediction_output
+            code_prediction_output,
+            columns=[
+                "person_id",
+                "visit_counter",
+                "code_labels",
+                "code_predictions"
+            ]
         ).to_parquet(os.path.join(code_predictions_output_folder_name, f'{uuid.uuid4()}-last.parquet'))
 
 
