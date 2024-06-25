@@ -112,16 +112,17 @@ class TimeSensitivePredictionModel:
         self.generation_config.max_new_tokens = old_max_new_tokens
 
         all_valid_time_intervals = []
-        for result in results:
-            concept_ids = self.tokenizer.decode(result.cpu().numpy())
-            next_token = concept_ids[seq_length]
-            time_interval = None
-            if next_token.startswith("D"):
-                time_interval = int(next_token[1:])
-            elif next_token == "LT":
-                time_interval = 1080
-            if time_interval:
-                all_valid_time_intervals.append(time_interval)
+        for seq in results.sequences:
+            concept_ids = self.tokenizer.decode(seq.cpu().numpy())
+            if seq_length < len(concept_ids):
+                next_token = concept_ids[seq_length]
+                time_interval = None
+                if next_token.startswith("D"):
+                    time_interval = int(next_token[1:])
+                elif next_token == "LT":
+                    time_interval = 1080
+                if time_interval:
+                    all_valid_time_intervals.append(time_interval)
 
         return TimeToEvent(
             average_time=np.mean(all_valid_time_intervals),
@@ -156,8 +157,8 @@ class TimeSensitivePredictionModel:
         )
         self.generation_config.max_new_tokens = old_max_new_tokens
         next_visit_type_tokens = []
-        for result in results:
-            concept_ids = self.tokenizer.decode(result.cpu().numpy())
+        for seq in results.sequences:
+            concept_ids = self.tokenizer.decode(seq.cpu().numpy())
             for next_token in concept_ids[seq_length:]:
                 if next_token in VISIT_CONCEPT_IDS:
                     next_visit_type_tokens.append(next_token)
@@ -193,8 +194,8 @@ class TimeSensitivePredictionModel:
         self.generation_config.max_new_tokens = old_max_new_tokens
 
         all_concepts = []
-        for result in results:
-            generated_seq = self.tokenizer.decode(result.cpu().numpy())
+        for seq in results.sequences:
+            generated_seq = self.tokenizer.decode(seq.cpu().numpy())
             for next_token in generated_seq[seq_length:]:
                 if only_next_visit and next_token == "VE":
                     break
