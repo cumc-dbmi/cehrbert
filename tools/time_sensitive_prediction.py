@@ -367,18 +367,18 @@ def main(
     next_visit_prediction_output = dict()
     code_prediction_output = dict()
     for record in tqdm(test_dataset, total=len(test_dataset)):
-        person_id += 1
         seq = record["concept_ids"]
+        if len(seq) > ts_pred_model.max_sequence:
+            continue
+        person_id += 1
         visit_counter = 0
         att_predictions = dict()
         visit_type_predictions = dict()
-        code_predictions = dict()
         for index, concept_id in enumerate(seq):
             # At the end of the visit, we will create simulations to estimate the probabilities of events
             if concept_id == "VE" and index < len(seq) - 1:
-                max_new_tokens = ts_pred_model.max_sequence - index - 1
                 partial_history = seq[:index + 1]
-                simulated_seqs = ts_pred_model.simulate(partial_history, max_new_tokens)
+                simulated_seqs = ts_pred_model.simulate(partial_history, 3)
 
                 # Extract the predictions for time to the next visit
                 time_to_next_visit_label = convert_att_to_time_interval(seq[index + 1])
@@ -415,24 +415,27 @@ def main(
                         'next_visit_predictions': visit_type_prediction
                     }
 
-                future_event_labels = ts_pred_model.extract_events(
-                    partial_history, [seq],
-                    only_next_visit=False
-                )
-                future_event_predictions = ts_pred_model.extract_events(
-                    partial_history, simulated_seqs,
-                    only_next_visit=False
-                )
-                code_predictions[visit_counter] = {
-                    "code_labels": future_event_labels,
-                    "code_predictions": future_event_predictions
-                }
+                # We only do code prediction once the cursor exceeds the half of the patient sequence.
+                # In other words, we use the first half of the patient sequence to predict the second half of
+                # the patient sequence.
+                if index > len(seq) // 2 and person_id not in code_prediction_output:
+                    future_event_predictions = ts_pred_model.predict_events(
+                        partial_history,
+                        only_next_visit=False
+                    )
+                    future_event_labels = ts_pred_model.extract_events(
+                        partial_history, [seq],
+                        only_next_visit=False
+                    )
+                    tte_visit_output[person_id] = att_predictions
+                    next_visit_prediction_output[person_id] = visit_type_predictions
+                    code_prediction_output[person_id] = {
+                        "code_labels": future_event_labels,
+                        "code_predictions": future_event_predictions
+                    }
+
                 # increment the visit number by one
                 visit_counter += 1
-
-        tte_visit_output[person_id] = att_predictions
-        next_visit_prediction_output[person_id] = visit_type_predictions
-        code_prediction_output[person_id] = code_predictions
 
     with open(time_sensitive_prediction_output_folder_name, 'w') as json_file:
         json.dump(tte_visit_output, json_file, indent=4)
