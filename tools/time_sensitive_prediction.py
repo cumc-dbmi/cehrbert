@@ -333,9 +333,10 @@ def main(
     if 'test' not in dataset:
         raise ValueError(f"The dataset does not contain a test split at {args.dataset_folder}")
 
+    person_id = 0
     output = dict()
     for record in tqdm(dataset["test"], total=len(dataset["test"])):
-        person_id = record["person_id"]
+        person_id += 1
         seq = record["concept_ids"]
         visit_counter = 0
         att_predictions = dict()
