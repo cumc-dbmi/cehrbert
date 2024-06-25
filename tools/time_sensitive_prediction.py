@@ -2,6 +2,7 @@ import argparse
 import datetime
 import os
 import json
+import math
 from enum import Enum
 from typing import Union, List, Dict
 from dataclasses import dataclass
@@ -101,13 +102,15 @@ class TimeSensitivePredictionModel:
             model: CEHRGPT2LMHeadModel,
             generation_config: GenerationConfig,
             prediction_strategy: PredictionStrategy = PredictionStrategy.GREEDY_STRATEGY,
-            device: torch.device = torch.device("cpu")
+            device: torch.device = torch.device("cpu"),
+            batch_size: int = 32
     ):
         self.tokenizer = tokenizer
-        self.model = model
+        self.model = model.eval()
         self.generation_config = generation_config
         self.prediction_strategy = prediction_strategy
         self.device = device
+        self.batch_size = batch_size
 
     def simulate(
             self,
@@ -133,12 +136,27 @@ class TimeSensitivePredictionModel:
         )
         token_ids = self.tokenizer.encode(partial_history)
         prompt = torch.tensor(token_ids).unsqueeze(0).to(self.device)
-        results = self.model.generate(
-            inputs=prompt,
-            generation_config=self.generation_config,
+
+        simulated_sequences = []
+        num_iters = max(
+            math.ceil(self.generation_config.num_return_sequences / self.batch_size),
+            1
         )
+        old_num_return_sequences = self.generation_config.num_return_sequences
+        self.generation_config.num_return_sequences = self.batch_size
+        for _ in range(num_iters):
+            with torch.no_grad():
+                results = self.model.generate(
+                    inputs=prompt,
+                    generation_config=self.generation_config,
+                )
+                # Clear the cache
+                torch.cuda.empty_cache()
+            simulated_sequences.extend([self.tokenizer.decode(seq.cpu().numpy()) for seq in results.sequences])
+
+        self.generation_config.num_return_sequences = old_num_return_sequences
         self.generation_config.max_new_tokens = old_max_new_tokens
-        return [self.tokenizer.decode(seq.cpu().numpy()) for seq in results.sequences]
+        return simulated_sequences
 
     @staticmethod
     def extract_time_to_next_visit(
@@ -330,6 +348,7 @@ def main(
         tokenizer=cehrgpt_tokenizer,
         model=cehrgpt_model,
         generation_config=generation_config,
+        batch_size=args.batch_size,
         device=device
     )
 
@@ -361,16 +380,9 @@ def main(
         for index, concept_id in enumerate(seq):
             if concept_id == "VE" and index < len(seq) - 1:
                 next_token = seq[index + 1]
-                time_to_next_visit_label = None
-                if next_token.startswith("D"):
-                    time_to_next_visit_label = int(next_token[1:])
-                elif next_token == "LT":
-                    time_to_next_visit_label = 1080
+                time_to_next_visit_label = convert_att_to_time_interval(next_token)
                 if time_to_next_visit_label:
-                    with torch.no_grad():
-                        tte = ts_pred_model.predict_time_to_next_visit(seq[:index + 1])
-                    # Clear the cache
-                    torch.cuda.empty_cache()
+                    tte = ts_pred_model.predict_time_to_next_visit(seq[:index + 1])
                     att_predictions[visit_counter] = {
                         "time_to_next_visit_label": time_to_next_visit_label,
                         "time_to_next_visit_average": tte.average_time,
@@ -427,6 +439,13 @@ if __name__ == "__main__":
     parser.add_argument(
         '--num_return_sequences',
         dest='num_return_sequences',
+        action='store',
+        type=int,
+        required=True
+    )
+    parser.add_argument(
+        '--batch_size',
+        dest='batch_size',
         action='store',
         type=int,
         required=True
