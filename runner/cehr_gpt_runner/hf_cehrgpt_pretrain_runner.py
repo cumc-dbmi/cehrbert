@@ -77,12 +77,22 @@ def main():
 
     prepared_ds_path = generate_prepared_ds_path(data_args, model_args)
 
-    if any(prepared_ds_path.glob("*")):
+    if os.path.exists(os.path.join(data_args.data_folder, 'dataset_dict.json')):
+        LOG.info(f"Loading prepared dataset from disk at {data_args.data_folder}...")
+        processed_dataset = load_from_disk(data_args.data_folder)
+        # If the data has been processed in the past, it's assume the tokenizer has been created before.
+        # we load the CEHR-GPT tokenizer from the output folder.
+        tokenizer = load_and_create_tokenizer(
+            data_args=data_args,
+            model_args=model_args,
+            dataset=processed_dataset
+        )
+    elif any(prepared_ds_path.glob("*")):
         LOG.info(f"Loading prepared dataset from disk at {prepared_ds_path}...")
         processed_dataset = load_from_disk(str(prepared_ds_path))
         LOG.info("Prepared dataset loaded from disk...")
         # If the data has been processed in the past, it's assume the tokenizer has been created before.
-        # we load the CEHR-BERT tokenizer from the output folder.
+        # we load the CEHR-GPT tokenizer from the output folder.
         tokenizer = load_and_create_tokenizer(
             data_args=data_args,
             model_args=model_args,
