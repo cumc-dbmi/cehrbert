@@ -322,21 +322,23 @@ def main(
         args.dataset_folder
     )
 
-    def filter_func(examples):
-        return [_ <= cehrgpt_model.config.n_positions for _ in examples['num_of_concepts']]
-
-    dataset = dataset.filter(
-        filter_func,
-        batched=True,
-        batch_size=1000
-    )
-
     if 'test' not in dataset:
         raise ValueError(f"The dataset does not contain a test split at {args.dataset_folder}")
 
+    test_dataset = dataset['test']
+
+    def filter_func(examples):
+        return [_ <= cehrgpt_model.config.n_positions for _ in examples['num_of_concepts']]
+
+    test_dataset = test_dataset.filter(
+        filter_func,
+        batched=True,
+        batch_size=1000
+    ).select(range(20))
+
     person_id = 0
     output = dict()
-    for record in tqdm(dataset["test"], total=len(dataset["test"])):
+    for record in tqdm(test_dataset, total=len(test_dataset)):
         person_id += 1
         seq = record["concept_ids"]
         visit_counter = 0
