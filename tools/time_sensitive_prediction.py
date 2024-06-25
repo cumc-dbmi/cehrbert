@@ -294,9 +294,6 @@ def main(
         'time_sensitive_predictions.json'
     )
 
-    if not os.path.exists(output_folder_name):
-        os.makedirs(output_folder_name)
-
     print(f'{datetime.datetime.now()}: Loading tokenizer at {args.model_folder}')
     print(f'{datetime.datetime.now()}: Loading model at {args.model_folder}')
     print(f'{datetime.datetime.now()}: Write time sensitive predictions to {output_folder_name}')
