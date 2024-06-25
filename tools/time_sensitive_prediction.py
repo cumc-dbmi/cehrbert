@@ -5,7 +5,7 @@ import json
 import math
 from enum import Enum
 from typing import Union, List, Dict
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from collections import Counter
 from tqdm import tqdm
 
@@ -397,16 +397,8 @@ def main(
                     visit_type_label = seq[index + 3]
                     # Extract the predictions for the next visit type
                     visit_concept_probs = ts_pred_model.extract_next_visit_type(partial_history, simulated_seqs)
-                    visit_type_prediction = [
-                        {
-                            "visit_type": p.concept,
-                            "probability": p.probability,
-                            "num_of_simulations": p.num_of_simulations
-                        }
-                        for p in visit_concept_probs
-                    ]
                     visit_type_prediction = sorted(
-                        visit_type_prediction,
+                        map(asdict, visit_concept_probs),
                         key=lambda v: v["probability"],
                         reverse=True
                     )
@@ -423,9 +415,15 @@ def main(
                         partial_history,
                         only_next_visit=False
                     )
+                    future_event_predictions = sorted(
+                        map(asdict, future_event_predictions), key=lambda v: v['probability'], reverse=True
+                    )
                     future_event_labels = ts_pred_model.extract_events(
                         partial_history, [seq],
                         only_next_visit=False
+                    )
+                    future_event_labels = sorted(
+                        map(asdict, future_event_labels), key=lambda v: v['probability'], reverse=True
                     )
                     tte_visit_output[person_id] = att_predictions
                     next_visit_prediction_output[person_id] = visit_type_predictions
