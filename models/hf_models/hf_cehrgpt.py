@@ -1,5 +1,5 @@
 import warnings
-from typing import Tuple, Optional, Union, List
+from typing import Tuple, Optional, Union, List, Dict
 
 import torch
 import math
@@ -14,7 +14,6 @@ from torch.nn import CrossEntropyLoss
 
 from transformers.generation.stopping_criteria import validate_stopping_criteria, StoppingCriteriaList
 from transformers.generation.logits_process import LogitsProcessorList
-from transformers.generation.utils import GenerateEncoderDecoderOutput, GenerateDecoderOnlyOutput
 
 from models.hf_models.hf_modeling_outputs import (
     CehrGptOutputWithPast, CehrGptCausalLMOutput, CehrGptGenerateDecoderOnlyOutput
@@ -73,6 +72,60 @@ class ConceptValueTransformationLayer(nn.Module):
         concept_embeddings = torch.where(value_indicators, transformed_embeddings, concept_embeddings)
 
         return concept_embeddings
+
+
+class CehrGptEmbedding(nn.Module):
+    def __init__(
+            self,
+            vocab_size: int,
+            sub_time_vocab_size: int,
+            embedding_dim: int,
+            time_token_mapping: Dict[int, List[int]]
+    ):
+        super(CehrGptEmbedding, self).__init__()
+        assert embedding_dim % 3 == 0, "embedding_size needs to be a multiple of three"
+        assert sub_time_vocab_size > 0, "sub_time_vocab_size nees to be greater than one"
+        if len(time_token_mapping) == 0:
+            # Add default value
+            time_token_mapping[-1] = [0, 0, 0]
+        self.vocab_size = vocab_size
+        self.sub_time_vocab_size = sub_time_vocab_size
+        self.embedding_dim = embedding_dim
+        self.sub_time_embedding_dim = embedding_dim // 3
+        self.embedding_layer = nn.Embedding(self.vocab_size, self.embedding_dim)
+        self.time_interval_embedding_layer = nn.Embedding(self.sub_time_vocab_size, self.sub_time_embedding_dim)
+        self.time_tokens = torch.tensor(list(time_token_mapping.keys()), dtype=torch.int64)
+        self.mapped_sub_time_tokens = torch.tensor(list(time_token_mapping.values()), dtype=torch.int64)
+
+    def forward(self, tokens: torch.IntTensor):
+        # Identify all time tokens
+        time_token_indicators = torch.isin(tokens, self.time_tokens.to(tokens.device))
+        masked_tokens = tokens.clone()
+        masked_tokens[~time_token_indicators] = -1
+        # Get the index of the sub_time_tokens from the time_tokens tensor
+        sub_time_token_indices = torch.argmax(
+            (masked_tokens.unsqueeze(-1) == self.time_tokens.unsqueeze(0).unsqueeze(0)).to(torch.int32),
+            dim=-1
+        )
+        sub_time_tokens = self.mapped_sub_time_tokens[sub_time_token_indices]
+        time_interval_embeddings = self.time_interval_embedding_layer(sub_time_tokens).flatten(-2)
+        embeddings = self.embedding_layer(tokens)
+        merged_embeddings = torch.where(
+            time_token_indicators.unsqueeze(-1),
+            time_interval_embeddings,
+            embeddings
+        )
+        return merged_embeddings
+
+    def merged_weights(self):
+        with torch.no_grad():
+            cloned_weights = self.embedding_layer.weight.clone()
+            valid_time_token_indicators = self.time_tokens >= 0
+            time_interval_embeddings = self.time_interval_embedding_layer(
+                self.mapped_sub_time_tokens[valid_time_token_indicators]
+            )
+            cloned_weights[self.time_tokens[valid_time_token_indicators]] = time_interval_embeddings.flatten(-2)
+        return cloned_weights
 
 
 class CEHRGPTPreTrainedModel(PreTrainedModel):
