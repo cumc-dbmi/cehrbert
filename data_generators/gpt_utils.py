@@ -100,15 +100,17 @@ def is_inpatient_att_token(token: str):
 
 
 def extract_time_interval_in_days(token: str):
-    if token[0] == 'D':
-        return int(token[1:])
-    elif token == 'LT':
-        return 365 * 3
-    elif token[:3] == 'VS-':  # VS-D7-VE
-        return int(token.split('-')[1][1:])
-    elif token[:2] == 'i-':  # i-D7
-        return int(token.split('-')[1][1:])
-
+    try:
+        if token[0] == 'D':
+            return int(token[1:])
+        elif token == 'LT':
+            return 365 * 3
+        elif token[:3] == 'VS-':  # VS-D7-VE
+            return int(token.split('-')[1][1:])
+        elif token[:2] == 'i-':  # i-D7
+            return int(token.split('-')[1][1:])
+    except Exception as e:
+        raise ValueError(f"Invalid time token: {token}")
     raise ValueError(f"Invalid time token: {token}")
 
 
