@@ -4,7 +4,7 @@ import pickle
 import collections
 from functools import partial
 from typing import Sequence, Union, List, Dict, Any
-from itertools import islice, chain
+from itertools import islice
 
 import transformers
 from datasets import Dataset, DatasetDict
@@ -16,6 +16,7 @@ from transformers.tokenization_utils_base import PushToHubMixin
 
 from femr.stat_utils import OnlineStatistics
 from runner.hf_runner_argument_dataclass import DataTrainingArguments
+from data_generators.gpt_utils import is_att_token, extract_time_interval_in_days, convert_time_interval_to_time_tuple
 
 START_TOKEN = "[START]"
 END_TOKEN = "[END]"
@@ -23,6 +24,8 @@ PAD_TOKEN = "[PAD]"
 OUT_OF_VOCABULARY_TOKEN = "[OOV]"
 
 TOKENIZER_FILE_NAME = "cehrgpt_tokenizer.json"
+TIME_TOKENIZER_FILE_NAME = "cehrgpt_time_tokenizer.json"
+TOKEN_TO_SUB_TIME_TOKEN_MAPPING_FILE_NAME = "token_to_sub_time_token_mapping.json"
 LAB_STATS_FILE_NAME = "cehrgpt_lab_stats.json"
 CONCEPT_MAPPING_FILE_NAME = "concept_name_mapping.json"
 
@@ -79,10 +82,14 @@ class CehrGptTokenizer(PushToHubMixin):
     def __init__(
             self,
             tokenizer: Tokenizer,
+            att_tokenizer: Tokenizer,
+            token_to_sub_time_token_mapping: Dict[str, List[str]],
             lab_stats: List[Dict[str, Any]],
             concept_name_mapping: Dict[str, str]
     ):
         self._tokenizer = tokenizer
+        self._att_tokenizer = att_tokenizer
+        self._token_to_sub_time_token_mapping = token_to_sub_time_token_mapping
         self._lab_stats = lab_stats
         self._concept_name_mapping = concept_name_mapping
         self._oov_token_id = self._tokenizer.token_to_id(OUT_OF_VOCABULARY_TOKEN)
@@ -163,6 +170,11 @@ class CehrGptTokenizer(PushToHubMixin):
 
         self._tokenizer.save(os.path.join(save_directory, TOKENIZER_FILE_NAME))
 
+        self._att_tokenizer.save(os.path.join(save_directory, TIME_TOKENIZER_FILE_NAME))
+
+        with open(os.path.join(save_directory, TOKEN_TO_SUB_TIME_TOKEN_MAPPING_FILE_NAME), "w") as f:
+            json.dump(self._token_to_sub_time_token_mapping, f)
+
         with open(os.path.join(save_directory, LAB_STATS_FILE_NAME), "w") as f:
             json.dump(self._lab_stats, f)
 
@@ -210,6 +222,20 @@ class CehrGptTokenizer(PushToHubMixin):
 
         tokenizer = Tokenizer.from_file(tokenizer_file)
 
+        att_tokenizer_file = transformers.utils.hub.cached_file(
+            pretrained_model_name_or_path, TIME_TOKENIZER_FILE_NAME, **kwargs
+        )
+        if not att_tokenizer_file:
+            return None
+
+        att_tokenizer = Tokenizer.from_file(att_tokenizer_file)
+
+        token_to_sub_time_token_mapping_file = transformers.utils.hub.cached_file(
+            pretrained_model_name_or_path, TOKEN_TO_SUB_TIME_TOKEN_MAPPING_FILE_NAME, **kwargs
+        )
+        if not token_to_sub_time_token_mapping_file:
+            return None
+
         lab_stats_file = transformers.utils.hub.cached_file(
             pretrained_model_name_or_path, LAB_STATS_FILE_NAME, **kwargs
         )
@@ -222,11 +248,19 @@ class CehrGptTokenizer(PushToHubMixin):
         if not concept_name_mapping_file:
             return None
 
+        token_to_sub_time_token_mapping = load_json_file(token_to_sub_time_token_mapping_file)
+
         concept_name_mapping = load_json_file(concept_name_mapping_file)
 
         lab_stats = load_json_file(lab_stats_file)
 
-        return CehrGptTokenizer(tokenizer, lab_stats, concept_name_mapping)
+        return CehrGptTokenizer(
+            tokenizer,
+            att_tokenizer,
+            token_to_sub_time_token_mapping,
+            lab_stats,
+            concept_name_mapping
+        )
 
     @classmethod
     def train_tokenizer(
@@ -244,11 +278,12 @@ class CehrGptTokenizer(PushToHubMixin):
         if isinstance(dataset, DatasetDict):
             dataset = dataset['train']
 
+        lab_stats = []
         # Use the Fast Tokenizer from the Huggingface tokenizers Rust implementation.
         # https://github.com/huggingface/tokenizers
-        tokenizer = Tokenizer(WordLevel(unk_token=OUT_OF_VOCABULARY_TOKEN, vocab=dict()))
-        tokenizer.pre_tokenizer = WhitespaceSplit()
-        trainer = WordLevelTrainer(
+        concept_tokenizer = Tokenizer(WordLevel(unk_token=OUT_OF_VOCABULARY_TOKEN, vocab=dict()))
+        concept_tokenizer.pre_tokenizer = WhitespaceSplit()
+        concept_trainer = WordLevelTrainer(
             special_tokens=[PAD_TOKEN, OUT_OF_VOCABULARY_TOKEN, START_TOKEN, END_TOKEN],
             vocab_size=data_args.vocab_size,
             min_frequency=data_args.min_frequency,
@@ -286,7 +321,7 @@ class CehrGptTokenizer(PushToHubMixin):
                 )
                 generator = concatenated_features[feature_name]
 
-            tokenizer.train_from_iterator(generator, trainer=trainer)
+            concept_tokenizer.train_from_iterator(generator, trainer=concept_trainer)
 
             if data_args.streaming:
                 parts = dataset.map(
@@ -323,7 +358,34 @@ class CehrGptTokenizer(PushToHubMixin):
                 }
                 for (concept_id, unit), online_stats in current['numeric_stats_by_lab'].items()
             ]
-        return CehrGptTokenizer(tokenizer, lab_stats, concept_name_mapping)
+
+        # We will train a tokenizer specifically for time intervals
+        sub_time_token_data = []
+        token_to_sub_time_token_mapping = collections.defaultdict(list)
+        for token, token_id in concept_tokenizer.get_vocab().items():
+            if is_att_token(token):
+                time_interval = extract_time_interval_in_days(token)
+                time_tuple = convert_time_interval_to_time_tuple(time_interval)
+                token_to_sub_time_token_mapping[token] = list(time_tuple)
+                sub_time_token_data.append(" ".join(time_tuple))
+
+        att_tokenizer = Tokenizer(WordLevel(unk_token=OUT_OF_VOCABULARY_TOKEN, vocab=dict()))
+        att_tokenizer.pre_tokenizer = WhitespaceSplit()
+        att_trainer = WordLevelTrainer(
+            special_tokens=[OUT_OF_VOCABULARY_TOKEN],
+            vocab_size=data_args.vocab_size,
+            min_frequency=0,
+            show_progress=True
+        )
+        att_tokenizer.train_from_iterator(sub_time_token_data, trainer=att_trainer)
+
+        return CehrGptTokenizer(
+            concept_tokenizer,
+            att_tokenizer,
+            token_to_sub_time_token_mapping,
+            lab_stats,
+            concept_name_mapping
+        )
 
     @classmethod
     def batch_concat_concepts(cls, records: Dict[str, List], feature_name) -> Dict[str, List]:
