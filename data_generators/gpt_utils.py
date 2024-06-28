@@ -1,7 +1,7 @@
 import re
 import random
 from datetime import date, timedelta
-from typing import Sequence
+from typing import Sequence, Tuple
 
 inpatient_att_pattern = re.compile(r'(?:VS-|i-)D(\d+)(?:-VE)?')
 
@@ -77,3 +77,47 @@ def random_slice_gpt_sequence(
         return random_starting_index, random_end_index, demographic_tokens
     except Exception as e:
         return 0, max_seq_len - 1, []
+
+
+def is_att_token(token: str):
+    if token.startswith("D"):
+        return True
+    elif token == "LT":
+        return True
+    elif token[:3] == 'VS-':  # VS-D7-VE
+        return True
+    elif token[:2] == 'i-':  # i-D7
+        return True
+    return False
+
+
+def is_inpatient_att_token(token: str):
+    if token[:3] == 'VS-':  # VS-D7-VE
+        return True
+    elif token[:2] == 'i-':  # i-D7
+        return True
+    return False
+
+
+def extract_time_interval_in_days(token: str):
+    if token[0] == 'D':
+        return int(token[1:])
+    elif token == 'LT':
+        return 365 * 3
+    elif token[:3] == 'VS-':  # VS-D7-VE
+        return int(token.split('-')[1][1:])
+    elif token[:2] == 'i-':  # i-D7
+        return int(token.split('-')[1][1:])
+
+    raise ValueError(f"Invalid time token: {token}")
+
+
+def convert_time_interval_to_time_tuple(time_interval: int, is_inpatient: bool) -> Tuple[str, str, str]:
+    assert time_interval >= 0, "the time interval must equal and greater than zero"
+    year = time_interval // 365
+    month = time_interval % 365 // 30
+    day = time_interval % 365 % 30
+    year_token = f"year:{year}"
+    month_token = f"month:{month}"
+    day_token = f"i-day:{day}" if is_inpatient else f"day:{day}"
+    return year_token, month_token, day_token

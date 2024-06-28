@@ -94,12 +94,18 @@ class CehrGptEmbedding(nn.Module):
         self.sub_time_embedding_dim = embedding_dim // 3
         self.embedding_layer = nn.Embedding(self.vocab_size, self.embedding_dim)
         self.time_interval_embedding_layer = nn.Embedding(self.sub_time_vocab_size, self.sub_time_embedding_dim)
-        self.time_tokens = torch.tensor(list(time_token_mapping.keys()), dtype=torch.int64)
-        self.mapped_sub_time_tokens = torch.tensor(list(time_token_mapping.values()), dtype=torch.int64)
+        self.register_buffer(
+            'time_tokens',
+            torch.tensor(list(time_token_mapping.keys()), dtype=torch.int64)
+        )
+        self.register_buffer(
+            'mapped_sub_time_tokens',
+            torch.tensor(list(time_token_mapping.values()), dtype=torch.int64)
+        )
 
     def forward(self, tokens: torch.IntTensor):
         # Identify all time tokens
-        time_token_indicators = torch.isin(tokens, self.time_tokens.to(tokens.device))
+        time_token_indicators = torch.isin(tokens, self.time_tokens)
         masked_tokens = tokens.clone()
         masked_tokens[~time_token_indicators] = -1
         # Get the index of the sub_time_tokens from the time_tokens tensor
@@ -117,15 +123,17 @@ class CehrGptEmbedding(nn.Module):
         )
         return merged_embeddings
 
-    def merged_weights(self):
+    @property
+    def weight(self):
+        weight = self.embedding_layer.weight
+        valid_time_token_indicators = self.time_tokens >= 0
+        time_interval_embeddings = self.time_interval_embedding_layer(
+            self.mapped_sub_time_tokens[valid_time_token_indicators]
+        )
+        # Use torch.no_grad() to perform the assignment without tracking gradients
         with torch.no_grad():
-            cloned_weights = self.embedding_layer.weight.clone()
-            valid_time_token_indicators = self.time_tokens >= 0
-            time_interval_embeddings = self.time_interval_embedding_layer(
-                self.mapped_sub_time_tokens[valid_time_token_indicators]
-            )
-            cloned_weights[self.time_tokens[valid_time_token_indicators]] = time_interval_embeddings.flatten(-2)
-        return cloned_weights
+            weight[self.time_tokens[valid_time_token_indicators]] = time_interval_embeddings.flatten(-2)
+        return weight
 
 
 class CEHRGPTPreTrainedModel(PreTrainedModel):
@@ -180,10 +188,18 @@ class CEHRGPT2Model(CEHRGPTPreTrainedModel):
         self.include_values = config.include_values
         self.embed_dim = config.hidden_size
 
-        self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
+        if config.use_sub_time_tokenization:
+            self.wte = CehrGptEmbedding(
+                vocab_size=config.vocab_size,
+                sub_time_vocab_size=config.time_token_vocab_size,
+                embedding_dim=self.embed_dim,
+                time_token_mapping=config.token_to_time_token_mapping
+            )
+        else:
+            self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
+
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
-        if self.include_values:
-            self.concept_value_transformation_layer = ConceptValueTransformationLayer(self.embed_dim)
+        self.concept_value_transformation_layer = ConceptValueTransformationLayer(self.embed_dim)
 
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([GPT2Block(config, layer_idx=i) for i in range(config.num_hidden_layers)])
@@ -242,8 +258,8 @@ class CEHRGPT2Model(CEHRGPTPreTrainedModel):
     def get_input_embeddings(self):
         return self.wte
 
-    def set_input_embeddings(self, new_embeddings):
-        self.wte = new_embeddings
+    def set_input_embeddings(self, new_embeddings: nn.Embedding):
+        self.wte.embedding_layer = new_embeddings
 
     def _prune_heads(self, heads_to_prune):
         """

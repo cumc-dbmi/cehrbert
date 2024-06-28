@@ -54,9 +54,12 @@ def load_and_create_model(
         LOG.warning(e)
         model_config = CEHRGPTConfig(
             vocab_size=tokenizer.vocab_size,
+            time_token_vocab_size=tokenizer.time_token_vocab_size,
             bos_token_id=tokenizer.end_token_id,
             eos_token_id=tokenizer.end_token_id,
             lab_token_ids=tokenizer.lab_token_ids,
+            token_to_time_token_mapping=tokenizer.token_to_time_token_mapping,
+            use_sub_time_tokenization=model_args.use_sub_time_tokenization,
             **model_args.as_dict()
         )
     return CEHRGPT2LMHeadModel(model_config)

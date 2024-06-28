@@ -229,6 +229,10 @@ class ModelArguments:
         default=False,
         metadata={"help": "Whether or not to include values into the model"}
     )
+    use_sub_time_tokenization: Optional[bool] = field(
+        default=True,
+        metadata={"help": "Whether or not to decompose the time interval into year/month/day"}
+    )
 
     def as_dict(self) -> Dict[str, Any]:
         return asdict(self)

@@ -16,7 +16,9 @@ from transformers.tokenization_utils_base import PushToHubMixin
 
 from femr.stat_utils import OnlineStatistics
 from runner.hf_runner_argument_dataclass import DataTrainingArguments
-from data_generators.gpt_utils import is_att_token, extract_time_interval_in_days, convert_time_interval_to_time_tuple
+from data_generators.gpt_utils import (
+    is_att_token, extract_time_interval_in_days, convert_time_interval_to_time_tuple, is_inpatient_att_token
+)
 
 START_TOKEN = "[START]"
 END_TOKEN = "[END]"
@@ -100,8 +102,12 @@ class CehrGptTokenizer(PushToHubMixin):
         super().__init__()
 
     @property
-    def vocab_size(self):
+    def vocab_size(self) -> int:
         return self._tokenizer.get_vocab_size()
+
+    @property
+    def time_token_vocab_size(self) -> int:
+        return self._att_tokenizer.get_vocab_size()
 
     @property
     def start_token_id(self):
@@ -118,6 +124,13 @@ class CehrGptTokenizer(PushToHubMixin):
     @property
     def lab_token_ids(self):
         return self.encode([_['concept_id'] for _ in self._lab_stats])
+
+    @property
+    def token_to_time_token_mapping(self) -> Dict[int, List[int]]:
+        return {
+            self._tokenizer.token_to_id(time_token): list(map(self._att_tokenizer.token_to_id, sub_time_tokens))
+            for time_token, sub_time_tokens in self._token_to_sub_time_token_mapping.items()
+        }
 
     def encode(self, concept_ids: Sequence[str]) -> Sequence[int]:
         encoded = self._tokenizer.encode(concept_ids, is_pretokenized=True)
@@ -365,7 +378,7 @@ class CehrGptTokenizer(PushToHubMixin):
         for token, token_id in concept_tokenizer.get_vocab().items():
             if is_att_token(token):
                 time_interval = extract_time_interval_in_days(token)
-                time_tuple = convert_time_interval_to_time_tuple(time_interval)
+                time_tuple = convert_time_interval_to_time_tuple(time_interval, is_inpatient_att_token(token))
                 token_to_sub_time_token_mapping[token] = list(time_tuple)
                 sub_time_token_data.append(" ".join(time_tuple))
 

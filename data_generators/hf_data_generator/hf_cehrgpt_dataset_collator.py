@@ -6,6 +6,7 @@ from torch.nn.utils.rnn import pad_sequence
 
 from models.hf_models.tokenization_hf_cehrgpt import CehrGptTokenizer
 from data_generators.gpt_utils import random_slice_gpt_sequence
+from models.gpt_model import generate_artificial_time_tokens
 
 
 class CehrGptDataCollator:
@@ -14,7 +15,8 @@ class CehrGptDataCollator:
             tokenizer: CehrGptTokenizer,
             max_length: int,
             shuffle_records: bool = False,
-            include_values: bool = False
+            include_values: bool = False,
+            include_att_prediction: bool = False
     ):
         self.tokenizer = tokenizer
         self.max_length = max_length
@@ -23,6 +25,7 @@ class CehrGptDataCollator:
         self.ve_token_id = tokenizer._convert_token_to_id('VE')
         self.shuffle_records = shuffle_records
         self.include_values = include_values
+        self.include_att_prediction = include_att_prediction
 
     @staticmethod
     def _convert_to_tensor(features: Any) -> torch.Tensor:

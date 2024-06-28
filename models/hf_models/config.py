@@ -1,3 +1,4 @@
+from typing import Dict, Any, List
 from transformers import PretrainedConfig
 
 
@@ -88,6 +89,7 @@ class CEHRGPTConfig(PretrainedConfig):
     def __init__(
             self,
             vocab_size=50257,
+            time_token_vocab_size=50257,
             n_positions=1024,
             n_embd=768,
             n_layer=12,
@@ -113,9 +115,14 @@ class CEHRGPTConfig(PretrainedConfig):
             reorder_and_upcast_attn=False,
             exclude_position_ids=False,
             include_values=False,
+            use_sub_time_tokenization=True,
+            token_to_time_token_mapping: Dict[int, List] = None,
             **kwargs,
     ):
+        if token_to_time_token_mapping is None:
+            token_to_time_token_mapping = {}
         self.vocab_size = vocab_size
+        self.time_token_vocab_size = time_token_vocab_size
         self.n_positions = n_positions
         self.n_embd = n_embd
         self.n_layer = n_layer
@@ -143,8 +150,18 @@ class CEHRGPTConfig(PretrainedConfig):
 
         self.exclude_position_ids = exclude_position_ids
         self.include_values = include_values
+        self.use_sub_time_tokenization = use_sub_time_tokenization
+        self._token_to_time_token_mapping = token_to_time_token_mapping
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+
+    @property
+    def token_to_time_token_mapping(self) -> Dict[int, List[int]]:
+        # The saved _token_to_time_token_mapping converts the key to string, so we need to convert it back to int
+        return {
+            int(token): list(map(int, sub_tokens))
+            for token, sub_tokens in self._token_to_time_token_mapping.items()
+        }
 
 
 class CehrBertConfig(PretrainedConfig):
