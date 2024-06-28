@@ -106,7 +106,10 @@ def extract_time_interval_in_days(token: str):
         elif token == 'LT':
             return 365 * 3
         elif token[:3] == 'VS-':  # VS-D7-VE
-            return int(token.split('-')[1][1:])
+            part = token.split('-')[1]
+            if part.startswith("LT"):
+                return 365 * 3
+            return int(part[1:])
         elif token[:2] == 'i-':  # i-D7
             return int(token.split('-')[1][1:])
     except Exception as e:
