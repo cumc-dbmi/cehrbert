@@ -6,7 +6,11 @@ from torch.nn.utils.rnn import pad_sequence
 
 from models.hf_models.tokenization_hf_cehrgpt import CehrGptTokenizer
 from data_generators.gpt_utils import random_slice_gpt_sequence
-from models.gpt_model import generate_artificial_time_tokens
+from data_generators.gpt_utils import (
+    is_inpatient_att_token, is_att_token, extract_time_interval_in_days
+)
+
+INPATIENT_STAY_DURATION_LIMIT = 30
 
 
 class CehrGptDataCollator:
@@ -16,7 +20,7 @@ class CehrGptDataCollator:
             max_length: int,
             shuffle_records: bool = False,
             include_values: bool = False,
-            include_att_prediction: bool = False
+            include_ttv_prediction: bool = False
     ):
         self.tokenizer = tokenizer
         self.max_length = max_length
@@ -25,7 +29,7 @@ class CehrGptDataCollator:
         self.ve_token_id = tokenizer._convert_token_to_id('VE')
         self.shuffle_records = shuffle_records
         self.include_values = include_values
-        self.include_att_prediction = include_att_prediction
+        self.include_ttv_prediction = include_ttv_prediction
 
     @staticmethod
     def _convert_to_tensor(features: Any) -> torch.Tensor:
@@ -33,6 +37,21 @@ class CehrGptDataCollator:
             return features
         else:
             return torch.tensor(features)
+
+    @staticmethod
+    def _convert_time_to_event(concept_ids):
+        def default_value(c):
+            try:
+                if is_att_token(c):
+                    time_to_visit = extract_time_interval_in_days(c)
+                    if is_inpatient_att_token(c) and time_to_visit > INPATIENT_STAY_DURATION_LIMIT:
+                        return -100
+                    return time_to_visit
+                return -100
+            except ValueError:
+                return -100
+
+        return [float(default_value(_)) for _ in concept_ids]
 
     def __call__(self, examples):
 
@@ -64,6 +83,17 @@ class CehrGptDataCollator:
         assert (batch['input_ids'].shape[1] <= self.max_length)
         assert (batch['attention_mask'].shape[1] <= self.max_length)
         batch['labels'] = batch['input_ids'].clone()
+
+        if self.include_ttv_prediction:
+            batch_time_to_visits = [
+                self._convert_to_tensor(example['time_to_visits'])
+                for example in examples
+            ]
+            batch['time_to_visits'] = pad_sequence(
+                batch_time_to_visits,
+                batch_first=True,
+                padding_value=-100.0
+            )
 
         if self.include_values:
             batch_value_indicators = [
@@ -148,6 +178,12 @@ class CehrGptDataCollator:
                     [self._convert_to_tensor(record['concept_values']),
                      self._convert_to_tensor([-1.0])]
                 )
+            if self.include_ttv_prediction:
+                record['time_to_visits'] = torch.concat(
+                    [self._convert_to_tensor(self._convert_time_to_event(record['concept_ids'])),
+                     self._convert_to_tensor([-100.0])]
+                )
+
             return record
 
         # There is a 50% chance we randomly slice out a portion of the patient history and update the demographic
@@ -166,6 +202,10 @@ class CehrGptDataCollator:
                     record['values'] = self._convert_to_tensor(
                         record['concept_values'][start_index:end_index + 1]
                     )
+                if self.include_ttv_prediction:
+                    record['time_to_visits'] = self._convert_to_tensor(
+                        self._convert_time_to_event(record['concept_ids'][start_index:end_index + 1])
+                    )
                 return record
 
         # The default employs a right truncation strategy, where the demographic prompt is reserved
@@ -183,5 +223,9 @@ class CehrGptDataCollator:
             ).to(torch.bool)
             record['values'] = self._convert_to_tensor(
                 record['concept_values'][0:end_index]
+            )
+        if self.include_ttv_prediction:
+            record['time_to_visits'] = self._convert_to_tensor(
+                self._convert_time_to_event(record['concept_ids'][0:end_index])
             )
         return record

@@ -11,6 +11,7 @@ from transformers.utils.model_parallel_utils import assert_device_map, get_devic
 from transformers.activations import gelu_new
 from transformers.utils import logging
 from torch.nn import CrossEntropyLoss
+from torch.distributions import Weibull
 
 from transformers.generation.stopping_criteria import validate_stopping_criteria, StoppingCriteriaList
 from transformers.generation.logits_process import LogitsProcessorList
@@ -21,6 +22,36 @@ from models.hf_models.hf_modeling_outputs import (
 from models.hf_models.config import CEHRGPTConfig
 
 logger = logging.get_logger(__name__)
+
+
+class WeibullModel(nn.Module):
+    def __init__(self, input_dim):
+        super(WeibullModel, self).__init__()
+        self.linear1 = nn.Sequential(
+            nn.Linear(input_dim, input_dim * 4),
+            nn.GELU(),
+            nn.Linear(4 * input_dim, input_dim),
+            nn.GELU(),
+            nn.Linear(input_dim, 1)
+        )
+        self.linear2 = nn.Sequential(
+            nn.Linear(input_dim, input_dim * 4),
+            nn.GELU(),
+            nn.Linear(4 * input_dim, input_dim),
+            nn.GELU(),
+            nn.Linear(input_dim, 1)
+        )
+
+    def forward(self, x):
+        lambda_param = torch.exp(self.linear1(x))
+        k_param = torch.exp(self.linear2(x))
+        return lambda_param, k_param
+
+    def sample(self, x, num_samples=1):
+        lambda_param, k_param = self.forward(x)
+        dist = Weibull(k_param, lambda_param)
+        samples = dist.sample((num_samples,))
+        return samples
 
 
 class ConceptValuePredictionLayer(nn.Module):
@@ -85,8 +116,8 @@ class CehrGptEmbedding(nn.Module):
         super(CehrGptEmbedding, self).__init__()
         assert embedding_dim % 3 == 0, "embedding_size needs to be a multiple of three"
         assert sub_time_vocab_size > 0, "sub_time_vocab_size nees to be greater than one"
-        if len(time_token_mapping) == 0:
-            # Add default value
+        # Add default value
+        if -1 not in time_token_mapping:
             time_token_mapping[-1] = [0, 0, 0]
         self.vocab_size = vocab_size
         self.sub_time_vocab_size = sub_time_vocab_size
@@ -186,6 +217,7 @@ class CEHRGPT2Model(CEHRGPTPreTrainedModel):
 
         self.exclude_position_ids = config.exclude_position_ids
         self.include_values = config.include_values
+        self.include_ttv_prediction = config.include_ttv_prediction
         self.embed_dim = config.hidden_size
 
         if config.use_sub_time_tokenization:
@@ -441,8 +473,11 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
     def __init__(self, config: CEHRGPTConfig):
         super().__init__(config)
         self.cehrgpt = CEHRGPT2Model(config)
-        if self.cehrgpt.include_values:
+        if self.config.include_values:
             self.concept_value_decoder_layer = ConceptValuePredictionLayer(config.n_embd)
+
+        if self.config.include_ttv_prediction:
+            self.tte_head = WeibullModel(config.n_embd)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
         # Model parallel
@@ -468,6 +503,10 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
         assert_device_map(self.device_map, len(self.cehrgpt.h))
         self.cehrgpt.parallelize(self.device_map)
         self.lm_head = self.lm_head.to(self.cehrgpt.first_device)
+        if self.config.include_values:
+            self.concept_value_decoder_layer = self.concept_value_decoder_layer.to(self.cehrgpt.first_device)
+        if self.config.include_ttv_prediction:
+            self.tte_head = self.tte_head.to(self.cehrgpt.first_device)
         self.model_parallel = True
 
     def deparallelize(self):
@@ -478,6 +517,10 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
         self.cehrgpt.deparallelize()
         self.cehrgpt = self.cehrgpt.to("cpu")
         self.lm_head = self.lm_head.to("cpu")
+        if self.config.include_values:
+            self.concept_value_decoder_layer = self.concept_value_decoder_layer.to("cpu")
+        if self.config.include_ttv_prediction:
+            self.tte_head = self.tte_head.to("cpu")
         self.model_parallel = False
         torch.cuda.empty_cache()
 
@@ -566,6 +609,7 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
             labels: Optional[torch.LongTensor] = None,
             true_value_indicators: Optional[torch.BoolTensor] = None,
             true_values: Optional[torch.FloatTensor] = None,
+            time_to_visits: Optional[torch.FloatTensor] = None,
             use_cache: Optional[bool] = None,
             output_attentions: Optional[bool] = None,
             output_hidden_states: Optional[bool] = None,
@@ -616,6 +660,18 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+
+        if time_to_visits is not None:
+            time_to_visits = time_to_visits.to(lm_logits.device)
+            shifted_time_to_visits = time_to_visits[..., 1:].contiguous().unsqueeze(-1)
+            lambda_param, k_param = self.tte_head(hidden_states)
+            shifted_lambda_param = lambda_param[..., :-1, :]
+            shifted_k_param = k_param[..., :-1, :]
+            time_to_visit_indicator = (shifted_time_to_visits >= 0).to(torch.float32)
+            dist = Weibull(shifted_k_param, shifted_lambda_param)
+            log_probs = dist.log_prob(torch.clamp(shifted_time_to_visits, min=0.0) + 1e-6)
+            log_probs *= time_to_visit_indicator
+            loss += -log_probs.mean()
 
         if true_values is not None and true_value_indicators is not None:
             true_values = true_values.to(value_preds.device)

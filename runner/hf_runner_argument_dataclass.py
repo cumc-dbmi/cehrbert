@@ -233,6 +233,10 @@ class ModelArguments:
         default=True,
         metadata={"help": "Whether or not to decompose the time interval into year/month/day"}
     )
+    include_ttv_prediction: Optional[bool] = field(
+        default=True,
+        metadata={"help": "Whether or not to include the time to visit prediction"}
+    )
 
     def as_dict(self) -> Dict[str, Any]:
         return asdict(self)

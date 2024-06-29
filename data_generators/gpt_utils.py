@@ -112,7 +112,7 @@ def extract_time_interval_in_days(token: str):
             return int(part[1:])
         elif token[:2] == 'i-':  # i-D7
             return int(token.split('-')[1][1:])
-    except Exception as e:
+    except Exception:
         raise ValueError(f"Invalid time token: {token}")
     raise ValueError(f"Invalid time token: {token}")
 

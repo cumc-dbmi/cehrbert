@@ -188,7 +188,8 @@ def main():
             tokenizer=tokenizer,
             max_length=model_args.max_position_embeddings,
             shuffle_records=data_args.shuffle_records,
-            include_values=model_args.include_values
+            include_values=model_args.include_values,
+            include_ttv_prediction=model_args.include_ttv_prediction
         ),
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
