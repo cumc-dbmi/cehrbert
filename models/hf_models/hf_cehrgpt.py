@@ -4,6 +4,7 @@ from typing import Tuple, Optional, Union, List, Dict
 import torch
 import math
 from torch import nn
+import torch.nn.functional as f
 from transformers import PreTrainedModel
 from transformers.pytorch_utils import Conv1D
 from transformers.models.gpt2.modeling_gpt2 import GPT2Block
@@ -41,14 +42,13 @@ class WeibullModel(nn.Module):
         )
 
     def forward(self, x):
-        lambda_param = torch.exp(self.linear1(x))
-        k_param = torch.exp(self.linear2(x))
+        lambda_param = f.softplus(self.linear1(x))  # Ensure scale is positive
+        k_param = f.softplus(self.linear2(x))  # Ensure shape is positive
         # Check for NaN values
         if torch.isnan(lambda_param).any():
-            logging.warning_once(f"NaN values found in scale_param. X: {x}")
+            logging.warning_once(f"NaN values found in scale_param.")
         if torch.isnan(k_param).any():
-            logging.warning_once(f"NaN values found in k_param. X: {x}")
-
+            logging.warning_once(f"NaN values found in k_param.")
         return lambda_param, k_param
 
     def sample(self, x, num_samples=1):
