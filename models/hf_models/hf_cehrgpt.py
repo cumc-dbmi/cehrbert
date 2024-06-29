@@ -668,6 +668,8 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
         if time_to_visits is not None:
+            if torch.isnan(hidden_states).any():
+                logger.warning(f"hidden_states is Nan: hidden_states: {hidden_states}")
             time_to_visits = time_to_visits.to(lm_logits.device)
             shifted_time_to_visits = time_to_visits[..., 1:].contiguous().unsqueeze(-1)
             lambda_param, k_param = self.tte_head(hidden_states)
