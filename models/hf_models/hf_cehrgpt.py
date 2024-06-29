@@ -22,6 +22,8 @@ from models.hf_models.hf_modeling_outputs import (
 )
 from models.hf_models.config import CEHRGPTConfig
 
+logger = logging.get_logger(__name__)
+
 
 class WeibullModel(nn.Module):
     def __init__(self, input_dim):
@@ -46,9 +48,9 @@ class WeibullModel(nn.Module):
         k_param = f.softplus(self.linear2(x))  # Ensure shape is positive
         # Check for NaN values
         if torch.isnan(lambda_param).any():
-            logging.warning_once(f"NaN values found in scale_param.")
+            logger.warning(f"NaN values found in scale_param. x: {x}")
         if torch.isnan(k_param).any():
-            logging.warning_once(f"NaN values found in k_param.")
+            logger.warning(f"NaN values found in k_param. x: {x}")
         return lambda_param, k_param
 
     def sample(self, x, num_samples=1):
@@ -389,7 +391,7 @@ class CEHRGPT2Model(CEHRGPTPreTrainedModel):
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
-                logging.warning_once(
+                logger.warning(
                     "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                 )
                 use_cache = False
