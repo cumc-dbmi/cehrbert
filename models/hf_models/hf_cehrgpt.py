@@ -29,18 +29,14 @@ class WeibullModel(nn.Module):
     def __init__(self, input_dim):
         super(WeibullModel, self).__init__()
         self.linear1 = nn.Sequential(
-            nn.Linear(input_dim, input_dim * 4),
-            nn.GELU(),
-            nn.Linear(4 * input_dim, input_dim),
-            nn.GELU(),
-            nn.Linear(input_dim, 1)
+            nn.Linear(input_dim, input_dim // 2),
+            gelu_new,
+            nn.Linear(input_dim // 2, 1)
         )
         self.linear2 = nn.Sequential(
-            nn.Linear(input_dim, input_dim * 4),
-            nn.GELU(),
-            nn.Linear(4 * input_dim, input_dim),
-            nn.GELU(),
-            nn.Linear(input_dim, 1)
+            nn.Linear(input_dim, input_dim // 2),
+            gelu_new,
+            nn.Linear(input_dim // 2, 1)
         )
 
     def forward(self, x):
@@ -131,6 +127,10 @@ class CehrGptEmbedding(nn.Module):
         self.sub_time_embedding_dim = embedding_dim // 3
         self.embedding_layer = nn.Embedding(self.vocab_size, self.embedding_dim)
         self.time_interval_embedding_layer = nn.Embedding(self.sub_time_vocab_size, self.sub_time_embedding_dim)
+        self.linear = nn.Sequential(
+            nn.Linear(self.embedding_dim, self.embedding_dim),
+            gelu_new
+        )
         self.register_buffer(
             'time_tokens',
             torch.tensor(list(time_token_mapping.keys()), dtype=torch.int64)
@@ -152,6 +152,7 @@ class CehrGptEmbedding(nn.Module):
         )
         sub_time_tokens = self.mapped_sub_time_tokens[sub_time_token_indices]
         time_interval_embeddings = self.time_interval_embedding_layer(sub_time_tokens).flatten(-2)
+        time_interval_embeddings = self.linear(time_interval_embeddings)
         embeddings = self.embedding_layer(tokens)
         merged_embeddings = torch.where(
             time_token_indicators.unsqueeze(-1),
