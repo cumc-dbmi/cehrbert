@@ -31,17 +31,20 @@ class WeibullModel(nn.Module):
         self.linear1 = nn.Sequential(
             nn.Linear(input_dim, input_dim // 2),
             gelu_new,
-            nn.Linear(input_dim // 2, 1)
+            nn.Linear(input_dim // 2, 3)
         )
         self.linear2 = nn.Sequential(
             nn.Linear(input_dim, input_dim // 2),
             gelu_new,
-            nn.Linear(input_dim // 2, 1)
+            nn.Linear(input_dim // 2, 3)
         )
 
     def forward(self, x):
         lambda_param = f.softplus(self.linear1(x))  # Ensure scale is positive
         k_param = f.softplus(self.linear2(x))  # Ensure shape is positive
+        # Split the last dimension
+        lambda_param = torch.unflatten(lambda_param, 2, (3, 1))
+        k_param = torch.unflatten(k_param, 2, (3, 1))
         # Check for NaN values
         if torch.isnan(lambda_param).any():
             logger.warning(f"NaN values found in scale_param. x: {x}")
@@ -709,15 +712,24 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
                 loss += torch.mean(time_token_loss)
 
         if time_to_visits is not None:
+            time_to_visits = time_to_visits.to(torch.int32)
+            time_to_visit_years = time_to_visits // 365
+            time_to_visit_months = time_to_visits % 365 // 30
+            time_to_visit_days = time_to_visits % 365 % 30
+            time_to_vist_preds = torch.stack(
+                [time_to_visit_years, time_to_visit_months, time_to_visit_days],
+                dim=-1
+            )
             lambda_param, k_param = self.tte_head(hidden_states)
-            shifted_lambda_param = lambda_param[..., :-1, :].contiguous()
-            shifted_k_param = k_param[..., :-1, :].contiguous()
-            shift_time_to_visits = time_to_visits[..., 1:].contiguous()
-            shift_time_to_visits = shift_time_to_visits.to(lm_logits.device)
+            shifted_lambda_param = lambda_param[:, :-1, ...].contiguous()
+            shifted_k_param = k_param[:, :-1, ...].contiguous()
+            shift_time_to_visits = time_to_visits[..., :-1].contiguous()
+            shift_time_to_vist_preds = time_to_vist_preds[:, 1:, ...].contiguous()
+            shift_time_to_vist_preds = shift_time_to_vist_preds.to(lm_logits.device)
             time_to_visit_indicator = (shift_time_to_visits >= 0).to(torch.float32)
-            dist = Weibull(shifted_k_param.squeeze(-1), shifted_lambda_param.squeeze(-1))
-            log_probs = dist.log_prob(torch.clamp(shift_time_to_visits, min=0.0) + 1e-6)
-            log_probs *= time_to_visit_indicator
+            dist = Weibull(shifted_k_param, shifted_lambda_param)
+            log_probs = dist.log_prob(torch.clamp(shift_time_to_vist_preds.unsqueeze(-1), min=0.0) + 1e-6)
+            log_probs *= time_to_visit_indicator[..., None, None]
             loss += -log_probs.mean()
 
         if true_values is not None and true_value_indicators is not None:
