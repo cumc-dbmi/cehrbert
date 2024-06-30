@@ -127,10 +127,10 @@ class CehrGptEmbedding(nn.Module):
         self.sub_time_embedding_dim = embedding_dim // 3
         self.embedding_layer = nn.Embedding(self.vocab_size, self.embedding_dim)
         self.time_interval_embedding_layer = nn.Embedding(self.sub_time_vocab_size, self.sub_time_embedding_dim)
-        self.linear = nn.Sequential(
-            nn.Linear(self.embedding_dim, self.embedding_dim),
-            gelu_new
-        )
+        # self.linear = nn.Sequential(
+        #     nn.Linear(self.embedding_dim, self.embedding_dim),
+        #     gelu_new
+        # )
         self.register_buffer(
             'time_tokens',
             torch.tensor(list(time_token_mapping.keys()), dtype=torch.int64)
@@ -164,7 +164,7 @@ class CehrGptEmbedding(nn.Module):
         )
         sub_time_tokens = self.mapped_sub_time_tokens[sub_time_token_indices]
         time_interval_embeddings = self.time_interval_embedding_layer(sub_time_tokens).flatten(-2)
-        time_interval_embeddings = self.linear(time_interval_embeddings)
+        # time_interval_embeddings = self.linear(time_interval_embeddings)
         embeddings = self.embedding_layer(tokens)
         merged_embeddings = torch.where(
             time_token_indicators.unsqueeze(-1),
@@ -687,6 +687,7 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
                 if not isinstance(self.cehrgpt.wte, CehrGptEmbedding):
                     raise AttributeError(f"self.cehrgpt.wte should be an instance of CehrGptEmbedding")
                 loss_fct = CrossEntropyLoss(reduction="none")
+                # Split the last dimensions into three parts
                 time_token_logits = self.time_token_lm_head(torch.unflatten(hidden_states, 2, (3, -1)))
                 shifted_time_token_logits = time_token_logits[..., :-1, :, :].contiguous()
                 shifted_time_token_indicators, shifted_time_token_labels = self.cehrgpt.wte.generate_output(
