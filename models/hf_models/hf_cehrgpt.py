@@ -709,14 +709,14 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
                 loss += torch.mean(time_token_loss)
 
         if time_to_visits is not None:
-            if torch.isnan(hidden_states).any():
-                logger.warning(f"hidden_states is Nan: hidden_states: {hidden_states}")
-            original_embeddings = self.cehrgpt.wte(input_ids)
-            shifted_lambda_param, shifted_k_param = self.tte_head(original_embeddings)
-            time_to_visits = time_to_visits.to(lm_logits.device)
-            time_to_visit_indicator = (time_to_visits >= 0).to(torch.float32)
+            lambda_param, k_param = self.tte_head(hidden_states)
+            shifted_lambda_param = lambda_param[..., :-1, :].contiguous()
+            shifted_k_param = k_param[..., :-1, :].contiguous()
+            shift_time_to_visits = time_to_visits[..., 1:].contiguous()
+            shift_time_to_visits = shift_time_to_visits.to(lm_logits.device)
+            time_to_visit_indicator = (shift_time_to_visits >= 0).to(torch.float32)
             dist = Weibull(shifted_k_param.squeeze(-1), shifted_lambda_param.squeeze(-1))
-            log_probs = dist.log_prob(torch.clamp(time_to_visits, min=0.0) + 1e-6)
+            log_probs = dist.log_prob(torch.clamp(shift_time_to_visits, min=0.0) + 1e-6)
             log_probs *= time_to_visit_indicator
             loss += -log_probs.mean()
 
