@@ -693,7 +693,7 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
                     raise AttributeError(f"self.cehrgpt.wte should be an instance of CehrGptEmbedding")
                 # Split the last dimensions into three parts
                 time_loss_fct = CrossEntropyLoss(reduction="none")
-                time_token_logits = self.time_token_lm_head(torch.unflatten(lm_logits, 2, (3, -1)))
+                time_token_logits = self.time_token_lm_head(torch.unflatten(hidden_states, 2, (3, -1)))
                 shifted_time_token_logits = time_token_logits[..., :-1, :, :].contiguous()
                 shifted_time_token_indicators, shifted_time_token_labels = self.cehrgpt.wte.generate_output(
                     shift_labels
@@ -709,7 +709,7 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
                 loss += torch.mean(time_token_loss)
 
         if time_to_visits is not None:
-            lambda_param, k_param = self.tte_head(lm_logits)
+            lambda_param, k_param = self.tte_head(hidden_states)
             shifted_lambda_param = lambda_param[..., :-1, :].contiguous()
             shifted_k_param = k_param[..., :-1, :].contiguous()
             shift_time_to_visits = time_to_visits[..., 1:].contiguous()
