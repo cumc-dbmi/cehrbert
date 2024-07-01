@@ -12,7 +12,7 @@ from transformers.utils.model_parallel_utils import assert_device_map, get_devic
 from transformers.activations import gelu_new
 from transformers.utils import logging
 from torch.nn import CrossEntropyLoss
-from torch.distributions import Weibull
+from torch.distributions import Gamma
 
 from transformers.generation.stopping_criteria import validate_stopping_criteria, StoppingCriteriaList
 from transformers.generation.logits_process import LogitsProcessorList
@@ -715,7 +715,7 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
             shift_time_to_visits = time_to_visits[..., 1:].contiguous()
             shift_time_to_visits = shift_time_to_visits.to(lm_logits.device)
             time_to_visit_indicator = (shift_time_to_visits >= 0).to(torch.float32)
-            dist = Weibull(shifted_k_param.squeeze(-1), shifted_lambda_param.squeeze(-1))
+            dist = Gamma(shifted_k_param.squeeze(-1), shifted_lambda_param.squeeze(-1))
             log_probs = dist.log_prob(torch.clamp(shift_time_to_visits, min=0.0) + 1e-6)
             log_probs *= time_to_visit_indicator
             loss += -log_probs.mean()
