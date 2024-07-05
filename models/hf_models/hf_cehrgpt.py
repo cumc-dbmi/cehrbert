@@ -107,87 +107,6 @@ class ConceptValueTransformationLayer(nn.Module):
         return concept_embeddings
 
 
-class CehrGptEmbedding(nn.Module):
-    def __init__(
-            self,
-            vocab_size: int,
-            sub_time_vocab_size: int,
-            embedding_dim: int,
-            time_token_mapping: Dict[int, List[int]]
-    ):
-        super(CehrGptEmbedding, self).__init__()
-        assert embedding_dim % 3 == 0, "embedding_size needs to be a multiple of three"
-        assert sub_time_vocab_size > 0, "sub_time_vocab_size nees to be greater than one"
-        # Add default value
-        if -1 not in time_token_mapping:
-            time_token_mapping[-1] = [0, 0, 0]
-        self.vocab_size = vocab_size
-        self.sub_time_vocab_size = sub_time_vocab_size
-        self.embedding_dim = embedding_dim
-        self.sub_time_embedding_dim = embedding_dim // 3
-        self.embedding_layer = nn.Embedding(self.vocab_size, self.embedding_dim)
-        # self.time_interval_embedding_layer = nn.Embedding(self.sub_time_vocab_size, self.sub_time_embedding_dim)
-        # self.linear = nn.Sequential(
-        #     nn.Linear(self.embedding_dim, self.embedding_dim),
-        #     gelu_new
-        # )
-        self.register_buffer(
-            'time_tokens',
-            torch.tensor(list(time_token_mapping.keys()), dtype=torch.int64)
-        )
-        self.register_buffer(
-            'mapped_sub_time_tokens',
-            torch.tensor(list(time_token_mapping.values()), dtype=torch.int64)
-        )
-
-    def generate_output(self, tokens: torch.Tensor):
-        time_token_indicators = torch.isin(tokens, self.time_tokens)
-        masked_tokens = tokens.clone()
-        masked_tokens[~time_token_indicators] = -1
-        # Get the index of the sub_time_tokens from the time_tokens tensor
-        sub_time_token_indices = torch.argmax(
-            (masked_tokens.unsqueeze(-1) == self.time_tokens.unsqueeze(0).unsqueeze(0)).to(torch.int32),
-            dim=-1
-        )
-        sub_time_tokens = self.mapped_sub_time_tokens[sub_time_token_indices]
-        return time_token_indicators, sub_time_tokens
-
-    def forward(self, tokens: torch.LongTensor):
-        # Identify all time tokens
-        # time_token_indicators = torch.isin(tokens, self.time_tokens)
-        # masked_tokens = tokens.clone()
-        # masked_tokens[~time_token_indicators] = -1
-        # # Get the index of the sub_time_tokens from the time_tokens tensor
-        # sub_time_token_indices = torch.argmax(
-        #     (masked_tokens.unsqueeze(-1) == self.time_tokens.unsqueeze(0).unsqueeze(0)).to(torch.int32),
-        #     dim=-1
-        # )
-        # sub_time_tokens = self.mapped_sub_time_tokens[sub_time_token_indices]
-        # time_interval_embeddings = self.time_interval_embedding_layer(sub_time_tokens).flatten(-2)
-        # time_interval_embeddings = self.linear(time_interval_embeddings)
-        # embeddings = self.embedding_layer(tokens)
-        # merged_embeddings = torch.where(
-        #     time_token_indicators.unsqueeze(-1),
-        #     time_interval_embeddings,
-        #     embeddings
-        # )
-        # return merged_embeddings
-        return self.embedding_layer(tokens)
-
-    @property
-    def weight(self):
-        # weight = self.embedding_layer.weight
-        # valid_time_token_indicators = self.time_tokens >= 0
-        # time_interval_embeddings = self.time_interval_embedding_layer(
-        #     self.mapped_sub_time_tokens[valid_time_token_indicators]
-        # )
-        # # Use torch.no_grad() to perform the assignment without tracking gradients
-        # with torch.no_grad():
-        #     weight[self.time_tokens[valid_time_token_indicators]] = time_interval_embeddings.flatten(-2)
-        # return weight
-        return self.embedding_layer.weight
-
-
 class CEHRGPTPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -241,16 +160,7 @@ class CEHRGPT2Model(CEHRGPTPreTrainedModel):
         self.include_ttv_prediction = config.include_ttv_prediction
         self.embed_dim = config.hidden_size
 
-        if config.use_sub_time_tokenization:
-            self.wte = CehrGptEmbedding(
-                vocab_size=config.vocab_size,
-                sub_time_vocab_size=config.time_token_vocab_size,
-                embedding_dim=self.embed_dim,
-                time_token_mapping=config.token_to_time_token_mapping
-            )
-        else:
-            self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
-
+        self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
         self.concept_value_transformation_layer = ConceptValueTransformationLayer(self.embed_dim)
 
@@ -635,6 +545,8 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
             true_value_indicators: Optional[torch.BoolTensor] = None,
             true_values: Optional[torch.FloatTensor] = None,
             time_to_visits: Optional[torch.FloatTensor] = None,
+            time_token_indicators: Optional[torch.BoolTensor] = None,
+            sub_time_tokens: Optional[torch.LongTensor] = None,
             use_cache: Optional[bool] = None,
             output_attentions: Optional[bool] = None,
             output_hidden_states: Optional[bool] = None,
@@ -689,15 +601,12 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
             # We add another loss term when use_sub_time_tokenization is enabled, we need to recover the sub time token
             # predictions for year/month/token
             if self.config.use_sub_time_tokenization:
-                if not isinstance(self.cehrgpt.wte, CehrGptEmbedding):
-                    raise AttributeError(f"self.cehrgpt.wte should be an instance of CehrGptEmbedding")
                 # Split the last dimensions into three parts
                 time_loss_fct = CrossEntropyLoss(reduction="none")
                 time_token_logits = self.time_token_lm_head(torch.unflatten(hidden_states, 2, (3, -1)))
                 shifted_time_token_logits = time_token_logits[..., :-1, :, :].contiguous()
-                shifted_time_token_indicators, shifted_time_token_labels = self.cehrgpt.wte.generate_output(
-                    shift_labels
-                )
+                shifted_time_token_indicators = time_token_indicators[..., 1:].contiguous().to(lm_logits.device)
+                shifted_time_token_labels = sub_time_tokens[:, 1:, ...].contiguous().to(lm_logits.device)
                 time_token_loss = time_loss_fct(
                     shifted_time_token_logits.view(-1, self.config.time_token_vocab_size),
                     shifted_time_token_labels.view(-1)
@@ -706,6 +615,7 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
                 time_token_loss = (
                         time_token_loss.view(-1, 3) * shifted_time_token_indicators.view(-1, 1).to(torch.float32)
                 )
+                time_token_loss = time_token_loss.sum(-1)
                 loss += torch.mean(time_token_loss) * self.config.time_token_loss_weight
 
         if time_to_visits is not None:

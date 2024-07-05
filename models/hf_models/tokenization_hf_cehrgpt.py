@@ -127,10 +127,12 @@ class CehrGptTokenizer(PushToHubMixin):
 
     @property
     def token_to_time_token_mapping(self) -> Dict[int, List[int]]:
-        return {
+        default_mapping = {-1: [0, 0, 0]}
+        default_mapping.update({
             self._tokenizer.token_to_id(time_token): list(map(self._att_tokenizer.token_to_id, sub_time_tokens))
             for time_token, sub_time_tokens in self._token_to_sub_time_token_mapping.items()
-        }
+        })
+        return default_mapping
 
     def encode(self, concept_ids: Sequence[str]) -> Sequence[int]:
         encoded = self._tokenizer.encode(concept_ids, is_pretokenized=True)

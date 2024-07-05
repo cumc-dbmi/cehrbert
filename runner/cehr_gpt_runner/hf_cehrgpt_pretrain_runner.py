@@ -189,7 +189,8 @@ def main():
             max_length=model_args.max_position_embeddings,
             shuffle_records=data_args.shuffle_records,
             include_values=model_args.include_values,
-            include_ttv_prediction=model_args.include_ttv_prediction
+            include_ttv_prediction=model_args.include_ttv_prediction,
+            use_sub_time_tokenization=model_args.use_sub_time_tokenization
         ),
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,

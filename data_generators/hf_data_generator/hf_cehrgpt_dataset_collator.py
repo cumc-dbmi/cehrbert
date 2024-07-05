@@ -1,6 +1,6 @@
 import random
 import numpy as np
-from typing import Any, Dict
+from typing import Any, Dict, List
 import torch
 from torch.nn.utils.rnn import pad_sequence
 
@@ -20,7 +20,8 @@ class CehrGptDataCollator:
             max_length: int,
             shuffle_records: bool = False,
             include_values: bool = False,
-            include_ttv_prediction: bool = False
+            include_ttv_prediction: bool = False,
+            use_sub_time_tokenization: bool = False
     ):
         self.tokenizer = tokenizer
         self.max_length = max_length
@@ -30,6 +31,17 @@ class CehrGptDataCollator:
         self.shuffle_records = shuffle_records
         self.include_values = include_values
         self.include_ttv_prediction = include_ttv_prediction
+        self.use_sub_time_tokenization = use_sub_time_tokenization
+        if self.use_sub_time_tokenization:
+            token_to_time_token_mapping = tokenizer.token_to_time_token_mapping
+            if not token_to_time_token_mapping:
+                raise ValueError(
+                    "The token_to_time_token_mapping in CehrGptTokenizer cannot be None "
+                    "when use_sub_time_tokenization is enabled"
+                )
+            # Create the tensors for converting time tokens to the sub time tokens
+            self.time_tokens = torch.tensor(list(tokenizer.token_to_time_token_mapping.keys()), dtype=torch.int64)
+            self.mapped_sub_time_tokens = torch.tensor(list(token_to_time_token_mapping.values()), dtype=torch.int64)
 
     @staticmethod
     def _convert_to_tensor(features: Any) -> torch.Tensor:
@@ -83,6 +95,19 @@ class CehrGptDataCollator:
         assert (batch['input_ids'].shape[1] <= self.max_length)
         assert (batch['attention_mask'].shape[1] <= self.max_length)
         batch['labels'] = batch['input_ids'].clone()
+
+        if self.use_sub_time_tokenization:
+            time_token_indicators = torch.isin(batch['input_ids'], self.time_tokens)
+            masked_tokens = batch['input_ids'].clone()
+            masked_tokens[~time_token_indicators] = -1
+            # Get the index of the sub_time_tokens from the time_tokens tensor
+            sub_time_token_indices = torch.argmax(
+                (masked_tokens.unsqueeze(-1) == self.time_tokens.unsqueeze(0).unsqueeze(0)).to(torch.int32),
+                dim=-1
+            )
+            sub_time_tokens = self.mapped_sub_time_tokens[sub_time_token_indices]
+            batch['time_token_indicators'] = time_token_indicators
+            batch['sub_time_tokens'] = sub_time_tokens
 
         if self.include_ttv_prediction:
             batch_time_to_visits = [
