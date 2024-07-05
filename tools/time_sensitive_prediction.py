@@ -294,6 +294,9 @@ def main(
 
     cehrgpt_tokenizer = CehrGptTokenizer.from_pretrained(args.tokenizer_folder)
     cehrgpt_model = CEHRGPT2LMHeadModel.from_pretrained(args.model_folder).eval().to(device)
+    cehrgpt_model.generation_config.pad_token_id = cehrgpt_tokenizer.pad_token_id
+    cehrgpt_model.generation_config.eos_token_id = cehrgpt_tokenizer.end_token_id
+    cehrgpt_model.generation_config.bos_token_id = cehrgpt_tokenizer.end_token_id
 
     if args.sampling_strategy == TopKStrategy.__name__:
         folder_name = f'top_k{args.top_k}'
