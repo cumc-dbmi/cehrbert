@@ -237,6 +237,14 @@ class ModelArguments:
         default=True,
         metadata={"help": "Whether or not to include the time to visit prediction"}
     )
+    time_token_loss_weight: Optional[float] = field(
+        default=1.0,
+        metadata={"help": "The weight of the time token loss"}
+    )
+    time_to_visit_loss_weight: Optional[float] = field(
+        default=1.0,
+        metadata={"help": "The weight of the time to visit loss"}
+    )
 
     def as_dict(self) -> Dict[str, Any]:
         return asdict(self)

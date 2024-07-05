@@ -706,7 +706,7 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
                 time_token_loss = (
                         time_token_loss.view(-1, 3) * shifted_time_token_indicators.view(-1, 1).to(torch.float32)
                 )
-                loss += torch.mean(time_token_loss)
+                loss += torch.mean(time_token_loss) * self.config.time_token_loss_weight
 
         if time_to_visits is not None:
             lambda_param, k_param = self.tte_head(hidden_states)
@@ -718,7 +718,7 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
             dist = Gamma(shifted_k_param.squeeze(-1), shifted_lambda_param.squeeze(-1))
             log_probs = dist.log_prob(torch.clamp(shift_time_to_visits, min=0.0) + 1e-6)
             log_probs *= time_to_visit_indicator
-            loss += -log_probs.mean()
+            loss += -log_probs.mean() * self.config.time_to_visit_loss_weight
 
         if true_values is not None and true_value_indicators is not None:
             true_values = true_values.to(value_preds.device)

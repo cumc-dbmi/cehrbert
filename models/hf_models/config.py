@@ -117,6 +117,8 @@ class CEHRGPTConfig(PretrainedConfig):
             include_values=False,
             include_ttv_prediction=False,
             use_sub_time_tokenization=True,
+            time_token_loss_weight=1.0,
+            time_to_visit_loss_weight=1.0,
             token_to_time_token_mapping: Dict[int, List] = None,
             **kwargs,
     ):
@@ -154,6 +156,8 @@ class CEHRGPTConfig(PretrainedConfig):
         self.include_ttv_prediction = include_ttv_prediction
         self.use_sub_time_tokenization = use_sub_time_tokenization
         self._token_to_time_token_mapping = token_to_time_token_mapping
+        self.time_token_loss_weight = time_token_loss_weight
+        self.time_to_visit_loss_weight = time_to_visit_loss_weight
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
