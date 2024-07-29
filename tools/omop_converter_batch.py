@@ -1,7 +1,6 @@
 import argparse
 import datetime
 import os
-import re
 import uuid
 from datetime import date, timedelta
 from multiprocessing import Pool
@@ -14,6 +13,7 @@ from tqdm import tqdm
 
 from models.gpt_model import generate_artificial_time_tokens
 from data_generators.tokenizer import ConceptTokenizer
+from data_generators.gpt_utils import is_inpatient_att_token, extract_time_interval_in_days
 from omop_entity import Person, VisitOccurrence, ConditionOccurrence, ProcedureOccurrence, \
     DrugExposure, Death, OmopEntity
 
@@ -33,7 +33,6 @@ OOV_CONCEPT_MAP = {
     905420: 'Drug',
     1525543: 'Drug'
 }
-SPAN_ATT_EXPR = re.compile('VS\-D\d+\-VE', re.IGNORECASE)
 
 
 def create_folder_if_not_exists(output_folder, table_name):
@@ -182,7 +181,7 @@ def gpt_to_omop_converter_serial(
         [start_year, start_age, start_gender, start_race] = [_ for _ in start_tokens]
         if 'year' not in start_year.lower():
             continue
-        
+
         try:
             start_year = start_year.split(':')[1]
             start_age = start_age.split(':')[1]
@@ -252,9 +251,10 @@ def gpt_to_omop_converter_serial(
                 elif x == 'LT':
                     att_date_delta = 365 * 3
                 data_cursor = data_cursor + timedelta(days=att_date_delta)
-            elif inpatient_visit_indicator and SPAN_ATT_EXPR.match(x):
+            elif inpatient_visit_indicator and is_inpatient_att_token(x):
                 # VS\-D\d+\-VE\
-                data_cursor = data_cursor + timedelta(days=int(x.split('-')[1][1:]))
+                inpatient_time_span_in_days = extract_time_interval_in_days(x)
+                data_cursor = data_cursor + timedelta(days=inpatient_time_span_in_days)
             elif x == 'VE':
                 if vo is None:
                     bad_sequence = True
