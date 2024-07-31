@@ -133,6 +133,14 @@ def main(
             F.col('age') < 90
         )
 
+    patient_events.write.mode("overwrite").parquet(
+        os.path.join(output_folder, 'all_patient_events')
+    )
+
+    patient_events = spark.read.parquet(
+        os.path.join(output_folder, 'all_patient_events')
+    )
+
     if is_new_patient_representation:
         sequence_data = create_sequence_data_with_att(
             patient_events,

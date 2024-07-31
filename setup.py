@@ -23,7 +23,7 @@ setup(
     ],
     keywords='development',
     packages=find_packages(where='.'),
-    install_requires=['Keras', 'numpy', 'tqdm', 'tensorflow', 'pandas', 'scikit-learn', 'xgboost'],
+    install_requires=[],
     tests_require=['pytest'],
     include_package_data=True,
 )
