@@ -20,11 +20,12 @@ from spark_apps.sql_templates import measurement_unit_stats_query
 from utils.logging_utils import *
 
 DOMAIN_KEY_FIELDS = {
-    'condition_occurrence_id': [('condition_concept_id', 'condition_start_date', 'condition')],
-    'procedure_occurrence_id': [('procedure_concept_id', 'procedure_date', 'procedure')],
-    'drug_exposure_id': [('drug_concept_id', 'drug_exposure_start_date', 'drug')],
-    'measurement_id': [('measurement_concept_id', 'measurement_date', 'measurement')],
-    'death_date': [('person_id', 'death_date', 'death')],
+    'condition_occurrence_id': [
+        ('condition_concept_id', 'condition_start_date', 'condition_start_datetime', 'condition')],
+    'procedure_occurrence_id': [('procedure_concept_id', 'procedure_date', 'procedure_datetime', 'procedure')],
+    'drug_exposure_id': [('drug_concept_id', 'drug_exposure_start_date', 'drug_exposure_start_datetime', 'drug')],
+    'measurement_id': [('measurement_concept_id', 'measurement_date', 'measurement_datetime', 'measurement')],
+    'death_date': [('person_id', 'death_date', 'death_datetime', 'death')],
     'visit_concept_id': [
         ('visit_concept_id', 'visit_start_date', 'visit'),
         ('discharged_to_concept_id', 'visit_end_date', 'visit')
@@ -34,18 +35,23 @@ DOMAIN_KEY_FIELDS = {
 LOGGER = logging.getLogger(__name__)
 
 
-def get_key_fields(domain_table) -> List[Tuple[str, str, str]]:
+def get_key_fields(domain_table) -> List[Tuple[str, str, str, str]]:
     field_names = domain_table.schema.fieldNames()
     for k, v in DOMAIN_KEY_FIELDS.items():
         if k in field_names:
             return v
     return [(get_concept_id_field(domain_table), get_domain_date_field(domain_table),
-             get_domain_field(domain_table))]
+             get_domain_datetime_field(domain_table), get_domain_field(domain_table))]
 
 
 def get_domain_date_field(domain_table):
     # extract the domain start_date column
     return [f for f in domain_table.schema.fieldNames() if 'date' in f][0]
+
+
+def get_domain_datetime_field(domain_table):
+    # extract the domain start_date column
+    return [f for f in domain_table.schema.fieldNames() if 'datetime' in f][0]
 
 
 def get_concept_id_field(domain_table):
@@ -83,21 +89,24 @@ def join_domain_tables(domain_tables):
     for domain_table in domain_tables:
         # extract the domain concept_id from the table fields. E.g. condition_concept_id from
         # condition_occurrence extract the domain start_date column extract the name of the table
-        for concept_id_field, date_field, table_domain_field in get_key_fields(domain_table):
-            # standardize the output columns
-
+        for concept_id_field, date_field, datetime_field, table_domain_field in get_key_fields(domain_table):
             # Remove records that don't have a date or standard_concept_id
             sub_domain_table = domain_table \
                 .where(F.col(date_field).isNotNull()) \
                 .where(F.col(concept_id_field).isNotNull())
-
+            datetime_field_udf = F.to_timestamp(
+                F.coalesce(datetime_field, date_field),
+                'yyyy-MM-dd HH:mm:ss'
+            )
             sub_domain_table = sub_domain_table.where(F.col(concept_id_field).cast('string') != '0') \
-                .withColumn('date', F.to_date(F.col(date_field)))
+                .withColumn('date', F.to_date(F.col(date_field))) \
+                .withColumn('datetime', datetime_field_udf)
 
             sub_domain_table = sub_domain_table.select(
                 sub_domain_table['person_id'],
                 sub_domain_table[concept_id_field].alias('standard_concept_id'),
                 sub_domain_table['date'].cast('date'),
+                sub_domain_table['datetime'],
                 sub_domain_table['visit_occurrence_id'],
                 F.lit(table_domain_field).alias('domain'),
                 F.lit(-1).alias('concept_value')
@@ -115,7 +124,13 @@ def join_domain_tables(domain_tables):
     return patient_event
 
 
-def preprocess_domain_table(spark, input_folder, domain_table_name, with_rollup=False):
+def preprocess_domain_table(
+        spark,
+        input_folder,
+        domain_table_name,
+        with_diagnosis_rollup=False,
+        with_drug_rollup=True
+):
     domain_table = spark.read.parquet(create_file_path(input_folder, domain_table_name))
 
     if 'concept' in domain_table_name.lower():
@@ -138,16 +153,16 @@ def preprocess_domain_table(spark, input_folder, domain_table_name, with_rollup=
         if 'discharge_to_concept_id' in domain_table.schema.fieldNames():
             domain_table = domain_table.withColumnRenamed('discharge_to_concept_id', 'discharged_to_concept_id')
 
-    # Always roll up the drug concepts to the ingredient level
-    if domain_table_name == 'drug_exposure' \
-            and path.exists(create_file_path(input_folder, 'concept')) \
-            and path.exists(create_file_path(input_folder, 'concept_ancestor')):
-        concept = spark.read.parquet(create_file_path(input_folder, 'concept'))
-        concept_ancestor = spark.read.parquet(
-            create_file_path(input_folder, 'concept_ancestor'))
-        domain_table = roll_up_to_drug_ingredients(domain_table, concept, concept_ancestor)
+    if with_drug_rollup:
+        if domain_table_name == 'drug_exposure' \
+                and path.exists(create_file_path(input_folder, 'concept')) \
+                and path.exists(create_file_path(input_folder, 'concept_ancestor')):
+            concept = spark.read.parquet(create_file_path(input_folder, 'concept'))
+            concept_ancestor = spark.read.parquet(
+                create_file_path(input_folder, 'concept_ancestor'))
+            domain_table = roll_up_to_drug_ingredients(domain_table, concept, concept_ancestor)
 
-    if with_rollup:
+    if with_diagnosis_rollup:
         if domain_table_name == 'condition_occurrence' \
                 and path.exists(create_file_path(input_folder, 'concept')) \
                 and path.exists(create_file_path(input_folder, 'concept_relationship')):
@@ -512,8 +527,9 @@ def create_sequence_data_with_att(
             'visit_rank_order',
             'concept_order',
             'priority',
-            'date',
-            'standard_concept_id')
+            'datetime',
+            'standard_concept_id'
+        )
     )
 
     dense_rank_udf = F.dense_rank().over(
@@ -521,7 +537,7 @@ def create_sequence_data_with_att(
             'visit_rank_order',
             'concept_order',
             'priority',
-            'date')
+            'datetime')
     )
 
     # Those columns are derived from the previous decorators

@@ -28,7 +28,8 @@ def main(
         att_type: AttType,
         include_sequence_information_content: bool = False,
         exclude_demographic: bool = False,
-        use_age_group: bool = False
+        use_age_group: bool = False,
+        with_drug_rollup: bool = True
 ):
     spark = SparkSession.builder.appName('Generate CEHR-BERT Training Data').getOrCreate()
 
@@ -50,12 +51,15 @@ def main(
         f'att_type: {att_type}\n'
         f'exclude_demographic: {exclude_demographic}\n'
         f'use_age_group: {use_age_group}\n'
+        f'with_drug_rollup: {with_drug_rollup}\n'
     )
 
     domain_tables = []
     for domain_table_name in domain_table_list:
         if domain_table_name != MEASUREMENT:
-            domain_tables.append(preprocess_domain_table(spark, input_folder, domain_table_name))
+            domain_tables.append(
+                preprocess_domain_table(spark, input_folder, domain_table_name, with_drug_rollup=with_drug_rollup)
+            )
 
     visit_occurrence = preprocess_domain_table(spark, input_folder, VISIT_OCCURRENCE)
     visit_occurrence = visit_occurrence.select(
@@ -305,6 +309,11 @@ if __name__ == '__main__':
         action='store_true'
     )
     parser.add_argument(
+        '--with_drug_rollup',
+        dest='with_drug_rollup',
+        action='store_true'
+    )
+    parser.add_argument(
         '--att_type',
         dest='att_type',
         action='store',
@@ -322,5 +331,6 @@ if __name__ == '__main__':
         ARGS.include_death,
         AttType(ARGS.att_type),
         exclude_demographic=ARGS.exclude_demographic,
-        use_age_group=ARGS.use_age_group
+        use_age_group=ARGS.use_age_group,
+        with_drug_rollup=ARGS.with_drug_rollup
     )
