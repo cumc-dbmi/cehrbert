@@ -191,12 +191,14 @@ class PatientEventAttDecorator(PatientEventDecorator):
             visit_occurrence,
             include_visit_type,
             exclude_visit_tokens,
-            att_type: AttType
+            att_type: AttType,
+            include_inpatient_hour_token: bool = False
     ):
         self._visit_occurrence = visit_occurrence
         self._include_visit_type = include_visit_type
         self._exclude_visit_tokens = exclude_visit_tokens
         self._att_type = att_type
+        self._include_inpatient_hour_token = include_inpatient_hour_token
 
     def _decorate(
             self,
@@ -361,16 +363,6 @@ class PatientEventAttDecorator(PatientEventDecorator):
             'priority', F.col('priority') + F.col('concept_order') * 0.1
         ).drop('visit_end_date')
 
-        # Get the prev days_since_epoch
-        inpatient_prev_date_udf = F.lag('date').over(
-            W.partitionBy('cohort_member_id', 'visit_occurrence_id').orderBy('concept_order')
-        )
-
-        # Compute the time difference between the current record and the previous record
-        inpatient_time_delta_udf = F.when(F.col('prev_date').isNull(), 0).otherwise(
-            F.datediff('date', 'prev_date')
-        )
-
         discharge_events = visit_occurrence \
             .where(F.col('visit_concept_id').isin([9201, 262, 8971, 8920])) \
             .withColumn('standard_concept_id', F.coalesce(F.col('discharged_to_concept_id'), F.lit(0))) \
@@ -387,19 +379,60 @@ class PatientEventAttDecorator(PatientEventDecorator):
         # Add discharge events to the inpatient visits
         inpatient_events = inpatient_events.unionByName(discharge_events)
 
-        # Create ATT tokens within the inpatient visits
-        inpatient_att_events = inpatient_events \
-            .withColumn('is_span_boundary', F.row_number().over(
-            W.partitionBy('cohort_member_id', 'visit_occurrence_id', 'concept_order').orderBy('priority'))) \
-            .where(F.col('is_span_boundary') == 1) \
-            .withColumn('prev_date', inpatient_prev_date_udf) \
-            .withColumn('time_delta', inpatient_time_delta_udf) \
-            .where(F.col('time_delta') != 0) \
-            .where(F.col('prev_date').isNotNull()) \
-            .withColumn('standard_concept_id', F.concat(F.lit('i-'), time_token_udf('time_delta'))) \
-            .withColumn('visit_concept_order', F.col('visit_concept_order')) \
-            .withColumn('priority', F.col('priority') - 0.01) \
-            .drop('prev_date', 'time_delta', 'is_span_boundary')
+        # Get the prev days_since_epoch
+        inpatient_prev_date_udf = F.lag('date').over(
+            W.partitionBy('cohort_member_id', 'visit_occurrence_id').orderBy('concept_order')
+        )
+
+        # Compute the time difference between the current record and the previous record
+        inpatient_time_delta_udf = F.when(F.col('prev_date').isNull(), 0).otherwise(
+            F.datediff('date', 'prev_date')
+        )
+
+        if self._include_inpatient_hour_token:
+            # Create ATT tokens within the inpatient visits
+            inpatient_prev_datetime_udf = F.lag('datetime').over(
+                W.partitionBy('cohort_member_id', 'visit_occurrence_id').orderBy('concept_order')
+            )
+            # Compute the time difference between the current record and the previous record
+            inpatient_hour_delta_udf = F.when(F.col('prev_datetime').isNull(), 0).otherwise(
+                F.floor((F.unix_timestamp('datetime') - F.unix_timestamp('prev_datetime')) / 3600)
+            )
+            inpatient_att_token = F.when(
+                F.col('hour_delta') < 24,
+                F.concat(F.lit('i-H'), F.col('hour_delta'))
+            ).otherwise(
+                F.concat(F.lit('i-'), time_token_udf('time_delta'))
+            )
+            # Create ATT tokens within the inpatient visits
+            inpatient_att_events = inpatient_events \
+                .withColumn('is_span_boundary', F.row_number().over(
+                W.partitionBy('cohort_member_id', 'visit_occurrence_id', 'concept_order').orderBy('priority'))) \
+                .where(F.col('is_span_boundary') == 1) \
+                .withColumn('prev_date', inpatient_prev_date_udf) \
+                .withColumn('time_delta', inpatient_time_delta_udf) \
+                .withColumn('prev_datetime', inpatient_prev_datetime_udf) \
+                .withColumn('hour_delta', inpatient_hour_delta_udf) \
+                .where(F.col('prev_date').isNotNull()) \
+                .where(F.col('hour_delta') > 0) \
+                .withColumn('standard_concept_id', inpatient_att_token) \
+                .withColumn('visit_concept_order', F.col('visit_concept_order')) \
+                .withColumn('priority', F.col('priority') - 0.01) \
+                .drop('prev_date', 'time_delta', 'is_span_boundary')
+        else:
+            # Create ATT tokens within the inpatient visits
+            inpatient_att_events = inpatient_events \
+                .withColumn('is_span_boundary', F.row_number().over(
+                W.partitionBy('cohort_member_id', 'visit_occurrence_id', 'concept_order').orderBy('priority'))) \
+                .where(F.col('is_span_boundary') == 1) \
+                .withColumn('prev_date', inpatient_prev_date_udf) \
+                .withColumn('time_delta', inpatient_time_delta_udf) \
+                .where(F.col('time_delta') != 0) \
+                .where(F.col('prev_date').isNotNull()) \
+                .withColumn('standard_concept_id', F.concat(F.lit('i-'), time_token_udf('time_delta'))) \
+                .withColumn('visit_concept_order', F.col('visit_concept_order')) \
+                .withColumn('priority', F.col('priority') - 0.01) \
+                .drop('prev_date', 'time_delta', 'is_span_boundary')
 
         self.validate(inpatient_events)
         self.validate(inpatient_att_events)
@@ -411,7 +444,37 @@ class PatientEventAttDecorator(PatientEventDecorator):
             how='left_anti'
         )
 
-        patient_events = inpatient_events.unionByName(inpatient_att_events).unionByName(other_events)
+        patient_events = inpatient_events.unionByName(
+            inpatient_att_events
+        ).unionByName(
+            other_events
+        )
+
+        if self._include_inpatient_hour_token:
+            # Create ATT tokens within the inpatient visits
+            inpatient_prev_datetime_udf = F.lag('datetime').over(
+                W.partitionBy('cohort_member_id', 'visit_occurrence_id').orderBy('concept_order')
+            )
+            # Compute the time difference between the current record and the previous record
+            inpatient_hour_delta_udf = F.when(F.col('prev_datetime').isNull(), 0).otherwise(
+                F.floor((F.unix_timestamp('datetime') - F.unix_timestamp('prev_datetime')) / 3600)
+            )
+
+            inpatient_hour_intervals = inpatient_events \
+                .withColumn('prev_datetime', inpatient_prev_datetime_udf) \
+                .where(F.col('prev_datetime').isNotNull()) \
+                .withColumn('hour_delta', inpatient_hour_delta_udf) \
+                .where(F.col('hour_delta') > 0) \
+                .where(F.col('hour_delta') <= 23) \
+                .withColumn('standard_concept_id', F.concat(F.lit('hour-'), F.col('hour_delta'))) \
+                .withColumn('visit_concept_order', F.col('visit_concept_order')) \
+                .withColumn('priority', F.col('priority') - 0.01) \
+                .drop('prev_datetime', 'hour_delta')
+
+            self.validate(inpatient_hour_intervals)
+            patient_events = patient_events.unionByName(
+                inpatient_hour_intervals
+            )
 
         self.validate(patient_events)
         self.validate(artificial_tokens)

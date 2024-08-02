@@ -29,7 +29,8 @@ def main(
         include_sequence_information_content: bool = False,
         exclude_demographic: bool = False,
         use_age_group: bool = False,
-        with_drug_rollup: bool = True
+        with_drug_rollup: bool = True,
+        include_inpatient_hour_token: bool = False
 ):
     spark = SparkSession.builder.appName('Generate CEHR-BERT Training Data').getOrCreate()
 
@@ -156,7 +157,8 @@ def main(
             death=death,
             att_type=att_type,
             exclude_demographic=exclude_demographic,
-            use_age_group=use_age_group
+            use_age_group=use_age_group,
+            include_inpatient_hour_token=include_inpatient_hour_token
         )
     else:
         sequence_data = create_sequence_data(
@@ -314,6 +316,11 @@ if __name__ == '__main__':
         action='store_true'
     )
     parser.add_argument(
+        '--include_inpatient_hour_token',
+        dest='include_inpatient_hour_token',
+        action='store_true'
+    )
+    parser.add_argument(
         '--att_type',
         dest='att_type',
         action='store',
@@ -332,5 +339,6 @@ if __name__ == '__main__':
         AttType(ARGS.att_type),
         exclude_demographic=ARGS.exclude_demographic,
         use_age_group=ARGS.use_age_group,
-        with_drug_rollup=ARGS.with_drug_rollup
+        with_drug_rollup=ARGS.with_drug_rollup,
+        include_inpatient_hour_token=ARGS.include_inpatient_hour_token
     )

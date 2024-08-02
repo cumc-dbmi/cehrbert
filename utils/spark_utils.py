@@ -482,7 +482,8 @@ def create_sequence_data_with_att(
         death=None,
         att_type: AttType = AttType.CEHR_BERT,
         exclude_demographic: bool = True,
-        use_age_group: bool = False
+        use_age_group: bool = False,
+        include_inpatient_hour_token: bool = False
 ):
     """
     Create a sequence of the events associated with one patient in a chronological order
@@ -497,6 +498,7 @@ def create_sequence_data_with_att(
     :param att_type:
     :param exclude_demographic:
     :param use_age_group:
+    :param include_inpatient_hour_token:
 
     :return:
     """
@@ -509,7 +511,8 @@ def create_sequence_data_with_att(
             visit_occurrence,
             include_visit_type,
             exclude_visit_tokens,
-            att_type
+            att_type,
+            include_inpatient_hour_token
         ),
         # DemographicPromptDecorator(patient_demographic),
         DeathEventDecorator(death, att_type)
