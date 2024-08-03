@@ -418,7 +418,8 @@ class PatientEventAttDecorator(PatientEventDecorator):
                 .withColumn('standard_concept_id', inpatient_att_token) \
                 .withColumn('visit_concept_order', F.col('visit_concept_order')) \
                 .withColumn('priority', F.col('priority') - 0.01) \
-                .drop('prev_date', 'time_delta', 'is_span_boundary')
+                .drop('prev_date', 'time_delta', 'is_span_boundary') \
+                .drop('prev_datetime', 'hour_delta')
         else:
             # Create ATT tokens within the inpatient visits
             inpatient_att_events = inpatient_events \
@@ -449,32 +450,6 @@ class PatientEventAttDecorator(PatientEventDecorator):
         ).unionByName(
             other_events
         )
-
-        if self._include_inpatient_hour_token:
-            # Create ATT tokens within the inpatient visits
-            inpatient_prev_datetime_udf = F.lag('datetime').over(
-                W.partitionBy('cohort_member_id', 'visit_occurrence_id').orderBy('concept_order')
-            )
-            # Compute the time difference between the current record and the previous record
-            inpatient_hour_delta_udf = F.when(F.col('prev_datetime').isNull(), 0).otherwise(
-                F.floor((F.unix_timestamp('datetime') - F.unix_timestamp('prev_datetime')) / 3600)
-            )
-
-            inpatient_hour_intervals = inpatient_events \
-                .withColumn('prev_datetime', inpatient_prev_datetime_udf) \
-                .where(F.col('prev_datetime').isNotNull()) \
-                .withColumn('hour_delta', inpatient_hour_delta_udf) \
-                .where(F.col('hour_delta') > 0) \
-                .where(F.col('hour_delta') <= 23) \
-                .withColumn('standard_concept_id', F.concat(F.lit('hour-'), F.col('hour_delta'))) \
-                .withColumn('visit_concept_order', F.col('visit_concept_order')) \
-                .withColumn('priority', F.col('priority') - 0.01) \
-                .drop('prev_datetime', 'hour_delta')
-
-            self.validate(inpatient_hour_intervals)
-            patient_events = patient_events.unionByName(
-                inpatient_hour_intervals
-            )
 
         self.validate(patient_events)
         self.validate(artificial_tokens)
