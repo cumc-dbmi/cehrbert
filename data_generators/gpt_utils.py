@@ -86,7 +86,7 @@ def is_att_token(token: str):
         return True
     elif token[:3] == 'VS-':  # VS-D7-VE
         return True
-    elif token[:2] == 'i-':  # i-D7
+    elif token[:2] == 'i-' and not token.startswith('i-H'):  # i-D7 and exclude hour tokens
         return True
     return False
 
