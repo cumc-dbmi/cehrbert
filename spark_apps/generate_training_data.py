@@ -30,7 +30,8 @@ def main(
         exclude_demographic: bool = False,
         use_age_group: bool = False,
         with_drug_rollup: bool = True,
-        include_inpatient_hour_token: bool = False
+        include_inpatient_hour_token: bool = False,
+        continue_from_events: bool = False
 ):
     spark = SparkSession.builder.appName('Generate CEHR-BERT Training Data').getOrCreate()
 
@@ -138,9 +139,10 @@ def main(
             F.col('age') < 90
         )
 
-    patient_events.write.mode("overwrite").parquet(
-        os.path.join(output_folder, 'all_patient_events')
-    )
+    if not continue_from_events:
+        patient_events.write.mode("overwrite").parquet(
+            os.path.join(output_folder, 'all_patient_events')
+        )
 
     patient_events = spark.read.parquet(
         os.path.join(output_folder, 'all_patient_events')
@@ -321,6 +323,11 @@ if __name__ == '__main__':
         action='store_true'
     )
     parser.add_argument(
+        '--continue_from_events',
+        dest='continue_from_events',
+        action='store_true'
+    )
+    parser.add_argument(
         '--att_type',
         dest='att_type',
         action='store',
@@ -340,5 +347,6 @@ if __name__ == '__main__':
         exclude_demographic=ARGS.exclude_demographic,
         use_age_group=ARGS.use_age_group,
         with_drug_rollup=ARGS.with_drug_rollup,
-        include_inpatient_hour_token=ARGS.include_inpatient_hour_token
+        include_inpatient_hour_token=ARGS.include_inpatient_hour_token,
+        continue_from_events=ARGS.continue_from_events
     )
