@@ -1,13 +1,15 @@
 import os
 
+import functools
 from typing import Union, Optional
 
 from datasets import load_from_disk, DatasetDict, Dataset
 from transformers.utils import logging
 from transformers import AutoConfig, Trainer, set_seed
 
+from data_generators.hf_data_generator.meds_utils import create_dataset_from_meds_reader
 from data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
-from data_generators.hf_data_generator.hf_dataset import create_cehrbert_pretraining_dataset, convert_meds_to_cehrbert
+from data_generators.hf_data_generator.hf_dataset import create_cehrbert_pretraining_dataset
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from models.hf_models.config import CehrBertConfig
 from models.hf_models.hf_cehrbert import CehrBertForPreTraining
@@ -82,32 +84,37 @@ def main():
             dataset=processed_dataset
         )
     else:
-        # Load the dataset from the parquet files
-        dataset = load_parquet_as_dataset(data_args.data_folder, split='train', streaming=data_args.streaming)
-        # If streaming is enabled, we need to manually split the data into train/val
-        if data_args.streaming and data_args.validation_split_num:
-            dataset = dataset.shuffle(buffer_size=10_000, seed=training_args.seed)
-            train_set = dataset.skip(data_args.validation_split_num)
-            val_set = dataset.take(data_args.validation_split_num)
-            dataset = DatasetDict({
-                'train': train_set,
-                'test': val_set
-            })
-        elif data_args.validation_split_percentage:
-            dataset = dataset.train_test_split(test_size=data_args.validation_split_percentage, seed=training_args.seed)
-        else:
-            raise RuntimeError(
-                f"Can not split the data. If streaming is enabled, validation_split_num needs to be "
-                f"defined, otherwise validation_split_percentage needs to be provided. "
-                f"The current values are:\n"
-                f"validation_split_percentage: {data_args.validation_split_percentage}\n"
-                f"validation_split_num: {data_args.validation_split_num}\n"
-                f"streaming: {data_args.streaming}"
-            )
 
         # If the data is in the MEDS format, we need to convert it to the CEHR-BERT format
         if data_args.is_data_in_med:
-            dataset = convert_meds_to_cehrbert(dataset, data_args)
+            dataset = create_dataset_from_meds_reader(
+                path_to_db=data_args.data_folder,
+                preprocessing_num_workers=data_args.preprocessing_num_workers
+            )
+        else:
+            # Load the dataset from the parquet files
+            dataset = load_parquet_as_dataset(data_args.data_folder, split='train', streaming=data_args.streaming)
+            # If streaming is enabled, we need to manually split the data into train/val
+            if data_args.streaming and data_args.validation_split_num:
+                dataset = dataset.shuffle(buffer_size=10_000, seed=training_args.seed)
+                train_set = dataset.skip(data_args.validation_split_num)
+                val_set = dataset.take(data_args.validation_split_num)
+                dataset = DatasetDict({
+                    'train': train_set,
+                    'test': val_set
+                })
+            elif data_args.validation_split_percentage:
+                dataset = dataset.train_test_split(test_size=data_args.validation_split_percentage,
+                                                   seed=training_args.seed)
+            else:
+                raise RuntimeError(
+                    f"Can not split the data. If streaming is enabled, validation_split_num needs to be "
+                    f"defined, otherwise validation_split_percentage needs to be provided. "
+                    f"The current values are:\n"
+                    f"validation_split_percentage: {data_args.validation_split_percentage}\n"
+                    f"validation_split_num: {data_args.validation_split_num}\n"
+                    f"streaming: {data_args.streaming}"
+                )
 
         # Create the CEHR-BERT tokenizer if it's not available in the output folder
         tokenizer = load_and_create_tokenizer(
