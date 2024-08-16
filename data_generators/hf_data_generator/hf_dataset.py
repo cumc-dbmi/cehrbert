@@ -53,7 +53,9 @@ def convert_meds_to_cehrbert(
                 )
         else:
             cehrbert_dataset = meds_dataset.map(
-                med_to_cehrbert_mapping.transform,
+                med_to_cehrbert_mapping.batch_transform,
+                batched=True,
+                batch_size=data_args.preprocessing_batch_size,
                 num_proc=data_args.preprocessing_num_workers,
             ).filter(
                 lambda records: [r >= 1 for r in records['num_of_visits']],

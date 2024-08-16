@@ -232,7 +232,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
             events = visit['events']
 
             # Skip this visit if the number measurements in the event is zero
-            if not events:
+            if events is None or len(events) == 0:
                 continue
 
             visit_start_datetime = visit['visit_start_datetime']

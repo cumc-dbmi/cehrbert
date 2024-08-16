@@ -39,7 +39,7 @@ def map_statistics(batch: Dict[str, Any]) -> Dict[str, Any]:
         for concept_id, concept_value, concept_value_indicator, unit in zip(
                 concept_ids, concept_values, concept_value_indicators, units
         ):
-            if concept_value_indicator == 1 and concept_id.isnumeric():
+            if concept_value_indicator == 1:
                 numeric_stats_by_lab[(concept_id, unit)].add(1, concept_value)
     return {
         'numeric_stats_by_lab': numeric_stats_by_lab
