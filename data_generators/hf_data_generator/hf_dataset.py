@@ -29,15 +29,28 @@ def convert_meds_to_cehrbert(
             data_args
         )
         if data_args.streaming:
-            cehrbert_dataset = meds_dataset.map(
-                med_to_cehrbert_mapping.batch_transform,
-                batched=True,
-                batch_size=data_args.preprocessing_batch_size
-            ).filter(
-                lambda records: [r >= 1 for r in records['num_of_visits']],
-                batched=True,
-                batch_size=data_args.preprocessing_batch_size
-            )
+            if isinstance(meds_dataset, DatasetDict):
+                cehrbert_dataset = DatasetDict()
+                for split in meds_dataset.keys():
+                    cehrbert_dataset[split] = meds_dataset[split].map(
+                        med_to_cehrbert_mapping.batch_transform,
+                        batched=True,
+                        batch_size=data_args.preprocessing_batch_size
+                    ).filter(
+                        lambda records: [r >= 1 for r in records['num_of_visits']],
+                        batched=True,
+                        batch_size=data_args.preprocessing_batch_size
+                    )
+            else:
+                cehrbert_dataset = meds_dataset.map(
+                    med_to_cehrbert_mapping.batch_transform,
+                    batched=True,
+                    batch_size=data_args.preprocessing_batch_size
+                ).filter(
+                    lambda records: [r >= 1 for r in records['num_of_visits']],
+                    batched=True,
+                    batch_size=data_args.preprocessing_batch_size
+                )
         else:
             cehrbert_dataset = meds_dataset.map(
                 med_to_cehrbert_mapping.transform,

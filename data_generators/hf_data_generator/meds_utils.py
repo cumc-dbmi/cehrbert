@@ -8,11 +8,11 @@ import meds_reader
 import pandas as pd
 from meds import Event
 
+from runner.hf_runner_argument_dataclass import DataTrainingArguments
 from data_generators.hf_data_generator.hf_dataset_mapping import birth_codes
 from med_extension.schema_extension import CehrBertPatient, Visit
 
-
-from datasets import Dataset, DatasetDict
+from datasets import Dataset, DatasetDict, IterableDataset
 
 
 def get_patient_split(meds_reader_db_path: str) -> Dict[str, List[int]]:
@@ -62,7 +62,7 @@ class PatientBlock:
     def get_meds_events(self) -> List[Event]:
         return [
             Event(
-                code=e.code,
+                code=e.code.replace(' ', '_'),
                 time=e.time,
                 numeric_value=getattr(e, "numeric_value", None),
                 text_value=getattr(e, "text_value", None),
@@ -183,35 +183,39 @@ def meds_reader_to_meds_extension(path_to_db: str, split: str, default_visit_id:
 
 
 def create_dataset_from_meds_reader(
-        path_to_db: str,
-        preprocessing_num_workers: int = 1,
+        data_args: DataTrainingArguments,
         default_visit_id: int = 1
 ) -> DatasetDict:
-    train_dataset = Dataset.from_generator(
+    dataset_class = IterableDataset if data_args.streaming else Dataset
+    kargs = dict()
+    if not data_args.streaming:
+        kargs["num_proc"] = data_args.preprocessing_num_workers
+
+    train_dataset = dataset_class.from_generator(
         functools.partial(
             meds_reader_to_meds_extension,
-            path_to_db=path_to_db,
+            path_to_db=data_args.data_folder,
             split="train",
             default_visit_id=default_visit_id
-        ), num_proc=preprocessing_num_workers
+        ), **kargs
     )
 
-    tuning_dataset = Dataset.from_generator(
+    tuning_dataset = dataset_class.from_generator(
         functools.partial(
             meds_reader_to_meds_extension,
-            path_to_db=path_to_db,
+            path_to_db=data_args.data_folder,
             split="tuning",
             default_visit_id=default_visit_id
-        ), num_proc=preprocessing_num_workers
+        ), **kargs
     )
 
-    held_out_dataset = Dataset.from_generator(
+    held_out_dataset = dataset_class.from_generator(
         functools.partial(
             meds_reader_to_meds_extension,
-            path_to_db=path_to_db,
+            path_to_db=data_args.data_folder,
             split="held_out",
             default_visit_id=default_visit_id
-        ), num_proc=preprocessing_num_workers
+        ), **kargs
     )
 
     return DatasetDict({

@@ -1,7 +1,8 @@
 import os
 import json
+import pickle
 from functools import partial
-from typing import Sequence, Union, List, Dict
+from typing import Sequence, Union, List, Dict, Any
 from itertools import islice
 
 import transformers
@@ -12,6 +13,7 @@ from tokenizers.trainers import WordLevelTrainer
 from tokenizers.pre_tokenizers import WhitespaceSplit
 from transformers.tokenization_utils_base import PushToHubMixin
 from runner.hf_runner_argument_dataclass import DataTrainingArguments
+from models.hf_models.tokenization_utils import agg_statistics, map_statistics, _agg_helper
 
 PAD_TOKEN = "[PAD]"
 CLS_TOKEN = "[CLS]"
@@ -21,6 +23,7 @@ OUT_OF_VOCABULARY_TOKEN = "[OOV]"
 
 TOKENIZER_FILE_NAME = "tokenizer.json"
 CONCEPT_MAPPING_FILE_NAME = "concept_name_mapping.json"
+LAB_STATS_FILE_NAME = "cehrgpt_lab_stats.json"
 
 
 def load_json_file(
@@ -40,9 +43,18 @@ class CehrBertTokenizer(PushToHubMixin):
     def __init__(
             self,
             tokenizer: Tokenizer,
+            lab_stats: List[Dict[str, Any]],
             concept_name_mapping: Dict[str, str]
     ):
         self._tokenizer = tokenizer
+        self._lab_stats = lab_stats
+        self._lab_stat_mapping = {
+            lab_stat["concept_id"]: {
+                'unit': lab_stat["unit"],
+                'mean': lab_stat['mean'],
+                'std': lab_stat['std']
+            } for lab_stat in lab_stats
+        }
         self._concept_name_mapping = concept_name_mapping
         self._oov_token_index = self._tokenizer.token_to_id(OUT_OF_VOCABULARY_TOKEN)
         self._padding_token_index = self._tokenizer.token_to_id(PAD_TOKEN)
@@ -71,6 +83,10 @@ class CehrBertTokenizer(PushToHubMixin):
     @property
     def cls_token_index(self):
         return self._cls_token_index
+
+    @property
+    def lab_token_ids(self):
+        return self.encode([_['concept_id'] for _ in self._lab_stats])
 
     def encode(self, concept_ids: Sequence[str]) -> Sequence[int]:
         encoded = self._tokenizer.encode(concept_ids, is_pretokenized=True)
@@ -123,6 +139,9 @@ class CehrBertTokenizer(PushToHubMixin):
 
         self._tokenizer.save(os.path.join(save_directory, TOKENIZER_FILE_NAME))
 
+        with open(os.path.join(save_directory, LAB_STATS_FILE_NAME), "w") as f:
+            json.dump(self._lab_stats, f)
+
         with open(os.path.join(save_directory, CONCEPT_MAPPING_FILE_NAME), "w") as f:
             json.dump(self._concept_name_mapping, f)
 
@@ -167,15 +186,23 @@ class CehrBertTokenizer(PushToHubMixin):
 
         tokenizer = Tokenizer.from_file(tokenizer_file)
 
+        lab_stats_file = transformers.utils.hub.cached_file(
+            pretrained_model_name_or_path, LAB_STATS_FILE_NAME, **kwargs
+        )
+        if not lab_stats_file:
+            return None
+
         concept_name_mapping_file = transformers.utils.hub.cached_file(
             pretrained_model_name_or_path, CONCEPT_MAPPING_FILE_NAME, **kwargs
         )
         if not concept_name_mapping_file:
             return None
 
+        lab_stats = load_json_file(lab_stats_file)
+
         concept_name_mapping = load_json_file(concept_name_mapping_file)
 
-        return CehrBertTokenizer(tokenizer, concept_name_mapping)
+        return CehrBertTokenizer(tokenizer, lab_stats, concept_name_mapping)
 
     @classmethod
     def train_tokenizer(
@@ -236,8 +263,52 @@ class CehrBertTokenizer(PushToHubMixin):
                 generator = concatenated_features[feature_name]
 
             tokenizer.train_from_iterator(generator, trainer=trainer)
-        return CehrBertTokenizer(tokenizer, concept_name_mapping)
+
+        if data_args.streaming:
+            parts = dataset.map(
+                partial(_agg_helper, map_func=map_statistics),
+                batched=True,
+                batch_size=data_args.preprocessing_batch_size
+            )
+        else:
+            parts = dataset.map(
+                partial(_agg_helper, map_func=map_statistics),
+                batched=True,
+                batch_size=data_args.preprocessing_batch_size,
+                remove_columns=dataset.column_names,
+                num_proc=data_args.preprocessing_num_workers,
+                keep_in_memory=True,
+                new_fingerprint="invalid",
+            )
+        current = None
+        for stat in parts:
+            fixed_stat = pickle.loads(stat["data"])
+            if current is None:
+                current = fixed_stat
+            else:
+                current = agg_statistics(current, fixed_stat)
+        lab_stats = [
+            {
+                'concept_id': concept_id,
+                'unit': unit,
+                'mean': online_stats.mean(),
+                'std': online_stats.standard_deviation(),
+                'count': online_stats.count
+            }
+            for (concept_id, unit), online_stats in current['numeric_stats_by_lab'].items()
+        ]
+
+        return CehrBertTokenizer(tokenizer, lab_stats, concept_name_mapping)
 
     @classmethod
     def batch_concat_concepts(cls, records: Dict[str, List], feature_name) -> Dict[str, List]:
         return {feature_name: [" ".join(map(str, _)) for _ in records[feature_name]]}
+
+    def normalize(self, concept_id, concept_value) -> float:
+        if concept_id in self._lab_stat_mapping:
+            normalized_value = (
+                    (concept_value - self._lab_stat_mapping[concept_id]['mean'])
+                    / self._lab_stat_mapping[concept_id]['std']
+            )
+            return normalized_value
+        return concept_value

@@ -1,6 +1,5 @@
 import os
 
-import functools
 from typing import Union, Optional
 
 from datasets import load_from_disk, DatasetDict, Dataset
@@ -9,7 +8,7 @@ from transformers import AutoConfig, Trainer, set_seed
 
 from data_generators.hf_data_generator.meds_utils import create_dataset_from_meds_reader
 from data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
-from data_generators.hf_data_generator.hf_dataset import create_cehrbert_pretraining_dataset
+from data_generators.hf_data_generator.hf_dataset import create_cehrbert_pretraining_dataset, convert_meds_to_cehrbert
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from models.hf_models.config import CehrBertConfig
 from models.hf_models.hf_cehrbert import CehrBertForPreTraining
@@ -54,7 +53,11 @@ def load_and_create_model(
         model_config = AutoConfig.from_pretrained(model_abspath)
     except Exception as e:
         LOG.warning(e)
-        model_config = CehrBertConfig(vocab_size=tokenizer.vocab_size, **model_args.as_dict())
+        model_config = CehrBertConfig(
+            vocab_size=tokenizer.vocab_size,
+            lab_token_ids=tokenizer.lab_token_ids,
+            **model_args.as_dict()
+        )
 
     return CehrBertForPreTraining(model_config)
 
@@ -87,10 +90,18 @@ def main():
 
         # If the data is in the MEDS format, we need to convert it to the CEHR-BERT format
         if data_args.is_data_in_med:
-            dataset = create_dataset_from_meds_reader(
-                path_to_db=data_args.data_folder,
-                preprocessing_num_workers=data_args.preprocessing_num_workers
-            )
+            basename = os.path.basename(data_args.data_folder)
+            meds_extension_path = os.path.join(data_args.dataset_prepared_path, f"{basename}_meds_extension")
+            try:
+                LOG.info(f"Trying to load the MEDS extension from disk at {meds_extension_path}...")
+                dataset = load_from_disk(meds_extension_path)
+            except Exception as e:
+                LOG.exception(e)
+                dataset = create_dataset_from_meds_reader(
+                    data_args=data_args
+                )
+                dataset.save_to_disk(meds_extension_path)
+            dataset = convert_meds_to_cehrbert(dataset, data_args)
         else:
             # Load the dataset from the parquet files
             dataset = load_parquet_as_dataset(data_args.data_folder, split='train', streaming=data_args.streaming)

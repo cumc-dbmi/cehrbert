@@ -95,7 +95,11 @@ def load_pretrained_model_and_tokenizer(data_args, model_args) -> Tuple[CehrBert
         model = finetune_model_cls.from_pretrained(model_abspath)
     except Exception as e:
         LOG.warning(e)
-        model_config = CehrBertConfig(vocab_size=tokenizer.vocab_size, **model_args.as_dict())
+        model_config = CehrBertConfig(
+            vocab_size=tokenizer.vocab_size,
+            lab_token_ids=tokenizer.lab_token_ids,
+            **model_args.as_dict()
+        )
         model = finetune_model_cls(model_config)
 
     return model, tokenizer

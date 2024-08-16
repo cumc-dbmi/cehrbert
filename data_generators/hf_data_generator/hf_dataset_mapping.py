@@ -435,6 +435,7 @@ class HFTokenizationMapping(DatasetMapping):
     ):
         self._concept_tokenizer = concept_tokenizer
         self._is_pretraining = is_pretraining
+        self._lab_token_ids = self._concept_tokenizer.lab_token_ids
 
     def transform(
             self,
@@ -443,6 +444,15 @@ class HFTokenizationMapping(DatasetMapping):
 
         input_ids = self._concept_tokenizer.encode(record['concept_ids'])
         record['input_ids'] = input_ids
+        concept_value_masks = record['concept_value_masks']
+        concept_values = record['concept_values']
+
+        for i, (concept_id, concept_value_mask, concept_value) in enumerate(
+                zip(record['concept_ids'], concept_value_masks, concept_values)
+        ):
+            if concept_id in self._lab_token_ids:
+                normalized_concept_value = self._concept_tokenizer.normalize(concept_id, concept_value)
+                concept_values[i] = normalized_concept_value
 
         # If mlm_skip_value=1, this indicates there is a value associated with this position and
         # hence we block the MLM to randomly pick this token to be predicted
