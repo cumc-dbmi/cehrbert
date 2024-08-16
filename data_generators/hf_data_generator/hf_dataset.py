@@ -74,10 +74,17 @@ def create_cehrbert_pretraining_dataset(
         data_args: DataTrainingArguments
 ) -> Dataset:
     required_columns = TRANSFORMER_COLUMNS + CEHRBERT_COLUMNS
-    mapping_functions = [
-        SortPatientSequenceMapping(),
-        HFTokenizationMapping(concept_tokenizer, True)
-    ]
+    # If the data is already in meds, we don't need to sort the sequence anymore
+    if data_args.is_data_in_med:
+        mapping_functions = [
+            HFTokenizationMapping(concept_tokenizer, True)
+        ]
+    else:
+        mapping_functions = [
+            SortPatientSequenceMapping(),
+            HFTokenizationMapping(concept_tokenizer, True)
+        ]
+
     for mapping_function in mapping_functions:
         if data_args.streaming:
             if isinstance(dataset, DatasetDict):
@@ -121,11 +128,18 @@ def create_cehrbert_finetuning_dataset(
         data_args: DataTrainingArguments
 ) -> Dataset:
     required_columns = TRANSFORMER_COLUMNS + CEHRBERT_COLUMNS + FINETUNING_COLUMNS
-    mapping_functions = [
-        SortPatientSequenceMapping(),
-        HFTokenizationMapping(concept_tokenizer, False),
-        HFFineTuningMapping()
-    ]
+
+    if data_args.is_data_in_med:
+        mapping_functions = [
+            HFTokenizationMapping(concept_tokenizer, False),
+            HFFineTuningMapping()
+        ]
+    else:
+        mapping_functions = [
+            SortPatientSequenceMapping(),
+            HFTokenizationMapping(concept_tokenizer, False),
+            HFFineTuningMapping()
+        ]
 
     if data_args.is_data_in_med:
         med_to_cehrbert_mapping = MedToCehrBertDatasetMapping(
