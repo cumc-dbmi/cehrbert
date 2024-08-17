@@ -91,7 +91,7 @@ def main():
         # If the data is in the MEDS format, we need to convert it to the CEHR-BERT format
         if data_args.is_data_in_med:
             basename = os.path.basename(data_args.data_folder)
-            meds_extension_path = os.path.join(data_args.dataset_prepared_path, f"{basename}_meds_extension_test")
+            meds_extension_path = os.path.join(data_args.dataset_prepared_path, f"{basename}_meds_extension")
             try:
                 LOG.info(f"Trying to load the MEDS extension from disk at {meds_extension_path}...")
                 dataset = load_from_disk(meds_extension_path)
