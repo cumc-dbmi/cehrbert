@@ -39,6 +39,7 @@ femr
 torch
 datasets~=2.16.1
 meds_reader==0.1.1
+meds
 python-dateutil~=2.8.2
 tokenizers~=0.15.2
 peft~=0.10.0

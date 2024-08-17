@@ -11,8 +11,7 @@ from dateutil.relativedelta import relativedelta
 from pandas import Series
 from datasets.formatting.formatting import LazyBatch
 
-from meds.schema import Patient, birth_code, death_code
-from med_extension.schema_extension import Visit, CehrBertPatient
+from meds.schema import birth_code, death_code
 from spark_apps.decorators.patient_event_decorator import get_att_function
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from models.hf_models.tokenization_hf_cehrgpt import CehrGptTokenizer
