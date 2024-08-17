@@ -21,7 +21,7 @@ tqdm~=4.66.1
 Werkzeug
 xgboost~=2.0.3
 fastparquet
-numpy~=1.24.3
+numpy
 setuptools~=58.0.4
 networkx~=3.2.1
 whoosh
@@ -33,13 +33,12 @@ evaluate~=0.4.1
 toml~=0.10.2
 pandas~=2.2.0
 pydantic~=2.6.0
-scipy~=1.12.0
+scipy
 transformers~=4.39.3
 femr
 torch
 datasets~=2.16.1
 meds_reader
-meds==0.2
 python-dateutil~=2.8.2
 tokenizers~=0.15.2
 peft~=0.10.0
