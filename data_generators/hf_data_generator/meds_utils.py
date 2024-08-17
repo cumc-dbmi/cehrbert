@@ -175,9 +175,11 @@ def convert_one_patient(patient: meds_reader.Patient, default_visit_id: int = 1)
     )
 
 
-def meds_reader_to_meds_extension(path_to_db: str, split: str, default_visit_id: int = 1) -> CehrBertPatient:
+def meds_reader_to_meds_extension(
+        path_to_db: str, split: str, num_threads: int = 1, default_visit_id: int = 1
+) -> CehrBertPatient:
     assert split in ['held_out', 'train', 'tuning']
-    patient_database = meds_reader.PatientDatabase(path_to_db)
+    patient_database = meds_reader.PatientDatabase(path_to_db, num_threads)
     patient_split = get_patient_split(path_to_db)
     filtered_patient_database = patient_database.filter(patient_split[split])
     for patient_id in filtered_patient_database:
@@ -199,7 +201,8 @@ def create_dataset_from_meds_reader(
             meds_reader_to_meds_extension,
             path_to_db=data_args.data_folder,
             split="train",
-            default_visit_id=default_visit_id
+            default_visit_id=default_visit_id,
+            num_threads=data_args.preprocessing_num_workers
         ), **kargs
     )
 
@@ -208,7 +211,8 @@ def create_dataset_from_meds_reader(
             meds_reader_to_meds_extension,
             path_to_db=data_args.data_folder,
             split="tuning",
-            default_visit_id=default_visit_id
+            default_visit_id=default_visit_id,
+            num_threads=data_args.preprocessing_num_workers
         ), **kargs
     )
 
@@ -217,7 +221,8 @@ def create_dataset_from_meds_reader(
             meds_reader_to_meds_extension,
             path_to_db=data_args.data_folder,
             split="held_out",
-            default_visit_id=default_visit_id
+            default_visit_id=default_visit_id,
+            num_threads=data_args.preprocessing_num_workers
         ), **kargs
     )
 
