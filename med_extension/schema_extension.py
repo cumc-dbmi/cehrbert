@@ -1,8 +1,15 @@
-from meds.schema import Event
-
-from typing import TypedDict, List
+from typing import TypedDict, List, Mapping, Any
 from typing_extensions import NotRequired
 import datetime
+
+Event = TypedDict('Event', {
+    'time': NotRequired[datetime.datetime],
+    'code': str,
+    'text_value': NotRequired[str],
+    'numeric_value': NotRequired[float],
+    'datetime_value': NotRequired[datetime.datetime],
+    'properties': NotRequired[Mapping[str, Any]],
+})
 
 
 class Visit(TypedDict):

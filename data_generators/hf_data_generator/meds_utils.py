@@ -6,13 +6,16 @@ from typing import Dict, List, Optional
 
 import meds_reader
 import pandas as pd
-from meds import Event
 
 from runner.hf_runner_argument_dataclass import DataTrainingArguments
 from data_generators.hf_data_generator.hf_dataset_mapping import birth_codes
-from med_extension.schema_extension import CehrBertPatient, Visit
+from med_extension.schema_extension import CehrBertPatient, Visit, Event
 
 from datasets import Dataset, DatasetDict, IterableDataset
+
+UNKNOWN_VALUE = "Unknown"
+DEFAULT_OUTPATIENT_CONCEPT_ID = "9202"
+DEFAULT_INPATIENT_CONCEPT_ID = "9201"
 
 
 def get_patient_split(meds_reader_db_path: str) -> Dict[str, List[int]]:
@@ -34,7 +37,7 @@ class PatientBlock:
         self.events = events
         self.min_time = events[0].time
         self.max_time = events[-1].time
-        self.visit_type = "9202"
+        self.visit_type = DEFAULT_OUTPATIENT_CONCEPT_ID
         self.visit_end_datetime = events[-1].time
         self.discharge_facility = None
 
@@ -126,7 +129,7 @@ def convert_one_patient(patient: meds_reader.Patient, default_visit_id: int = 1)
         visit_id = admission_block.visit_id
         for i in range(admit_index, discharge_index + 1):
             patient_blocks[i].visit_id = visit_id
-            patient_blocks[i].visit_type = "9201"
+            patient_blocks[i].visit_type = DEFAULT_INPATIENT_CONCEPT_ID
         # there could be events that occur after the discharge, which are considered as part of the visit
         # we need to check if the time stamp of the next block is within 12 hours
         if discharge_index + 1 < len(patient_blocks):
@@ -134,7 +137,7 @@ def convert_one_patient(patient: meds_reader.Patient, default_visit_id: int = 1)
             hour_diff = (discharge_block.max_time - next_block.min_time).total_seconds() / 3600
             if hour_diff <= 12:
                 next_block.visit_id = visit_id
-                next_block.visit_type = "9201"
+                next_block.visit_type = DEFAULT_INPATIENT_CONCEPT_ID
                 admission_block.visit_end_datetime = next_block.max_time
 
     patient_block_dict = collections.defaultdict(list)
@@ -149,7 +152,7 @@ def convert_one_patient(patient: meds_reader.Patient, default_visit_id: int = 1)
         discharge_facility = next(
             filter(None, [b.get_discharge_facility() for b in blocks]),
             None
-        ) if visit_type == "9201" else None
+        ) if visit_type == DEFAULT_INPATIENT_CONCEPT_ID else None
         visit_events = list()
         for block in blocks:
             visit_events.extend(block.get_meds_events())
@@ -166,9 +169,9 @@ def convert_one_patient(patient: meds_reader.Patient, default_visit_id: int = 1)
         patient_id=patient.patient_id,
         birth_datetime=birth_datetime,
         visits=visits,
-        race=race if race else "Unknown",
-        gender=gender if gender else "Unknown",
-        ethnicity=ethnicity if ethnicity else "Unknown"
+        race=race if race else UNKNOWN_VALUE,
+        gender=gender if gender else UNKNOWN_VALUE,
+        ethnicity=ethnicity if ethnicity else UNKNOWN_VALUE
     )
 
 
