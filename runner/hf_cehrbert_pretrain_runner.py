@@ -91,7 +91,7 @@ def main():
         # If the data is in the MEDS format, we need to convert it to the CEHR-BERT format
         if data_args.is_data_in_med:
             basename = os.path.basename(data_args.data_folder)
-            meds_extension_path = os.path.join(data_args.dataset_prepared_path, f"{basename}_meds_extension")
+            meds_extension_path = os.path.join(data_args.dataset_prepared_path, f"{basename}_meds_extension_test")
             try:
                 LOG.info(f"Trying to load the MEDS extension from disk at {meds_extension_path}...")
                 dataset = load_from_disk(meds_extension_path)
@@ -112,7 +112,7 @@ def main():
                 val_set = dataset.take(data_args.validation_split_num)
                 dataset = DatasetDict({
                     'train': train_set,
-                    'test': val_set
+                    'validation': val_set
                 })
             elif data_args.validation_split_percentage:
                 dataset = dataset.train_test_split(test_size=data_args.validation_split_percentage,
@@ -163,8 +163,8 @@ def main():
     eval_dataset = None
     if isinstance(processed_dataset, DatasetDict):
         train_dataset = processed_dataset['train']
-        if 'test' in processed_dataset:
-            eval_dataset = processed_dataset['test']
+        if 'validation' in processed_dataset:
+            eval_dataset = processed_dataset['validation']
     else:
         train_dataset = processed_dataset
 

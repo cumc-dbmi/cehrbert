@@ -166,9 +166,9 @@ def convert_one_patient(patient: meds_reader.Patient, default_visit_id: int = 1)
         patient_id=patient.patient_id,
         birth_datetime=birth_datetime,
         visits=visits,
-        race=race,
-        gender=gender,
-        ethnicity=ethnicity
+        race=race if race else "Unknown",
+        gender=gender if gender else "Unknown",
+        ethnicity=ethnicity if ethnicity else "Unknown"
     )
 
 

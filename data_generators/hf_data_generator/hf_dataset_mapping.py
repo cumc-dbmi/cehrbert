@@ -380,10 +380,10 @@ class HFTokenizationMapping(DatasetMapping):
         concept_value_masks = record['concept_value_masks']
         concept_values = record['concept_values']
 
-        for i, (concept_id, concept_value_mask, concept_value) in enumerate(
-                zip(record['concept_ids'], concept_value_masks, concept_values)
+        for i, (concept_id, token_id, concept_value_mask, concept_value) in enumerate(
+                zip(record['concept_ids'], input_ids, concept_value_masks, concept_values)
         ):
-            if concept_id in self._lab_token_ids:
+            if token_id in self._lab_token_ids:
                 normalized_concept_value = self._concept_tokenizer.normalize(concept_id, concept_value)
                 concept_values[i] = normalized_concept_value
 

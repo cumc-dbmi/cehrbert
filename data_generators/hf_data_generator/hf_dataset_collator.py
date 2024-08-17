@@ -26,7 +26,11 @@ class CehrBertDataCollator:
         self.truncate_type = truncate_type if is_pretraining else TruncationType.TAIL
         # Pre-compute these so we can use them later on
         self.vs_token_id = tokenizer._convert_token_to_id('VS')
+        if self.vs_token_id == tokenizer._oov_token_index:
+            self.vs_token_id = tokenizer._convert_token_to_id('[VS]')
         self.ve_token_id = tokenizer._convert_token_to_id('VE')
+        if self.ve_token_id == tokenizer._oov_token_index:
+            self.ve_token_id = tokenizer._convert_token_to_id('[VE]')
 
     @staticmethod
     def _convert_to_tensor(features: Any) -> torch.Tensor:

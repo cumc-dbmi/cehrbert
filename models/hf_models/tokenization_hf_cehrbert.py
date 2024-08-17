@@ -306,9 +306,11 @@ class CehrBertTokenizer(PushToHubMixin):
 
     def normalize(self, concept_id, concept_value) -> float:
         if concept_id in self._lab_stat_mapping:
-            normalized_value = (
-                    (concept_value - self._lab_stat_mapping[concept_id]['mean'])
-                    / self._lab_stat_mapping[concept_id]['std']
-            )
+            mean_ = (concept_value - self._lab_stat_mapping[concept_id]['mean'])
+            std = self._lab_stat_mapping[concept_id]['std']
+            if std > 0:
+                normalized_value = mean_ / self._lab_stat_mapping[concept_id]['std']
+            else:
+                normalized_value = mean_
             return normalized_value
         return concept_value
