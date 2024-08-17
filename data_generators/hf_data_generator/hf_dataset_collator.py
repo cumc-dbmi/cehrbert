@@ -25,6 +25,8 @@ class CehrBertDataCollator:
         # We always take the most recent history during finetuning indicated by TruncationType.TAIL
         self.truncate_type = truncate_type if is_pretraining else TruncationType.TAIL
         # Pre-compute these so we can use them later on
+        # We used VS for the historical data, currently, we use the new [VS] for the newer data
+        # so we need to check both cases.
         self.vs_token_id = tokenizer._convert_token_to_id('VS')
         if self.vs_token_id == tokenizer._oov_token_index:
             self.vs_token_id = tokenizer._convert_token_to_id('[VS]')

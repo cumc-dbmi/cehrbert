@@ -26,8 +26,15 @@ class CehrGptDataCollator:
         self.tokenizer = tokenizer
         self.max_length = max_length
         # Pre-compute these so we can use them later on
+        # We used VS for the historical data, currently, we use the new [VS] for the newer data
+        # so we need to check both cases.
         self.vs_token_id = tokenizer._convert_token_to_id('VS')
+        if self.vs_token_id == tokenizer._oov_token_index:
+            self.vs_token_id = tokenizer._convert_token_to_id('[VS]')
         self.ve_token_id = tokenizer._convert_token_to_id('VE')
+        if self.ve_token_id == tokenizer._oov_token_index:
+            self.ve_token_id = tokenizer._convert_token_to_id('[VE]')
+
         self.shuffle_records = shuffle_records
         self.include_values = include_values
         self.include_ttv_prediction = include_ttv_prediction
