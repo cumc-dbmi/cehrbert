@@ -211,8 +211,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                     visit_concept_id=visit_type
                 )
 
-            # Sort all measurements using time, in case of a tie, we use the natural order of codes to tiebreak
-            for e_i, e in enumerate(sorted(events, key=lambda e: (e['time'], e['code']))):
+            for e in events:
                 # If the event doesn't have a time stamp, we skip it
                 if not e['time']:
                     continue
