@@ -2,7 +2,7 @@ import os
 
 from typing import Union, Optional
 
-from datasets import DatasetDict, Dataset, load_dataset
+from datasets import DatasetDict, IterableDatasetDict, Dataset, load_dataset
 from transformers.utils import logging
 from transformers import AutoConfig, Trainer, set_seed
 
@@ -161,7 +161,7 @@ def main():
         processed_dataset.set_format('pt')
 
     eval_dataset = None
-    if isinstance(processed_dataset, DatasetDict):
+    if isinstance(processed_dataset, DatasetDict) or isinstance(processed_dataset, IterableDatasetDict):
         train_dataset = processed_dataset['train']
         if 'validation' in processed_dataset:
             eval_dataset = processed_dataset['validation']
