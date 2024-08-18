@@ -239,7 +239,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                         # This generates an artificial time token depending on the choice of the time token functions
                         self._update_cehrbert_record(
                             cehrbert_record,
-                            code=f'i-{self._inpatient_time_token_function(time_delta)}',
+                            code=f'i-{self._inpatient_time_token_function(meas_time_diff)}',
                             visit_concept_order=i + 1,
                             visit_segment=visit_segment,
                             visit_concept_id=visit_type

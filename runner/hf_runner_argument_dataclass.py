@@ -65,7 +65,14 @@ class DataTrainingArguments:
         default=10000,
         metadata={"help": "The batch size to use for preprocessing a streaming dataset"}
     )
-    att_function_type: Literal[AttType.CEHR_BERT.value, AttType.DAY.value, AttType.NONE.value] = field(
+    att_function_type: Literal[
+        AttType.CEHR_BERT.value,
+        AttType.DAY.value,
+        AttType.WEEK.value,
+        AttType.MONTH.value,
+        AttType.MIX.value,
+        AttType.NONE.value
+    ] = field(
         default=AttType.CEHR_BERT.value,
         metadata={
             "help": "The ATT type to choose the level of granularity to use for creating the "
@@ -77,7 +84,14 @@ class DataTrainingArguments:
         default=False,
         metadata={"help": "The boolean indicator to indicate whether the data is in the MED format"}
     )
-    inpatient_att_function_type: Literal[AttType.CEHR_BERT.value, AttType.DAY.value, AttType.NONE.value] = field(
+    inpatient_att_function_type: Literal[
+        AttType.CEHR_BERT.value,
+        AttType.DAY.value,
+        AttType.WEEK.value,
+        AttType.MONTH.value,
+        AttType.MIX.value,
+        AttType.NONE.value
+    ] = field(
         default=AttType.NONE,
         metadata={
             "help": "The ATT type to choose the level of granularity to use for creating the "
