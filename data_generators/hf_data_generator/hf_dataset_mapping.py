@@ -270,7 +270,10 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                 if self._include_auxiliary_token:
                     # Reuse the age and date calculated for the last event in the patient timeline for the discharge
                     # facility event
-                    discharge_facility = visit['discharge_facility'] if 'discharge_facility' in visit else '0'
+                    discharge_facility = (
+                        visit['discharge_facility'] if ('discharge_facility' in visit) and visit['discharge_facility']
+                        else '0'
+                    )
 
                     self._update_cehrbert_record(
                         cehrbert_record,

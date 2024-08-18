@@ -161,7 +161,7 @@ def convert_one_patient(patient: meds_reader.Patient, default_visit_id: int = 1)
             visit_type=visit_type,
             visit_start_datetime=visit_start_datetime,
             visit_end_datetime=visit_end_datetime,
-            discharge_facility=discharge_facility,
+            discharge_facility=discharge_facility if discharge_facility else UNKNOWN_VALUE,
             events=visit_events
         ))
 
