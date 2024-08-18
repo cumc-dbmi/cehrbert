@@ -658,7 +658,7 @@ class DeathEventDecorator(PatientEventDecorator):
 
 
 def time_token_func(time_delta) -> Optional[str]:
-    if np.isnan(time_delta):
+    if time_delta is None or np.isnan(time_delta):
         return None
     if time_delta < 0:
         return 'W-1'
@@ -670,7 +670,7 @@ def time_token_func(time_delta) -> Optional[str]:
 
 
 def time_day_token(time_delta):
-    if np.isnan(time_delta):
+    if time_delta is None or np.isnan(time_delta):
         return None
     if time_delta < 1080:
         return f'D{str(time_delta)}'
@@ -678,7 +678,7 @@ def time_day_token(time_delta):
 
 
 def time_week_token(time_delta):
-    if np.isnan(time_delta):
+    if time_delta is None or np.isnan(time_delta):
         return None
     if time_delta < 1080:
         return f'W{str(math.floor(time_delta / 7))}'
@@ -686,7 +686,7 @@ def time_week_token(time_delta):
 
 
 def time_month_token(time_delta):
-    if np.isnan(time_delta):
+    if time_delta is None or np.isnan(time_delta):
         return None
     if time_delta < 1080:
         return f'M{str(math.floor(time_delta / 30))}'
@@ -700,7 +700,7 @@ def time_mix_token(time_delta):
     #         WHEN day_diff <= 720 THEN CONCAT('Q', ceil(day_diff / 90))
     #         WHEN day_diff <= 1440 THEN CONCAT('Y', ceil(day_diff / 360))
     #         ELSE 'LT'
-    if np.isnan(time_delta):
+    if time_delta is None or np.isnan(time_delta):
         return None
     if time_delta <= 7:
         return f'D{str(time_delta)}'
