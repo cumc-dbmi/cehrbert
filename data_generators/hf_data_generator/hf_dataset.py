@@ -104,10 +104,8 @@ def create_cehrbert_pretraining_dataset(
                 )
         else:
             dataset = dataset.map(
-                mapping_function.batch_transform,
-                num_proc=data_args.preprocessing_num_workers,
-                batched=True,
-                batch_size=data_args.preprocessing_batch_size
+                mapping_function.transform,
+                num_proc=data_args.preprocessing_num_workers
             )
 
     if not data_args.streaming:
