@@ -120,7 +120,7 @@ def main(
         folder_name = f'{folder_name}_num_beam_groups_{int(args.num_beam_groups)}'
 
     if args.epsilon_cutoff > 0.0:
-        folder_name = f'{folder_name}_epsilon_cutoff_{int(args.epsilon_cutoff * 10000)}'
+        folder_name = f'{folder_name}_epsilon_cutoff_{int(args.epsilon_cutoff * 100000)}'
 
     output_folder_name = os.path.join(
         args.output_folder,
