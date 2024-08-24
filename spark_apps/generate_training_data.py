@@ -1,5 +1,6 @@
 import datetime
 import os
+import shutil
 
 from pyspark.sql import SparkSession
 from pyspark.sql.window import Window
@@ -192,20 +193,28 @@ def main(
             .groupby('person_id') \
             .agg(F.mean('ic').alias('ic'))
 
-        # bound_df = patient_ic_df.select(
-        #     F.percentile_approx('ic', 0.01).alias('lower_bound'),
-        #     F.percentile_approx('ic', 0.99).alias('upper_bound')
-        # )
-        #
-        # patient_ic_df = patient_ic_df.crossJoin(bound_df) \
-        #     .withColumn('ic', F.greatest(F.least('upper_bound', 'ic'), 'lower_bound')) \
-        #     .drop('lower_bound', 'upper_bound')
-
         sequence_data = sequence_data.join(patient_ic_df, 'person_id')
 
-    sequence_data.write.mode('overwrite').parquet(
-        os.path.join(output_folder, 'patient_sequence')
-    )
+    patient_splits_folder = os.path.join(input_folder, 'patient_splits')
+    if os.path.exists(patient_splits_folder):
+        patient_splits = spark.read.parquet(patient_splits_folder)
+        sequence_data.join(patient_splits, 'person_id').write.mode('overwrite').parquet(
+            os.path.join(output_folder, 'patient_sequence_temp')
+        )
+        sequence_data = spark.read.parquet(
+            os.path.join(output_folder, 'patient_sequence_temp')
+        )
+        sequence_data.where('split="train"').write.mode('overwrite').parquet(
+            os.path.join(output_folder, 'patient_sequence_train_test_split/train')
+        )
+        sequence_data.where('split="test"').write.mode('overwrite').parquet(
+            os.path.join(output_folder, 'patient_sequence_train_test_split/test')
+        )
+        shutil.rmtree(os.path.join(output_folder, 'patient_sequence_temp'))
+    else:
+        sequence_data.write.mode('overwrite').parquet(
+            os.path.join(output_folder, 'patient_sequence')
+        )
 
 
 if __name__ == '__main__':
