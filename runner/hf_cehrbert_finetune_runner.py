@@ -176,6 +176,7 @@ def main():
                     * data_args.validation_split_percentage
                     * data_args.test_eval_ratio
                 ) + train_end
+
                 # Split patient IDs
                 val_patient_ids = set(unique_patient_ids[train_end:validation_end])
                 test_patient_ids = set(unique_patient_ids[validation_end:])
