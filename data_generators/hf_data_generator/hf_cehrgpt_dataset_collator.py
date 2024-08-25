@@ -29,10 +29,10 @@ class CehrGptDataCollator:
         # We used VS for the historical data, currently, we use the new [VS] for the newer data
         # so we need to check both cases.
         self.vs_token_id = tokenizer._convert_token_to_id('VS')
-        if self.vs_token_id == tokenizer._oov_token_index:
+        if self.vs_token_id == tokenizer._oov_token_id:
             self.vs_token_id = tokenizer._convert_token_to_id('[VS]')
         self.ve_token_id = tokenizer._convert_token_to_id('VE')
-        if self.ve_token_id == tokenizer._oov_token_index:
+        if self.ve_token_id == tokenizer._oov_token_id:
             self.ve_token_id = tokenizer._convert_token_to_id('[VE]')
 
         self.shuffle_records = shuffle_records

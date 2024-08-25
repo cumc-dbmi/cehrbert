@@ -46,6 +46,13 @@ class CehrGptTokenizer(PushToHubMixin):
         self._att_tokenizer = att_tokenizer
         self._token_to_sub_time_token_mapping = token_to_sub_time_token_mapping
         self._lab_stats = lab_stats
+        self._lab_stat_mapping = {
+            lab_stat["concept_id"]: {
+                'unit': lab_stat["unit"],
+                'mean': lab_stat['mean'],
+                'std': lab_stat['std']
+            } for lab_stat in lab_stats
+        }
         self._concept_name_mapping = concept_name_mapping
         self._oov_token_id = self._tokenizer.token_to_id(OUT_OF_VOCABULARY_TOKEN)
         self._padding_token_id = self._tokenizer.token_to_id(PAD_TOKEN)
@@ -298,6 +305,7 @@ class CehrGptTokenizer(PushToHubMixin):
                     batch_size=data_args.preprocessing_batch_size,
                     keep_in_memory=True,
                     new_fingerprint="invalid",
+                    remove_columns=dataset.column_names
                 )
             else:
                 parts = dataset.map(
@@ -354,6 +362,25 @@ class CehrGptTokenizer(PushToHubMixin):
             lab_stats,
             concept_name_mapping
         )
+
+    def normalize(self, concept_id, concept_value) -> float:
+        if concept_id in self._lab_stat_mapping:
+            mean_ = (concept_value - self._lab_stat_mapping[concept_id]['mean'])
+            std = self._lab_stat_mapping[concept_id]['std']
+            if std > 0:
+                normalized_value = mean_ / self._lab_stat_mapping[concept_id]['std']
+            else:
+                normalized_value = mean_
+            return normalized_value
+        return concept_value
+
+    def denormalize(self, concept_id, value) -> float:
+        if concept_id in self._lab_stat_mapping:
+            value = (
+                    value * self._lab_stat_mapping[concept_id]['std']
+                    + self._lab_stat_mapping[concept_id]['mean']
+            )
+        return value
 
     @classmethod
     def batch_concat_concepts(cls, records: Dict[str, List], feature_name) -> Dict[str, List]:
