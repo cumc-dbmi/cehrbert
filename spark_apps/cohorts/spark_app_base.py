@@ -1,7 +1,7 @@
 import os
 import re
 from abc import ABC
-from typing import List
+import shutil
 
 from pandas import to_datetime
 from pyspark.sql import DataFrame
@@ -238,6 +238,7 @@ class NestedCohortBuilder:
             prediction_window: int,
             num_of_visits: int,
             num_of_concepts: int,
+            patient_splits_folder: str = None,
             is_window_post_index: bool = False,
             include_visit_type: bool = True,
             allow_measurement_only: bool = False,
@@ -263,6 +264,7 @@ class NestedCohortBuilder:
         self._cohort_name = cohort_name
         self._input_folder = input_folder
         self._output_folder = output_folder
+        self._patient_splits_folder = patient_splits_folder
         self._target_cohort = target_cohort
         self._outcome_cohort = outcome_cohort
         self._ehr_table_list = ehr_table_list
@@ -424,7 +426,8 @@ class NestedCohortBuilder:
                                                       prediction_window=prediction_window)) \
             .withColumn('cohort_member_id', cohort_member_id_udf)
 
-        # Keep the
+        # Keep one record in case that there are multiple samples generated for the same index_date.
+        # This should not happen in theory, this is really just a safeguard
         row_rank = F.row_number().over(
             Window.partitionBy('person_id', 'cohort_member_id', 'index_date').orderBy(F.desc('label')))
         cohort = cohort.withColumn('row_rank', row_rank) \
@@ -447,8 +450,23 @@ class NestedCohortBuilder:
             .where(F.col('num_of_visits') >= self._num_of_visits) \
             .where(F.col('num_of_concepts') >= self._num_of_concepts)
 
-        cohort.orderBy('person_id', 'cohort_member_id') \
-            .write.mode('overwrite').parquet(self._output_data_folder)
+        # if patient_splits is provided, we will
+        if self._patient_splits_folder:
+            patient_splits = self.spark.read.parquet(self._patient_splits_folder)
+            cohort.join(patient_splits, 'person_id').orderBy('person_id', 'cohort_member_id') \
+                .write.mode('overwrite').parquet(os.path.join(self._output_data_folder, 'temp'))
+            # Reload the data from the disk
+            cohort = self.spark.read.parquet(os.path.join(self._output_data_folder, 'temp'))
+            cohort.where('split="train"').write.mode('overwrite').parquet(
+                os.path.join(self._output_data_folder, 'train')
+            )
+            cohort.where('split="test"').write.mode('overwrite').parquet(
+                os.path.join(self._output_data_folder, 'test')
+            )
+            shutil.rmtree(os.path.join(self._output_data_folder, 'temp'))
+        else:
+            cohort.orderBy('person_id', 'cohort_member_id') \
+                .write.mode('overwrite').parquet(self._output_data_folder)
 
     def extract_ehr_records_for_cohort(self, cohort: DataFrame):
         """
@@ -633,6 +651,7 @@ def create_prediction_cohort(
         cohort_name=cohort_name,
         input_folder=input_folder,
         output_folder=output_folder,
+        patient_splits_folder=spark_args.patient_splits_folder,
         target_cohort=target_cohort,
         outcome_cohort=outcome_cohort,
         ehr_table_list=ehr_table_list,

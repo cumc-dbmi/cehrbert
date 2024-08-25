@@ -27,6 +27,11 @@ def create_spark_args():
                         action='store',
                         help='The path for your input_folder where the sequence data is',
                         required=True)
+    parser.add_argument('--patient_splits_folder',
+                        dest='patient_splits_folder',
+                        action='store',
+                        help='The folder that contains the patient_splits data',
+                        required=False)
     parser.add_argument('-o',
                         '--output_folder',
                         dest='output_folder',
