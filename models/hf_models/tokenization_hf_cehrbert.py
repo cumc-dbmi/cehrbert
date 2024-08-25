@@ -268,7 +268,8 @@ class CehrBertTokenizer(PushToHubMixin):
             parts = dataset.map(
                 partial(_agg_helper, map_func=map_statistics),
                 batched=True,
-                batch_size=data_args.preprocessing_batch_size
+                batch_size=data_args.preprocessing_batch_size,
+                remove_columns=dataset.column_names
             )
         else:
             parts = dataset.map(
