@@ -69,20 +69,21 @@ def generate_lab_stats_mapping(all_lab_stats: Optional[List[Dict[str, Any]]]) ->
     lab_stats_mapping = {}
     if all_lab_stats is not None:
         for lab_stats in all_lab_stats:
-            concept_id = lab_stats['concept_id']
-            count = lab_stats['concept_id']
-            if (concept_id in lab_stats_mapping) and (count > lab_stats_mapping[concept_id]['count']):
-                lab_stats_mapping[concept_id] = {
-                    'mean': lab_stats['mean'],
-                    'std': lab_stats['std'],
-                    'count': lab_stats['count']
-                }
-            else:
-                lab_stats_mapping[concept_id] = {
-                    'mean': lab_stats['mean'],
-                    'std': lab_stats['std'],
-                    'count': lab_stats['count']
-                }
+            if lab_stats['concept_id'].isnumeric():
+                concept_id = int(lab_stats['concept_id'])
+                count = lab_stats['concept_id']
+                if (concept_id in lab_stats_mapping) and (count > lab_stats_mapping[concept_id]['count']):
+                    lab_stats_mapping[concept_id] = {
+                        'mean': lab_stats['mean'],
+                        'std': lab_stats['std'],
+                        'count': lab_stats['count']
+                    }
+                else:
+                    lab_stats_mapping[concept_id] = {
+                        'mean': lab_stats['mean'],
+                        'std': lab_stats['std'],
+                        'count': lab_stats['count']
+                    }
     return lab_stats_mapping
 
 

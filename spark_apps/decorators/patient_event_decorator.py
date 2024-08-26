@@ -418,6 +418,8 @@ class PatientEventAttDecorator(PatientEventDecorator):
                 .withColumn('standard_concept_id', inpatient_att_token) \
                 .withColumn('visit_concept_order', F.col('visit_concept_order')) \
                 .withColumn('priority', F.col('priority') - 0.01) \
+                .withColumn('concept_value_mask', F.lit(0)) \
+                .withColumn('concept_value', F.lit(0.0)) \
                 .drop('prev_date', 'time_delta', 'is_span_boundary') \
                 .drop('prev_datetime', 'hour_delta')
         else:
@@ -433,6 +435,8 @@ class PatientEventAttDecorator(PatientEventDecorator):
                 .withColumn('standard_concept_id', F.concat(F.lit('i-'), time_token_udf('time_delta'))) \
                 .withColumn('visit_concept_order', F.col('visit_concept_order')) \
                 .withColumn('priority', F.col('priority') - 0.01) \
+                .withColumn('concept_value_mask', F.lit(0)) \
+                .withColumn('concept_value', F.lit(0.0)) \
                 .drop('prev_date', 'time_delta', 'is_span_boundary')
 
         self.validate(inpatient_events)
