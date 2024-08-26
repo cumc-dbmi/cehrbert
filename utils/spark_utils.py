@@ -1109,9 +1109,10 @@ def process_measurement(
             m.person_id,
             m.measurement_concept_id AS standard_concept_id,
             CAST(m.measurement_date AS DATE) AS date,
+            CAST(m.measurement_time AS TIMESTAMP) AS datetime,
             m.visit_occurrence_id,
             'measurement' AS domain,
-            MEAN((m.value_as_number - s.value_mean) / value_stddev) AS concept_value
+            (m.value_as_number - s.value_mean) / value_stddev AS concept_value
         FROM measurement AS m
         JOIN measurement_unit_stats AS s
             ON s.measurement_concept_id = m.measurement_concept_id 
@@ -1119,7 +1120,6 @@ def process_measurement(
         WHERE m.visit_occurrence_id IS NOT NULL
             AND m.value_as_number IS NOT NULL
             AND m.value_as_number BETWEEN s.lower_bound AND s.upper_bound
-        GROUP BY m.person_id, m.visit_occurrence_id, m.measurement_concept_id, m.measurement_date
     ''')
 
     # For categorical measurements in required_measurement, we concatenate measurement_concept_id
@@ -1133,6 +1133,7 @@ def process_measurement(
                 ELSE CAST(measurement_concept_id AS STRING)
             END AS standard_concept_id,
             CAST(m.measurement_date AS DATE) AS date,
+            CAST(m.measurement_time AS TIMESTAMP) AS datetime,
             m.visit_occurrence_id,
             'categorical_measurement' AS domain,
             -1.0 AS concept_value
