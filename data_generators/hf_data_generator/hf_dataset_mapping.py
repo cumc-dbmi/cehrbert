@@ -443,6 +443,7 @@ class HFCehrGptTokenizationMapping(DatasetMapping):
         record['input_ids'] = input_ids
         concept_value_masks = record['concept_value_masks']
         concept_values = record['concept_values']
+        normalized_concept_values = copy.deepcopy(concept_values)
 
         # If any concept has a value associated with it, we normalize the value
         if np.any(concept_value_masks > 0):
@@ -451,6 +452,6 @@ class HFCehrGptTokenizationMapping(DatasetMapping):
             ):
                 if token_id in self._lab_token_ids:
                     normalized_concept_value = self._concept_tokenizer.normalize(concept_id, concept_value)
-                    concept_values[i] = normalized_concept_value
-            record['concept_values'] = concept_values
+                    normalized_concept_values[i] = normalized_concept_value
+            record['concept_values'] = normalized_concept_values
         return record
