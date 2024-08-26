@@ -164,9 +164,6 @@ def gpt_to_omop_converter_serial(
     id_mappings_dict = {}
     pt_seq_dict = {}
 
-    if isinstance(pat_concept_values, pd.Series):
-        pat_concept_values = pat_concept_values.to_numpy()
-
     for tb in TABLE_LIST:
         create_folder_if_not_exists(output_folder, tb)
         id_mappings_dict[tb] = {}
@@ -180,7 +177,7 @@ def gpt_to_omop_converter_serial(
 
     person_id: int = const + 1
 
-    for index, row in tqdm(enumerate(pat_seq_split), total=pat_seq_len):
+    for index, (row, full_concept_values) in tqdm(enumerate(zip(pat_seq_split, pat_concept_values)), total=pat_seq_len):
         bad_sequence = False
         # ignore start token
         if original_person_id:
@@ -195,7 +192,7 @@ def gpt_to_omop_converter_serial(
             else:
                 row = row[0:]
         tokens_generated = row[START_TOKEN_SIZE:]
-        concept_values = pat_concept_values[index][START_TOKEN_SIZE:]
+        concept_values = full_concept_values[START_TOKEN_SIZE:] if full_concept_values is not None else None
 
         # Skip the sequences whose sequence length is 0
         if len(tokens_generated) == 0:
@@ -360,7 +357,7 @@ def gpt_to_omop_converter_serial(
                             id_mappings_dict['drug_exposure'][drug_exposure_id] = person_id
                             drug_exposure_id += 1
                         elif domain == 'Measurement':
-                            concept_value = concept_values[idx]
+                            concept_value = concept_values[idx] if concept_values is not None else 0.0
                             if concept_id in lab_stats_mapping:
                                 concept_value = (
                                         concept_value * lab_stats_mapping[concept_id]['std'] +
