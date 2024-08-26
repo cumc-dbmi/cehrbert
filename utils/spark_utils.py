@@ -1109,7 +1109,7 @@ def process_measurement(
             m.person_id,
             m.measurement_concept_id AS standard_concept_id,
             CAST(m.measurement_date AS DATE) AS date,
-            CAST(m.measurement_time AS TIMESTAMP) AS datetime,
+            CAST(COALESCE(m.measurement_datetime, m.measurement_date) AS TIMESTAMP) AS datetime,
             m.visit_occurrence_id,
             'measurement' AS domain,
             (m.value_as_number - s.value_mean) / value_stddev AS concept_value
@@ -1133,7 +1133,7 @@ def process_measurement(
                 ELSE CAST(measurement_concept_id AS STRING)
             END AS standard_concept_id,
             CAST(m.measurement_date AS DATE) AS date,
-            CAST(m.measurement_time AS TIMESTAMP) AS datetime,
+            CAST(COALESCE(m.measurement_datetime, m.measurement_date) AS TIMESTAMP) AS datetime,
             m.visit_occurrence_id,
             'categorical_measurement' AS domain,
             -1.0 AS concept_value
