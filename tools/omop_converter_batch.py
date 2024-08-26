@@ -5,7 +5,7 @@ import uuid
 from datetime import date, timedelta
 from multiprocessing import Pool
 from pathlib import Path
-from typing import Dict, Union
+from typing import Dict, Union, Tuple, Any, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -15,13 +15,13 @@ from models.gpt_model import generate_artificial_time_tokens
 from data_generators.tokenizer import ConceptTokenizer
 from data_generators.gpt_utils import is_inpatient_att_token, extract_time_interval_in_days
 from omop_entity import Person, VisitOccurrence, ConditionOccurrence, ProcedureOccurrence, \
-    DrugExposure, Death, OmopEntity
+    DrugExposure, Death, Measurement, OmopEntity
 
 CURRENT_PATH = Path(__file__).parent
 START_TOKEN_SIZE = 4
 ATT_TIME_TOKENS = generate_artificial_time_tokens()
 TABLE_LIST = ['person', 'visit_occurrence', 'condition_occurrence', 'procedure_occurrence',
-              'drug_exposure', 'death']
+              'drug_exposure', 'death', 'measurement']
 DISCHARGE_CONCEPT_LIST = [4216643, 4021968, 4146681]
 OOV_CONCEPT_MAP = {
     1525734: 'Drug',
@@ -63,6 +63,27 @@ def generate_omop_concept_domain(concept_parquet) -> Dict[int, str]:
     for i in concept_parquet.itertuples():
         domain_dict[i.concept_id] = i.domain_id
     return domain_dict
+
+
+def generate_lab_stats_mapping(all_lab_stats: Optional[List[Dict[str, Any]]]) -> Dict[int, Dict[str, Any]]:
+    lab_stats_mapping = {}
+    if all_lab_stats is not None:
+        for lab_stats in all_lab_stats:
+            concept_id = lab_stats['concept_id']
+            count = lab_stats['concept_id']
+            if (concept_id in lab_stats_mapping) and (count > lab_stats_mapping[concept_id]['count']):
+                lab_stats_mapping[concept_id] = {
+                    'mean': lab_stats['mean'],
+                    'std': lab_stats['std'],
+                    'count': lab_stats['count']
+                }
+            else:
+                lab_stats_mapping[concept_id] = {
+                    'mean': lab_stats['mean'],
+                    'std': lab_stats['std'],
+                    'count': lab_stats['count']
+                }
+    return lab_stats_mapping
 
 
 def append_to_dict(
@@ -128,17 +149,22 @@ def export_and_clear(
 
 def gpt_to_omop_converter_serial(
         const: int,
-        pat_seq_split: Union[np.ndarray, pd.core.series.Series],
+        pat_seq_split: Union[np.ndarray, pd.Series],
+        pat_concept_values: Union[np.ndarray, pd.Series],
         domain_map: Dict[int, str],
         output_folder: str,
         buffer_size: int,
-        original_person_id: bool
+        original_person_id: bool,
+        lab_stats_mapping: Dict[int, Dict[str, float]]
 ):
     omop_export_dict = {}
     error_dict = {}
     export_error = {}
     id_mappings_dict = {}
     pt_seq_dict = {}
+
+    if isinstance(pat_concept_values, pd.Series):
+        pat_concept_values = pat_concept_values.to_numpy()
 
     for tb in TABLE_LIST:
         create_folder_if_not_exists(output_folder, tb)
@@ -149,6 +175,7 @@ def gpt_to_omop_converter_serial(
     condition_occurrence_id: int = const + 1
     procedure_occurrence_id: int = const + 1
     drug_exposure_id: int = const + 1
+    measurement_id: int = const + 1
 
     person_id: int = const + 1
 
@@ -167,6 +194,7 @@ def gpt_to_omop_converter_serial(
             else:
                 row = row[0:]
         tokens_generated = row[START_TOKEN_SIZE:]
+        concept_values = pat_concept_values[index][START_TOKEN_SIZE:]
 
         # Skip the sequences whose sequence length is 0
         if len(tokens_generated) == 0:
@@ -330,6 +358,17 @@ def gpt_to_omop_converter_serial(
                             append_to_dict(omop_export_dict, de, drug_exposure_id)
                             id_mappings_dict['drug_exposure'][drug_exposure_id] = person_id
                             drug_exposure_id += 1
+                        elif domain == 'Measurement':
+                            concept_value = concept_values[idx]
+                            if concept_id in lab_stats_mapping:
+                                concept_value = (
+                                        concept_value * lab_stats_mapping[concept_id]['std'] +
+                                        lab_stats_mapping[concept_id]['mean']
+                                )
+                            m = Measurement(measurement_id, x, concept_value, vo, data_cursor)
+                            append_to_dict(omop_export_dict, m, measurement_id)
+                            id_mappings_dict['measurement'][measurement_id] = person_id
+                            measurement_id += 1
 
                 except ValueError:
                     error_dict[person_id] = {}
@@ -377,18 +416,22 @@ def gpt_to_omop_converter_parallel(
         patient_sequences_concept_ids: pd.DataFrame,
         buffer_size: int,
         num_of_cores: int,
-        original_person_id: bool
+        original_person_id: bool,
+        all_lab_stats: List[Dict[int, Any]] = None
 ):
     patient_sequences = patient_sequences_concept_ids['concept_ids']
+    concept_values = patient_sequences_concept_ids['concept_values']
     domain_map = generate_omop_concept_domain(concept_pd)
+    lab_stats_mapping = generate_lab_stats_mapping(all_lab_stats)
     pool_tuples = []
     # TODO: Need to make this dynamic
     const = 10000000
     patient_sequences_list = np.array_split(patient_sequences, num_of_cores)
+    concept_values_list = np.array_split(concept_values, num_of_cores)
     for i in range(1, num_of_cores + 1):
         pool_tuples.append(
-            (const * i, patient_sequences_list[i - 1], domain_map, output_folder, buffer_size,
-             original_person_id)
+            (const * i, patient_sequences_list[i - 1], concept_values_list[i - 1], domain_map,
+             output_folder, buffer_size, original_person_id, lab_stats_mapping)
         )
 
     with Pool(processes=num_of_cores) as p:
@@ -400,19 +443,21 @@ def gpt_to_omop_converter_parallel(
 
 
 def main(args):
-    # tokenizer_path = os.path.join(args.model_folder, 'tokenizer.pickle')
-    # tokenizer = pickle.load(open(tokenizer_path, 'rb'))
-    concept_pd = pd.read_parquet(os.path.join(args.concept_path))
+    from models.hf_models.tokenization_utils import load_json_file
+    concept_pd = pd.read_parquet(args.concept_path)
+    all_lab_stats = load_json_file(args.lab_stats_path) if args.lab_stats_path is not None else None
 
     if args.original_person_id:
-        patient_sequences_concept_ids = pd.read_parquet(os.path.join(args.patient_sequence_path),
-                                                        columns=['person_id', 'concept_ids'])
+        patient_sequences_concept_ids = pd.read_parquet(
+            args.patient_sequence_path,
+            columns=['person_id', 'concept_ids', 'concept_values']
+        )
         patient_sequences_concept_ids['concept_ids'] = patient_sequences_concept_ids. \
             apply(lambda row: np.append(row.person_id, row.concept_ids), axis=1)
         patient_sequences_concept_ids.drop(columns=['person_id'], inplace=True)
     else:
         patient_sequences_concept_ids = pd.read_parquet(
-            os.path.join(args.patient_sequence_path), columns=['concept_ids']
+            args.patient_sequence_path, columns=['concept_ids', 'concept_values']
         )
     gpt_to_omop_converter_parallel(
         args.output_folder,
@@ -420,7 +465,8 @@ def main(args):
         patient_sequences_concept_ids,
         args.buffer_size,
         args.cpu_cores,
-        args.original_person_id
+        args.original_person_id,
+        all_lab_stats
     )
 
 
@@ -434,13 +480,18 @@ if __name__ == "__main__":
         help='The path for the output_folder',
         required=True
     )
-
     parser.add_argument(
         '--concept_path',
         dest='concept_path',
         action='store',
         help='The path for your concept_path',
         required=True
+    )
+    parser.add_argument(
+        '--lab_stats_path',
+        dest='lab_stats_path',
+        action='store',
+        required=False
     )
     parser.add_argument(
         '--buffer_size',

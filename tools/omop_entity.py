@@ -402,3 +402,57 @@ class Death(OmopEntity):
 
     def get_table_name(self):
         return 'death'
+
+
+class Measurement(OmopEntity):
+
+    def __init__(
+            self,
+            measurement_id,
+            measurement_concept_id,
+            value_as_number,
+            visit_occurrence: VisitOccurrence,
+            measurement_date: date
+    ):
+        self._measurement_id = measurement_id
+        self._measurement_concept_id = measurement_concept_id
+        self._value_as_number = value_as_number
+        self._visit_occurrence = visit_occurrence
+        self._measurement_date = measurement_date
+        self._measurement_datetime = fill_start_datetime(measurement_date)
+
+    def export_as_json(self):
+        return {
+            'measurement_id': self._measurement_id,
+            'person_id': self._visit_occurrence._person._person_id,
+            'measurement_concept_id': self._measurement_concept_id,
+            'measurement_date': self._measurement_date,
+            'measurement_datetime': self._measurement_datetime,
+            'value_as_number': self._value_as_number,
+            'operator_concept_id': 4172703,
+            'provider_id': 0,
+            'visit_occurrence_id': self._visit_occurrence._visit_occurrence_id,
+            'visit_detail_id': 0,
+            'measurement_source_value': '',
+            'measurement_source_concept_id': self._measurement_concept_id
+        }
+
+    @classmethod
+    def get_schema(cls):
+        return {
+            'measurement_id': int,
+            'person_id': int,
+            'measurement_concept_id': int,
+            'measurement_date': date,
+            'measurement_datetime': datetime,
+            'value_as_number': float,
+            'operator_concept_id': int,
+            'provider_id': int,
+            'visit_occurrence_id': int,
+            'visit_detail_id': int,
+            'measurement_source_value': str,
+            'measurement_source_concept_id': int
+        }
+
+    def get_table_name(self):
+        return 'measurement'
