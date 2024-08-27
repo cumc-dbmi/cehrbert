@@ -148,6 +148,10 @@ def export_and_clear(
         export_dict[table_name].clear()
 
 
+def _is_none(x):
+    return x is None or np.isnan(x)
+
+
 def gpt_to_omop_converter_serial(
         const: int,
         pat_seq_split: Union[np.ndarray, pd.Series],
@@ -192,7 +196,11 @@ def gpt_to_omop_converter_serial(
             else:
                 row = row[0:]
         tokens_generated = row[START_TOKEN_SIZE:]
-        concept_values = full_concept_values[START_TOKEN_SIZE:] if full_concept_values is not None else None
+        concept_values = (
+            full_concept_values[START_TOKEN_SIZE:]
+            if full_concept_values is not None and ~np.isnan(full_concept_values)
+            else None
+        )
 
         # Skip the sequences whose sequence length is 0
         if len(tokens_generated) == 0:
