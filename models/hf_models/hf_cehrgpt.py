@@ -1,5 +1,5 @@
 import warnings
-from typing import Tuple, Optional, Union, List, Dict
+from typing import Tuple, Optional, Union, List
 
 import torch
 import math
@@ -18,7 +18,8 @@ from transformers.generation.stopping_criteria import validate_stopping_criteria
 from transformers.generation.logits_process import LogitsProcessorList
 
 from models.hf_models.hf_modeling_outputs import (
-    CehrGptOutputWithPast, CehrGptCausalLMOutput, CehrGptGenerateDecoderOnlyOutput
+    CehrGptOutputWithPast, CehrGptCausalLMOutput,
+    CehrGptGenerateDecoderOnlyOutput, CehrBertSequenceClassifierOutput
 )
 from models.hf_models.config import CEHRGPTConfig
 
@@ -48,12 +49,6 @@ class WeibullModel(nn.Module):
         if torch.isnan(k_param).any():
             logger.warning(f"NaN values found in k_param. x: {x}")
         return lambda_param, k_param
-    #
-    # def sample(self, x, num_samples=1):
-    #     lambda_param, k_param = self.forward(x)
-    #     dist = Weibull(k_param, lambda_param)
-    #     samples = dist.sample((num_samples,))
-    #     return samples
 
 
 class ConceptValuePredictionLayer(nn.Module):
@@ -840,3 +835,84 @@ class CEHRGPT2LMHeadModel(CEHRGPTPreTrainedModel):
             hidden_states=decoder_hidden_states,
             past_key_values=model_kwargs.get("past_key_values"),
         )
+
+
+class CehrGptForClassification(CEHRGPTPreTrainedModel):
+
+    def __init__(self, config: CEHRGPTConfig):
+        super().__init__(config)
+
+        self.cehr_gpt = CEHRGPT2Model(config)
+        self.age_batch_norm = torch.nn.BatchNorm1d(1)
+
+        self.dropout = nn.Dropout(config.summary_first_dropout)
+        self.dense_layer = nn.Linear(config.hidden_size + 1, config.hidden_size // 2)
+        self.dense_dropout = nn.Dropout(config.summary_first_dropout)
+        self.classifier = nn.Linear(config.hidden_size // 2, 1)
+
+        # Model parallel
+        self.model_parallel = False
+        self.device_map = None
+        self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(
+            self,
+            input_ids: Optional[torch.LongTensor],
+            age_at_index: torch.FloatTensor,
+            classifier_label: Optional[torch.FloatTensor],
+            value_indicators: Optional[torch.BoolTensor] = None,
+            values: Optional[torch.FloatTensor] = None,
+            past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            position_ids: Optional[torch.LongTensor] = None,
+            head_mask: Optional[torch.FloatTensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None
+    ) -> CehrBertSequenceClassifierOutput:
+        normalized_age = self.age_batch_norm(age_at_index)
+
+        cehrgpt_output = self.cehr_gpt(
+            input_ids=input_ids,
+            value_indicators=value_indicators,
+            values=values,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict
+        )
+
+        # In fine-tuning, the sequences are left-padded, so we use the last element as the pooler
+        output_pooler = cehrgpt_output.last_hidden_state[..., -1, :]
+        next_input = self.dropout(output_pooler)
+        next_input = torch.cat([next_input, normalized_age], dim=1)
+        next_input = self.dense_layer(next_input)
+        next_input = nn.functional.relu(next_input)
+        next_input = self.dense_dropout(next_input)
+        logits = self.classifier(next_input)
+
+        loss = None
+        if classifier_label is not None:
+            loss_fct = nn.BCEWithLogitsLoss()
+            loss = loss_fct(logits, classifier_label)
+
+        return CehrBertSequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=cehrgpt_output.last_hidden_state,
+            attentions=cehrgpt_output.attentions
+        )
+
+    def parallelize(self, device_map=None):
+        self.cehr_gpt.parallelize(device_map=device_map)
+
+    def deparallelize(self):
+        self.cehr_gpt.deparallelize()

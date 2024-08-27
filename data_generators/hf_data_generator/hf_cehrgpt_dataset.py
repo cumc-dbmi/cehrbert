@@ -4,6 +4,9 @@ from models.hf_models.tokenization_hf_cehrgpt import CehrGptTokenizer
 from data_generators.hf_data_generator.hf_dataset_mapping import (
     SortPatientSequenceMapping, HFCehrGptTokenizationMapping
 )
+from data_generators.hf_data_generator.hf_dataset import (
+    FINETUNING_COLUMNS, HFFineTuningMapping, MedToCehrBertDatasetMapping
+)
 from runner.hf_runner_argument_dataclass import DataTrainingArguments
 
 CEHRGPT_COLUMNS = [
@@ -17,13 +20,13 @@ TRANSFORMER_COLUMNS = ['input_ids', 'concept_ids']
 
 def create_cehrgpt_pretraining_dataset(
         dataset: Union[Dataset, DatasetDict],
-        concept_tokenizer: CehrGptTokenizer,
+        cehrgpt_tokenizer: CehrGptTokenizer,
         data_args: DataTrainingArguments
 ) -> Dataset:
     required_columns = TRANSFORMER_COLUMNS + CEHRGPT_COLUMNS
     mapping_functions = [
         SortPatientSequenceMapping(),
-        HFCehrGptTokenizationMapping(concept_tokenizer, True)
+        HFCehrGptTokenizationMapping(cehrgpt_tokenizer)
     ]
     for mapping_function in mapping_functions:
         if data_args.streaming:
@@ -59,4 +62,42 @@ def create_cehrgpt_pretraining_dataset(
         columns_to_remove = [_ for _ in all_columns if _ not in required_columns]
         dataset = dataset.remove_columns(columns_to_remove)
 
+    return dataset
+
+
+def create_cehrgpt_finetuning_dataset(
+        dataset: Union[Dataset, DatasetDict],
+        cehrgpt_tokenizer: CehrGptTokenizer,
+        data_args: DataTrainingArguments
+) -> Dataset:
+    required_columns = TRANSFORMER_COLUMNS + CEHRGPT_COLUMNS + FINETUNING_COLUMNS
+
+    if data_args.is_data_in_med:
+        mapping_functions = [
+            HFCehrGptTokenizationMapping(cehrgpt_tokenizer),
+            HFFineTuningMapping()
+        ]
+    else:
+        mapping_functions = [
+            SortPatientSequenceMapping(),
+            HFCehrGptTokenizationMapping(cehrgpt_tokenizer),
+            HFFineTuningMapping()
+        ]
+
+    if data_args.is_data_in_med:
+        med_to_cehrbert_mapping = MedToCehrBertDatasetMapping(
+            data_args
+        )
+        mapping_functions.insert(0, med_to_cehrbert_mapping)
+
+    for mapping_function in mapping_functions:
+        dataset = dataset.map(mapping_function.transform, num_proc=data_args.preprocessing_num_workers)
+
+    if isinstance(dataset, DatasetDict):
+        all_columns = dataset['train'].column_names
+    else:
+        all_columns = dataset.column_names
+
+    columns_to_remove = [_ for _ in all_columns if _ not in required_columns]
+    dataset = dataset.remove_columns(columns_to_remove)
     return dataset

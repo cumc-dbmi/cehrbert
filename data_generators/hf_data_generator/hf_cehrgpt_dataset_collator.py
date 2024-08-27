@@ -21,7 +21,8 @@ class CehrGptDataCollator:
             shuffle_records: bool = False,
             include_values: bool = False,
             include_ttv_prediction: bool = False,
-            use_sub_time_tokenization: bool = False
+            use_sub_time_tokenization: bool = False,
+            pretraining: bool = True
     ):
         self.tokenizer = tokenizer
         self.max_length = max_length
@@ -39,6 +40,8 @@ class CehrGptDataCollator:
         self.include_values = include_values
         self.include_ttv_prediction = include_ttv_prediction
         self.use_sub_time_tokenization = use_sub_time_tokenization
+        self.pretraining = pretraining
+
         if self.use_sub_time_tokenization:
             token_to_time_token_mapping = tokenizer.token_to_time_token_mapping
             if not token_to_time_token_mapping:
@@ -49,6 +52,11 @@ class CehrGptDataCollator:
             # Create the tensors for converting time tokens to the sub time tokens
             self.time_tokens = torch.tensor(list(tokenizer.token_to_time_token_mapping.keys()), dtype=torch.int64)
             self.mapped_sub_time_tokens = torch.tensor(list(token_to_time_token_mapping.values()), dtype=torch.int64)
+
+    def _try_reverse_tensor(self, tensor: torch.Tensor) -> torch.Tensor:
+        if not self.pretraining:
+            return torch.flip(tensor, dims=[-1])
+        return tensor
 
     @staticmethod
     def _convert_to_tensor(features: Any) -> torch.Tensor:
@@ -80,28 +88,37 @@ class CehrGptDataCollator:
 
         # Assume that each example in the batch is a dictionary with 'input_ids' and 'attention_mask'
         batch_input_ids = [
-            self._convert_to_tensor(example['input_ids'])
+            self._try_reverse_tensor(self._convert_to_tensor(example['input_ids']))
             for example in examples
         ]
         batch_attention_mask = [
-            torch.ones_like(self._convert_to_tensor(example['input_ids']), dtype=torch.float)
+            self._try_reverse_tensor(
+                torch.ones_like(self._convert_to_tensor(example['input_ids']), dtype=torch.float)
+            )
             for example in examples
         ]
 
         # Pad sequences to the max length in the batch
-        batch['input_ids'] = pad_sequence(
-            batch_input_ids,
-            batch_first=True,
-            padding_value=self.tokenizer.pad_token_id
-        ).to(torch.int64)
-        batch['attention_mask'] = pad_sequence(
-            batch_attention_mask,
-            batch_first=True,
-            padding_value=0.
+        batch['input_ids'] = self._try_reverse_tensor(
+            pad_sequence(
+                batch_input_ids,
+                batch_first=True,
+                padding_value=self.tokenizer.pad_token_id
+            ).to(torch.int64)
+        )
+
+        batch['attention_mask'] = self._try_reverse_tensor(
+            pad_sequence(
+                batch_attention_mask,
+                batch_first=True,
+                padding_value=0.
+            )
         )
         assert (batch['input_ids'].shape[1] <= self.max_length)
         assert (batch['attention_mask'].shape[1] <= self.max_length)
-        batch['labels'] = batch['input_ids'].clone()
+
+        if self.pretraining:
+            batch['labels'] = batch['input_ids'].clone()
 
         if self.use_sub_time_tokenization:
             time_token_indicators = torch.isin(batch['input_ids'], self.time_tokens)
@@ -118,40 +135,58 @@ class CehrGptDataCollator:
 
         if self.include_ttv_prediction:
             batch_time_to_visits = [
-                self._convert_to_tensor(example['time_to_visits'])
+                self._try_reverse_tensor(self._convert_to_tensor(example['time_to_visits']))
                 for example in examples
             ]
-            batch['time_to_visits'] = pad_sequence(
-                batch_time_to_visits,
-                batch_first=True,
-                padding_value=-100.0
+            batch['time_to_visits'] = self._try_reverse_tensor(
+                pad_sequence(
+                    batch_time_to_visits,
+                    batch_first=True,
+                    padding_value=-100.0
+                )
             )
 
         if self.include_values:
             batch_value_indicators = [
-                self._convert_to_tensor(example['value_indicators'])
+                self._try_reverse_tensor(self._convert_to_tensor(example['value_indicators']))
                 for example in examples
             ]
             batch_values = [
-                self._convert_to_tensor(example['values'])
+                self._try_reverse_tensor(self._convert_to_tensor(example['values']))
                 for example in examples
             ]
 
-            batch['value_indicators'] = pad_sequence(
-                batch_value_indicators,
-                batch_first=True,
-                padding_value=False
+            batch['value_indicators'] = self._try_reverse_tensor(
+                pad_sequence(
+                    batch_value_indicators,
+                    batch_first=True,
+                    padding_value=False
+                )
             )
-            batch['values'] = pad_sequence(
-                batch_values,
-                batch_first=True,
-                padding_value=-1.0
+            batch['values'] = self._try_reverse_tensor(
+                pad_sequence(
+                    batch_values,
+                    batch_first=True,
+                    padding_value=-1.0
+                )
             )
 
             assert (batch['value_indicators'].shape[1] <= self.max_length)
             assert (batch['values'].shape[1] <= self.max_length)
             batch['true_value_indicators'] = batch['value_indicators'].clone()
             batch['true_values'] = batch['values'].clone()
+
+        if 'age_at_index' in examples[0]:
+            batch['age_at_index'] = torch.cat(
+                [self._convert_to_tensor(example['age_at_index']).reshape(-1, 1) for example in examples],
+                dim=0
+            ).to(torch.float)
+
+        if 'classifier_label' in examples[0]:
+            batch['classifier_label'] = torch.cat(
+                [self._convert_to_tensor(example['classifier_label']).reshape(-1, 1) for example in examples],
+                dim=0
+            ).to(torch.float)
 
         return batch
 
@@ -195,7 +230,6 @@ class CehrGptDataCollator:
         new_max_length = self.max_length - 1  # Subtract one for the [END] token
 
         # Return the record directly if the actual sequence length is less than the max sequence
-
         if seq_length <= new_max_length:
             record['input_ids'] = torch.concat(
                 [self._convert_to_tensor(record['input_ids']),
@@ -218,46 +252,70 @@ class CehrGptDataCollator:
 
             return record
 
-        # There is a 50% chance we randomly slice out a portion of the patient history and update the demographic
-        # prompt depending on the new starting point
-        if random.random() < 0.5:
-            start_index, end_index, demographic_tokens = random_slice_gpt_sequence(
-                record['concept_ids'],
-                new_max_length
-            )
-            if start_index != end_index:
-                record['input_ids'] = self._convert_to_tensor(record['input_ids'][start_index:end_index + 1])
-                if self.include_values:
-                    record['value_indicators'] = self._convert_to_tensor(
-                        record['concept_value_masks'][start_index:end_index + 1]
-                    ).to(torch.bool)
-                    record['values'] = self._convert_to_tensor(
-                        record['concept_values'][start_index:end_index + 1]
-                    )
-                if self.include_ttv_prediction:
-                    record['time_to_visits'] = self._convert_to_tensor(
-                        self._convert_time_to_event(record['concept_ids'][start_index:end_index + 1])
-                    )
-                return record
+        if self.pretraining:
+            # There is a 50% chance we randomly slice out a portion of the patient history and update the demographic
+            # prompt depending on the new starting point
+            if random.random() < 0.5:
+                start_index, end_index, demographic_tokens = random_slice_gpt_sequence(
+                    record['concept_ids'],
+                    new_max_length
+                )
+                if start_index != end_index:
+                    record['input_ids'] = self._convert_to_tensor(record['input_ids'][start_index:end_index + 1])
+                    if self.include_values:
+                        record['value_indicators'] = self._convert_to_tensor(
+                            record['concept_value_masks'][start_index:end_index + 1]
+                        ).to(torch.bool)
+                        record['values'] = self._convert_to_tensor(
+                            record['concept_values'][start_index:end_index + 1]
+                        )
+                    if self.include_ttv_prediction:
+                        record['time_to_visits'] = self._convert_to_tensor(
+                            self._convert_time_to_event(record['concept_ids'][start_index:end_index + 1])
+                        )
+                    return record
 
-        # The default employs a right truncation strategy, where the demographic prompt is reserved
-        end_index = new_max_length
-        for i in reversed(list(range(0, end_index))):
-            current_token = record['input_ids'][i]
-            if current_token == self.ve_token_id:
-                end_index = i
-                break
+            # The default employs a right truncation strategy, where the demographic prompt is reserved
+            end_index = new_max_length
+            for i in reversed(list(range(0, end_index))):
+                current_token = record['input_ids'][i]
+                if current_token == self.ve_token_id:
+                    end_index = i
+                    break
 
-        record['input_ids'] = record['input_ids'][0:end_index]
-        if self.include_values:
-            record['value_indicators'] = self._convert_to_tensor(
-                record['concept_value_masks'][0:end_index]
-            ).to(torch.bool)
-            record['values'] = self._convert_to_tensor(
-                record['concept_values'][0:end_index]
-            )
-        if self.include_ttv_prediction:
-            record['time_to_visits'] = self._convert_to_tensor(
-                self._convert_time_to_event(record['concept_ids'][0:end_index])
-            )
-        return record
+            record['input_ids'] = record['input_ids'][0:end_index]
+            if self.include_values:
+                record['value_indicators'] = self._convert_to_tensor(
+                    record['concept_value_masks'][0:end_index]
+                ).to(torch.bool)
+                record['values'] = self._convert_to_tensor(
+                    record['concept_values'][0:end_index]
+                )
+            if self.include_ttv_prediction:
+                record['time_to_visits'] = self._convert_to_tensor(
+                    self._convert_time_to_event(record['concept_ids'][0:end_index])
+                )
+            return record
+
+        else:
+            # We employ a left truncation strategy, where the most recent patient history is reserved for fine-tuning
+            start_index = seq_length - new_max_length
+            end_index = new_max_length
+            for i in range(start_index, end_index):
+                current_token = record['input_ids'][i]
+                if current_token == self.vs_token_id:
+                    start_index = i
+                    break
+            record['input_ids'] = record['input_ids'][start_index:end_index]
+            if self.include_values:
+                record['value_indicators'] = self._convert_to_tensor(
+                    record['concept_value_masks'][start_index:end_index]
+                ).to(torch.bool)
+                record['values'] = self._convert_to_tensor(
+                    record['concept_values'][start_index:end_index]
+                )
+            if self.include_ttv_prediction:
+                record['time_to_visits'] = self._convert_to_tensor(
+                    self._convert_time_to_event(record['concept_ids'][start_index:end_index])
+                )
+            return record

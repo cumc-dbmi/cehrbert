@@ -429,10 +429,8 @@ class HFCehrGptTokenizationMapping(DatasetMapping):
     def __init__(
             self,
             concept_tokenizer: CehrGptTokenizer,
-            is_pretraining: bool
     ):
         self._concept_tokenizer = concept_tokenizer
-        self._is_pretraining = is_pretraining
         self._lab_token_ids = self._concept_tokenizer.lab_token_ids
 
     def transform(

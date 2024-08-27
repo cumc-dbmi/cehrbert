@@ -133,7 +133,7 @@ def main():
         # sort the patient features chronologically and tokenize the data
         processed_dataset = create_cehrgpt_pretraining_dataset(
             dataset=dataset,
-            concept_tokenizer=tokenizer,
+            cehrgpt_tokenizer=tokenizer,
             data_args=data_args
         )
         # only save the data to the disk if it is not streaming
