@@ -246,7 +246,6 @@ def _create_cehrbert_data_from_meds(
         split: str,
         default_visit_id: int = 1
 ):
-    dataset_class = IterableDataset if data_args.streaming else Dataset
     assert split in ['held_out', 'train', 'tuning']
     batches = []
     if data_args.cohort_folder:
@@ -271,7 +270,7 @@ def _create_cehrbert_data_from_meds(
         path_to_db=data_args.data_folder,
         default_visit_id=default_visit_id
     )
-    dataset = dataset_class.from_generator(
+    dataset = Dataset.from_generator(
         batch_func,
         gen_kwargs={
             "shards": split_batches,
