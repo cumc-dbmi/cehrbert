@@ -153,23 +153,21 @@ def _apply_mapping(data_args, dataset, mapping_function):
                     dataset[dataset_name].map(
                         mapping_function.batch_transform,
                         batched=True,
-                        batch_size=data_args.preprocessing_batch_size,
-                        remove_columns=mapping_function.remove_columns()
+                        batch_size=data_args.preprocessing_batch_size
                     )
                 )
         else:
             dataset = dataset.map(
                 mapping_function.batch_transform,
                 batched=True,
-                batch_size=data_args.preprocessing_batch_size,
-                remove_columns=mapping_function.remove_columns()
+                batch_size=data_args.preprocessing_batch_size
             )
     else:
         dataset = dataset.map(
             mapping_function.batch_transform,
             num_proc=data_args.preprocessing_num_workers,
             batched=True,
-            batch_size=data_args.preprocessing_batch_size,
-            remove_columns=mapping_function.remove_columns()
+            batch_size=data_args.preprocessing_batch_size
         )
+    dataset = dataset.remove_columns(mapping_function.remove_columns())
     return dataset

@@ -151,7 +151,6 @@ def main():
                     if isinstance(dataset, DatasetDict):
                         for k in dataset.keys():
                             dataset[k] = dataset[k].to_iterable_dataset()
-            dataset = convert_meds_to_cehrbert(dataset, data_args)
             train_set = dataset["train"]
             validation_set = dataset["validation"]
             test_set = dataset["test"]
