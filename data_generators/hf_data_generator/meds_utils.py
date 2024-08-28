@@ -13,12 +13,12 @@ from runner.hf_runner_argument_dataclass import DataTrainingArguments
 from data_generators.hf_data_generator.hf_dataset_mapping import birth_codes
 from med_extension.schema_extension import CehrBertPatient, Visit, Event
 
-from datasets import Dataset, DatasetDict, IterableDataset
+from datasets import Dataset, DatasetDict, IterableDataset, Split
 
 UNKNOWN_VALUE = "Unknown"
 DEFAULT_OUTPATIENT_CONCEPT_ID = "9202"
 DEFAULT_INPATIENT_CONCEPT_ID = "9201"
-MEDS_SPLIT_DATA_SPLIT_MAPPING = {"train": "train", "tuning": "validation", "held_out": "test"}
+MEDS_SPLIT_DATA_SPLIT_MAPPING = {"train": Split.TRAIN, "tuning": Split.VALIDATION, "held_out": Split.TEST}
 
 
 def get_patient_split(meds_reader_db_path: str) -> Dict[str, List[int]]:
@@ -203,18 +203,17 @@ def create_dataset_from_meds_reader(
         data_args: DataTrainingArguments,
         default_visit_id: int = 1
 ) -> DatasetDict:
+
     train_dataset = _create_cehrbert_data_from_meds(
         data_args=data_args,
         split="train",
         default_visit_id=default_visit_id
     )
-
     tuning_dataset = _create_cehrbert_data_from_meds(
         data_args=data_args,
         split="tuning",
         default_visit_id=default_visit_id
     )
-
     held_out_dataset = _create_cehrbert_data_from_meds(
         data_args=data_args,
         split="held_out",
@@ -276,7 +275,6 @@ def _create_cehrbert_data_from_meds(
             "shards": split_batches,
         },
         num_proc=data_args.preprocessing_num_workers,
-        split=MEDS_SPLIT_DATA_SPLIT_MAPPING[split],
         writer_batch_size=8
     )
     return dataset

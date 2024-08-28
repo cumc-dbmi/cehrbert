@@ -134,11 +134,19 @@ def main():
     else:
         # If the data is in the MEDS format, we need to convert it to the CEHR-BERT format
         if data_args.is_data_in_med:
-            dataset = create_dataset_from_meds_reader(data_args)
+            basename = os.path.basename(data_args.cohort_folder)
+            meds_extension_path = os.path.join(data_args.dataset_prepared_path, f"{basename}_meds_extension")
+            try:
+                LOG.info(f"Trying to load the MEDS extension from disk at {meds_extension_path}...")
+                dataset = load_dataset(meds_extension_path, streaming=data_args.streaming)
+            except Exception as e:
+                LOG.exception(e)
+                dataset = create_dataset_from_meds_reader(data_args)
+                dataset.save_to_disk(meds_extension_path)
             dataset = convert_meds_to_cehrbert(dataset, data_args)
             train_set = dataset["train"]
-            validation_set = dataset["tuning"]
-            test_set = dataset["held_out"]
+            validation_set = dataset["validation"]
+            test_set = dataset["test"]
         else:
             dataset = load_parquet_as_dataset(data_args.data_folder)
 
