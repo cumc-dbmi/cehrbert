@@ -2,9 +2,11 @@ import os
 import re
 import collections
 import functools
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union, Tuple
+from datetime import datetime
 
 import meds_reader
+import numpy as np
 import pandas as pd
 
 from runner.hf_runner_argument_dataclass import DataTrainingArguments
@@ -75,7 +77,12 @@ class PatientBlock:
         ]
 
 
-def convert_one_patient(patient: meds_reader.Patient, default_visit_id: int = 1) -> CehrBertPatient:
+def convert_one_patient(
+        patient: meds_reader.Patient,
+        default_visit_id: int = 1,
+        prediction_time: datetime = None,
+        label: Union[int, float] = None
+) -> CehrBertPatient:
     birth_datetime = None
     race = None
     gender = None
@@ -86,6 +93,12 @@ def convert_one_patient(patient: meds_reader.Patient, default_visit_id: int = 1)
     events_for_current_date = []
     patient_blocks = []
     for e in patient.events:
+
+        # Skip out of the loop if the events's time stamps are beyond the prediction time
+        if prediction_time is not None and e.time is not None:
+            if e.time > prediction_time:
+                break
+
         # This indicates demographics features
         if e.code in birth_codes:
             birth_datetime = e.time
@@ -157,13 +170,20 @@ def convert_one_patient(patient: meds_reader.Patient, default_visit_id: int = 1)
         for block in blocks:
             visit_events.extend(block.get_meds_events())
 
-        visits.append(Visit(
-            visit_type=visit_type,
-            visit_start_datetime=visit_start_datetime,
-            visit_end_datetime=visit_end_datetime,
-            discharge_facility=discharge_facility if discharge_facility else UNKNOWN_VALUE,
-            events=visit_events
-        ))
+        visits.append(
+            Visit(
+                visit_type=visit_type,
+                visit_start_datetime=visit_start_datetime,
+                visit_end_datetime=visit_end_datetime,
+                discharge_facility=discharge_facility if discharge_facility else UNKNOWN_VALUE,
+                events=visit_events
+            )
+        )
+    age_at_index = -1
+    if prediction_time is not None and birth_datetime is not None:
+        age_at_index = prediction_time.year - birth_datetime.year
+        if (prediction_time.month, prediction_time.day) < (prediction_time.month, prediction_time.day):
+            age_at_index -= 1
 
     return CehrBertPatient(
         patient_id=patient.patient_id,
@@ -171,59 +191,33 @@ def convert_one_patient(patient: meds_reader.Patient, default_visit_id: int = 1)
         visits=visits,
         race=race if race else UNKNOWN_VALUE,
         gender=gender if gender else UNKNOWN_VALUE,
-        ethnicity=ethnicity if ethnicity else UNKNOWN_VALUE
+        ethnicity=ethnicity if ethnicity else UNKNOWN_VALUE,
+        index_date=prediction_time,
+        age_at_index=age_at_index,
+        label=label
     )
-
-
-def meds_reader_to_meds_extension(
-        path_to_db: str, split: str, num_threads: int = 1, default_visit_id: int = 1
-) -> CehrBertPatient:
-    assert split in ['held_out', 'train', 'tuning']
-    patient_database = meds_reader.PatientDatabase(path_to_db, num_threads)
-    patient_split = get_patient_split(path_to_db)
-    filtered_patient_database = patient_database.filter(patient_split[split])
-    for patient_id in filtered_patient_database:
-        patient = filtered_patient_database[patient_id]
-        yield convert_one_patient(patient, default_visit_id)
 
 
 def create_dataset_from_meds_reader(
         data_args: DataTrainingArguments,
         default_visit_id: int = 1
 ) -> DatasetDict:
-    dataset_class = IterableDataset if data_args.streaming else Dataset
-    kargs = dict()
-    if not data_args.streaming:
-        kargs["num_proc"] = data_args.preprocessing_num_workers
-
-    train_dataset = dataset_class.from_generator(
-        functools.partial(
-            meds_reader_to_meds_extension,
-            path_to_db=data_args.data_folder,
-            split="train",
-            default_visit_id=default_visit_id,
-            num_threads=data_args.preprocessing_num_workers
-        ), **kargs
+    train_dataset = _create_cehrbert_data_from_meds(
+        data_args=data_args,
+        split="train",
+        default_visit_id=default_visit_id
     )
 
-    tuning_dataset = dataset_class.from_generator(
-        functools.partial(
-            meds_reader_to_meds_extension,
-            path_to_db=data_args.data_folder,
-            split="tuning",
-            default_visit_id=default_visit_id,
-            num_threads=data_args.preprocessing_num_workers
-        ), **kargs
+    tuning_dataset = _create_cehrbert_data_from_meds(
+        data_args=data_args,
+        split="tuning",
+        default_visit_id=default_visit_id
     )
 
-    held_out_dataset = dataset_class.from_generator(
-        functools.partial(
-            meds_reader_to_meds_extension,
-            path_to_db=data_args.data_folder,
-            split="held_out",
-            default_visit_id=default_visit_id,
-            num_threads=data_args.preprocessing_num_workers
-        ), **kargs
+    held_out_dataset = _create_cehrbert_data_from_meds(
+        data_args=data_args,
+        split="held_out",
+        default_visit_id=default_visit_id
     )
 
     return DatasetDict({
@@ -231,3 +225,56 @@ def create_dataset_from_meds_reader(
         "validation": tuning_dataset,
         "test": held_out_dataset
     })
+
+
+def _meds_to_cehrbert_generator(
+        shards: List[Tuple[np.ndarray, np.ndarray, np.ndarray]],
+        path_to_db: str,
+        default_visit_id: int
+) -> CehrBertPatient:
+    for shard in shards:
+        with meds_reader.PatientDatabase(path_to_db) as patient_database:
+            for patient_id, prediction_time, label in shard:
+                patient = patient_database[patient_id]
+                yield convert_one_patient(patient, default_visit_id, prediction_time, label)
+
+
+def _create_cehrbert_data_from_meds(
+        data_args: DataTrainingArguments,
+        split: str,
+        default_visit_id: int = 1
+):
+    dataset_class = IterableDataset if data_args.streaming else Dataset
+    assert split in ['held_out', 'train', 'tuning']
+    batches = []
+    if data_args.cohort_folder:
+        cohort = pd.read_parquet(os.path.join(data_args.cohort_folder, split))
+        for cohort_row in cohort.itertuples():
+            patient_id = cohort_row.patient_id
+            prediction_time = cohort_row.prediction_time
+            label = int(cohort_row.boolean_value)
+            batches.append((patient_id, prediction_time, label))
+    else:
+        patient_split = get_patient_split(data_args.data_folder)
+        for patient_id in patient_split[split]:
+            batches.append((patient_id, None, None))
+
+    split_batches = np.array_split(
+        np.asarray(batches),
+        data_args.preprocessing_num_workers
+    )
+
+    batch_func = functools.partial(
+        _meds_to_cehrbert_generator,
+        path_to_db=data_args.data_folder,
+        default_visit_id=default_visit_id
+    )
+    dataset = dataset_class.from_generator(
+        batch_func,
+        gen_kwargs={
+            "shards": split_batches,
+        },
+        num_proc=data_args.preprocessing_num_workers,
+        writer_batch_size=8
+    )
+    return dataset

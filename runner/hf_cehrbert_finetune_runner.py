@@ -8,14 +8,15 @@ import pandas as pd
 from sklearn.metrics import accuracy_score, roc_auc_score, precision_recall_curve, auc
 from scipy.special import expit as sigmoid
 
-from datasets import load_from_disk, DatasetDict
+from datasets import load_dataset, load_from_disk, DatasetDict
 from transformers.utils import logging
 from transformers import Trainer, set_seed
 from transformers import EarlyStoppingCallback
 from peft import LoraConfig, get_peft_model
 
+from data_generators.hf_data_generator.meds_utils import create_dataset_from_meds_reader
 from data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
-from data_generators.hf_data_generator.hf_dataset import create_cehrbert_finetuning_dataset
+from data_generators.hf_data_generator.hf_dataset import create_cehrbert_finetuning_dataset, convert_meds_to_cehrbert
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from models.hf_models.config import CehrBertConfig
 from models.hf_models.hf_cehrbert import (
@@ -61,22 +62,15 @@ def compute_metrics(eval_pred):
     }
 
 
-def load_pretrained_model_and_tokenizer(data_args, model_args) -> Tuple[CehrBertPreTrainedModel, CehrBertTokenizer]:
+def load_pretrained_model_and_tokenizer(model_args) -> Tuple[CehrBertPreTrainedModel, CehrBertTokenizer]:
     # Try to load the pretrained tokenizer
     try:
         tokenizer_abspath = os.path.abspath(model_args.tokenizer_name_or_path)
         tokenizer = CehrBertTokenizer.from_pretrained(tokenizer_abspath)
     except Exception as e:
-        LOG.warning(e)
-        data_folder_abspath = os.path.abspath(data_args.data_folder)
-        dataset = load_parquet_as_dataset(data_folder_abspath)
-        tokenizer = CehrBertTokenizer.train_tokenizer(
-            dataset,
-            ['concept_ids'],
-            {},
-            data_args=data_args
+        raise ValueError(
+            f'Can not load the pretrained tokenizer from {model_args.tokenizer_name_or_path}'
         )
-        tokenizer.save_pretrained(os.path.abspath(model_args.tokenizer_name_or_path))
 
     if model_args.finetune_model_type == FineTuneModelType.POOLING.value:
         finetune_model_cls = CehrBertForClassification
@@ -106,7 +100,7 @@ def load_pretrained_model_and_tokenizer(data_args, model_args) -> Tuple[CehrBert
 def main():
     data_args, model_args, training_args = parse_runner_args()
 
-    model, tokenizer = load_pretrained_model_and_tokenizer(data_args, model_args)
+    model, tokenizer = load_pretrained_model_and_tokenizer(model_args)
 
     prepared_ds_path = generate_prepared_ds_path(data_args, model_args)
 
@@ -138,121 +132,129 @@ def main():
         processed_dataset = load_from_disk(str(prepared_ds_path))
         LOG.info("Prepared dataset loaded from disk...")
     else:
-        dataset = load_parquet_as_dataset(data_args.data_folder)
-
-        test_set = None
-        if data_args.test_data_folder:
-            test_set = load_parquet_as_dataset(data_args.test_data_folder)
-
-        if data_args.chronological_split:
-            dataset = dataset.sort('index_date')
-            # Determine the split index
-            total_size = len(dataset)
-            train_end = int((1 - data_args.validation_split_percentage) * total_size)
-            # Perform the chronological split, use the historical data for training and future data
-            # for validation/testing
-            train_dataset = dataset.select(range(0, train_end))
-            validation_set = dataset.select(range(train_end, total_size))
-            if not test_set:
-                test_valid = validation_set.train_test_split(
-                    test_size=data_args.test_eval_ratio, seed=training_args.seed
-                )
-                validation_set = test_valid['train']
-                test_set = test_valid['test']
-
-        elif data_args.split_by_patient:
-            LOG.info(f"Using the split_by_patient strategy")
-            unique_patient_ids = np.unique(dataset['person_id'])
-            LOG.info(f"There are {len(unique_patient_ids)} num of patients in total")
-            np.random.seed(training_args.seed)
-            np.random.shuffle(unique_patient_ids)
-
-            train_end = int(len(unique_patient_ids) * (1 - data_args.validation_split_percentage))
-            train_patient_ids = set(unique_patient_ids[:train_end])
-            if not test_set:
-                # Calculate split indices
-                validation_end = int(
-                    len(unique_patient_ids)
-                    * data_args.validation_split_percentage
-                    * data_args.test_eval_ratio
-                ) + train_end
-
-                # Split patient IDs
-                val_patient_ids = set(unique_patient_ids[train_end:validation_end])
-                test_patient_ids = set(unique_patient_ids[validation_end:])
-
-                def assign_split(example):
-                    pid = example['person_id']
-                    if pid in train_patient_ids:
-                        return 'train'
-                    elif pid in val_patient_ids:
-                        return 'validation'
-                    elif pid in test_patient_ids:
-                        return 'test'
-                    else:
-                        raise ValueError(f"Unknown patient {pid}")
-
-                # Apply the function to assign splits
-                dataset = dataset.map(
-                    lambda example: {'split': assign_split(example)},
-                    num_proc=data_args.preprocessing_num_workers
-                )
-                train_dataset = dataset.filter(
-                    lambda example: example['split'] == 'train',
-                    num_proc=data_args.preprocessing_num_workers
-                )
-                validation_set = dataset.filter(
-                    lambda example: example['split'] == 'validation',
-                    num_proc=data_args.preprocessing_num_workers
-                )
-                test_set = dataset.filter(
-                    lambda example: example['split'] == 'test',
-                    num_proc=data_args.preprocessing_num_workers
-                )
-            else:
-                # Split patient IDs
-                val_patient_ids = set(unique_patient_ids[train_end:])
-
-                def assign_split(example):
-                    pid = example['person_id']
-                    if pid in train_patient_ids:
-                        return 'train'
-                    elif pid in val_patient_ids:
-                        return 'validation'
-                    else:
-                        raise ValueError(f"Unknown patient {pid}")
-
-                # Apply the function to assign splits
-                dataset = dataset.map(
-                    lambda example: {'split': assign_split(example)},
-                    num_proc=data_args.preprocessing_num_workers
-                )
-                train_dataset = dataset.filter(
-                    lambda example: example['split'] == 'train',
-                    num_proc=data_args.preprocessing_num_workers
-                )
-                validation_set = dataset.filter(
-                    lambda example: example['split'] == 'validation',
-                    num_proc=data_args.preprocessing_num_workers
-                )
+        # If the data is in the MEDS format, we need to convert it to the CEHR-BERT format
+        if data_args.is_data_in_med:
+            dataset = create_dataset_from_meds_reader(data_args)
+            dataset = convert_meds_to_cehrbert(dataset, data_args)
+            train_set = dataset["train"]
+            validation_set = dataset["tuning"]
+            test_set = dataset["held_out"]
         else:
-            # Split the dataset into train/val
-            train_val = dataset.train_test_split(
-                test_size=data_args.validation_split_percentage,
-                seed=training_args.seed
-            )
-            train_dataset = train_val['train']
-            validation_set = train_val['test']
-            if not test_set:
-                test_valid = validation_set.train_test_split(
-                    test_size=data_args.test_eval_ratio, seed=training_args.seed
+            dataset = load_parquet_as_dataset(data_args.data_folder)
+
+            test_set = None
+            if data_args.test_data_folder:
+                test_set = load_parquet_as_dataset(data_args.test_data_folder)
+
+            if data_args.chronological_split:
+                dataset = dataset.sort('index_date')
+                # Determine the split index
+                total_size = len(dataset)
+                train_end = int((1 - data_args.validation_split_percentage) * total_size)
+                # Perform the chronological split, use the historical data for training and future data
+                # for validation/testing
+                train_set = dataset.select(range(0, train_end))
+                validation_set = dataset.select(range(train_end, total_size))
+                if not test_set:
+                    test_valid = validation_set.train_test_split(
+                        test_size=data_args.test_eval_ratio, seed=training_args.seed
+                    )
+                    validation_set = test_valid['train']
+                    test_set = test_valid['test']
+
+            elif data_args.split_by_patient:
+                LOG.info(f"Using the split_by_patient strategy")
+                unique_patient_ids = np.unique(dataset['person_id'])
+                LOG.info(f"There are {len(unique_patient_ids)} num of patients in total")
+                np.random.seed(training_args.seed)
+                np.random.shuffle(unique_patient_ids)
+
+                train_end = int(len(unique_patient_ids) * (1 - data_args.validation_split_percentage))
+                train_patient_ids = set(unique_patient_ids[:train_end])
+                if not test_set:
+                    # Calculate split indices
+                    validation_end = int(
+                        len(unique_patient_ids)
+                        * data_args.validation_split_percentage
+                        * data_args.test_eval_ratio
+                    ) + train_end
+
+                    # Split patient IDs
+                    val_patient_ids = set(unique_patient_ids[train_end:validation_end])
+                    test_patient_ids = set(unique_patient_ids[validation_end:])
+
+                    def assign_split(example):
+                        pid = example['person_id']
+                        if pid in train_patient_ids:
+                            return 'train'
+                        elif pid in val_patient_ids:
+                            return 'validation'
+                        elif pid in test_patient_ids:
+                            return 'test'
+                        else:
+                            raise ValueError(f"Unknown patient {pid}")
+
+                    # Apply the function to assign splits
+                    dataset = dataset.map(
+                        lambda example: {'split': assign_split(example)},
+                        num_proc=data_args.preprocessing_num_workers
+                    )
+                    train_set = dataset.filter(
+                        lambda example: example['split'] == 'train',
+                        num_proc=data_args.preprocessing_num_workers
+                    )
+                    validation_set = dataset.filter(
+                        lambda example: example['split'] == 'validation',
+                        num_proc=data_args.preprocessing_num_workers
+                    )
+                    test_set = dataset.filter(
+                        lambda example: example['split'] == 'test',
+                        num_proc=data_args.preprocessing_num_workers
+                    )
+                else:
+                    # Split patient IDs
+                    val_patient_ids = set(unique_patient_ids[train_end:])
+
+                    def assign_split(example):
+                        pid = example['person_id']
+                        if pid in train_patient_ids:
+                            return 'train'
+                        elif pid in val_patient_ids:
+                            return 'validation'
+                        else:
+                            raise ValueError(f"Unknown patient {pid}")
+
+                    # Apply the function to assign splits
+                    dataset = dataset.map(
+                        lambda example: {'split': assign_split(example)},
+                        num_proc=data_args.preprocessing_num_workers
+                    )
+                    train_set = dataset.filter(
+                        lambda example: example['split'] == 'train',
+                        num_proc=data_args.preprocessing_num_workers
+                    )
+                    validation_set = dataset.filter(
+                        lambda example: example['split'] == 'validation',
+                        num_proc=data_args.preprocessing_num_workers
+                    )
+            else:
+                # Split the dataset into train/val
+                train_val = dataset.train_test_split(
+                    test_size=data_args.validation_split_percentage,
+                    seed=training_args.seed
                 )
-                validation_set = test_valid['train']
-                test_set = test_valid['test']
+                train_set = train_val['train']
+                validation_set = train_val['test']
+                if not test_set:
+                    test_valid = validation_set.train_test_split(
+                        test_size=data_args.test_eval_ratio, seed=training_args.seed
+                    )
+                    validation_set = test_valid['train']
+                    test_set = test_valid['test']
 
         # Organize them into a single DatasetDict
         final_splits = DatasetDict({
-            'train': train_dataset,
+            'train': train_set,
             'validation': validation_set,
             'test': test_set
         })

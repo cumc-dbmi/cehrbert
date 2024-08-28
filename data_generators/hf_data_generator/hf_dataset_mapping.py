@@ -310,6 +310,12 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
         cehrbert_record['birth_datetime'] = birth_datetime
         cehrbert_record['gender'] = gender
         cehrbert_record['race'] = race
+
+        if 'label' in record:
+            cehrbert_record['label'] = record['label']
+        if 'age_at_index' in record:
+            cehrbert_record['age_at_index'] = record['age_at_index']
+
         return cehrbert_record
 
 

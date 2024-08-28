@@ -1,4 +1,4 @@
-from typing import TypedDict, List, Mapping, Any
+from typing import TypedDict, List, Mapping, Any, Union
 from typing_extensions import NotRequired
 import datetime
 
@@ -27,3 +27,6 @@ class CehrBertPatient(TypedDict):
     race: str
     ethnicity: str
     visits: List[Visit]
+    index_date: datetime.datetime
+    age_at_index: int
+    label: Union[int, float]
