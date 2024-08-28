@@ -32,7 +32,7 @@ def convert_meds_to_cehrbert(
             if isinstance(meds_dataset, DatasetDict):
                 cehrbert_dataset = DatasetDict()
                 for split in meds_dataset.keys():
-                    cehrbert_dataset[split] = meds_dataset[split].map(
+                    cehrbert_dataset[split] = meds_dataset[split].filter().map(
                         med_to_cehrbert_mapping.batch_transform,
                         batched=True,
                         batch_size=data_args.preprocessing_batch_size
@@ -132,7 +132,12 @@ def create_cehrbert_finetuning_dataset(
         mapping_functions.insert(0, med_to_cehrbert_mapping)
 
     for mapping_function in mapping_functions:
-        dataset = dataset.map(mapping_function.transform, num_proc=data_args.preprocessing_num_workers)
+        dataset = dataset.map(
+            mapping_function.batch_transform,
+            num_proc=data_args.preprocessing_num_workers,
+            batched=True,
+            batch_size=data_args.preprocessing_batch_size
+        )
 
     if isinstance(dataset, DatasetDict):
         all_columns = dataset['train'].column_names

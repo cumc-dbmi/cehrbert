@@ -387,14 +387,16 @@ class HFTokenizationMapping(DatasetMapping):
         concept_value_masks = record['concept_value_masks']
         concept_values = record['concept_values']
 
-        for i, (concept_id, token_id, concept_value_mask, concept_value) in enumerate(
-                zip(record['concept_ids'], input_ids, concept_value_masks, concept_values)
-        ):
-            if token_id in self._lab_token_ids:
-                normalized_concept_value = self._concept_tokenizer.normalize(concept_id, concept_value)
-                concept_values[i] = normalized_concept_value
-
-        record['concept_values'] = concept_values
+        # If any concept has a value associated with it, we normalize the value
+        if np.any(concept_value_masks > 0):
+            normalized_concept_values = copy.deepcopy(concept_values)
+            for i, (concept_id, token_id, concept_value_mask, concept_value) in enumerate(
+                    zip(record['concept_ids'], input_ids, concept_value_masks, concept_values)
+            ):
+                if token_id in self._lab_token_ids:
+                    normalized_concept_value = self._concept_tokenizer.normalize(concept_id, concept_value)
+                    normalized_concept_values[i] = normalized_concept_value
+            record['concept_values'] = normalized_concept_values
 
         # If mlm_skip_value=1, this indicates there is a value associated with this position and
         # hence we block the MLM to randomly pick this token to be predicted
@@ -447,10 +449,10 @@ class HFCehrGptTokenizationMapping(DatasetMapping):
         record['input_ids'] = input_ids
         concept_value_masks = record['concept_value_masks']
         concept_values = record['concept_values']
-        normalized_concept_values = copy.deepcopy(concept_values)
 
         # If any concept has a value associated with it, we normalize the value
         if np.any(concept_value_masks > 0):
+            normalized_concept_values = copy.deepcopy(concept_values)
             for i, (concept_id, token_id, concept_value_mask, concept_value) in enumerate(
                     zip(record['concept_ids'], input_ids, concept_value_masks, concept_values)
             ):
