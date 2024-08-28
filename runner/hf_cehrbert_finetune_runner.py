@@ -325,7 +325,8 @@ def main():
             json.dump(test_results.metrics, f, indent=4)
 
         LOG.info(f'Test results: {test_results.metrics}')
-        person_ids = processed_dataset['test']['person_id']
+
+        person_ids = [row['person_id'] for row in processed_dataset['test']]
 
         if isinstance(test_results.predictions, np.ndarray):
             predictions = np.squeeze(test_results.predictions).tolist()
