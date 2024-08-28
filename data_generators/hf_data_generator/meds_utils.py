@@ -18,6 +18,7 @@ from datasets import Dataset, DatasetDict, IterableDataset
 UNKNOWN_VALUE = "Unknown"
 DEFAULT_OUTPATIENT_CONCEPT_ID = "9202"
 DEFAULT_INPATIENT_CONCEPT_ID = "9201"
+MEDS_SPLIT_DATA_SPLIT_MAPPING = {"train": "train", "tuning": "validation", "held_out": "test"}
 
 
 def get_patient_split(meds_reader_db_path: str) -> Dict[str, List[int]]:
@@ -275,6 +276,7 @@ def _create_cehrbert_data_from_meds(
             "shards": split_batches,
         },
         num_proc=data_args.preprocessing_num_workers,
+        split=MEDS_SPLIT_DATA_SPLIT_MAPPING[split],
         writer_batch_size=8
     )
     return dataset
