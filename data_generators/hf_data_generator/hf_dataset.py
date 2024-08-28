@@ -36,18 +36,10 @@ def convert_meds_to_cehrbert(
                         med_to_cehrbert_mapping.batch_transform,
                         batched=True,
                         batch_size=data_args.preprocessing_batch_size
-                    ).filter(
-                        lambda records: [r >= 1 for r in records['num_of_visits']],
-                        batched=True,
-                        batch_size=data_args.preprocessing_batch_size
                     )
             else:
                 cehrbert_dataset = meds_dataset.map(
                     med_to_cehrbert_mapping.batch_transform,
-                    batched=True,
-                    batch_size=data_args.preprocessing_batch_size
-                ).filter(
-                    lambda records: [r >= 1 for r in records['num_of_visits']],
                     batched=True,
                     batch_size=data_args.preprocessing_batch_size
                 )
@@ -57,11 +49,6 @@ def convert_meds_to_cehrbert(
                 batched=True,
                 batch_size=data_args.preprocessing_batch_size,
                 num_proc=data_args.preprocessing_num_workers,
-            ).filter(
-                lambda records: [r >= 1 for r in records['num_of_visits']],
-                num_proc=data_args.preprocessing_num_workers,
-                batched=True,
-                batch_size=data_args.preprocessing_batch_size
             )
         return cehrbert_dataset
     else:
