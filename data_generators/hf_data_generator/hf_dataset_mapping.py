@@ -139,6 +139,8 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
         }
         # Extract the demographic information
         birth_datetime = record['birth_datetime']
+        if isinstance(birth_datetime, pd.Timestamp):
+            birth_datetime = birth_datetime.to_pydatetime()
         gender = record['gender']
         race = record['race']
 
@@ -388,7 +390,7 @@ class HFTokenizationMapping(DatasetMapping):
         concept_values = record['concept_values']
 
         # If any concept has a value associated with it, we normalize the value
-        if np.any(concept_value_masks > 0):
+        if np.any(np.asarray(concept_value_masks) > 0):
             normalized_concept_values = copy.deepcopy(concept_values)
             for i, (concept_id, token_id, concept_value_mask, concept_value) in enumerate(
                     zip(record['concept_ids'], input_ids, concept_value_masks, concept_values)

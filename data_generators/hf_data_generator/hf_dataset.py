@@ -1,5 +1,5 @@
 from typing import Union
-from datasets import Dataset, DatasetDict
+from datasets import Dataset, DatasetDict, IterableDatasetDict
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from data_generators.hf_data_generator.hf_dataset_mapping import (
     MedToCehrBertDatasetMapping,
@@ -29,10 +29,10 @@ def convert_meds_to_cehrbert(
             data_args
         )
         if data_args.streaming:
-            if isinstance(meds_dataset, DatasetDict):
+            if isinstance(meds_dataset, DatasetDict) or isinstance(meds_dataset, IterableDatasetDict):
                 cehrbert_dataset = DatasetDict()
                 for split in meds_dataset.keys():
-                    cehrbert_dataset[split] = meds_dataset[split].filter().map(
+                    cehrbert_dataset[split] = meds_dataset[split].map(
                         med_to_cehrbert_mapping.batch_transform,
                         batched=True,
                         batch_size=data_args.preprocessing_batch_size

@@ -138,12 +138,19 @@ def main():
             meds_extension_path = os.path.join(data_args.dataset_prepared_path, f"{basename}_meds_extension")
             try:
                 LOG.info(f"Trying to load the MEDS extension from disk at {meds_extension_path}...")
-                dataset = load_dataset(meds_extension_path, streaming=data_args.streaming)
+                dataset = load_from_disk(meds_extension_path)
+                if data_args.streaming:
+                    if isinstance(dataset, DatasetDict):
+                        for k in dataset.keys():
+                            dataset[k] = dataset[k].to_iterable_dataset()
             except Exception as e:
                 LOG.exception(e)
                 dataset = create_dataset_from_meds_reader(data_args)
                 dataset.save_to_disk(meds_extension_path)
-                dataset = load_dataset(meds_extension_path, streaming=data_args.streaming)
+                if data_args.streaming:
+                    if isinstance(dataset, DatasetDict):
+                        for k in dataset.keys():
+                            dataset[k] = dataset[k].to_iterable_dataset()
             dataset = convert_meds_to_cehrbert(dataset, data_args)
             train_set = dataset["train"]
             validation_set = dataset["validation"]
