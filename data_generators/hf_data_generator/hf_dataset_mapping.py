@@ -59,6 +59,9 @@ class DatasetMapping(ABC):
         record = self.transform(series.to_dict())
         return pd.Series(record)
 
+    def remove_columns(self):
+        return []
+
     @abstractmethod
     def transform(
             self,
@@ -77,12 +80,14 @@ class DatasetMapping(ABC):
 class MedToCehrBertDatasetMapping(DatasetMapping):
     def __init__(
             self,
-            data_args: DataTrainingArguments
+            data_args: DataTrainingArguments,
+            is_pretraining: bool = True
     ):
         self._time_token_function = get_att_function(data_args.att_function_type)
         self._include_auxiliary_token = data_args.include_auxiliary_token
         self._inpatient_time_token_function = get_att_function(data_args.inpatient_att_function_type)
         self._include_demographic_prompt = data_args.include_demographic_prompt
+        self._is_pretraining = is_pretraining
 
     """
     This mapping function converts the MED (https://github.com/Medical-Event-Data-Standard/meds/tree/main) extension
@@ -95,6 +100,13 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
             contain the standard OMOP concept id for discharge facilities (e.g 8536)
         - in case of inpatient visits, datetime_value of the last measurement stores visit_end_datetime
     """
+
+    def remove_columns(self):
+        if self._is_pretraining:
+            return ["visits", "patient_id", "birth_datetime", "index_date"]
+        else:
+            return ["visits", "patient_id", "birth_datetime", "index_date",
+                    "visit_concept_ids", "num_of_concepts", "num_of_visits"]
 
     @staticmethod
     def _update_cehrbert_record(
@@ -308,11 +320,6 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
         cehrbert_record['num_of_concepts'] = len(cehrbert_record['concept_ids'])
         cehrbert_record['num_of_visits'] = len(record['visits'])
 
-        # Add demographics for this patient
-        cehrbert_record['birth_datetime'] = birth_datetime
-        cehrbert_record['gender'] = gender
-        cehrbert_record['race'] = race
-
         if 'label' in record:
             cehrbert_record['label'] = record['label']
         if 'age_at_index' in record:
@@ -378,6 +385,12 @@ class HFTokenizationMapping(DatasetMapping):
         self._concept_tokenizer = concept_tokenizer
         self._is_pretraining = is_pretraining
         self._lab_token_ids = self._concept_tokenizer.lab_token_ids
+
+    def remove_columns(self):
+        if self._is_pretraining:
+            return ["concept_ids", "orders"]
+        else:
+            return ["concept_ids", "mlm_skip_values", "orders"]
 
     def transform(
             self,
