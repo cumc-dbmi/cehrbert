@@ -186,6 +186,9 @@ def convert_one_patient(
         if (prediction_time.month, prediction_time.day) < (prediction_time.month, prediction_time.day):
             age_at_index -= 1
 
+    # birth_datetime can not be None
+    assert birth_datetime is not None, f"patient_id: {patient.patient_id} does not have a valid birth_datetime"
+
     return CehrBertPatient(
         patient_id=patient.patient_id,
         birth_datetime=birth_datetime,
@@ -203,7 +206,6 @@ def create_dataset_from_meds_reader(
         data_args: DataTrainingArguments,
         default_visit_id: int = 1
 ) -> DatasetDict:
-
     train_dataset = _create_cehrbert_data_from_meds(
         data_args=data_args,
         split="train",
