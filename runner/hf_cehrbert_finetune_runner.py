@@ -143,6 +143,7 @@ def main():
                 LOG.exception(e)
                 dataset = create_dataset_from_meds_reader(data_args)
                 dataset.save_to_disk(meds_extension_path)
+                dataset = load_dataset(meds_extension_path, streaming=data_args.streaming)
             dataset = convert_meds_to_cehrbert(dataset, data_args)
             train_set = dataset["train"]
             validation_set = dataset["validation"]
@@ -272,14 +273,17 @@ def main():
             concept_tokenizer=tokenizer,
             data_args=data_args
         )
-        processed_dataset.save_to_disk(prepared_ds_path)
+
+        if not data_args.streaming:
+            processed_dataset.save_to_disk(prepared_ds_path)
 
     collator = CehrBertDataCollator(tokenizer, model_args.max_position_embeddings, is_pretraining=False)
 
     # Set seed before initializing model.
     set_seed(training_args.seed)
 
-    processed_dataset.set_format('pt')
+    if not data_args.streaming:
+        processed_dataset.set_format('pt')
 
     trainer = Trainer(
         model=model,
