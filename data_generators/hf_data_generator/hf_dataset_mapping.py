@@ -429,7 +429,7 @@ class HFFineTuningMapping(DatasetMapping):
     ) -> Dict[str, Any]:
         new_record = copy.deepcopy(record)
         new_record.update({
-            'age_at_index': record['age'],
+            'age_at_index': record['age_at_index'],
             'classifier_label': record['label']
         })
         return new_record
