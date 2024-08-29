@@ -135,6 +135,15 @@ def convert_one_patient(
                 admit_discharge_pairs.append((admission_index, i))
             admission_index = None
 
+        # Check the last block of the patient history to see whether the admission is partial
+        if i == len(patient_blocks) - 1:
+            # This indicates an ongoing (incomplete) inpatient visit,
+            # this is a common pattern for inpatient visit prediction problems,
+            # where the data from the first 24-48 hours after the admission
+            # are used to predict something about the admission
+            if admission_index is not None and prediction_time is not None:
+                admit_discharge_pairs.append((admission_index, i))
+
     # Update visit_id for the admission blocks
     for admit_index, discharge_index in admit_discharge_pairs:
         admission_block = patient_blocks[admit_index]
