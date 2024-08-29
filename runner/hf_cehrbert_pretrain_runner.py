@@ -8,7 +8,7 @@ from transformers import AutoConfig, Trainer, set_seed
 
 from data_generators.hf_data_generator.meds_utils import create_dataset_from_meds_reader
 from data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
-from data_generators.hf_data_generator.hf_dataset import create_cehrbert_pretraining_dataset, convert_meds_to_cehrbert
+from data_generators.hf_data_generator.hf_dataset import create_cehrbert_pretraining_dataset
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from models.hf_models.config import CehrBertConfig
 from models.hf_models.hf_cehrbert import CehrBertForPreTraining

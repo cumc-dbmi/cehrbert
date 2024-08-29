@@ -4,6 +4,7 @@ import collections
 import functools
 from typing import Dict, List, Optional, Union, Tuple
 from datetime import datetime
+from dateutil.relativedelta import relativedelta
 
 import meds_reader
 import numpy as np
@@ -16,6 +17,7 @@ from med_extension.schema_extension import CehrBertPatient, Visit, Event
 from datasets import Dataset, DatasetDict, IterableDataset, Split
 
 UNKNOWN_VALUE = "Unknown"
+DEFAULT_ED_CONCEPT_ID = "9203"
 DEFAULT_OUTPATIENT_CONCEPT_ID = "9202"
 DEFAULT_INPATIENT_CONCEPT_ID = "9201"
 MEDS_SPLIT_DATA_SPLIT_MAPPING = {"train": Split.TRAIN, "tuning": Split.VALIDATION, "held_out": Split.TEST}
@@ -40,24 +42,47 @@ class PatientBlock:
         self.events = events
         self.min_time = events[0].time
         self.max_time = events[-1].time
-        self.visit_type = DEFAULT_OUTPATIENT_CONCEPT_ID
         self.visit_end_datetime = events[-1].time
-        self.discharge_facility = None
 
-    def has_admission(self) -> bool:
+        # Cache these variables so we don't need to compute
+        self.has_ed_admission = self._has_ed_admission()
+        self.has_admission = self._has_admission()
+        self.has_discharge = self._has_discharge()
+
+        # Infer the visit_type from the events
+        # Admission takes precedence over ED
+        if self.has_admission:
+            self.visit_type = DEFAULT_INPATIENT_CONCEPT_ID
+        elif self.has_ed_admission:
+            self.visit_type = DEFAULT_ED_CONCEPT_ID
+        else:
+            self.visit_type = DEFAULT_OUTPATIENT_CONCEPT_ID
+
+    def _has_ed_admission(self) -> bool:
+        """
+        Make this configurable in the future
+        """
+        for event in self.events:
+            if 'ED_REGISTRATION' in event.code:
+                return True
+            if 'TRANSFER_TO//ED' in event.code:
+                return True
+        return False
+
+    def _has_admission(self) -> bool:
         for event in self.events:
             if 'HOSPITAL_ADMISSION' in event.code:
                 return True
         return False
 
-    def has_discharge(self) -> bool:
+    def _has_discharge(self) -> bool:
         for event in self.events:
             if 'HOSPITAL_DISCHARGE' in event.code:
                 return True
         return False
 
     def get_discharge_facility(self) -> Optional[str]:
-        if self.has_discharge():
+        if self._has_discharge():
             for event in self.events:
                 if 'HOSPITAL_DISCHARGE' in event.code:
                     discharge_facility = event.code.replace('HOSPITAL_DISCHARGE', '')
@@ -126,23 +151,49 @@ def convert_one_patient(
         patient_blocks.append(PatientBlock(events_for_current_date, visit_id))
 
     admit_discharge_pairs = []
-    admission_index = None
+    active_ed_index = None
+    active_admission_index = None
+    # |ED|20-hours|Admission| ... |Discharge| -> ED will be merged into the admission
+    # |ED|25-hours|Admission| ... |Discharge| -> ED will NOT be merged into the admission
+    # |Admission|ED| ... |Discharge| -> ED will be merged into the admission
+    # |Admission|Admission|ED| ... |Discharge|
+    #   -> The first admission will be ignored and turned into a separate visit
+    #   -> The second Admission and ED will be merged
     for i, patient_block in enumerate(patient_blocks):
-        if patient_block.has_admission():
-            admission_index = i
-        elif patient_block.has_discharge():
-            if admission_index is not None:
-                admit_discharge_pairs.append((admission_index, i))
-            admission_index = None
+        # Keep track of the ED block when there is no on-going admission
+        if patient_block.has_ed_admission and active_admission_index is None:
+            active_ed_index = i
+        # Keep track of the admission block
+        if patient_block.has_admission:
+            # If the ED event has occurred, we need to check the time difference between
+            # the ED event and the subsequent hospital admission
+            if active_ed_index is not None:
+                time_diff = relativedelta(
+                    patient_blocks[active_ed_index].max_time,
+                    patient_block.min_time
+                )
+                # If the time difference between the ed and admission is leq 24 hours,
+                # we consider ED to be part of the visits
+                if time_diff.hours <= 24 or active_ed_index == i:
+                    active_admission_index = active_ed_index
+                    active_ed_index = None
+            else:
+                active_admission_index = i
+        elif patient_block.has_discharge:
+            if active_admission_index is not None:
+                admit_discharge_pairs.append((active_admission_index, i))
+            # When the patient is discharged from the hospital, we assume the admission and ED should end
+            active_admission_index = None
+            active_ed_index = None
 
-        # Check the last block of the patient history to see whether the admission is partial
+            # Check the last block of the patient history to see whether the admission is partial
         if i == len(patient_blocks) - 1:
             # This indicates an ongoing (incomplete) inpatient visit,
             # this is a common pattern for inpatient visit prediction problems,
             # where the data from the first 24-48 hours after the admission
             # are used to predict something about the admission
-            if admission_index is not None and prediction_time is not None:
-                admit_discharge_pairs.append((admission_index, i))
+            if active_admission_index is not None and prediction_time is not None:
+                admit_discharge_pairs.append((active_admission_index, i))
 
     # Update visit_id for the admission blocks
     for admit_index, discharge_index in admit_discharge_pairs:
