@@ -1,5 +1,5 @@
 from typing import Union
-from datasets import Dataset, DatasetDict, IterableDatasetDict
+from datasets import Dataset, DatasetDict
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from data_generators.hf_data_generator.hf_dataset_mapping import (
     MedToCehrBertDatasetMapping,
