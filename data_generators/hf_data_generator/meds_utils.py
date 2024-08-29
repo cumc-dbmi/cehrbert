@@ -42,7 +42,6 @@ class PatientBlock:
         self.events = events
         self.min_time = events[0].time
         self.max_time = events[-1].time
-        self.visit_end_datetime = events[-1].time
 
         # Cache these variables so we don't need to compute
         self.has_ed_admission = self._has_ed_admission()
@@ -153,7 +152,7 @@ def convert_one_patient(
     admit_discharge_pairs = []
     active_ed_index = None
     active_admission_index = None
-    # |ED|20-hours|Admission| ... |Discharge| -> ED will be merged into the admission
+    # |ED|24-hours|Admission| ... |Discharge| -> ED will be merged into the admission (within 24 hours)
     # |ED|25-hours|Admission| ... |Discharge| -> ED will NOT be merged into the admission
     # |Admission|ED| ... |Discharge| -> ED will be merged into the admission
     # |Admission|Admission|ED| ... |Discharge|
@@ -179,14 +178,15 @@ def convert_one_patient(
                     active_ed_index = None
             else:
                 active_admission_index = i
-        elif patient_block.has_discharge:
+
+        if patient_block.has_discharge:
             if active_admission_index is not None:
                 admit_discharge_pairs.append((active_admission_index, i))
             # When the patient is discharged from the hospital, we assume the admission and ED should end
             active_admission_index = None
             active_ed_index = None
 
-            # Check the last block of the patient history to see whether the admission is partial
+        # Check the last block of the patient history to see whether the admission is partial
         if i == len(patient_blocks) - 1:
             # This indicates an ongoing (incomplete) inpatient visit,
             # this is a common pattern for inpatient visit prediction problems,
@@ -199,12 +199,11 @@ def convert_one_patient(
     for admit_index, discharge_index in admit_discharge_pairs:
         admission_block = patient_blocks[admit_index]
         discharge_block = patient_blocks[discharge_index]
-        admission_block.visit_end_datetime = discharge_block.max_time
         visit_id = admission_block.visit_id
         for i in range(admit_index, discharge_index + 1):
             patient_blocks[i].visit_id = visit_id
             patient_blocks[i].visit_type = DEFAULT_INPATIENT_CONCEPT_ID
-        # there could be events that occur after the discharge, which are considered as part of the visit
+        # There could be events that occur after the discharge, which are considered as part of the visit
         # we need to check if the time stamp of the next block is within 12 hours
         if discharge_index + 1 < len(patient_blocks):
             next_block = patient_blocks[discharge_index + 1]
@@ -212,7 +211,6 @@ def convert_one_patient(
             if hour_diff <= 12:
                 next_block.visit_id = visit_id
                 next_block.visit_type = DEFAULT_INPATIENT_CONCEPT_ID
-                admission_block.visit_end_datetime = next_block.max_time
 
     patient_block_dict = collections.defaultdict(list)
     for patient_block in patient_blocks:
@@ -222,7 +220,7 @@ def convert_one_patient(
     for visit_id, blocks in patient_block_dict.items():
         visit_type = blocks[0].visit_type
         visit_start_datetime = min([b.min_time for b in blocks])
-        visit_end_datetime = min([b.max_time for b in blocks])
+        visit_end_datetime = max([b.max_time for b in blocks])
         discharge_facility = next(
             filter(None, [b.get_discharge_facility() for b in blocks]),
             None
@@ -243,7 +241,7 @@ def convert_one_patient(
     age_at_index = -1
     if prediction_time is not None and birth_datetime is not None:
         age_at_index = prediction_time.year - birth_datetime.year
-        if (prediction_time.month, prediction_time.day) < (prediction_time.month, prediction_time.day):
+        if (prediction_time.month, prediction_time.day) < (birth_datetime.month, birth_datetime.day):
             age_at_index -= 1
 
     # birth_datetime can not be None
