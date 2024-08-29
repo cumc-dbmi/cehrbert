@@ -101,7 +101,6 @@ def main():
                     data_args=data_args
                 )
                 dataset.save_to_disk(meds_extension_path)
-            dataset = convert_meds_to_cehrbert(dataset, data_args)
         else:
             # Load the dataset from the parquet files
             dataset = load_parquet_as_dataset(data_args.data_folder, split='train', streaming=data_args.streaming)

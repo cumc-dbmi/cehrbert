@@ -8,7 +8,7 @@ import pandas as pd
 from sklearn.metrics import accuracy_score, roc_auc_score, precision_recall_curve, auc
 from scipy.special import expit as sigmoid
 
-from datasets import load_dataset, load_from_disk, DatasetDict
+from datasets import load_from_disk, DatasetDict
 from transformers.utils import logging
 from transformers import Trainer, set_seed
 from transformers import EarlyStoppingCallback

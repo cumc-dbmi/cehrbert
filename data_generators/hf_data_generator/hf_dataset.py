@@ -20,41 +20,6 @@ TRANSFORMER_COLUMNS = ['input_ids', 'labels']
 FINETUNING_COLUMNS = ['age_at_index', 'classifier_label', 'index_date', 'person_id']
 
 
-def convert_meds_to_cehrbert(
-        meds_dataset: Union[Dataset, DatasetDict],
-        data_args: DataTrainingArguments
-) -> Dataset:
-    if data_args.is_data_in_med:
-        med_to_cehrbert_mapping = MedToCehrBertDatasetMapping(
-            data_args
-        )
-        if data_args.streaming:
-            if isinstance(meds_dataset, DatasetDict) or isinstance(meds_dataset, IterableDatasetDict):
-                cehrbert_dataset = DatasetDict()
-                for split in meds_dataset.keys():
-                    cehrbert_dataset[split] = meds_dataset[split].map(
-                        med_to_cehrbert_mapping.batch_transform,
-                        batched=True,
-                        batch_size=data_args.preprocessing_batch_size
-                    )
-            else:
-                cehrbert_dataset = meds_dataset.map(
-                    med_to_cehrbert_mapping.batch_transform,
-                    batched=True,
-                    batch_size=data_args.preprocessing_batch_size
-                )
-        else:
-            cehrbert_dataset = meds_dataset.map(
-                med_to_cehrbert_mapping.batch_transform,
-                batched=True,
-                batch_size=data_args.preprocessing_batch_size,
-                num_proc=data_args.preprocessing_num_workers,
-            )
-        return cehrbert_dataset
-    else:
-        raise RuntimeError(f"is_data_in_med is not set to True in DataTrainingArguments: {data_args}")
-
-
 def create_cehrbert_pretraining_dataset(
         dataset: Union[Dataset, DatasetDict],
         concept_tokenizer: CehrBertTokenizer,
@@ -64,6 +29,10 @@ def create_cehrbert_pretraining_dataset(
     # If the data is already in meds, we don't need to sort the sequence anymore
     if data_args.is_data_in_med:
         mapping_functions = [
+            MedToCehrBertDatasetMapping(
+                data_args,
+                True
+            ),
             HFTokenizationMapping(concept_tokenizer, True)
         ]
     else:
@@ -71,13 +40,6 @@ def create_cehrbert_pretraining_dataset(
             SortPatientSequenceMapping(),
             HFTokenizationMapping(concept_tokenizer, True)
         ]
-
-    if data_args.is_data_in_med:
-        med_to_cehrbert_mapping = MedToCehrBertDatasetMapping(
-            data_args,
-            True
-        )
-        dataset = _apply_mapping(data_args, dataset, med_to_cehrbert_mapping)
 
     for mapping_function in mapping_functions:
         dataset = _apply_mapping(data_args, dataset, mapping_function)
