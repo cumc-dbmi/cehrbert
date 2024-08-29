@@ -145,7 +145,7 @@ def main():
                             dataset[k] = dataset[k].to_iterable_dataset()
             except Exception as e:
                 LOG.exception(e)
-                dataset = create_dataset_from_meds_reader(data_args)
+                dataset = create_dataset_from_meds_reader(data_args, is_pretraining=False)
                 dataset.save_to_disk(meds_extension_path)
                 if data_args.streaming:
                     if isinstance(dataset, DatasetDict):

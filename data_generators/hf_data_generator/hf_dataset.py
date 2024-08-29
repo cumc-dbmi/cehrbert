@@ -29,10 +29,6 @@ def create_cehrbert_pretraining_dataset(
     # If the data is already in meds, we don't need to sort the sequence anymore
     if data_args.is_data_in_med:
         mapping_functions = [
-            MedToCehrBertDatasetMapping(
-                data_args,
-                True
-            ),
             HFTokenizationMapping(concept_tokenizer, True)
         ]
     else:
@@ -64,10 +60,6 @@ def create_cehrbert_finetuning_dataset(
 
     if data_args.is_data_in_med:
         mapping_functions = [
-            MedToCehrBertDatasetMapping(
-                data_args,
-                False
-            ),
             HFTokenizationMapping(concept_tokenizer, False),
             HFFineTuningMapping()
         ]

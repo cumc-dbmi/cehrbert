@@ -97,9 +97,7 @@ def main():
                 dataset = load_dataset(meds_extension_path, streaming=data_args.streaming)
             except Exception as e:
                 LOG.exception(e)
-                dataset = create_dataset_from_meds_reader(
-                    data_args=data_args
-                )
+                dataset = create_dataset_from_meds_reader(data_args, is_pretraining=True)
                 dataset.save_to_disk(meds_extension_path)
         else:
             # Load the dataset from the parquet files

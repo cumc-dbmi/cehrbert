@@ -11,10 +11,13 @@ import numpy as np
 import pandas as pd
 
 from runner.hf_runner_argument_dataclass import DataTrainingArguments
-from data_generators.hf_data_generator.hf_dataset_mapping import birth_codes
+from data_generators.hf_data_generator.hf_dataset_mapping import (
+    birth_codes, MedToCehrBertDatasetMapping
+)
+from data_generators.hf_data_generator.hf_dataset import _apply_mapping
 from med_extension.schema_extension import CehrBertPatient, Visit, Event
 
-from datasets import Dataset, DatasetDict, IterableDataset, Split
+from datasets import Dataset, DatasetDict, Split
 
 UNKNOWN_VALUE = "Unknown"
 DEFAULT_ED_CONCEPT_ID = "9203"
@@ -262,22 +265,26 @@ def convert_one_patient(
 
 def create_dataset_from_meds_reader(
         data_args: DataTrainingArguments,
-        default_visit_id: int = 1
+        default_visit_id: int = 1,
+        is_pretraining: bool = True
 ) -> DatasetDict:
     train_dataset = _create_cehrbert_data_from_meds(
         data_args=data_args,
         split="train",
-        default_visit_id=default_visit_id
+        default_visit_id=default_visit_id,
+        is_pretraining=is_pretraining
     )
     tuning_dataset = _create_cehrbert_data_from_meds(
         data_args=data_args,
         split="tuning",
-        default_visit_id=default_visit_id
+        default_visit_id=default_visit_id,
+        is_pretraining=is_pretraining
     )
     held_out_dataset = _create_cehrbert_data_from_meds(
         data_args=data_args,
         split="held_out",
-        default_visit_id=default_visit_id
+        default_visit_id=default_visit_id,
+        is_pretraining=is_pretraining
     )
 
     return DatasetDict({
@@ -302,7 +309,8 @@ def _meds_to_cehrbert_generator(
 def _create_cehrbert_data_from_meds(
         data_args: DataTrainingArguments,
         split: str,
-        default_visit_id: int = 1
+        default_visit_id: int = 1,
+        is_pretraining: bool = True
 ):
     assert split in ['held_out', 'train', 'tuning']
     batches = []
@@ -336,4 +344,11 @@ def _create_cehrbert_data_from_meds(
         num_proc=data_args.preprocessing_num_workers,
         writer_batch_size=8
     )
+    # Convert the CehrBertPatient to CehrBert data inputs
+    dataset = _apply_mapping(
+        data_args,
+        dataset,
+        MedToCehrBertDatasetMapping(data_args, is_pretraining)
+    )
+
     return dataset
