@@ -146,11 +146,8 @@ def main():
             except Exception as e:
                 LOG.exception(e)
                 dataset = create_dataset_from_meds_reader(data_args, is_pretraining=False)
-                dataset.save_to_disk(meds_extension_path)
-                if data_args.streaming:
-                    if isinstance(dataset, DatasetDict):
-                        for k in dataset.keys():
-                            dataset[k] = dataset[k].to_iterable_dataset()
+                if not data_args.streaming:
+                    dataset.save_to_disk(meds_extension_path)
             train_set = dataset["train"]
             validation_set = dataset["validation"]
             test_set = dataset["test"]
