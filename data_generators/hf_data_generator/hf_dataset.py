@@ -1,11 +1,11 @@
 from typing import Union
-from datasets import Dataset, DatasetDict
+from datasets import Dataset, DatasetDict, IterableDataset, IterableDatasetDict
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from data_generators.hf_data_generator.hf_dataset_mapping import (
-    MedToCehrBertDatasetMapping,
     SortPatientSequenceMapping,
     HFTokenizationMapping,
-    HFFineTuningMapping
+    HFFineTuningMapping,
+    DatasetMapping
 )
 from runner.hf_runner_argument_dataclass import DataTrainingArguments
 
@@ -38,7 +38,13 @@ def create_cehrbert_pretraining_dataset(
         ]
 
     for mapping_function in mapping_functions:
-        dataset = _apply_mapping(data_args, dataset, mapping_function)
+        dataset = apply_cehrbert_dataset_mapping(
+            dataset,
+            mapping_function,
+            num_proc=data_args.preprocessing_num_workers,
+            batch_size=data_args.preprocessing_batch_size,
+            streaming=data_args.streaming
+        )
 
     if not data_args.streaming:
         if isinstance(dataset, DatasetDict):
@@ -71,7 +77,13 @@ def create_cehrbert_finetuning_dataset(
         ]
 
     for mapping_function in mapping_functions:
-        dataset = _apply_mapping(data_args, dataset, mapping_function)
+        dataset = apply_cehrbert_dataset_mapping(
+            dataset,
+            mapping_function,
+            num_proc=data_args.preprocessing_num_workers,
+            batch_size=data_args.preprocessing_batch_size,
+            streaming=data_args.streaming
+        )
 
     if not data_args.streaming:
         if isinstance(dataset, DatasetDict):
@@ -83,15 +95,21 @@ def create_cehrbert_finetuning_dataset(
     return dataset
 
 
-def _apply_mapping(data_args, dataset, mapping_function):
-    if data_args.streaming:
+def apply_cehrbert_dataset_mapping(
+        dataset: Union[DatasetDict, Dataset, IterableDataset, IterableDatasetDict],
+        mapping_function: DatasetMapping,
+        batch_size: int = 128,
+        num_proc: int = 1,
+        streaming: bool = False
+):
+    if streaming:
         if isinstance(dataset, DatasetDict):
             for dataset_name in dataset.keys():
                 dataset[dataset_name] = (
                     dataset[dataset_name].map(
                         mapping_function.batch_transform,
                         batched=True,
-                        batch_size=data_args.preprocessing_batch_size
+                        batch_size=batch_size
                     )
                 )
                 dataset[dataset_name] = dataset[dataset_name].remove_columns(mapping_function.remove_columns())
@@ -99,15 +117,15 @@ def _apply_mapping(data_args, dataset, mapping_function):
             dataset = dataset.map(
                 mapping_function.batch_transform,
                 batched=True,
-                batch_size=data_args.preprocessing_batch_size
+                batch_size=batch_size
             )
             dataset = dataset.remove_columns(mapping_function.remove_columns())
     else:
         dataset = dataset.map(
             mapping_function.batch_transform,
-            num_proc=data_args.preprocessing_num_workers,
+            num_proc=num_proc,
             batched=True,
-            batch_size=data_args.preprocessing_batch_size
+            batch_size=batch_size
         )
         dataset = dataset.remove_columns(mapping_function.remove_columns())
     return dataset

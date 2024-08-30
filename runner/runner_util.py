@@ -272,3 +272,12 @@ def compute_metrics(eval_pred: EvalPrediction):
     perplexity = torch.exp(torch.mean(cross_entropy_loss))
 
     return {"perplexity": perplexity.item()}  # Use .item() to extract the scalar value from the tensor
+
+
+def get_meds_extension_path(data_args: DataTrainingArguments):
+    data_folder = data_args.data_folder
+    if data_folder.endswith("\\"):
+        data_folder.rstrip("\\")
+    basename = os.path.basename(data_folder)
+    meds_extension_path = os.path.join(data_args.dataset_prepared_path, f"{basename}_meds_extension")
+    return meds_extension_path

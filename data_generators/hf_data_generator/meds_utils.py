@@ -13,7 +13,7 @@ from runner.hf_runner_argument_dataclass import DataTrainingArguments
 from data_generators.hf_data_generator.hf_dataset_mapping import (
     birth_codes, MedToCehrBertDatasetMapping
 )
-from data_generators.hf_data_generator.hf_dataset import _apply_mapping
+from data_generators.hf_data_generator.hf_dataset import apply_cehrbert_dataset_mapping
 from med_extension.schema_extension import CehrBertPatient, Visit, Event
 
 from datasets import Dataset, DatasetDict, Split
@@ -331,7 +331,6 @@ def _create_cehrbert_data_from_meds(
         np.asarray(batches),
         data_args.preprocessing_num_workers
     )
-
     batch_func = functools.partial(
         _meds_to_cehrbert_generator,
         path_to_db=data_args.data_folder,
@@ -342,14 +341,16 @@ def _create_cehrbert_data_from_meds(
         gen_kwargs={
             "shards": split_batches,
         },
-        num_proc=data_args.preprocessing_num_workers,
-        writer_batch_size=8
+        num_proc=data_args.preprocessing_num_workers if not data_args.streaming else None,
+        writer_batch_size=data_args.preprocessing_batch_size,
+        streaming=data_args.streaming
     )
     # Convert the CehrBertPatient to CehrBert data inputs
-    dataset = _apply_mapping(
-        data_args,
+    dataset = apply_cehrbert_dataset_mapping(
         dataset,
-        MedToCehrBertDatasetMapping(data_args, is_pretraining)
+        MedToCehrBertDatasetMapping(data_args, is_pretraining),
+        num_proc=data_args.preprocessing_num_workers,
+        batch_size=data_args.preprocessing_batch_size,
+        streaming=data_args.streaming
     )
-
     return dataset

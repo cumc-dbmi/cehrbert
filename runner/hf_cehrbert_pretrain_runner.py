@@ -8,12 +8,14 @@ from transformers import AutoConfig, Trainer, set_seed
 
 from data_generators.hf_data_generator.meds_utils import create_dataset_from_meds_reader
 from data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
-from data_generators.hf_data_generator.hf_dataset import create_cehrbert_pretraining_dataset
+from data_generators.hf_data_generator.hf_dataset import (
+    create_cehrbert_pretraining_dataset
+)
 from models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from models.hf_models.config import CehrBertConfig
 from models.hf_models.hf_cehrbert import CehrBertForPreTraining
 from runner.runner_util import generate_prepared_ds_path, load_parquet_as_dataset, get_last_hf_checkpoint, \
-    parse_runner_args
+    parse_runner_args, get_meds_extension_path
 from runner.hf_runner_argument_dataclass import DataTrainingArguments, ModelArguments
 
 LOG = logging.get_logger("transformers")
@@ -87,18 +89,17 @@ def main():
             dataset=processed_dataset
         )
     else:
-
         # If the data is in the MEDS format, we need to convert it to the CEHR-BERT format
         if data_args.is_data_in_med:
-            basename = os.path.basename(data_args.data_folder)
-            meds_extension_path = os.path.join(data_args.dataset_prepared_path, f"{basename}_meds_extension")
+            meds_extension_path = get_meds_extension_path(data_args)
             try:
                 LOG.info(f"Trying to load the MEDS extension from disk at {meds_extension_path}...")
                 dataset = load_dataset(meds_extension_path, streaming=data_args.streaming)
             except Exception as e:
                 LOG.exception(e)
                 dataset = create_dataset_from_meds_reader(data_args, is_pretraining=True)
-                dataset.save_to_disk(meds_extension_path)
+                if not data_args.streaming:
+                    dataset.save_to_disk(meds_extension_path)
         else:
             # Load the dataset from the parquet files
             dataset = load_parquet_as_dataset(data_args.data_folder, split='train', streaming=data_args.streaming)

@@ -8,7 +8,7 @@ import pandas as pd
 from sklearn.metrics import accuracy_score, roc_auc_score, precision_recall_curve, auc
 from scipy.special import expit as sigmoid
 
-from datasets import load_from_disk, DatasetDict
+from datasets import load_dataset, DatasetDict
 from transformers.utils import logging
 from transformers import Trainer, set_seed
 from transformers import EarlyStoppingCallback
@@ -24,7 +24,8 @@ from models.hf_models.hf_cehrbert import (
 )
 from runner.hf_runner_argument_dataclass import FineTuneModelType
 from runner.runner_util import (
-    get_last_hf_checkpoint, load_parquet_as_dataset, generate_prepared_ds_path, parse_runner_args
+    get_last_hf_checkpoint, load_parquet_as_dataset,
+    generate_prepared_ds_path, parse_runner_args, get_meds_extension_path
 )
 
 LOG = logging.get_logger("transformers")
@@ -129,20 +130,15 @@ def main():
 
     if any(prepared_ds_path.glob("*")):
         LOG.info(f"Loading prepared dataset from disk at {prepared_ds_path}...")
-        processed_dataset = load_from_disk(str(prepared_ds_path))
+        processed_dataset = load_dataset(str(prepared_ds_path))
         LOG.info("Prepared dataset loaded from disk...")
     else:
         # If the data is in the MEDS format, we need to convert it to the CEHR-BERT format
         if data_args.is_data_in_med:
-            basename = os.path.basename(data_args.cohort_folder)
-            meds_extension_path = os.path.join(data_args.dataset_prepared_path, f"{basename}_meds_extension")
+            meds_extension_path = get_meds_extension_path(data_args)
             try:
                 LOG.info(f"Trying to load the MEDS extension from disk at {meds_extension_path}...")
-                dataset = load_from_disk(meds_extension_path)
-                if data_args.streaming:
-                    if isinstance(dataset, DatasetDict):
-                        for k in dataset.keys():
-                            dataset[k] = dataset[k].to_iterable_dataset()
+                dataset = load_dataset(meds_extension_path, streaming=data_args.streaming)
             except Exception as e:
                 LOG.exception(e)
                 dataset = create_dataset_from_meds_reader(data_args, is_pretraining=False)
@@ -153,7 +149,6 @@ def main():
             test_set = dataset["test"]
         else:
             dataset = load_parquet_as_dataset(data_args.data_folder)
-
             test_set = None
             if data_args.test_data_folder:
                 test_set = load_parquet_as_dataset(data_args.test_data_folder)
