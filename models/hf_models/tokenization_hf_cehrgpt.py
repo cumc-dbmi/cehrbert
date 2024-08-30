@@ -83,7 +83,12 @@ class CehrGptTokenizer(PushToHubMixin):
 
     @property
     def lab_token_ids(self):
-        return self.encode([_['concept_id'] for _ in self._lab_stats])
+        reserved_tokens = [
+            START_TOKEN, PAD_TOKEN, END_TOKEN, OUT_OF_VOCABULARY_TOKEN
+        ]
+        return self.encode(
+            [_['concept_id'] for _ in self._lab_stats if _['concept_id'] not in reserved_tokens]
+        )
 
     @property
     def token_to_time_token_mapping(self) -> Dict[int, List[int]]:

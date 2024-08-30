@@ -86,7 +86,12 @@ class CehrBertTokenizer(PushToHubMixin):
 
     @property
     def lab_token_ids(self):
-        return self.encode([_['concept_id'] for _ in self._lab_stats])
+        reserved_tokens = [
+            OUT_OF_VOCABULARY_TOKEN, PAD_TOKEN, UNUSED_TOKEN, OUT_OF_VOCABULARY_TOKEN
+        ]
+        return self.encode(
+            [_['concept_id'] for _ in self._lab_stats if _['concept_id'] not in reserved_tokens]
+        )
 
     def encode(self, concept_ids: Sequence[str]) -> Sequence[int]:
         encoded = self._tokenizer.encode(concept_ids, is_pretokenized=True)
