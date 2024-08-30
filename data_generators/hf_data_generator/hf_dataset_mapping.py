@@ -243,7 +243,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                     pass
 
                 # Calculate the time diff in days w.r.t the previous measurement
-                meas_time_diff = relativedelta(e['time'], date_cursor).days
+                meas_time_diff = (e['time'] - date_cursor).days
                 # Update the date_cursor if the time diff between two neighboring measurements is greater than and
                 # equal to 1 day
                 if meas_time_diff > 0:

@@ -4,7 +4,6 @@ import collections
 import functools
 from typing import Dict, List, Optional, Union, Tuple
 from datetime import datetime
-from dateutil.relativedelta import relativedelta
 
 import meds_reader
 import numpy as np
@@ -170,13 +169,11 @@ def convert_one_patient(
             # If the ED event has occurred, we need to check the time difference between
             # the ED event and the subsequent hospital admission
             if active_ed_index is not None:
-                time_diff = relativedelta(
-                    patient_blocks[active_ed_index].max_time,
-                    patient_block.min_time
-                )
+
+                hour_diff = (patient_block.min_time - patient_blocks[active_ed_index].max_time).total_seconds() / 3600
                 # If the time difference between the ed and admission is leq 24 hours,
                 # we consider ED to be part of the visits
-                if time_diff.hours <= 24 or active_ed_index == i:
+                if hour_diff <= 24 or active_ed_index == i:
                     active_admission_index = active_ed_index
                     active_ed_index = None
             else:
@@ -210,7 +207,11 @@ def convert_one_patient(
         # we need to check if the time stamp of the next block is within 12 hours
         if discharge_index + 1 < len(patient_blocks):
             next_block = patient_blocks[discharge_index + 1]
-            hour_diff = (discharge_block.max_time - next_block.min_time).total_seconds() / 3600
+            hour_diff = (next_block.min_time - discharge_block.max_time).total_seconds() / 3600
+            assert hour_diff >= 0, (
+                f"next_block.min_time: {next_block.min_time} "
+                f"must be GE discharge_block.max_time: {discharge_block.max_time}"
+            )
             if hour_diff <= 12:
                 next_block.visit_id = visit_id
                 next_block.visit_type = DEFAULT_INPATIENT_CONCEPT_ID
