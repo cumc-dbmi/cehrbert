@@ -91,7 +91,10 @@ def main():
     else:
         # If the data is in the MEDS format, we need to convert it to the CEHR-BERT format
         if data_args.is_data_in_med:
-            meds_extension_path = get_meds_extension_path(data_args)
+            meds_extension_path = get_meds_extension_path(
+                data_folder=data_args.data_folder,
+                dataset_prepared_path=data_args.dataset_prepared_path
+            )
             try:
                 LOG.info(f"Trying to load the MEDS extension from disk at {meds_extension_path}...")
                 dataset = load_dataset(meds_extension_path, streaming=data_args.streaming)
