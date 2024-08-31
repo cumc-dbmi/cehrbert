@@ -397,8 +397,9 @@ class HFTokenizationMapping(DatasetMapping):
             record: Dict[str, Any]
     ) -> Dict[str, Any]:
 
+        new_column_record = {}
         input_ids = self._concept_tokenizer.encode(record['concept_ids'])
-        record['input_ids'] = input_ids
+        new_column_record['input_ids'] = input_ids
         concept_value_masks = record['concept_value_masks']
         concept_values = record['concept_values']
 
@@ -411,7 +412,7 @@ class HFTokenizationMapping(DatasetMapping):
                 if token_id in self._lab_token_ids:
                     normalized_concept_value = self._concept_tokenizer.normalize(concept_id, concept_value)
                     normalized_concept_values[i] = normalized_concept_value
-            record['concept_values'] = normalized_concept_values
+            new_column_record['concept_values'] = normalized_concept_values
 
         # If mlm_skip_value=1, this indicates there is a value associated with this position and
         # hence we block the MLM to randomly pick this token to be predicted
@@ -427,25 +428,26 @@ class HFTokenizationMapping(DatasetMapping):
                     if mlm_skip_value == 1:
                         labels[i] = -100
 
-                record.update({
+                new_column_record.update({
                     'input_ids': input_ids,
                     'labels': labels
                 })
 
-        return record
+        return new_column_record
 
 
 class HFFineTuningMapping(DatasetMapping):
+    """
+    Consider removing this transformation in the future
+    """
     def transform(
             self,
             record: Dict[str, Any]
     ) -> Dict[str, Any]:
-        new_record = copy.deepcopy(record)
-        new_record.update({
+        return {
             'age_at_index': record['age_at_index'],
             'classifier_label': record['label']
-        })
-        return new_record
+        }
 
 
 class HFCehrGptTokenizationMapping(DatasetMapping):
