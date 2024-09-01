@@ -397,9 +397,8 @@ class HFTokenizationMapping(DatasetMapping):
             record: Dict[str, Any]
     ) -> Dict[str, Any]:
 
-        new_column_record = {}
         input_ids = self._concept_tokenizer.encode(record['concept_ids'])
-        new_column_record['input_ids'] = input_ids
+        record['input_ids'] = input_ids
         concept_value_masks = record['concept_value_masks']
         concept_values = record['concept_values']
 
@@ -412,7 +411,7 @@ class HFTokenizationMapping(DatasetMapping):
                 if token_id in self._lab_token_ids:
                     normalized_concept_value = self._concept_tokenizer.normalize(concept_id, concept_value)
                     normalized_concept_values[i] = normalized_concept_value
-            new_column_record['concept_values'] = normalized_concept_values
+            record['concept_values'] = normalized_concept_values
 
         # If mlm_skip_value=1, this indicates there is a value associated with this position and
         # hence we block the MLM to randomly pick this token to be predicted
@@ -428,12 +427,12 @@ class HFTokenizationMapping(DatasetMapping):
                     if mlm_skip_value == 1:
                         labels[i] = -100
 
-                new_column_record.update({
+                record.update({
                     'input_ids': input_ids,
                     'labels': labels
                 })
 
-        return new_column_record
+        return record
 
 
 class HFFineTuningMapping(DatasetMapping):
