@@ -416,21 +416,9 @@ class HFTokenizationMapping(DatasetMapping):
         # If mlm_skip_value=1, this indicates there is a value associated with this position and
         # hence we block the MLM to randomly pick this token to be predicted
         if self._is_pretraining:
-            if 'mlm_skip_values' in record:
-                labels = copy.deepcopy(input_ids)
-                mlm_skip_values = record['mlm_skip_values']
-
-                assert len(input_ids) == len(mlm_skip_values), \
-                    f"The following equality must be true: len(input_ids) == len(mlm_skip_values)"
-
-                for i, (input_id, mlm_skip_value) in enumerate(zip(input_ids, mlm_skip_values)):
-                    if mlm_skip_value == 1:
-                        labels[i] = -100
-
-                record.update({
-                    'input_ids': input_ids,
-                    'labels': labels
-                })
+            record.update({
+                'labels': copy.deepcopy(input_ids)
+            })
 
         return record
 
@@ -439,6 +427,7 @@ class HFFineTuningMapping(DatasetMapping):
     """
     Consider removing this transformation in the future
     """
+
     def transform(
             self,
             record: Dict[str, Any]

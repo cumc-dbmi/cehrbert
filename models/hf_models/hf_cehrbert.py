@@ -7,6 +7,7 @@ from torch.nn.utils.rnn import pack_padded_sequence
 
 from transformers.models.bert.modeling_bert import BertEncoder, BertPooler, BertOnlyMLMHead
 from transformers import PreTrainedModel
+from transformers.activations import gelu_new
 from models.hf_models.config import CehrBertConfig
 from models.hf_models.hf_modeling_outputs import CehrBertModelOutput, CehrBertSequenceClassifierOutput
 from transformers.utils import logging
@@ -119,6 +120,25 @@ class ConceptValueTransformationLayer(nn.Module):
         )
 
         return merged
+
+
+class ConceptValuePredictionLayer(nn.Module):
+    def __init__(self, embedding_size):
+        super(ConceptValuePredictionLayer, self).__init__()
+        self.embedding_size = embedding_size
+        self.concept_value_decoder_layer = nn.Sequential(
+            nn.Linear(embedding_size, embedding_size // 2),
+            gelu_new,
+            nn.Linear(embedding_size // 2, 1),
+        )
+
+    def forward(
+            self,
+            hidden_states: Optional[torch.FloatTensor]
+    ):
+        # (batch_size, context_window, 1)
+        concept_vals = self.concept_value_decoder_layer(hidden_states)
+        return concept_vals
 
 
 class CehrBertEmbeddings(nn.Module):
@@ -264,6 +284,8 @@ class CehrBertForPreTraining(CehrBertPreTrainedModel):
         super().__init__(config)
 
         self.bert = CehrBert(config)
+        if self.config.include_value_prediction:
+            self.concept_value_decoder_layer = ConceptValuePredictionLayer(config.hidden_size)
         self.cls = BertOnlyMLMHead(config)
 
         # Initialize weights and apply final processing
@@ -315,6 +337,17 @@ class CehrBertForPreTraining(CehrBertPreTrainedModel):
             loss_fct = nn.CrossEntropyLoss()
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
             total_loss = masked_lm_loss
+
+        if self.config.include_value_prediction:
+            probability_matrix = torch.full(labels.shape, self.config.mlm_probability)
+            masked_indices = torch.bernoulli(probability_matrix).bool().to(labels.device)
+            predicted_values = self.concept_value_decoder_layer(cehrbert_output.last_hidden_state)
+            num_items = torch.sum(concept_value_masks.to(torch.float32), dim=-1) + 1e-6
+            values_ = (predicted_values.squeeze(-1) - concept_values) ** 2
+            masked_mse = torch.sum(
+                values_ * concept_value_masks * masked_indices, dim=-1
+            ) / num_items
+            total_loss += torch.mean(masked_mse)
 
         return CehrBertModelOutput(
             loss=total_loss,

@@ -149,7 +149,8 @@ def main():
     collator = CehrBertDataCollator(
         tokenizer=tokenizer,
         max_length=model_args.max_position_embeddings,
-        is_pretraining=True
+        is_pretraining=True,
+        mlm_probability=model.config.mlm_probability
     )
 
     # Detecting last checkpoint.

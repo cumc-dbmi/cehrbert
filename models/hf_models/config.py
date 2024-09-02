@@ -195,6 +195,8 @@ class CehrBertConfig(PretrainedConfig):
             num_labels=2,
             classifier_dropout=0.1,
             bidirectional=True,
+            include_value_prediction=False,
+            mlm_probability=0.15,
             **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -215,6 +217,8 @@ class CehrBertConfig(PretrainedConfig):
         self.num_labels = num_labels
         self.classifier_dropout = classifier_dropout
         self.bidirectional = bidirectional
+        self.include_value_prediction = include_value_prediction
+        self.mlm_probability = mlm_probability
 
         self.lab_token_ids = lab_token_ids
 

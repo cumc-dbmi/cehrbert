@@ -251,6 +251,10 @@ class ModelArguments:
         default=True,
         metadata={"help": "Whether or not to decompose the time interval into year/month/day"}
     )
+    include_value_prediction: Optional[bool] = field(
+        default=True,
+        metadata={"help": "Whether or not to include value prediction head for cehr-bert"}
+    )
     include_ttv_prediction: Optional[bool] = field(
         default=True,
         metadata={"help": "Whether or not to include the time to visit prediction"}
