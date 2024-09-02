@@ -234,13 +234,12 @@ class CehrBertDataCollator:
         ):
             # We randomly pick a [VS] token
             starting_points = []
-            # Plus 4 due to the potential presence of the demographic prompt at the beginning
-            for i in range(seq_length - new_max_length + 4):
+            for i in range(seq_length - new_max_length):
                 current_token = record['input_ids'][i]
                 if current_token == self.vs_token_id:
                     starting_points.append(i)
 
-            assert len(starting_points) > 0, f"{record['input_ids'][:seq_length - new_max_length + 4]}"
+            assert len(starting_points) > 0, f"{record['input_ids'][:seq_length - new_max_length]}"
             start_index = random.choice(starting_points)
             end_index = min(start_index + new_max_length, seq_length)
 
