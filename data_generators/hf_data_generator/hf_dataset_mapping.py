@@ -386,12 +386,6 @@ class HFTokenizationMapping(DatasetMapping):
         self._is_pretraining = is_pretraining
         self._lab_token_ids = self._concept_tokenizer.lab_token_ids
 
-    def remove_columns(self):
-        if self._is_pretraining:
-            return ["orders"]
-        else:
-            return ["mlm_skip_values", "orders"]
-
     def transform(
             self,
             record: Dict[str, Any]

@@ -320,6 +320,7 @@ class CehrBertForPreTraining(CehrBertPreTrainedModel):
             concept_values: Optional[torch.FloatTensor] = None,
             concept_value_masks: Optional[torch.FloatTensor] = None,
             visit_segments: Optional[torch.LongTensor] = None,
+            mlm_skip_values: Optional[torch.BoolTensor] = None,
             output_attentions: Optional[bool] = None,
             output_hidden_states: Optional[bool] = None,
             labels: Optional[torch.LongTensor] = None
@@ -341,20 +342,23 @@ class CehrBertForPreTraining(CehrBertPreTrainedModel):
 
         total_loss = None
         if labels is not None:
+            # Skip the MLM predictions for label concepts if include_value_prediction is disabled
+            if not self.config.include_value_prediction:
+                labels = torch.where(mlm_skip_values, -100, labels)
             loss_fct = nn.CrossEntropyLoss()
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
             total_loss = masked_lm_loss
 
-        if self.config.include_value_prediction:
-            probability_matrix = torch.full(labels.shape, self.config.mlm_probability)
-            masked_indices = torch.bernoulli(probability_matrix).bool().to(labels.device)
-            predicted_values = self.concept_value_decoder_layer(cehrbert_output.last_hidden_state)
-            num_items = torch.sum(concept_value_masks.to(torch.float32), dim=-1) + 1e-6
-            values_ = (predicted_values.squeeze(-1) - concept_values) ** 2
-            masked_mse = torch.sum(
-                values_ * concept_value_masks * masked_indices, dim=-1
-            ) / num_items
-            total_loss += torch.mean(masked_mse)
+            # In addition to MLM, we also predict the values associated with the masked concepts
+            if self.config.include_value_prediction:
+                mlm_masks = labels != -100
+                predicted_values = self.concept_value_decoder_layer(cehrbert_output.last_hidden_state)
+                num_items = torch.sum(concept_value_masks.to(torch.float32), dim=-1) + 1e-6
+                values_ = (predicted_values.squeeze(-1) - concept_values) ** 2
+                masked_mse = torch.sum(
+                    values_ * concept_value_masks * mlm_masks, dim=-1
+                ) / num_items
+                total_loss += torch.mean(masked_mse)
 
         return CehrBertModelOutput(
             loss=total_loss,

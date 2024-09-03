@@ -49,14 +49,19 @@ class CehrBertDataCollator:
 
         # Assume that each example in the batch is a dictionary with 'input_ids' and 'attention_mask'
         batch_input_ids = [self._convert_to_tensor(example['input_ids']) for example in examples]
-        batch_attention_mask = [torch.ones_like(self._convert_to_tensor(example['input_ids']), dtype=torch.float) for
-                                example in examples]
+        batch_attention_mask = [
+            torch.ones_like(self._convert_to_tensor(example['input_ids']), dtype=torch.float) for
+            example in examples
+        ]
         batch_ages = [self._convert_to_tensor(example['ages']) for example in examples]
         batch_dates = [self._convert_to_tensor(example['dates']) for example in examples]
         batch_visit_concept_orders = [self._convert_to_tensor(example['visit_concept_orders']) for example in examples]
         batch_concept_values = [self._convert_to_tensor(example['concept_values']) for example in examples]
         batch_concept_value_masks = [self._convert_to_tensor(example['concept_value_masks']) for example in examples]
         batch_visit_segments = [self._convert_to_tensor(example['visit_segments']) for example in examples]
+        batch_mlm_skip_values = [
+            self._convert_to_tensor(example['mlm_skip_values']).to(torch.bool) for example in examples
+        ]
 
         # Pad sequences to the max length in the batch
         batch['input_ids'] = pad_sequence(
@@ -98,6 +103,11 @@ class CehrBertDataCollator:
             batch_visit_segments,
             batch_first=True,
             padding_value=0
+        )
+        batch['mlm_skip_values'] = pad_sequence(
+            batch_mlm_skip_values,
+            batch_first=True,
+            padding_value=False
         )
         # Prepend the CLS token and their associated values to the corresponding time series features
         batch['input_ids'] = torch.cat(
@@ -143,6 +153,11 @@ class CehrBertDataCollator:
         # Set the visit_segments of the CLS token to a default value 0 because this doesn't belong to a visit
         batch['visit_segments'] = torch.cat(
             [torch.full((batch_size, 1), 0), batch['visit_segments']],
+            dim=1
+        )
+        # Set the mlm_skip_values of the CLS token to a default value False
+        batch['mlm_skip_values'] = torch.cat(
+            [torch.full((batch_size, 1), False), batch['mlm_skip_values']],
             dim=1
         )
 
