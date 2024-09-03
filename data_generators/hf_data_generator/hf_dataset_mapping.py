@@ -388,9 +388,9 @@ class HFTokenizationMapping(DatasetMapping):
 
     def remove_columns(self):
         if self._is_pretraining:
-            return ["concept_ids", "orders"]
+            return ["orders"]
         else:
-            return ["concept_ids", "mlm_skip_values", "orders"]
+            return ["mlm_skip_values", "orders"]
 
     def transform(
             self,
