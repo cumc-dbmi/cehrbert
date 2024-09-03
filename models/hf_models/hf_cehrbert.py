@@ -151,6 +151,7 @@ class CehrBertEmbeddings(nn.Module):
         self.positional_embedding_layer = PositionalEncodingLayer(config.n_time_embd, config.max_position_embeddings)
         self.concept_value_transformation_layer = ConceptValueTransformationLayer(config.hidden_size)
         self.linear_proj = nn.Linear(config.hidden_size + 3 * config.n_time_embd, config.hidden_size)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
             self,
@@ -173,10 +174,11 @@ class CehrBertEmbeddings(nn.Module):
         age_embeddings = self.age_embedding_layer(ages)
         time_embeddings = self.age_embedding_layer(dates)
         positional_embeddings = self.positional_embedding_layer(visit_concept_orders)
-        x = self.linear_proj(
+        proj = self.linear_proj(
             torch.cat([x, time_embeddings, age_embeddings, positional_embeddings], dim=-1)
         )
-        x = f.gelu(x)
+        # skip connection + layer normalization
+        x = self.layer_norm(x + gelu_new(proj))
         x += self.visit_segment_embeddings(visit_segments)
         return x
 
