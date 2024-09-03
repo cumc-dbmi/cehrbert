@@ -116,7 +116,7 @@ class ConceptValueTransformationLayer(nn.Module):
 
         merged = torch.where(
             concept_value_masks.to(torch.bool),
-            gelu_new(concept_embeddings_with_val) + concept_embeddings_with_val,
+            gelu_new(concept_embeddings_with_val),
             concept_embeddings
         )
 
@@ -183,7 +183,7 @@ class CehrBertEmbeddings(nn.Module):
             torch.cat([x, time_embeddings, age_embeddings, positional_embeddings], dim=-1)
         )
         # skip connection + layer normalization
-        x = self.layer_norm(x + gelu_new(proj))
+        x = self.layer_norm(gelu_new(proj))
         x += self.visit_segment_embeddings(visit_segments)
         return x
 
