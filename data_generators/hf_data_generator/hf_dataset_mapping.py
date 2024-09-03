@@ -260,11 +260,19 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
 
                 # If numeric_value exists, this is a concept/value tuple, we indicate this using a concept_value_mask
                 concept_value_mask = int(e['numeric_value'] is not None)
-                concept_value = e['numeric_value'] if concept_value_mask == 1 else -1
+                concept_value = e['numeric_value'] if concept_value_mask == 1 else -1.0
+                code = e['code'].replace(' ', '_')
+                # If the value mask is 1, this indicates a numeric value associated with the concept
+                if concept_value_mask != 1:
+                    # Otherwise we will try to concatenate the answer with the code if the categorical value is provide
+                    text_value = getattr(e, "text_value", None)
+                    if text_value:
+                        text_value_replaced = text_value.replace(' ', '_')
+                        code = f"{code}//option:{text_value_replaced}"
 
                 self._update_cehrbert_record(
                     cehrbert_record,
-                    code=e['code'],
+                    code=code,
                     age=age,
                     date=date,
                     visit_concept_order=i + 1,
