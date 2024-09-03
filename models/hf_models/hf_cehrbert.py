@@ -83,12 +83,13 @@ class TimeEmbeddingLayer(nn.Module):
 
 
 class ConceptValueTransformationLayer(nn.Module):
-    def __init__(self, embedding_size):
+    def __init__(self, embedding_size, layer_norm_eps):
         super(ConceptValueTransformationLayer, self).__init__()
         self.merge_value_transformation_layer = nn.Linear(
             embedding_size + 1,
             embedding_size
         )
+        self.layer_norm = nn.LayerNorm(embedding_size, eps=layer_norm_eps)
 
     def forward(
             self,
@@ -115,9 +116,11 @@ class ConceptValueTransformationLayer(nn.Module):
 
         merged = torch.where(
             concept_value_masks.to(torch.bool),
-            concept_embeddings_with_val,
+            gelu_new(concept_embeddings_with_val) + concept_embeddings_with_val,
             concept_embeddings
         )
+
+        merged = self.layer_norm(merged)
 
         return merged
 
@@ -149,7 +152,9 @@ class CehrBertEmbeddings(nn.Module):
         self.time_embedding_layer = TimeEmbeddingLayer(config.n_time_embd)
         self.age_embedding_layer = TimeEmbeddingLayer(config.n_time_embd)
         self.positional_embedding_layer = PositionalEncodingLayer(config.n_time_embd, config.max_position_embeddings)
-        self.concept_value_transformation_layer = ConceptValueTransformationLayer(config.hidden_size)
+        self.concept_value_transformation_layer = ConceptValueTransformationLayer(
+            config.hidden_size, config.layer_norm_eps
+        )
         self.linear_proj = nn.Linear(config.hidden_size + 3 * config.n_time_embd, config.hidden_size)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
