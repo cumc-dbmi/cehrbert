@@ -176,7 +176,7 @@ class CehrBertEmbeddings(nn.Module):
         x = self.linear_proj(
             torch.cat([x, time_embeddings, age_embeddings, positional_embeddings], dim=-1)
         )
-        x = f.gelu(x)
+        x = f.tanh(x)
         x += self.visit_segment_embeddings(visit_segments)
         return x
 
