@@ -5,7 +5,7 @@ from data_generators.hf_data_generator.hf_dataset_mapping import (
     SortPatientSequenceMapping, HFCehrGptTokenizationMapping
 )
 from data_generators.hf_data_generator.hf_dataset import (
-    FINETUNING_COLUMNS, HFFineTuningMapping, MedToCehrBertDatasetMapping
+    FINETUNING_COLUMNS, HFFineTuningMapping
 )
 from runner.hf_runner_argument_dataclass import DataTrainingArguments
 

@@ -2,20 +2,31 @@ import os
 
 from typing import Union, Optional
 
-from datasets import load_from_disk, DatasetDict, Dataset
+from datasets import load_from_disk, load_dataset, DatasetDict, Dataset
 from transformers.utils import logging
 from transformers import AutoConfig, Trainer, set_seed
 
+from data_generators.hf_data_generator.meds_utils import create_dataset_from_meds_reader
 from data_generators.hf_data_generator.hf_cehrgpt_dataset_collator import CehrGptDataCollator
 from data_generators.hf_data_generator.hf_cehrgpt_dataset import create_cehrgpt_pretraining_dataset
 from models.hf_models.config import CEHRGPTConfig
 from models.hf_models.hf_cehrgpt import CEHRGPT2LMHeadModel
 from models.hf_models.tokenization_hf_cehrgpt import CehrGptTokenizer
 from runner.runner_util import generate_prepared_ds_path, load_parquet_as_dataset, get_last_hf_checkpoint, \
-    parse_runner_args, compute_metrics
+    parse_runner_args, get_meds_extension_path
 from runner.hf_runner_argument_dataclass import DataTrainingArguments, ModelArguments
 
 LOG = logging.get_logger("transformers")
+
+
+def tokenizer_exists(model_args: ModelArguments) -> bool:
+    # Try to load the pretrained tokenizer
+    try:
+        CehrGptTokenizer.from_pretrained(os.path.abspath(model_args.tokenizer_name_or_path))
+        return True
+    except RuntimeWarning:
+        LOG.info(f"The tokenizer does not exist at {model_args.tokenizer_name_or_path}")
+    return False
 
 
 def load_and_create_tokenizer(
@@ -83,46 +94,68 @@ def main():
         LOG.info(f"Loading prepared dataset from disk at {data_args.data_folder}...")
         processed_dataset = load_from_disk(data_args.data_folder)
         # If the data has been processed in the past, it's assume the tokenizer has been created before.
-        # we load the CEHR-GPT tokenizer from the output folder.
-        tokenizer = load_and_create_tokenizer(
-            data_args=data_args,
-            model_args=model_args,
-            dataset=processed_dataset
-        )
+        # we load the CEHR-GPT tokenizer from the output folder, otherwise an exception will be raised.
+        if not tokenizer_exists(model_args):
+            raise RuntimeError(
+                f"The dataset has been tokenized but the corresponding tokenizer: "
+                f"{model_args.tokenizer_name_or_path} does not exist"
+            )
     elif any(prepared_ds_path.glob("*")):
         LOG.info(f"Loading prepared dataset from disk at {prepared_ds_path}...")
         processed_dataset = load_from_disk(str(prepared_ds_path))
         LOG.info("Prepared dataset loaded from disk...")
         # If the data has been processed in the past, it's assume the tokenizer has been created before.
-        # we load the CEHR-GPT tokenizer from the output folder.
-        tokenizer = load_and_create_tokenizer(
-            data_args=data_args,
-            model_args=model_args,
-            dataset=processed_dataset
-        )
-    else:
-        # Load the dataset from the parquet files
-        dataset = load_parquet_as_dataset(data_args.data_folder, split='train', streaming=data_args.streaming)
-        # If streaming is enabled, we need to manually split the data into train/val
-        if data_args.streaming and data_args.validation_split_num:
-            dataset = dataset.shuffle(buffer_size=10_000, seed=training_args.seed)
-            train_set = dataset.skip(data_args.validation_split_num)
-            val_set = dataset.take(data_args.validation_split_num)
-            dataset = DatasetDict({
-                'train': train_set,
-                'test': val_set
-            })
-        elif data_args.validation_split_percentage:
-            dataset = dataset.train_test_split(test_size=data_args.validation_split_percentage, seed=training_args.seed)
-        else:
+        # we load the CEHR-GPT tokenizer from the output folder, otherwise an exception will be raised.
+        if not tokenizer_exists(model_args):
             raise RuntimeError(
-                f"Can not split the data. If streaming is enabled, validation_split_num needs to be "
-                f"defined, otherwise validation_split_percentage needs to be provided. "
-                f"The current values are:\n"
-                f"validation_split_percentage: {data_args.validation_split_percentage}\n"
-                f"validation_split_num: {data_args.validation_split_num}\n"
-                f"streaming: {data_args.streaming}"
+                f"The dataset has been tokenized but the corresponding tokenizer: "
+                f"{model_args.tokenizer_name_or_path} does not exist"
             )
+    else:
+        # If the data is in the MEDS format, we need to convert it to the CEHR-BERT format
+        if data_args.is_data_in_med:
+            meds_extension_path = get_meds_extension_path(
+                data_folder=data_args.data_folder,
+                dataset_prepared_path=data_args.dataset_prepared_path
+            )
+            try:
+                LOG.info(f"Trying to load the MEDS extension from disk at {meds_extension_path}...")
+                dataset = load_dataset(meds_extension_path, streaming=data_args.streaming)
+            except Exception as e:
+                LOG.exception(e)
+                dataset = create_dataset_from_meds_reader(data_args, is_pretraining=True)
+                if not data_args.streaming:
+                    dataset.save_to_disk(meds_extension_path)
+        else:
+            # Load the dataset from the parquet files
+            dataset = load_parquet_as_dataset(
+                data_args.data_folder,
+                split='train',
+                streaming=data_args.streaming
+            )
+            # If streaming is enabled, we need to manually split the data into train/val
+            if data_args.streaming and data_args.validation_split_num:
+                dataset = dataset.shuffle(buffer_size=10_000, seed=training_args.seed)
+                train_set = dataset.skip(data_args.validation_split_num)
+                val_set = dataset.take(data_args.validation_split_num)
+                dataset = DatasetDict({
+                    'train': train_set,
+                    'test': val_set
+                })
+            elif data_args.validation_split_percentage:
+                dataset = dataset.train_test_split(
+                    test_size=data_args.validation_split_percentage,
+                    seed=training_args.seed
+                )
+            else:
+                raise RuntimeError(
+                    f"Can not split the data. If streaming is enabled, validation_split_num needs to be "
+                    f"defined, otherwise validation_split_percentage needs to be provided. "
+                    f"The current values are:\n"
+                    f"validation_split_percentage: {data_args.validation_split_percentage}\n"
+                    f"validation_split_num: {data_args.validation_split_num}\n"
+                    f"streaming: {data_args.streaming}"
+                )
 
         # Create the CEHR-GPT tokenizer if it's not available in the output folder
         tokenizer = load_and_create_tokenizer(
