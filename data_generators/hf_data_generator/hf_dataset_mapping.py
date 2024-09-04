@@ -265,7 +265,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                 # If the value mask is 1, this indicates a numeric value associated with the concept
                 if concept_value_mask != 1:
                     # Otherwise we will try to concatenate the answer with the code if the categorical value is provide
-                    text_value = getattr(e, "text_value", None)
+                    text_value = e["text_value"]
                     if text_value:
                         text_value_replaced = text_value.replace(' ', '_')
                         code = f"{code}//option:{text_value_replaced}"

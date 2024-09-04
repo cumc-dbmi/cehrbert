@@ -2,7 +2,9 @@ import os
 import re
 import collections
 import functools
-from typing import Dict, List, Optional, Union, Tuple
+from itertools import chain
+
+from typing import Dict, List, Optional, Union, Tuple, Iterable
 from datetime import datetime
 
 import meds_reader
@@ -13,7 +15,10 @@ from runner.hf_runner_argument_dataclass import DataTrainingArguments
 from data_generators.hf_data_generator.hf_dataset_mapping import (
     birth_codes, MedToCehrBertDatasetMapping
 )
+from data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules.meds_to_cehrbert_base import \
+    MedsToCehrBertConversion
 from data_generators.hf_data_generator.hf_dataset import apply_cehrbert_dataset_mapping
+from data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules import MedsToBertMimic4
 from med_extension.schema_extension import CehrBertPatient, Visit, Event
 
 from datasets import Dataset, DatasetDict, Split
@@ -38,12 +43,14 @@ class PatientBlock:
     def __init__(
             self,
             events: List[meds_reader.Event],
-            visit_id: int
+            visit_id: int,
+            conversion: MedsToCehrBertConversion
     ):
         self.visit_id = visit_id
         self.events = events
         self.min_time = events[0].time
         self.max_time = events[-1].time
+        self.conversion = conversion
 
         # Cache these variables so we don't need to compute
         self.has_ed_admission = self._has_ed_admission()
@@ -64,48 +71,87 @@ class PatientBlock:
         Make this configurable in the future
         """
         for event in self.events:
-            if 'ED_REGISTRATION' in event.code:
-                return True
-            if 'TRANSFER_TO//ED' in event.code:
-                return True
+            for matching_rule in self.conversion.get_discharge_matching_rules():
+                if matching_rule in event.code:
+                    return True
         return False
 
     def _has_admission(self) -> bool:
         for event in self.events:
-            if 'HOSPITAL_ADMISSION' in event.code:
-                return True
+            for matching_rule in self.conversion.get_admission_matching_rules():
+                if matching_rule in event.code:
+                    return True
         return False
 
     def _has_discharge(self) -> bool:
         for event in self.events:
-            if 'HOSPITAL_DISCHARGE' in event.code:
-                return True
+            for matching_rule in self.conversion.get_discharge_matching_rules():
+                if matching_rule in event.code:
+                    return True
         return False
 
     def get_discharge_facility(self) -> Optional[str]:
         if self._has_discharge():
             for event in self.events:
-                if 'HOSPITAL_DISCHARGE' in event.code:
-                    discharge_facility = event.code.replace('HOSPITAL_DISCHARGE', '')
-                    discharge_facility = re.sub(r'[^a-zA-Z]', '', discharge_facility)
-                    return discharge_facility
+                for matching_rule in self.conversion.get_discharge_matching_rules():
+                    if matching_rule in event.code:
+                        discharge_facility = event.code.replace(matching_rule, '')
+                        discharge_facility = re.sub(r'[^a-zA-Z]', '', discharge_facility)
+                        return discharge_facility
         return None
 
-    def get_meds_events(self) -> List[Event]:
+    def _convert_event(self, event) -> List[Event]:
+        code = event.code
+        time = getattr(event, "time", None)
+        text_value = getattr(event, "text_value", None)
+        numeric_value = getattr(event, "numeric_value", None)
+        # We try to parse the numeric values from the text value, in other words,
+        # we try to construct numeric events from the event with a text value
+        if numeric_value is None and text_value is not None:
+            conversion_rule = self.conversion.get_text_event_to_numeric_events_rule(code)
+            if conversion_rule:
+                match = re.search(conversion_rule.parsing_pattern, text_value)
+                if match:
+                    if len(match.groups()) == len(conversion_rule.mapped_event_labels):
+                        events = [
+                            Event(
+                                code=label,
+                                time=time,
+                                numeric_value=float(value),
+                                properties={'visit_id': self.visit_id, "table": "meds"}
+                            )
+                            for label, value in zip(conversion_rule.mapped_event_labels, match.groups())
+                            if value.isnumeric()
+                        ]
+                        return events
+                if code in self.conversion.get_text_value_as_text_event() and text_value is not None:
+                    return [
+                        Event(
+                            code=text_value,
+                            time=time,
+                            properties={'visit_id': self.visit_id, "table": "meds"}
+                        )
+                    ]
         return [
             Event(
-                code=e.code.replace(' ', '_'),
-                time=e.time,
-                numeric_value=getattr(e, "numeric_value", None),
-                text_value=getattr(e, "text_value", None),
+                code=code,
+                time=time,
+                numeric_value=numeric_value,
+                text_value=text_value,
                 properties={'visit_id': self.visit_id, "table": "meds"}
             )
-            for e in self.events
         ]
+
+    def get_meds_events(self) -> Iterable[Event]:
+        events = []
+        for e in self.events:
+            events.extend(self._convert_event(e))
+        return events
 
 
 def convert_one_patient(
         patient: meds_reader.Patient,
+        conversion: MedsToCehrBertConversion,
         default_visit_id: int = 1,
         prediction_time: datetime = None,
         label: Union[int, float] = None
@@ -142,14 +188,14 @@ def convert_one_patient(
             if current_date.date() == e.time.date():
                 events_for_current_date.append(e)
             else:
-                patient_blocks.append(PatientBlock(events_for_current_date, visit_id))
+                patient_blocks.append(PatientBlock(events_for_current_date, visit_id, conversion))
                 events_for_current_date = list()
                 events_for_current_date.append(e)
                 current_date = e.time
                 visit_id += 1
 
     if events_for_current_date:
-        patient_blocks.append(PatientBlock(events_for_current_date, visit_id))
+        patient_blocks.append(PatientBlock(events_for_current_date, visit_id, conversion))
 
     admit_discharge_pairs = []
     active_ed_index = None
@@ -298,13 +344,14 @@ def create_dataset_from_meds_reader(
 def _meds_to_cehrbert_generator(
         shards: List[Tuple[np.ndarray, np.ndarray, np.ndarray]],
         path_to_db: str,
-        default_visit_id: int
+        default_visit_id: int,
+        conversion: MedsToCehrBertConversion
 ) -> CehrBertPatient:
     for shard in shards:
         with meds_reader.PatientDatabase(path_to_db) as patient_database:
             for patient_id, prediction_time, label in shard:
                 patient = patient_database[patient_id]
-                yield convert_one_patient(patient, default_visit_id, prediction_time, label)
+                yield convert_one_patient(patient, conversion, default_visit_id, prediction_time, label)
 
 
 def _create_cehrbert_data_from_meds(
@@ -327,6 +374,8 @@ def _create_cehrbert_data_from_meds(
         for patient_id in patient_split[split]:
             batches.append((patient_id, None, None))
 
+    conversion = MedsToBertMimic4()
+
     split_batches = np.array_split(
         np.asarray(batches),
         data_args.preprocessing_num_workers
@@ -334,7 +383,8 @@ def _create_cehrbert_data_from_meds(
     batch_func = functools.partial(
         _meds_to_cehrbert_generator,
         path_to_db=data_args.data_folder,
-        default_visit_id=default_visit_id
+        default_visit_id=default_visit_id,
+        conversion=conversion
     )
     dataset = Dataset.from_generator(
         batch_func,
