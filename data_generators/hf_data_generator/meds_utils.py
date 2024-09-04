@@ -2,7 +2,6 @@ import os
 import re
 import collections
 import functools
-from itertools import chain
 
 from typing import Dict, List, Optional, Union, Tuple, Iterable
 from datetime import datetime
@@ -28,6 +27,7 @@ DEFAULT_ED_CONCEPT_ID = "9203"
 DEFAULT_OUTPATIENT_CONCEPT_ID = "9202"
 DEFAULT_INPATIENT_CONCEPT_ID = "9201"
 MEDS_SPLIT_DATA_SPLIT_MAPPING = {"train": Split.TRAIN, "tuning": Split.VALIDATION, "held_out": Split.TEST}
+NON_ALPHANUMERIC_CHARS = r"[\w\/\\:\-_]"
 
 
 def get_patient_split(meds_reader_db_path: str) -> Dict[str, List[int]]:

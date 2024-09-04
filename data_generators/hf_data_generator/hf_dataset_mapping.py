@@ -1,4 +1,5 @@
 import datetime
+import re
 from enum import Enum
 from abc import abstractmethod, ABC
 from typing import Dict, List, Any, Union
@@ -33,6 +34,10 @@ DISCHARGE_FACILITY_TYPES = [
 ]
 
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
+
+
+def replace_escape_chars(text: str) -> str:
+    return re.sub(r"\s+", "_", text)
 
 
 class TruncationType(Enum):
@@ -261,13 +266,13 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                 # If numeric_value exists, this is a concept/value tuple, we indicate this using a concept_value_mask
                 concept_value_mask = int(e['numeric_value'] is not None)
                 concept_value = e['numeric_value'] if concept_value_mask == 1 else -1.0
-                code = e['code'].replace(' ', '_')
+                code = replace_escape_chars(e['code'])
                 # If the value mask is 1, this indicates a numeric value associated with the concept
                 if concept_value_mask != 1:
                     # Otherwise we will try to concatenate the answer with the code if the categorical value is provide
                     text_value = e["text_value"]
                     if text_value:
-                        text_value_replaced = text_value.replace(' ', '_')
+                        text_value_replaced = replace_escape_chars(text_value)
                         code = f"{code}//option:{text_value_replaced}"
 
                 self._update_cehrbert_record(
@@ -403,6 +408,9 @@ class HFTokenizationMapping(DatasetMapping):
         record['input_ids'] = input_ids
         concept_value_masks = record['concept_value_masks']
         concept_values = record['concept_values']
+
+        assert len(input_ids) == len(record['concept_ids']), \
+            "the length of input_ids needs to be the same as the length of concept_ids"
 
         # If any concept has a value associated with it, we normalize the value
         if np.any(np.asarray(concept_value_masks) > 0):
