@@ -9,13 +9,13 @@ from data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules.meds_to
 class MedsToBertMimic4(MedsToCehrBertConversion):
 
     def get_ed_admission_matching_rules(self) -> List[str]:
-        return ["ED_REGISTRATION", "TRANSFER_TO//ED"]
+        return ["ED_REGISTRATION//", "TRANSFER_TO//ED"]
 
     def get_admission_matching_rules(self) -> List[str]:
-        return ["HOSPITAL_ADMISSION"]
+        return ["HOSPITAL_ADMISSION//"]
 
     def get_discharge_matching_rules(self) -> List[str]:
-        return ["HOSPITAL_DISCHARGE"]
+        return ["HOSPITAL_DISCHARGE//"]
 
     def _text_event_to_numeric_events(self) -> List[EventConversionRule]:
         blood_pressure_codes = [

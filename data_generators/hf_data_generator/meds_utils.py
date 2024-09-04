@@ -71,22 +71,22 @@ class PatientBlock:
         Make this configurable in the future
         """
         for event in self.events:
-            for matching_rule in self.conversion.get_discharge_matching_rules():
-                if matching_rule in event.code:
+            for matching_rule in self.conversion.get_ed_admission_matching_rules():
+                if re.match(matching_rule, event.code):
                     return True
         return False
 
     def _has_admission(self) -> bool:
         for event in self.events:
             for matching_rule in self.conversion.get_admission_matching_rules():
-                if matching_rule in event.code:
+                if re.match(matching_rule, event.code):
                     return True
         return False
 
     def _has_discharge(self) -> bool:
         for event in self.events:
             for matching_rule in self.conversion.get_discharge_matching_rules():
-                if matching_rule in event.code:
+                if re.match(matching_rule, event.code):
                     return True
         return False
 
