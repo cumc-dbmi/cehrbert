@@ -344,9 +344,9 @@ def create_dataset_from_meds_reader(
 def _meds_to_cehrbert_generator(
         shards: List[Tuple[np.ndarray, np.ndarray, np.ndarray]],
         path_to_db: str,
-        default_visit_id: int,
-        conversion: MedsToCehrBertConversion
+        default_visit_id: int
 ) -> CehrBertPatient:
+    conversion = MedsToBertMimic4()
     for shard in shards:
         with meds_reader.PatientDatabase(path_to_db) as patient_database:
             for patient_id, prediction_time, label in shard:
@@ -374,8 +374,6 @@ def _create_cehrbert_data_from_meds(
         for patient_id in patient_split[split]:
             batches.append((patient_id, None, None))
 
-    conversion = MedsToBertMimic4()
-
     split_batches = np.array_split(
         np.asarray(batches),
         data_args.preprocessing_num_workers
@@ -383,8 +381,7 @@ def _create_cehrbert_data_from_meds(
     batch_func = functools.partial(
         _meds_to_cehrbert_generator,
         path_to_db=data_args.data_folder,
-        default_visit_id=default_visit_id,
-        conversion=conversion
+        default_visit_id=default_visit_id
     )
     dataset = Dataset.from_generator(
         batch_func,
