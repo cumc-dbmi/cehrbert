@@ -8,16 +8,16 @@ from data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules.meds_to
 
 class MedsToBertMimic4(MedsToCehrBertConversion):
 
-    def get_ed_admission_matching_rules(self) -> List[str]:
+    def _create_ed_admission_matching_rules(self) -> List[str]:
         return ["ED_REGISTRATION//", "TRANSFER_TO//ED"]
 
-    def get_admission_matching_rules(self) -> List[str]:
+    def _create_admission_matching_rules(self) -> List[str]:
         return ["HOSPITAL_ADMISSION//"]
 
-    def get_discharge_matching_rules(self) -> List[str]:
+    def _create_discharge_matching_rules(self) -> List[str]:
         return ["HOSPITAL_DISCHARGE//"]
 
-    def _text_event_to_numeric_events(self) -> List[EventConversionRule]:
+    def _create_text_event_to_numeric_event_rules(self) -> List[EventConversionRule]:
         blood_pressure_codes = [
             "Blood Pressure",
             "Blood Pressure Lying",
@@ -33,7 +33,7 @@ class MedsToBertMimic4(MedsToCehrBertConversion):
             )
             for code in blood_pressure_codes
         ]
-        height_weight_codes = ["Weight (Lbs)", "Height (Inches), BMI (kg/m2)"]
+        height_weight_codes = ["Weight (Lbs)", "Height (Inches)", "BMI (kg/m2)"]
         height_weight_rules = [
             EventConversionRule(
                 code=code,
@@ -51,5 +51,5 @@ class MedsToBertMimic4(MedsToCehrBertConversion):
         ]
         return blood_pressure_rules + height_weight_rules + ventilation_rate_rules
 
-    def get_open_ended_event_codes(self) -> List[str]:
+    def _create_open_ended_event_codes(self) -> List[str]:
         return ["LAB//220001//UNK"]

@@ -96,7 +96,7 @@ class PatientBlock:
                 for matching_rule in self.conversion.get_discharge_matching_rules():
                     if matching_rule in event.code:
                         discharge_facility = event.code.replace(matching_rule, '')
-                        discharge_facility = re.sub(r'[^a-zA-Z]', '', discharge_facility)
+                        discharge_facility = re.sub(r'[^a-zA-Z]', '_', discharge_facility)
                         return discharge_facility
         return None
 
