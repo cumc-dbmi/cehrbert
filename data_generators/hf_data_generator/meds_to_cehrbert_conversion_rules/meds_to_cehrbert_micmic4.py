@@ -50,6 +50,3 @@ class MedsToBertMimic4(MedsToCehrBertConversion):
             )
         ]
         return blood_pressure_rules + height_weight_rules + ventilation_rate_rules
-
-    def _create_open_ended_event_codes(self) -> List[str]:
-        return ["LAB//220001//UNK"]

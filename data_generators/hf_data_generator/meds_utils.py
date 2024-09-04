@@ -125,15 +125,6 @@ class PatientBlock:
                         ]
                         return events
 
-                # For open-ended questions such as problem list, we extract the answer as the event code
-                if code in self.conversion.get_open_ended_event_codes() and text_value is not None:
-                    return [
-                        Event(
-                            code=text_value,
-                            time=time,
-                            properties={'visit_id': self.visit_id, "table": "meds"}
-                        )
-                    ]
         return [
             Event(
                 code=code,

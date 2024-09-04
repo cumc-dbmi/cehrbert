@@ -24,7 +24,6 @@ class MedsToCehrBertConversion(ABC):
         self._text_event_numeric_event_map = {
             r.code: r for r in self._create_text_event_to_numeric_event_rules()
         }
-        self._open_ended_event_codes = self._create_open_ended_event_codes()
 
     @abstractmethod
     def _create_ed_admission_matching_rules(self) -> List[str]:
@@ -44,12 +43,6 @@ class MedsToCehrBertConversion(ABC):
             "Must implement the event mapping rules for converting the text events to numeric events"
         )
 
-    @abstractmethod
-    def _create_open_ended_event_codes(self) -> List[str]:
-        raise NotImplementedError(
-            "Must implement the event mapping rules for extracting the text_values as the event codes"
-        )
-
     def get_ed_admission_matching_rules(self) -> List[str]:
         return self._ed_admission_matching_rules
 
@@ -63,6 +56,3 @@ class MedsToCehrBertConversion(ABC):
         if code in self._text_event_numeric_event_map:
             return self._text_event_numeric_event_map[code]
         return None
-
-    def get_open_ended_event_codes(self) -> List[str]:
-        return self._open_ended_event_codes
