@@ -2,7 +2,7 @@ import os
 
 from typing import Union, Optional
 
-from datasets import DatasetDict, IterableDatasetDict, Dataset, load_dataset
+from datasets import DatasetDict, IterableDatasetDict, Dataset, load_from_disk
 from transformers.utils import logging
 from transformers import AutoConfig, Trainer, set_seed
 
@@ -79,7 +79,9 @@ def main():
 
     if any(prepared_ds_path.glob("*")):
         LOG.info(f"Loading prepared dataset from disk at {prepared_ds_path}...")
-        processed_dataset = load_dataset(str(prepared_ds_path), streaming=data_args.streaming)
+        processed_dataset = load_from_disk(str(prepared_ds_path))
+        if data_args.streaming:
+            processed_dataset = processed_dataset.to_iterable_dataset(num_shards=training_args.dataloader_num_workers)
         LOG.info("Prepared dataset loaded from disk...")
         # If the data has been processed in the past, it's assume the tokenizer has been created before.
         # we load the CEHR-BERT tokenizer from the output folder.
@@ -97,7 +99,9 @@ def main():
             )
             try:
                 LOG.info(f"Trying to load the MEDS extension from disk at {meds_extension_path}...")
-                dataset = load_dataset(meds_extension_path, streaming=data_args.streaming)
+                dataset = load_from_disk(meds_extension_path)
+                if data_args.streaming:
+                    dataset = dataset.to_iterable_dataset(num_shards=training_args.dataloader_num_workers)
             except Exception as e:
                 LOG.exception(e)
                 dataset = create_dataset_from_meds_reader(data_args, is_pretraining=True)
