@@ -124,7 +124,9 @@ class PatientBlock:
                             if value.isnumeric()
                         ]
                         return events
-                if code in self.conversion.get_text_value_as_text_event() and text_value is not None:
+
+                # For open-ended questions such as problem list, we extract the answer as the event code
+                if code in self.conversion.get_open_ended_event_codes() and text_value is not None:
                     return [
                         Event(
                             code=text_value,

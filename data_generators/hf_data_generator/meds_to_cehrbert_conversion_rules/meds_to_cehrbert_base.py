@@ -45,7 +45,7 @@ class MedsToCehrBertConversion(ABC):
         return None
 
     @abstractmethod
-    def get_text_value_as_text_event(self) -> List[str]:
+    def get_open_ended_event_codes(self) -> List[str]:
         raise NotImplementedError(
-            "Must implement the event mapping rules for extracting the text_values as the events"
+            "Must implement the event mapping rules for extracting the text_values as the event codes"
         )
