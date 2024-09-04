@@ -89,7 +89,6 @@ class ConceptValueTransformationLayer(nn.Module):
             embedding_size + 1,
             embedding_size
         )
-        self.layer_norm = nn.LayerNorm(embedding_size, eps=layer_norm_eps)
 
     def forward(
             self,
@@ -119,8 +118,6 @@ class ConceptValueTransformationLayer(nn.Module):
             gelu_new(concept_embeddings_with_val),
             concept_embeddings
         )
-
-        merged = self.layer_norm(merged)
 
         return merged
 
@@ -156,7 +153,6 @@ class CehrBertEmbeddings(nn.Module):
             config.hidden_size, config.layer_norm_eps
         )
         self.linear_proj = nn.Linear(config.hidden_size + 3 * config.n_time_embd, config.hidden_size)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
             self,
@@ -182,8 +178,7 @@ class CehrBertEmbeddings(nn.Module):
         proj = self.linear_proj(
             torch.cat([x, time_embeddings, age_embeddings, positional_embeddings], dim=-1)
         )
-        # skip connection + layer normalization
-        x = self.layer_norm(gelu_new(proj))
+        x = f.tanh(proj)
         x += self.visit_segment_embeddings(visit_segments)
         return x
 
