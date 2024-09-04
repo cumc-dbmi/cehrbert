@@ -45,3 +45,4 @@ tokenizers~=0.15.2
 peft~=0.10.0
 markupsafe==2.0.1
 deepspeed
+wandb
