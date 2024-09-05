@@ -296,7 +296,7 @@ def main():
         train_dataset=processed_dataset['train'],
         eval_dataset=processed_dataset['validation'],
         compute_metrics=compute_metrics,
-        callbacks=[EarlyStoppingCallback()],
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=model_args.early_stopping_patience)],
         args=training_args
     )
 

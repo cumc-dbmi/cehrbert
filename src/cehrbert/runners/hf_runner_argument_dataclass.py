@@ -158,6 +158,12 @@ class ModelArguments:
     tokenizer_name_or_path: Optional[str] = field(
         metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
     )
+    early_stopping_patience: Optional[int] = field(
+        default=1,
+        metadata={
+            "help": "stop training when the specified metric worsens for `early_stopping_patience` evaluation calls."
+        }
+    )
     cache_dir: Optional[str] = field(
         default=None,
         metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
@@ -166,7 +172,7 @@ class ModelArguments:
         default=None,
         metadata={
             "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
-        },
+        }
     )
     trust_remote_code: bool = field(
         default=False,
