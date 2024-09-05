@@ -26,9 +26,6 @@ dependencies = [
     "dask==2024.1.1",
     "dask[dataframe]==2024.1.1",
     "datasets==2.16.1",
-    "docarray==0.40.0",
-    "docarray[hnswlib]==0.40.0",
-    "docarray[weaviate]==0.40.0",
     "evaluate==0.4.1",
     "fast-ml==3.68",
     "fastparquet==0.8.1",
@@ -49,7 +46,7 @@ dependencies = [
     "PyYAML==6.0.1",
     "scikit-learn==1.4.0",
     "scipy==1.12.0",
-    "tensorflow==2.15.0",
+    "tensorflow==2.12.0",
     "tensorflow-metal==1.1.0; sys_platform == 'darwin'",  # macOS only
     "tensorflow-datasets==4.5.2",
     "tqdm==4.66.1",
@@ -58,7 +55,6 @@ dependencies = [
     "transformers==4.39.3",
     "Werkzeug==3.0.1",
     "wandb==0.17.8",
-    "Whoosh==2.7.4",
     "xgboost==2.0.3"
 ]
 
