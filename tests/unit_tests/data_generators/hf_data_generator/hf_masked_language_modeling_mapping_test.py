@@ -1,7 +1,7 @@
 import unittest
 import random
 from unittest.mock import MagicMock
-from data_generators.hf_data_generator.hf_dataset_mapping import HFTokenizationMapping
+from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import HFTokenizationMapping
 
 
 # Assuming the module containing your classes is named 'your_module'

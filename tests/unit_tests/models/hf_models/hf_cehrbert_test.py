@@ -1,7 +1,7 @@
 import unittest
 import torch
-from models.hf_models.config import CehrBertConfig
-from models.hf_models.hf_cehrbert import CehrBertForPreTraining
+from cehrbert.models.hf_models.config import CehrBertConfig
+from cehrbert.models.hf_models.hf_cehrbert import CehrBertForPreTraining
 
 
 class TestCehrBert(unittest.TestCase):

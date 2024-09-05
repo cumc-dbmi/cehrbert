@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools", "wheel", "setuptools_scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cehrbert"
+dynamic = ["version"]
+authors = [
+  { name="Chao Pang", email="chaopang229@gmail.com" }
+]
+description = "CEHR-BERT: Incorporating temporal information from structured EHR data to improve prediction tasks"
+readme = "README.md"
+requires-python = ">=3.9.0"
+
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3"
+]
+
+dependencies = []  # Add any runtime dependencies here if needed
+
+[tool.setuptools_scm]
+
+[project.optional-dependencies]
+dev = [
+  "pre-commit", "pytest", "pytest-cov", "pytest-subtests", "rootutils", "hypothesis"
+]

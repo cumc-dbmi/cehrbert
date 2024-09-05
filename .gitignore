@@ -15,14 +15,14 @@ venv*
 *.dat
 .metastore_db/
 
-evaluations/hospitalization_baseline.py
-evaluations/hospitalization_prediction-new-data-generator.py
+src/cehr-bert/evaluations/hospitalization_baseline.py
+src/cehr-bert/evaluations/hospitalization_prediction-new-data-generator.py
 hospitalization_baseline.py
 hospitalization_prediction-new-data-generator.py
 build/
 concept_embeddings.egg-info/
 
-runner/*yaml
+src/cehr-bert/runner/*yaml
 
 *.out
 *.egg-info/

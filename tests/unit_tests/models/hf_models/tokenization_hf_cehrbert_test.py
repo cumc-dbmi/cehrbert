@@ -2,7 +2,7 @@ import unittest
 from tokenizers import Tokenizer
 from tokenizers.models import WordLevel
 from tokenizers.pre_tokenizers import Whitespace
-from models.hf_models.tokenization_hf_cehrbert import (
+from cehrbert.models.hf_models.tokenization_hf_cehrbert import (
     CehrBertTokenizer, PAD_TOKEN, MASK_TOKEN, OUT_OF_VOCABULARY_TOKEN, UNUSED_TOKEN, CLS_TOKEN
 )
 

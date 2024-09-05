@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from runner.runner_util import compute_metrics
+from cehrbert.runner.runner_util import compute_metrics
 
 import numpy as np
 

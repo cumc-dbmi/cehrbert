@@ -1,5 +1,5 @@
 import unittest
-from data_generators.hf_data_generator.hf_dataset_mapping import SortPatientSequenceMapping
+from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import SortPatientSequenceMapping
 
 
 class TestSortPatientSequenceMapping(unittest.TestCase):

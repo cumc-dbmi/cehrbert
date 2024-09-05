@@ -1,5 +1,5 @@
 import tensorflow as tf
-from models.layers.custom_layers import ConceptValuePredictionLayer
+from cehrbert.models.layers.custom_layers import ConceptValuePredictionLayer
 import unittest
 
 

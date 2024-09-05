@@ -1,5 +1,5 @@
 import unittest
-from data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
+from cehrbert.data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
 import random
 from unittest.mock import MagicMock
 

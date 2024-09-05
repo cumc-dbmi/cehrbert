@@ -1,9 +1,9 @@
 import unittest
 import numpy as np
 import pandas as pd
-from data_generators.data_classes import RowSlicer
-from data_generators.learning_objective import VisitPredictionLearningObjective
-from data_generators.tokenizer import ConceptTokenizer
+from cehrbert.data_generators.data_classes import RowSlicer
+from cehrbert.data_generators.learning_objective import VisitPredictionLearningObjective
+from cehrbert.data_generators.tokenizer import ConceptTokenizer
 
 
 class TestVisitPredictionLearningObjective(unittest.TestCase):
