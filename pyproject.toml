@@ -26,9 +26,6 @@ dependencies = [
     "dask==2024.1.1",
     "dask[dataframe]==2024.1.1",
     "datasets==2.16.1",
-    "docarray==0.40.0",
-    "docarray[hnswlib]==0.40.0",
-    "docarray[weaviate]==0.40.0",
     "evaluate==0.4.1",
     "fast-ml==3.68",
     "fastparquet==0.8.1",
@@ -58,7 +55,6 @@ dependencies = [
     "transformers==4.39.3",
     "Werkzeug==3.0.1",
     "wandb==0.17.8",
-    "Whoosh==2.7.4",
     "xgboost==2.0.3"
 ]
 

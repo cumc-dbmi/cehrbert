@@ -73,7 +73,8 @@ tar -xvf omop_synthea.tar .
 ```
 Convert the OMOP dataset to the MEDS format
 ```console
-meds_etl_omop omop_synthea synthea_meds
+pip install meds_etl==0.3.6;
+meds_etl_omop omop_synthea synthea_meds;
 ```
 Convert MEDS to the meds_reader database to get the patient level data
 ```console
