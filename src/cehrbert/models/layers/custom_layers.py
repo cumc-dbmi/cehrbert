@@ -211,11 +211,11 @@ class DecoderLayer(tf.keras.layers.Layer):
 
     def call(self, x, enc_output, decoder_mask, encoder_mask, **kwargs):
         # The reason we are doing this is that tensorflow on Mac doesn't seem to recognize the rank correctly
-        if platform.system() == 'Darwin':
-            batch, length = tf.shape(x)[0], tf.shape(x)[1]
-            x = tf.reshape(x, (batch, -1, self.d_model))
-            decoder_mask = tf.reshape(decoder_mask, (batch, -1, length))
-            encoder_mask = tf.reshape(encoder_mask, (batch, -1, length))
+        # if platform.system() == 'Darwin':
+        batch, length = tf.shape(x)[0], tf.shape(x)[1]
+        x = tf.reshape(x, (batch, -1, self.d_model))
+        decoder_mask = tf.reshape(decoder_mask, (batch, -1, length))
+        encoder_mask = tf.reshape(encoder_mask, (batch, -1, length))
 
         # enc_output.shape == (batch_size, input_seq_len, d_model)
         attn1, attn_weights_block1 = self.mha1(
