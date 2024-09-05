@@ -10,14 +10,13 @@ import meds_reader
 import numpy as np
 import pandas as pd
 
-from ...runners.hf_runner_argument_dataclass import DataTrainingArguments
+from ...runners.hf_runner_argument_dataclass import DataTrainingArguments, MedsToCehrBertConversionType
 from ...data_generators.hf_data_generator.hf_dataset_mapping import (
     birth_codes, MedToCehrBertDatasetMapping
 )
 from ...data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules.meds_to_cehrbert_base import \
     MedsToCehrBertConversion
 from ...data_generators.hf_data_generator.hf_dataset import apply_cehrbert_dataset_mapping
-from ...data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules import MedsToBertMimic4
 from ...med_extension.schema_extension import CehrBertPatient, Visit, Event
 
 from datasets import Dataset, DatasetDict, Split
@@ -28,6 +27,15 @@ DEFAULT_OUTPATIENT_CONCEPT_ID = "9202"
 DEFAULT_INPATIENT_CONCEPT_ID = "9201"
 MEDS_SPLIT_DATA_SPLIT_MAPPING = {"train": Split.TRAIN, "tuning": Split.VALIDATION, "held_out": Split.TEST}
 NON_ALPHANUMERIC_CHARS = r"[\w\/\\:\-_]"
+
+
+def get_meds_to_cehrbert_conversion_cls(
+        meds_to_cehrbert_conversion_type: MedsToCehrBertConversionType
+) -> MedsToCehrBertConversion:
+    for cls in MedsToCehrBertConversion.__subclasses__():
+        if meds_to_cehrbert_conversion_type.name == cls.__name__:
+            return cls()
+    raise RuntimeError(f"{meds_to_cehrbert_conversion_type} is not a valid MedsToCehrBertConversionType")
 
 
 def get_patient_split(meds_reader_db_path: str) -> Dict[str, List[int]]:
@@ -337,9 +345,10 @@ def create_dataset_from_meds_reader(
 def _meds_to_cehrbert_generator(
         shards: List[Tuple[np.ndarray, np.ndarray, np.ndarray]],
         path_to_db: str,
-        default_visit_id: int
+        default_visit_id: int,
+        meds_to_cehrbert_conversion_type: MedsToCehrBertConversionType
 ) -> CehrBertPatient:
-    conversion = MedsToBertMimic4()
+    conversion = get_meds_to_cehrbert_conversion_cls(meds_to_cehrbert_conversion_type)
     for shard in shards:
         with meds_reader.PatientDatabase(path_to_db) as patient_database:
             for patient_id, prediction_time, label in shard:

@@ -1,7 +1,16 @@
 from dataclasses import dataclass, field, asdict
 from enum import Enum
 from typing import Optional, Dict, Any, Literal, List
+
+from ..data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules import MedsToCehrBertConversion
+from ..data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules import MedsToBertMimic4
 from ..spark_apps.decorators.patient_event_decorator import AttType
+
+# Create an enum dynamically from the list
+MedsToCehrBertConversionType = Enum(
+    'MedsToCehrBertConversionType',
+    [cls.__name__ for cls in MedsToCehrBertConversion.__subclasses__()]
+)
 
 
 class FineTuneModelType(Enum):
@@ -102,6 +111,14 @@ class DataTrainingArguments:
                     "artificial time tokens between neighboring events within inpatient visits."
                     "Default to None, meaning the inpatient artificial time tokens are not created.",
             "choices": f"choices={[e.value for e in AttType]}"
+        }
+    )
+    # TODO: Python 3.9/10 do not support dynamic unpacking, we have to manually provide the entire list right now.
+    meds_to_cehrbert_conversion_type: Literal[MedsToBertMimic4.__name__] = field(
+        default=MedsToBertMimic4,
+        metadata={
+            "help": "The MEDS to CEHRBERT conversion type e.g. MedsToBertMimic4",
+            "choices": f"choices={[e for e in MedsToCehrBertConversionType.__members__]}"
         }
     )
     include_auxiliary_token: Optional[bool] = field(
