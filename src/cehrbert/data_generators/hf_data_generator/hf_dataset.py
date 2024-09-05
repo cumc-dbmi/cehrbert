@@ -7,7 +7,7 @@ from ...data_generators.hf_data_generator.hf_dataset_mapping import (
     HFFineTuningMapping,
     DatasetMapping
 )
-from ...runner.hf_runner_argument_dataclass import DataTrainingArguments
+from ...runners.hf_runner_argument_dataclass import DataTrainingArguments
 
 CEHRBERT_COLUMNS = [
     'concept_ids', 'ages', 'dates', 'visit_segments',

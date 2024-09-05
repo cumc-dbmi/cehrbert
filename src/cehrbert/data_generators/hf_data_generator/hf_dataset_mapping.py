@@ -16,7 +16,7 @@ from meds.schema import birth_code, death_code
 from ...spark_apps.decorators.patient_event_decorator import get_att_function
 from ...models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from ...models.hf_models.tokenization_hf_cehrgpt import CehrGptTokenizer
-from ...runner.hf_runner_argument_dataclass import DataTrainingArguments
+from ...runners.hf_runner_argument_dataclass import DataTrainingArguments
 
 birth_codes = [birth_code, "MEDS_BIRTH"]
 death_codes = [death_code, "MEDS_DEATH"]

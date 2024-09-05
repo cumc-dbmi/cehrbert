@@ -10,7 +10,7 @@ import meds_reader
 import numpy as np
 import pandas as pd
 
-from ...runner.hf_runner_argument_dataclass import DataTrainingArguments
+from ...runners.hf_runner_argument_dataclass import DataTrainingArguments
 from ...data_generators.hf_data_generator.hf_dataset_mapping import (
     birth_codes, MedToCehrBertDatasetMapping
 )

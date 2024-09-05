@@ -5,7 +5,7 @@ import os
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 from pathlib import Path
-from trainers.train_cehr_bert import VanillaBertTrainer
+from cehrbert.trainers.train_cehr_bert import VanillaBertTrainer
 
 
 class VanillaBertTrainerIntegrationTest(unittest.TestCase):

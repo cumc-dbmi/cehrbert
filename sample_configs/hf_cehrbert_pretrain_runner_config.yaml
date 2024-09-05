@@ -41,7 +41,7 @@ per_device_eval_batch_size: 4
 gradient_accumulation_steps: 1
 num_train_epochs: 2
 # When streaming is set to True, max_steps needs to be provided
-max_steps: 4000
+max_steps: 100
 
 warmup_steps: 500
 weight_decay: 0.01

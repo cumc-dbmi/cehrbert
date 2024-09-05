@@ -2,7 +2,7 @@ import unittest
 from cehrbert.med_extension.schema_extension import CehrBertPatient, Visit, Event
 from datetime import datetime
 
-from cehrbert.runner.hf_runner_argument_dataclass import DataTrainingArguments
+from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments
 from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import MedToCehrBertDatasetMapping
 from cehrbert.spark_apps.decorators.patient_event_decorator import AttType
 

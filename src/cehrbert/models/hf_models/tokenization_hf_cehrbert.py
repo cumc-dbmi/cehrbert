@@ -13,7 +13,7 @@ from tokenizers.trainers import WordLevelTrainer
 from tokenizers.pre_tokenizers import WhitespaceSplit
 from transformers.tokenization_utils_base import PushToHubMixin
 from .tokenization_utils import agg_statistics, map_statistics, _agg_helper
-from ...runner.hf_runner_argument_dataclass import DataTrainingArguments
+from ...runners.hf_runner_argument_dataclass import DataTrainingArguments
 
 PAD_TOKEN = "[PAD]"
 CLS_TOKEN = "[CLS]"
