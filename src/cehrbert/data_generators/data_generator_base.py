@@ -6,12 +6,6 @@ from itertools import chain
 from typing import Set
 
 from pandas import DataFrame
-
-from .gpt_learning_objectives import (
-    SequenceGenerationLearningObjective,
-    PredictNextValueLearningObjective
-)
-from .gpt_utils import random_slice_gpt_sequence, RandomSampleCache
 from .learning_objective import *
 from .tokenizer import ConceptTokenizer
 from .data_classes import RecordStatus, RowSlicer
