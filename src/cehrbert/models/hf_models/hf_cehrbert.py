@@ -57,11 +57,13 @@ class PositionalEncodingLayer(nn.Module):
 class TimeEmbeddingLayer(nn.Module):
     def __init__(
             self,
-            embedding_size,
-            is_time_delta=False
+            embedding_size: int,
+            is_time_delta: bool = False,
+            scaling_factor: float = 1.0
     ):
         super(TimeEmbeddingLayer, self).__init__()
         self.embedding_size = embedding_size
+        self.scaling_factor = scaling_factor
         self.is_time_delta = is_time_delta
         self.w = nn.Parameter(torch.randn(1, self.embedding_size))
         self.phi = nn.Parameter(torch.randn(1, self.embedding_size))
@@ -71,6 +73,7 @@ class TimeEmbeddingLayer(nn.Module):
             dates: torch.Tensor
     ) -> torch.Tensor:
         dates = dates.to(torch.float)
+        dates = dates / self.scaling_factor
         if self.is_time_delta:
             dates = torch.cat(
                 [torch.zeros(dates[..., 0:1].shape),
@@ -145,8 +148,12 @@ class CehrBertEmbeddings(nn.Module):
         super(CehrBertEmbeddings, self).__init__()
         self.concept_embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
         self.visit_segment_embeddings = nn.Embedding(config.n_visit_segments, config.hidden_size)
-        self.time_embedding_layer = TimeEmbeddingLayer(config.n_time_embd)
-        self.age_embedding_layer = TimeEmbeddingLayer(config.n_time_embd)
+        self.time_embedding_layer = TimeEmbeddingLayer(
+            config.n_time_embd, scaling_factor=config.time_embedding_scaling_factor
+        )
+        self.age_embedding_layer = TimeEmbeddingLayer(
+            config.n_time_embd, scaling_factor=config.age_embedding_scaling_factor
+        )
         self.positional_embedding_layer = PositionalEncodingLayer(config.n_time_embd, config.max_position_embeddings)
         self.concept_value_transformation_layer = ConceptValueTransformationLayer(config.hidden_size)
         self.linear_proj = nn.Linear(config.hidden_size + 3 * config.n_time_embd, config.hidden_size)

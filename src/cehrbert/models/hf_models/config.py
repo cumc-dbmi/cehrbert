@@ -197,6 +197,8 @@ class CehrBertConfig(PretrainedConfig):
             bidirectional=True,
             include_value_prediction=False,
             mlm_probability=0.15,
+            time_embedding_scaling_factor: float = 1000,
+            age_embedding_scaling_factor: float = 100,
             **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -219,6 +221,8 @@ class CehrBertConfig(PretrainedConfig):
         self.bidirectional = bidirectional
         self.include_value_prediction = include_value_prediction
         self.mlm_probability = mlm_probability
+        self.time_embedding_scaling_factor = time_embedding_scaling_factor
+        self.age_embedding_scaling_factor = age_embedding_scaling_factor
 
         self.lab_token_ids = lab_token_ids
 
