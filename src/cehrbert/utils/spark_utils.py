@@ -9,7 +9,7 @@ from pyspark.sql import Window as W
 from pyspark.sql.functions import broadcast
 from pyspark.sql.pandas.functions import pandas_udf
 
-from ..config.output_names import qualified_concept_list_path
+from ..config.output_names import QUALIFIED_CONCEPT_LIST_PATH
 from ..const.common import PERSON, VISIT_OCCURRENCE, UNKNOWN_CONCEPT, MEASUREMENT, \
     CATEGORICAL_MEASUREMENT, REQUIRED_MEASUREMENT, CDM_TABLES
 from ..spark_apps.decorators.patient_event_decorator import (
@@ -639,7 +639,7 @@ def extract_ehr_records(spark, input_folder, domain_table_list, include_visit_ty
         qualified_concepts = preprocess_domain_table(
             spark,
             input_folder,
-            qualified_concept_list_path
+            QUALIFIED_CONCEPT_LIST_PATH
         ).select('standard_concept_id')
 
         patient_ehr_records = patient_ehr_records.join(

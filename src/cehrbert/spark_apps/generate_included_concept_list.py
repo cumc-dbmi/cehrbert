@@ -5,7 +5,7 @@ from pyspark.sql.functions import countDistinct
 
 from ..utils.spark_utils import *
 from ..const.common import MEASUREMENT
-from ..config.output_names import qualified_concept_list_path
+from ..config.output_names import QUALIFIED_CONCEPT_LIST_PATH
 
 DOMAIN_TABLE_LIST = ['condition_occurrence', 'procedure_occurrence', 'drug_exposure']
 
@@ -39,7 +39,7 @@ def main(
     qualified_concepts.write.mode('overwrite').parquet(
         os.path.join(
             output_folder,
-            qualified_concept_list_path
+            QUALIFIED_CONCEPT_LIST_PATH
         )
     )
 

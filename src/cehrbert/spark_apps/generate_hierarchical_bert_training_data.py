@@ -73,7 +73,7 @@ def main(
             preprocess_domain_table(
                 spark,
                 input_folder,
-                qualified_concept_list_path
+                QUALIFIED_CONCEPT_LIST_PATH
             )
         )
         # The select is necessary to make sure the order of the columns is the same as the
@@ -116,7 +116,7 @@ def main(
     sequence_data.write.mode('overwrite').parquet(
         os.path.join(
             output_folder,
-            parquet_data_path
+            PARQUET_DATA_PATH
         )
     )
 

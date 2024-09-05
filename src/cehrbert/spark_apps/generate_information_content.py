@@ -60,7 +60,7 @@ def main(
         .withColumn('probability', F.col('count') / total_count)
 
     information_content.write.mode('overwrite').parquet(
-        os.path.join(output_folder, information_content_data_path)
+        os.path.join(output_folder, INFORMATION_CONTENT_DATA_PATH)
     )
 
 

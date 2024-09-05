@@ -56,7 +56,7 @@ def evaluate_sequence_models(args):
         time_attention_tokenizer_path = find_tokenizer_path(args.time_attention_model_folder)
         time_aware_model_path = os.path.join(
             args.time_attention_model_folder,
-            p.time_attention_model_path
+            p.TIME_ATTENTION_MODEL_PATH
         )
         BiLstmModelEvaluator(
             dataset=dataset,
@@ -83,7 +83,7 @@ def evaluate_sequence_models(args):
         validate_folder(args.vanilla_bert_model_folder)
         bert_tokenizer_path = find_tokenizer_path(args.vanilla_bert_model_folder)
         bert_model_path = os.path.join(args.vanilla_bert_model_folder,
-                                       p.bert_model_validation_path)
+                                       p.BERT_MODEL_VALIDATION_PATH)
         BertFeedForwardModelEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
@@ -108,7 +108,7 @@ def evaluate_sequence_models(args):
         validate_folder(args.vanilla_bert_model_folder)
         bert_tokenizer_path = find_tokenizer_path(args.vanilla_bert_model_folder)
         bert_model_path = os.path.join(args.vanilla_bert_model_folder,
-                                       p.bert_model_validation_path)
+                                       p.BERT_MODEL_VALIDATION_PATH)
         SlidingBertModelEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
@@ -134,7 +134,7 @@ def evaluate_sequence_models(args):
         validate_folder(args.vanilla_bert_model_folder)
         bert_tokenizer_path = find_tokenizer_path(args.vanilla_bert_model_folder)
         bert_model_path = os.path.join(args.vanilla_bert_model_folder,
-                                       p.bert_model_validation_path)
+                                       p.BERT_MODEL_VALIDATION_PATH)
         BertLstmModelEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
@@ -160,7 +160,7 @@ def evaluate_sequence_models(args):
     if RANDOM_VANILLA_BERT_LSTM in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
         bert_model_path = os.path.join(args.vanilla_bert_model_folder,
-                                       p.bert_model_validation_path)
+                                       p.BERT_MODEL_VALIDATION_PATH)
         bert_tokenizer_path = find_tokenizer_path(args.vanilla_bert_model_folder)
         visit_tokenizer_path = find_visit_tokenizer_path(args.vanilla_bert_model_folder)
 
@@ -195,7 +195,7 @@ def evaluate_sequence_models(args):
     if HIERARCHICAL_BERT_LSTM in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
         bert_model_path = os.path.join(args.vanilla_bert_model_folder,
-                                       p.bert_model_validation_path)
+                                       p.BERT_MODEL_VALIDATION_PATH)
 
         bert_tokenizer_path = find_tokenizer_path(args.vanilla_bert_model_folder)
         bert_visit_tokenizer_path = find_visit_tokenizer_path(args.vanilla_bert_model_folder)
@@ -227,7 +227,7 @@ def evaluate_sequence_models(args):
     if HIERARCHICAL_BERT_POOLING in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
         bert_model_path = os.path.join(args.vanilla_bert_model_folder,
-                                       p.bert_model_validation_path)
+                                       p.BERT_MODEL_VALIDATION_PATH)
 
         bert_tokenizer_path = find_tokenizer_path(args.vanilla_bert_model_folder)
         bert_visit_tokenizer_path = find_visit_tokenizer_path(args.vanilla_bert_model_folder)
@@ -259,7 +259,7 @@ def evaluate_sequence_models(args):
     if RANDOM_HIERARCHICAL_BERT_LSTM in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
         bert_model_path = os.path.join(args.vanilla_bert_model_folder,
-                                       p.bert_model_validation_path)
+                                       p.BERT_MODEL_VALIDATION_PATH)
 
         bert_tokenizer_path = find_tokenizer_path(args.vanilla_bert_model_folder)
         bert_visit_tokenizer_path = find_visit_tokenizer_path(args.vanilla_bert_model_folder)

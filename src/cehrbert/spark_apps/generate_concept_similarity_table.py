@@ -307,7 +307,7 @@ def main(
             preprocess_domain_table(
                 spark,
                 input_folder,
-                qualified_concept_list_path
+                QUALIFIED_CONCEPT_LIST_PATH
             )
         )
 
@@ -350,7 +350,7 @@ def main(
     concept_pair_similarity.write.mode('overwrite').parquet(
         os.path.join(
             output_folder,
-            concept_similarity_path
+            CONCEPT_SIMILARITY_PATH
         )
     )
 
