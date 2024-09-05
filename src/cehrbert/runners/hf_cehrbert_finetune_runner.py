@@ -8,7 +8,7 @@ import pandas as pd
 from sklearn.metrics import accuracy_score, roc_auc_score, precision_recall_curve, auc
 from scipy.special import expit as sigmoid
 
-from datasets import load_dataset, DatasetDict
+from datasets import load_from_disk, DatasetDict
 from transformers.utils import logging
 from transformers import Trainer, set_seed
 from transformers import EarlyStoppingCallback
@@ -130,7 +130,9 @@ def main():
 
     if any(prepared_ds_path.glob("*")):
         LOG.info(f"Loading prepared dataset from disk at {prepared_ds_path}...")
-        processed_dataset = load_dataset(str(prepared_ds_path))
+        processed_dataset = load_from_disk(str(prepared_ds_path))
+        if data_args.streaming:
+            processed_dataset = processed_dataset.to_iterable_dataset(num_shards=training_args.dataloader_num_workers)
         LOG.info("Prepared dataset loaded from disk...")
     else:
         # If the data is in the MEDS format, we need to convert it to the CEHR-BERT format
@@ -141,7 +143,9 @@ def main():
             )
             try:
                 LOG.info(f"Trying to load the MEDS extension from disk at {meds_extension_path}...")
-                dataset = load_dataset(meds_extension_path, streaming=data_args.streaming)
+                dataset = load_from_disk(meds_extension_path)
+                if data_args.streaming:
+                    dataset = dataset.to_iterable_dataset(num_shards=training_args.dataloader_num_workers)
             except Exception as e:
                 LOG.exception(e)
                 dataset = create_dataset_from_meds_reader(data_args, is_pretraining=False)

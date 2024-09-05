@@ -59,9 +59,6 @@ class CehrBertDataCollator:
         batch_concept_values = [self._convert_to_tensor(example['concept_values']) for example in examples]
         batch_concept_value_masks = [self._convert_to_tensor(example['concept_value_masks']) for example in examples]
         batch_visit_segments = [self._convert_to_tensor(example['visit_segments']) for example in examples]
-        batch_mlm_skip_values = [
-            self._convert_to_tensor(example['mlm_skip_values']).to(torch.bool) for example in examples
-        ]
 
         # Pad sequences to the max length in the batch
         batch['input_ids'] = pad_sequence(
@@ -104,11 +101,7 @@ class CehrBertDataCollator:
             batch_first=True,
             padding_value=0
         )
-        batch['mlm_skip_values'] = pad_sequence(
-            batch_mlm_skip_values,
-            batch_first=True,
-            padding_value=False
-        )
+
         # Prepend the CLS token and their associated values to the corresponding time series features
         batch['input_ids'] = torch.cat(
             [torch.full((batch_size, 1), self.tokenizer.cls_token_index), batch['input_ids']],
@@ -155,14 +148,24 @@ class CehrBertDataCollator:
             [torch.full((batch_size, 1), 0), batch['visit_segments']],
             dim=1
         )
-        # Set the mlm_skip_values of the CLS token to a default value False
-        batch['mlm_skip_values'] = torch.cat(
-            [torch.full((batch_size, 1), False), batch['mlm_skip_values']],
-            dim=1
-        )
 
         # This is the most crucial logic for generating the training labels
         if self.is_pretraining:
+
+            batch_mlm_skip_values = [
+                self._convert_to_tensor(example['mlm_skip_values']).to(torch.bool) for example in examples
+            ]
+            batch['mlm_skip_values'] = pad_sequence(
+                batch_mlm_skip_values,
+                batch_first=True,
+                padding_value=False
+            )
+            # Set the mlm_skip_values of the CLS token to a default value False
+            batch['mlm_skip_values'] = torch.cat(
+                [torch.full((batch_size, 1), False), batch['mlm_skip_values']],
+                dim=1
+            )
+
             # If the labels field is already provided, we will build the MLM labels off of that.
             # The labels value indicates the positions that are not allowed for MLM.
             # For example, the mlm_skip_values=1, this means this is a lab value and
