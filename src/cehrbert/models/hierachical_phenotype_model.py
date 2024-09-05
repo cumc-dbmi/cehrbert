@@ -1,5 +1,5 @@
-from layers.custom_layers import *
-from hierachical_bert_model_v2 import create_att_concept_mask
+from .layers.custom_layers import *
+from .hierachical_bert_model_v2 import create_att_concept_mask
 
 
 def create_probabilistic_phenotype_model(

@@ -264,13 +264,14 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                         )
 
                 # If numeric_value exists, this is a concept/value tuple, we indicate this using a concept_value_mask
-                concept_value_mask = int(e['numeric_value'] is not None)
-                concept_value = e['numeric_value'] if concept_value_mask == 1 else -1.0
+                numeric_value = e.get('numeric_value', None)
+                concept_value_mask = int(numeric_value is not None)
+                concept_value = numeric_value if concept_value_mask == 1 else -1.0
                 code = replace_escape_chars(e['code'])
                 # If the value mask is 1, this indicates a numeric value associated with the concept
                 if concept_value_mask != 1:
                     # Otherwise we will try to concatenate the answer with the code if the categorical value is provide
-                    text_value = e["text_value"]
+                    text_value = e.get("text_value", None)
                     if text_value:
                         text_value_replaced = replace_escape_chars(text_value)
                         code = f"{code}//option:{text_value_replaced}"

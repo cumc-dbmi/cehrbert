@@ -1,6 +1,5 @@
 import datetime
 import os
-import logging
 
 from pyspark.sql import SparkSession
 

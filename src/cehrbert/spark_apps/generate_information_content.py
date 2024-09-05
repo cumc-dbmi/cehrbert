@@ -1,5 +1,4 @@
 import os
-import logging
 import datetime
 from pyspark.sql import SparkSession
 from ..utils.spark_utils import *

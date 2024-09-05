@@ -2,12 +2,11 @@ import tensorflow as tf
 
 from ..keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 
-from layers.custom_layers import (
+from .layers.custom_layers import (
     VisitEmbeddingLayer, Encoder, DecoderLayer,
     PositionalEncodingLayer, TimeEmbeddingLayer,
     ConceptValueTransformationLayer
 )
-from ..utils.model_utils import create_concept_mask
 
 
 def transformer_bert_model_visit_prediction(

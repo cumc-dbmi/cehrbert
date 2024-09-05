@@ -2,7 +2,7 @@ import tensorflow as tf
 
 from ..keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 
-from layers.custom_layers import (
+from .layers.custom_layers import (
     VisitEmbeddingLayer, Encoder,
     PositionalEncodingLayer, TimeEmbeddingLayer,
     ConceptValueTransformationLayer

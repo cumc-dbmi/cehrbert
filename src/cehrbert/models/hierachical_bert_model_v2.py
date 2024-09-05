@@ -1,4 +1,4 @@
-from layers.custom_layers import *
+from .layers.custom_layers import *
 
 
 def transformer_hierarchical_bert_model(

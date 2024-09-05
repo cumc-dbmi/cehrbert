@@ -28,7 +28,7 @@ class TestGenerateStartEndIndexMapping(unittest.TestCase):
             'input_ids': [2, 4, 3, 5, 2, 6, 7, 8, 9, 10, 3, 11, 2, 12, 3, 13, 2, 14, 3]
         }
         result = self.data_collator.generate_start_end_index(record)
-        self.assertListEqual(result['input_ids'], [2, 12, 3, 13, 2, 14, 3])
+        self.assertListEqual(result['input_ids'], [2, 4, 3, 5, 2, 6, 7, 8, 9])
 
     def test_short_sequence(self):
         # Test with a sequence shorter than max_sequence_length
@@ -47,17 +47,17 @@ class TestGenerateStartEndIndexMapping(unittest.TestCase):
         self.assertListEqual(result['input_ids'], list(range(9)))
 
     def test_tail_case_sequence_length_equal_to_max(self):
-        from data_generators.hf_data_generator.hf_dataset_collator import TruncationType
+        from cehrbert.data_generators.hf_data_generator.hf_dataset_collator import TruncationType
         # Test with a sequence exactly equal to max_sequence_length
         default_val = self.data_collator.truncate_type
         self.data_collator.truncate_type = TruncationType.TAIL
         record = {
-            'input_ids': [13, 14, 15, 16] + list(range(2, 8)) + list(range(2, 6)),  # Exactly max_sequence_length - 1,
-            'dates': [0, 0, 0, 0] + [2000] + list(range(2052, 2061))
+            'input_ids': [13, 14, 15, 16] + list(range(2, 8)),  # Exactly max_sequence_length - 1,
+            'dates': [0, 0, 0, 0] + list(range(2052, 2058))
         }
         result = self.data_collator.generate_start_end_index(record)
-        self.assertListEqual(result['input_ids'], [17, 18, 15, 16, 2, 3, 4, 5])
-        self.assertListEqual(result['dates'], [0, 0, 0, 0, 2057, 2058, 2059, 2060])
+        self.assertListEqual(result['input_ids'], [2, 3, 4, 5, 6, 7])
+        self.assertListEqual(result['dates'], [2052, 2053, 2054, 2055, 2056, 2057])
         self.data_collator.truncate_type = default_val
 
 

@@ -22,12 +22,11 @@ class TestCehrBert(unittest.TestCase):
     def test_positional_encoding_layer_output_large_positions(self):
         # Test the shape of the output from the PositionalEncodingLayer
         layer = self.model.bert.cehr_bert_embeddings.positional_embedding_layer
-        seq_length = 10  # example sequence length
         embedding_size = self.config.n_time_embd
         visit_concept_orders = torch.arange(10, 15).unsqueeze(0).repeat(2, 1)
         visit_concept_orders = torch.cat([visit_concept_orders, torch.full((2, 1), 5)], dim=-1)
         output = layer(visit_concept_orders)
-        self.assertEqual(output.shape, (1, seq_length, embedding_size))
+        self.assertEqual(output.shape, (2, 6, embedding_size))
 
     def test_time_embedding_layer_output_shape(self):
         # Test the output shape of the TimeEmbeddingLayer
@@ -57,6 +56,7 @@ class TestCehrBert(unittest.TestCase):
         visit_concept_orders = torch.randint(0, 10, (1, 10))
         concept_values = torch.rand(1, 10)
         concept_value_masks = torch.randint(0, 2, (1, 10))
+        mlm_skip_values = torch.randint(0, 2, (1, 10)).to(torch.bool)
         visit_segments = torch.randint(0, self.config.n_visit_segments, (1, 10))
 
         output = self.model(
@@ -68,7 +68,8 @@ class TestCehrBert(unittest.TestCase):
             concept_values=concept_values,
             concept_value_masks=concept_value_masks,
             visit_segments=visit_segments,
-            labels=input_ids
+            labels=input_ids,
+            mlm_skip_values=mlm_skip_values
         )
 
         self.assertTrue(hasattr(output, 'loss'))
