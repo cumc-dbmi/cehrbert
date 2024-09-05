@@ -103,7 +103,7 @@ def main():
 
     model, tokenizer = load_pretrained_model_and_tokenizer(model_args)
 
-    prepared_ds_path = generate_prepared_ds_path(data_args, model_args)
+    prepared_ds_path = generate_prepared_ds_path(data_args, model_args, data_folder=data_args.cohort_folder)
 
     # If lora is enabled, we add LORA adapters to the model
     if model_args.use_lora:

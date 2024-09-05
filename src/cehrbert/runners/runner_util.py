@@ -119,48 +119,63 @@ def md5(to_hash: str, encoding: str = "utf-8") -> str:
         return hashlib.md5(to_hash.encode(encoding)).hexdigest()
 
 
-def generate_prepared_ds_path(data_args, model_args) -> Path:
+def generate_prepared_ds_path(data_args, model_args, data_folder=None) -> Path:
     """
-   Generates a unique path for storing or retrieving a prepared dataset based on the specified arguments.
+    Generates a unique path for storing or retrieving a prepared dataset based on the specified arguments.
 
-   This function constructs a path using a hash value that encapsulates certain attributes from the data
-   and model arguments. The hash ensures that the path is unique to the specific combination of model settings
-   and data configuration, helping in caching or versioning of processed datasets.
+    This function constructs a path using a hash value that encapsulates various attributes from the data
+    and model arguments. The hash ensures that the path is unique to the specific combination of model
+    settings and data configuration, aiding in caching or versioning of processed datasets. It also incorporates
+    additional dataset parameters such as test-eval ratio and whether the split was based on patients or done
+    chronologically.
 
-   Parameters:
-       data_args (DataTrainingArguments): An object containing arguments related to the training data, such
-           as the data folder and validation split percentage.
-       model_args (ModelArguments): An object containing arguments specific to the model configuration, such
-           as the maximum position embeddings and tokenizer path.
+    Parameters:
+        data_args (DataTrainingArguments): An object containing arguments related to the dataset configuration, such as:
+            - data_folder (str): The folder containing the raw data files.
+            - validation_split_percentage (float): The percentage of the data used for validation.
+            - dataset_prepared_path (str): The base path where the prepared datasets are to be saved.
+            - test_eval_ratio (float): The ratio between test and evaluation datasets.
+            - split_by_patient (bool): A flag indicating if the dataset should be split by patient IDs.
+            - chronological_split (bool): A flag indicating if the split should be chronological.
+        model_args (ModelArguments): An object containing model-specific arguments, such as:
+            - max_position_embeddings (int): The maximum sequence length that the model supports.
+            - tokenizer_name_or_path (str): The path or name of the tokenizer used for preprocessing.
+        data_folder (str, optional): An optional folder path to override the `data_folder` from `data_args`.
 
-   Returns:
-       Path: A pathlib.Path object representing the unique path for the prepared dataset. This path includes
-           the base directory specified in `data_args.dataset_prepared_path` combined with a unique hash derived
-           from other input arguments.
+    Returns:
+        Path: A `pathlib.Path` object representing the unique path for the prepared dataset. This path includes
+        the base directory specified in `data_args.dataset_prepared_path`, combined with a hash derived from the
+        input arguments, ensuring a unique path for different data and model configurations.
 
-   Example:
-       >>> data_args = DataTrainingArguments(data_folder='./data', validation_split_percentage=10,
-       ...                                   dataset_prepared_path='./prepared')
-       >>> model_args = ModelArguments(max_position_embeddings=512, tokenizer_name_or_path='bert-base-uncased')
-       >>> path = generate_prepared_ds_path(data_args, model_args)
-       >>> print(path)
-       PosixPath('/absolute/path/to/prepared/1234567890abcdef1234567890abcdef')
+    Example:
+        >>> data_args = DataTrainingArguments(data_folder='./data', validation_split_percentage=10,
+        ...                                   dataset_prepared_path='./prepared', test_eval_ratio=0.2,
+        ...                                   split_by_patient=True, chronological_split=False)
+        >>> model_args = ModelArguments(max_position_embeddings=512, tokenizer_name_or_path='bert-base-uncased')
+        >>> path = generate_prepared_ds_path(data_args, model_args)
+        >>> print(path)
+        PosixPath('/absolute/path/to/prepared/datafoldername_hash')
 
-   Note:
-       The hash is generated from the string representation of the maximum position embeddings, the absolute
-       paths of the data folder and tokenizer, and the validation split percentage. If `validation_split_percentage`
-       is None or zero, it is omitted from the hash to maintain consistency.
+    Note:
+        The hash is generated from a combination of the following:
+        - model_args.max_position_embeddings
+        - Absolute paths of `data_folder` and `model_args.tokenizer_name_or_path`
+        - `data_args.validation_split_percentage` (if provided)
+        - `data_args.test_eval_ratio`, `data_args.split_by_patient`, and `data_args.chronological_split`
+
+        If `validation_split_percentage` is `None` or zero, it is omitted from the hash for consistency.
     """
+    data_folder = data_folder if data_folder else data_args.data_folder
     concatenated_str = (
             str(model_args.max_position_embeddings) +
-            "|" + os.path.abspath(data_args.data_folder) +
+            "|" + os.path.abspath(data_folder) +
             "|" + os.path.abspath(model_args.tokenizer_name_or_path) +
             "|" + (str(data_args.validation_split_percentage) if data_args.validation_split_percentage else "") +
             "|" + f"test_eval_ratio={str(data_args.test_eval_ratio)}" +
             "|" + f"split_by_patient={str(data_args.split_by_patient)}" +
             "|" + f"chronological_split={str(data_args.chronological_split)}"
     )
-    basename = os.path.basename(data_args.data_folder)
+    basename = os.path.basename(data_folder)
     cleaned_basename = re.sub(r'[^a-zA-Z0-9_]', '', basename)
     LOG.info(f"concatenated_str: {concatenated_str}")
     ds_hash = f"{cleaned_basename}_{str(md5(concatenated_str))}"
