@@ -360,7 +360,7 @@ def roll_up_procedure(procedure_occurrence, concept, concept_ancestor):
     def extract_parent_code(concept_code):
         return concept_code.split(".")[0]
 
-    parent_code_udf = F.udf(lambda code: extract_parent_code(code), T.StringType())
+    parent_code_udf = F.udf(extract_parent_code, T.StringType())
 
     procedure_code = (
         procedure_occurrence.select("procedure_source_concept_id")
@@ -983,14 +983,16 @@ def get_descendant_concept_ids(spark, concept_ids):
     # Join the sanitized IDs into a string for the query
     concept_ids_str = ",".join(map(str, sanitized_concept_ids))
     # Construct and execute the SQL query using the sanitized string
-    descendant_concept_ids = spark.sql(f"""
+    descendant_concept_ids = spark.sql(
+        f"""
         SELECT DISTINCT
             c.*
         FROM global_temp.concept_ancestor AS ca
         JOIN global_temp.concept AS c
             ON ca.descendant_concept_id = c.concept_id
         WHERE ca.ancestor_concept_id IN ({concept_ids_str})
-    """)
+    """
+    )
     return descendant_concept_ids
 
 

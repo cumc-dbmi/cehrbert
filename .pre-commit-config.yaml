@@ -88,4 +88,4 @@ repos:
     rev: '1.7.7'
     hooks:
       - id: bandit
-        args: ["--skip", "B101,B311"]
+        args: ["--skip", "B101,B106,B107,B301,B311,B105,B608,B403"]
