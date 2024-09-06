@@ -1,3 +1,4 @@
+import json
 import os
 from typing import Optional, Union
 
@@ -62,7 +63,7 @@ def load_and_create_tokenizer(
     tokenizer_abspath = os.path.abspath(model_args.tokenizer_name_or_path)
     try:
         tokenizer = CehrBertTokenizer.from_pretrained(tokenizer_abspath)
-    except RuntimeError as e:
+    except (OSError, RuntimeError, FileNotFoundError, json.JSONDecodeError) as e:
         LOG.warning(
             "Failed to load the tokenizer from %s with the error "
             "\n%s\nTried to create the tokenizer, however the dataset is not provided.",
@@ -104,7 +105,7 @@ def load_and_create_model(
     try:
         model_abspath = os.path.abspath(model_args.model_name_or_path)
         model_config = AutoConfig.from_pretrained(model_abspath)
-    except RuntimeError as e:
+    except (OSError, ValueError, FileNotFoundError, json.JSONDecodeError) as e:
         LOG.warning(e)
         model_config = CehrBertConfig(
             vocab_size=tokenizer.vocab_size,

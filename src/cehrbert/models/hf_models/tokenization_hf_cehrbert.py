@@ -31,7 +31,7 @@ CONCEPT_MAPPING_FILE_NAME = "concept_name_mapping.json"
 LAB_STATS_FILE_NAME = "cehrgpt_lab_stats.json"
 
 
-def load_json_file(json_file):
+def load_json_file(json_file) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
     """
     Loads a JSON file and returns the parsed JSON object.
 
@@ -56,10 +56,10 @@ def load_json_file(json_file):
 class CehrBertTokenizer(PushToHubMixin):
 
     def __init__(
-            self,
-            tokenizer: Tokenizer,
-            lab_stats: List[Dict[str, Any]],
-            concept_name_mapping: Dict[str, str],
+        self,
+        tokenizer: Tokenizer,
+        lab_stats: List[Dict[str, Any]],
+        concept_name_mapping: Dict[str, str],
     ):
         self._tokenizer = tokenizer
         self._lab_stats = lab_stats
@@ -139,10 +139,10 @@ class CehrBertTokenizer(PushToHubMixin):
         return out_string
 
     def save_pretrained(
-            self,
-            save_directory: Union[str, os.PathLike],
-            push_to_hub: bool = False,
-            **kwargs,
+        self,
+        save_directory: Union[str, os.PathLike],
+        push_to_hub: bool = False,
+        **kwargs,
     ):
         """
         Save the Cehrbert tokenizer.
@@ -190,9 +190,9 @@ class CehrBertTokenizer(PushToHubMixin):
 
     @classmethod
     def from_pretrained(
-            cls,
-            pretrained_model_name_or_path: Union[str, os.PathLike],
-            **kwargs,
+        cls,
+        pretrained_model_name_or_path: Union[str, os.PathLike],
+        **kwargs,
     ):
         """
         Load the CehrBert tokenizer.
@@ -216,7 +216,7 @@ class CehrBertTokenizer(PushToHubMixin):
         )
 
         if not tokenizer_file:
-            return None
+            raise RuntimeError(f"tokenizer_file does not exist: {tokenizer_file}")
 
         tokenizer = Tokenizer.from_file(tokenizer_file)
 
@@ -224,13 +224,15 @@ class CehrBertTokenizer(PushToHubMixin):
             pretrained_model_name_or_path, LAB_STATS_FILE_NAME, **kwargs
         )
         if not lab_stats_file:
-            return None
+            raise RuntimeError(f"lab_stats_file does not exist: {lab_stats_file}")
 
         concept_name_mapping_file = transformers.utils.hub.cached_file(
             pretrained_model_name_or_path, CONCEPT_MAPPING_FILE_NAME, **kwargs
         )
         if not concept_name_mapping_file:
-            return None
+            raise RuntimeError(
+                f"concept_name_mapping_file does not exist: {concept_name_mapping_file}"
+            )
 
         lab_stats = load_json_file(lab_stats_file)
 
@@ -240,11 +242,11 @@ class CehrBertTokenizer(PushToHubMixin):
 
     @classmethod
     def train_tokenizer(
-            cls,
-            dataset: Union[Dataset, DatasetDict],
-            feature_names: List[str],
-            concept_name_mapping: Dict[str, str],
-            data_args: DataTrainingArguments,
+        cls,
+        dataset: Union[Dataset, DatasetDict],
+        feature_names: List[str],
+        concept_name_mapping: Dict[str, str],
+        data_args: DataTrainingArguments,
     ):
         """
         Train a huggingface word level tokenizer.

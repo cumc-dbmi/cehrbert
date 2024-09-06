@@ -12,12 +12,12 @@ from cehrbert.models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 
 class CehrBertDataCollator:
     def __init__(
-        self,
-        tokenizer: CehrBertTokenizer,
-        max_length: int,
-        mlm_probability: float = 0.15,
-        is_pretraining: bool = True,
-        truncate_type: TruncationType = TruncationType.RANDOM_RIGHT_TRUNCATION,
+            self,
+            tokenizer: CehrBertTokenizer,
+            max_length: int,
+            mlm_probability: float = 0.15,
+            is_pretraining: bool = True,
+            truncate_type: TruncationType = TruncationType.RANDOM_RIGHT_TRUNCATION,
     ):
         self.tokenizer = tokenizer
         self.max_length = max_length
@@ -29,12 +29,12 @@ class CehrBertDataCollator:
         # Pre-compute these so we can use them later on
         # We used VS for the historical data, currently, we use the new [VS] for the newer data
         # so we need to check both cases.
-        self.vs_token_id = tokenizer._convert_token_to_id("VS")
-        if self.vs_token_id == tokenizer._oov_token_index:
-            self.vs_token_id = tokenizer._convert_token_to_id("[VS]")
-        self.ve_token_id = tokenizer._convert_token_to_id("VE")
-        if self.ve_token_id == tokenizer._oov_token_index:
-            self.ve_token_id = tokenizer._convert_token_to_id("[VE]")
+        self.vs_token_id = tokenizer.convert_token_to_id("VS")
+        if self.vs_token_id == tokenizer.oov_token_index:
+            self.vs_token_id = tokenizer.convert_token_to_id("[VS]")
+        self.ve_token_id = tokenizer.convert_token_to_id("VE")
+        if self.ve_token_id == tokenizer.oov_token_index:
+            self.ve_token_id = tokenizer.convert_token_to_id("[VE]")
 
     @staticmethod
     def _convert_to_tensor(features: Any) -> torch.Tensor:
@@ -205,9 +205,9 @@ class CehrBertDataCollator:
 
         # 10% of the time, we replace masked input tokens with random word
         indices_random = (
-            torch.bernoulli(torch.full(labels.shape, 0.5)).bool()
-            & masked_indices
-            & ~indices_replaced
+                torch.bernoulli(torch.full(labels.shape, 0.5)).bool()
+                & masked_indices
+                & ~indices_replaced
         )
         random_words = torch.randint(self.tokenizer.vocab_size, labels.shape, dtype=torch.long)
         inputs[indices_random] = random_words[indices_random]
@@ -233,8 +233,8 @@ class CehrBertDataCollator:
             start_index = random.randint(0, seq_length - new_max_length)
             end_index = min(seq_length, start_index + new_max_length)
         elif self.truncate_type in (
-            TruncationType.RANDOM_RIGHT_TRUNCATION,
-            TruncationType.RANDOM_COMPLETE,
+                TruncationType.RANDOM_RIGHT_TRUNCATION,
+                TruncationType.RANDOM_COMPLETE,
         ):
             # We randomly pick a [VS] token
             starting_points = []
@@ -266,9 +266,9 @@ class CehrBertDataCollator:
         new_record = collections.OrderedDict()
         for k, v in record.items():
             if (
-                isinstance(v, list)
-                or isinstance(v, np.ndarray)
-                or (isinstance(v, torch.Tensor) and v.dim() > 0)
+                    isinstance(v, list)
+                    or isinstance(v, np.ndarray)
+                    or (isinstance(v, torch.Tensor) and v.dim() > 0)
             ):
                 if len(v) == seq_length:
                     new_record[k] = v[start_index:end_index]
