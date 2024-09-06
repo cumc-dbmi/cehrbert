@@ -66,8 +66,7 @@ def load_pretrained_model_and_tokenizer(
 ) -> Tuple[CehrBertPreTrainedModel, CehrBertTokenizer]:
     # Try to load the pretrained tokenizer
     try:
-        tokenizer_abspath = os.path.abspath(model_args.tokenizer_name_or_path)
-        tokenizer = CehrBertTokenizer.from_pretrained(tokenizer_abspath)
+        tokenizer = CehrBertTokenizer.from_pretrained(model_args.tokenizer_name_or_path)
     except Exception:
         raise ValueError(f"Can not load the pretrained tokenizer from {model_args.tokenizer_name_or_path}")
 
@@ -82,8 +81,7 @@ def load_pretrained_model_and_tokenizer(
 
     # Try to load the pretrained model
     try:
-        model_abspath = os.path.abspath(model_args.model_name_or_path)
-        model = finetune_model_cls.from_pretrained(model_abspath)
+        model = finetune_model_cls.from_pretrained(model_args.model_name_or_path)
     except Exception as e:
         LOG.warning(e)
         model_config = CehrBertConfig(
