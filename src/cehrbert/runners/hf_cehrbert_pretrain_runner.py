@@ -5,16 +5,19 @@ from datasets import Dataset, DatasetDict, IterableDatasetDict, load_from_disk
 from transformers import AutoConfig, Trainer, set_seed
 from transformers.utils import logging
 
-from ..data_generators.hf_data_generator.hf_dataset import (
+from cehrbert.data_generators.hf_data_generator.hf_dataset import (
     create_cehrbert_pretraining_dataset,
 )
-from ..data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
-from ..data_generators.hf_data_generator.meds_utils import (
+from cehrbert.data_generators.hf_data_generator.hf_dataset_collator import (
+    CehrBertDataCollator,
+)
+from cehrbert.data_generators.hf_data_generator.meds_utils import (
     create_dataset_from_meds_reader,
 )
-from ..models.hf_models.config import CehrBertConfig
-from ..models.hf_models.hf_cehrbert import CehrBertForPreTraining
-from ..models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
+from cehrbert.models.hf_models.config import CehrBertConfig
+from cehrbert.models.hf_models.hf_cehrbert import CehrBertForPreTraining
+from cehrbert.models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
+
 from .hf_runner_argument_dataclass import DataTrainingArguments, ModelArguments
 from .runner_util import (
     generate_prepared_ds_path,
@@ -32,20 +35,44 @@ def load_and_create_tokenizer(
     model_args: ModelArguments,
     dataset: Optional[Union[Dataset, DatasetDict]] = None,
 ) -> CehrBertTokenizer:
+    """
+    Loads a pretrained tokenizer or creates a new one if it cannot be loaded.
+
+    Args:
+        data_args (DataTrainingArguments): Data-related arguments used for training the tokenizer.
+        model_args (ModelArguments): Model-related arguments including the tokenizer's path or name.
+        dataset (Optional[Union[Dataset, DatasetDict]]): A dataset used to train the tokenizer if it cannot be loaded.
+
+    Returns:
+        CehrBertTokenizer: The loaded or newly created and trained tokenizer.
+
+    Raises:
+        RuntimeError: If the tokenizer cannot be loaded and no dataset is provided to create a new tokenizer.
+
+    Behavior:
+        - Attempts to load the tokenizer from the specified path in `model_args.tokenizer_name_or_path`.
+        - If loading fails and no dataset is provided, it raises the original exception.
+        - If a dataset is provided, it trains a new tokenizer on the dataset using the `concept_ids` feature.
+        - Saves the newly created tokenizer at the specified path.
+
+    Example:
+        tokenizer = load_and_create_tokenizer(data_args, model_args, dataset)
+    """
     # Try to load the pretrained tokenizer
     tokenizer_abspath = os.path.abspath(model_args.tokenizer_name_or_path)
     try:
         tokenizer = CehrBertTokenizer.from_pretrained(tokenizer_abspath)
-    except Exception as e:
-        LOG.warning(e)
+    except RuntimeError as e:
+        LOG.warning(
+            "Failed to load the tokenizer from %s with the error "
+            "\n%s\nTried to create the tokenizer, however the dataset is not provided.",
+            tokenizer_abspath,
+            e,
+        )
         if dataset is None:
-            raise RuntimeError(
-                f"Failed to load the tokenizer from {tokenizer_abspath} with the error \n{e}\n"
-                f"Tried to create the tokenizer, however the dataset is not provided."
-            )
-
+            raise e
         tokenizer = CehrBertTokenizer.train_tokenizer(
-            dataset, ["concept_ids"], {}, data_args
+            dataset, feature_names=["concept_ids"], concept_name_mapping={}, data_args=data_args
         )
         tokenizer.save_pretrained(tokenizer_abspath)
 
@@ -55,21 +82,77 @@ def load_and_create_tokenizer(
 def load_and_create_model(
     model_args: ModelArguments, tokenizer: CehrBertTokenizer
 ) -> CehrBertForPreTraining:
+    """
+    Loads a pretrained model or creates a new model configuration if the pretrained model cannot be loaded.
+
+    Args:
+        model_args (ModelArguments): Model-related arguments including the model's path or configuration details.
+        tokenizer (CehrBertTokenizer): The tokenizer to be used with the model, providing vocab and token information.
+
+    Returns:
+        CehrBertForPreTraining: The loaded or newly configured model for pretraining.
+
+    Behavior:
+        - Attempts to load the model's configuration from the specified path in `model_args.model_name_or_path`.
+        - If loading fails, it logs the error and creates a new model configuration using the tokenizer's vocab size
+          and lab token IDs.
+        - Returns a `CehrBertForPreTraining` model initialized with the loaded or newly created configuration.
+
+    Example:
+        model = load_and_create_model(model_args, tokenizer)
+    """
     try:
         model_abspath = os.path.abspath(model_args.model_name_or_path)
         model_config = AutoConfig.from_pretrained(model_abspath)
-    except Exception as e:
+    except RuntimeError as e:
         LOG.warning(e)
         model_config = CehrBertConfig(
             vocab_size=tokenizer.vocab_size,
             lab_token_ids=tokenizer.lab_token_ids,
             **model_args.as_dict(),
         )
-
     return CehrBertForPreTraining(model_config)
 
 
 def main():
+    """
+    Main function for preparing, loading, and training a CEHR-BERT model for pretraining.
+
+    This function handles:
+    - Parsing input arguments for data, model, and training configurations.
+    - Loading or creating a dataset, either from a previously saved state or raw data (e.g., MEDS).
+    - Creating or loading a CEHR-BERT tokenizer, depending on whether a tokenizer exists.
+    - Creating and configuring the CEHR-BERT model for pretraining.
+    - Setting up a data collator and trainer for pretraining using Hugging Face's `Trainer` class.
+    - Handling dataset splitting for training and validation.
+    - Optionally resuming training from the last checkpoint.
+
+    Key Steps:
+    1. Check for streaming data support and adjust settings accordingly.
+    2. Load the dataset from disk if available, or create it from raw data.
+    3. Tokenize the dataset using the CEHR-BERT tokenizer.
+    4. Train the model, resume from a checkpoint if specified, and save the final model and metrics.
+
+    Raises:
+        RuntimeError: Raised if required arguments (e.g., validation split details) are missing.
+
+    Example Usage:
+        Run this function in a script with appropriate arguments:
+        ```
+        python hf_cehrbert_pretrain_runner.py --data_args <data_args> --model_args <model_args> \
+        --training_args <training_args>
+        ```
+
+    Dependencies:
+        - Hugging Face Transformers (Trainer, Dataset, DatasetDict, etc.)
+        - CEHR-BERT modules such as `CehrBertTokenizer`, `CehrBertForPreTraining`,
+        and `CehrBertDataCollator`.
+
+    Notes:
+    - Assumes the data is in the CEHR-BERT format or needs conversion from the MEDS format.
+    - Supports both disk-based and streaming datasets, depending on the argument configuration.
+    - The tokenizer and model are saved to disk after the training process completes.
+    """
     data_args, model_args, training_args = parse_runner_args()
 
     if data_args.streaming:
@@ -83,7 +166,7 @@ def main():
     prepared_ds_path = generate_prepared_ds_path(data_args, model_args)
 
     if any(prepared_ds_path.glob("*")):
-        LOG.info(f"Loading prepared dataset from disk at {prepared_ds_path}...")
+        LOG.info("Loading prepared dataset from disk at %s...", prepared_ds_path)
         processed_dataset = load_from_disk(str(prepared_ds_path))
         if data_args.streaming:
             processed_dataset = processed_dataset.to_iterable_dataset(
@@ -114,9 +197,7 @@ def main():
                     )
             except RuntimeError as e:
                 LOG.exception(e)
-                dataset = create_dataset_from_meds_reader(
-                    data_args, is_pretraining=True
-                )
+                dataset = create_dataset_from_meds_reader(data_args, is_pretraining=True)
                 if not data_args.streaming:
                     dataset.save_to_disk(meds_extension_path)
         else:

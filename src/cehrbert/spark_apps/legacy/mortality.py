@@ -112,9 +112,7 @@ class MortalityCohortBuilder(LastVisitCohortBuilderBase):
         cohort = self._dependency_dict[COHORT_TABLE]
         return cohort.where(f.col("label") == 0)
 
-    def create_matching_control_cases(
-        self, incident_cases: DataFrame, control_cases: DataFrame
-    ):
+    def create_matching_control_cases(self, incident_cases: DataFrame, control_cases: DataFrame):
         """
         Do not match for control and simply what's in the control cases.
 

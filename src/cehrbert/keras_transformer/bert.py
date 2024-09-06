@@ -37,9 +37,7 @@ def masked_perplexity(y_true, y_pred):
     y_true_value = y_true[:, :, 0]
     mask = K.cast(y_true[:, :, 1], dtype="float32")
     cross_entropy = K.sparse_categorical_crossentropy(y_true_value, y_pred)
-    batch_perplexities = K.exp(
-        K.sum(mask * cross_entropy, axis=-1) / (K.sum(mask, axis=-1) + 1e-6)
-    )
+    batch_perplexities = K.exp(K.sum(mask * cross_entropy, axis=-1) / (K.sum(mask, axis=-1) + 1e-6))
     return K.mean(batch_perplexities)
 
 
@@ -50,8 +48,7 @@ class MaskedMeanSquaredError(object):
 
         num_items_masked = tf.reduce_sum(mask, axis=-1) + 1e-6
         masked_mse = (
-            tf.reduce_sum(tf.square(y_true_val - y_pred) * mask, axis=-1)
-            / num_items_masked
+            tf.reduce_sum(tf.square(y_true_val - y_pred) * mask, axis=-1) / num_items_masked
         )
 
         return masked_mse
@@ -88,8 +85,7 @@ class MaskedPenalizedSparseCategoricalCrossentropy(object):
             / num_items_masked
         )
         masked_entropy = (
-            K.sum(mask * -K.sum(y_pred * K.log(y_pred), axis=-1), axis=-1)
-            / num_items_masked
+            K.sum(mask * -K.sum(y_pred * K.log(y_pred), axis=-1), axis=-1) / num_items_masked
         )
         return masked_cross_entropy - self.penalty_weight * masked_entropy
 
@@ -105,9 +101,7 @@ class SequenceCrossentropy(object):
         y_true_val = K.cast(y_true[:, :, 0], dtype="float32")
         mask = K.cast(y_true[:, :, 1], dtype="float32")
         num_items_masked = K.sum(mask, axis=-1) + 1e-6
-        loss = K.sum(
-            binary_crossentropy(y_true_val[:, :, tf.newaxis], y_pred) * mask, axis=-1
-        )
+        loss = K.sum(binary_crossentropy(y_true_val[:, :, tf.newaxis], y_pred) * mask, axis=-1)
         return loss / num_items_masked
 
 

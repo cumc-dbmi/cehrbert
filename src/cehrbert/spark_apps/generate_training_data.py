@@ -48,9 +48,7 @@ def main(
     include_inpatient_hour_token: bool = False,
     continue_from_events: bool = False,
 ):
-    spark = SparkSession.builder.appName(
-        "Generate CEHR-BERT Training Data"
-    ).getOrCreate()
+    spark = SparkSession.builder.appName("Generate CEHR-BERT Training Data").getOrCreate()
 
     logger = logging.getLogger(__name__)
     logger.info(
@@ -108,16 +106,11 @@ def main(
 
     visit_occurrence_person = visit_occurrence.join(person, "person_id").withColumn(
         "age",
-        F.ceil(
-            F.months_between(F.col("visit_start_date"), F.col("birth_datetime"))
-            / F.lit(12)
-        ),
+        F.ceil(F.months_between(F.col("visit_start_date"), F.col("birth_datetime")) / F.lit(12)),
     )
     visit_occurrence_person = visit_occurrence_person.drop("birth_datetime")
 
-    death = (
-        preprocess_domain_table(spark, input_folder, DEATH) if include_death else None
-    )
+    death = preprocess_domain_table(spark, input_folder, DEATH) if include_death else None
 
     patient_events = join_domain_tables(domain_tables)
 
@@ -128,16 +121,14 @@ def main(
             spark, input_folder, "qualified_concept_list"
         ).select("standard_concept_id")
 
-        patient_events = patient_events.join(
-            qualified_concepts, "standard_concept_id"
-        ).select(column_names)
+        patient_events = patient_events.join(qualified_concepts, "standard_concept_id").select(
+            column_names
+        )
 
     # Process the measurement table if exists
     if MEASUREMENT in domain_table_list:
         measurement = preprocess_domain_table(spark, input_folder, MEASUREMENT)
-        required_measurement = preprocess_domain_table(
-            spark, input_folder, REQUIRED_MEASUREMENT
-        )
+        required_measurement = preprocess_domain_table(spark, input_folder, REQUIRED_MEASUREMENT)
         # The select is necessary to make sure the order of the columns is the same as the
         # original dataframe, otherwise the union might use the wrong columns
         scaled_measurement = process_measurement(
@@ -153,10 +144,7 @@ def main(
     patient_events = (
         patient_events.join(visit_occurrence_person, "visit_occurrence_id")
         .select(
-            [
-                patient_events[fieldName]
-                for fieldName in patient_events.schema.fieldNames()
-            ]
+            [patient_events[fieldName] for fieldName in patient_events.schema.fieldNames()]
             + ["visit_concept_id", "age"]
         )
         .withColumn("cohort_member_id", F.col("person_id"))
@@ -172,9 +160,7 @@ def main(
             os.path.join(output_folder, "all_patient_events")
         )
 
-    patient_events = spark.read.parquet(
-        os.path.join(output_folder, "all_patient_events")
-    )
+    patient_events = spark.read.parquet(os.path.join(output_folder, "all_patient_events"))
 
     if is_new_patient_representation:
         sequence_data = create_sequence_data_with_att(
@@ -206,9 +192,7 @@ def main(
                 F.lit(0),
             ),
         ).otherwise(F.lit(0))
-        visit_occurrence = preprocess_domain_table(
-            spark, input_folder, VISIT_OCCURRENCE
-        )
+        visit_occurrence = preprocess_domain_table(spark, input_folder, VISIT_OCCURRENCE)
         visit_occurrence = (
             visit_occurrence.withColumn("prolonged_length_stay", udf)
             .select("person_id", "prolonged_length_stay")
@@ -227,9 +211,7 @@ def main(
         concept_freq = (
             concept_df.groupBy("concept_id")
             .count()
-            .withColumn(
-                "prob", F.col("count") / F.sum("count").over(Window.partitionBy())
-            )
+            .withColumn("prob", F.col("count") / F.sum("count").over(Window.partitionBy()))
             .withColumn("ic", -F.log("prob"))
         )
 
@@ -247,9 +229,7 @@ def main(
         sequence_data.join(patient_splits, "person_id").write.mode("overwrite").parquet(
             os.path.join(output_folder, "patient_sequence", "temp")
         )
-        sequence_data = spark.read.parquet(
-            os.path.join(output_folder, "patient_sequence", "temp")
-        )
+        sequence_data = spark.read.parquet(os.path.join(output_folder, "patient_sequence", "temp"))
         sequence_data.where('split="train"').write.mode("overwrite").parquet(
             os.path.join(output_folder, "patient_sequence/train")
         )
@@ -264,9 +244,7 @@ def main(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Arguments for generate training data for Bert"
-    )
+    parser = argparse.ArgumentParser(description="Arguments for generate training data for Bert")
     parser.add_argument(
         "-i",
         "--input_folder",
@@ -339,31 +317,19 @@ if __name__ == "__main__":
         help="Specify whether or not to include the data for the second learning objective for "
         "Med-BERT",
     )
-    parser.add_argument(
-        "--include_concept_list", dest="include_concept_list", action="store_true"
-    )
-    parser.add_argument(
-        "--gpt_patient_sequence", dest="gpt_patient_sequence", action="store_true"
-    )
-    parser.add_argument(
-        "--apply_age_filter", dest="apply_age_filter", action="store_true"
-    )
+    parser.add_argument("--include_concept_list", dest="include_concept_list", action="store_true")
+    parser.add_argument("--gpt_patient_sequence", dest="gpt_patient_sequence", action="store_true")
+    parser.add_argument("--apply_age_filter", dest="apply_age_filter", action="store_true")
     parser.add_argument("--include_death", dest="include_death", action="store_true")
-    parser.add_argument(
-        "--exclude_demographic", dest="exclude_demographic", action="store_true"
-    )
+    parser.add_argument("--exclude_demographic", dest="exclude_demographic", action="store_true")
     parser.add_argument("--use_age_group", dest="use_age_group", action="store_true")
-    parser.add_argument(
-        "--with_drug_rollup", dest="with_drug_rollup", action="store_true"
-    )
+    parser.add_argument("--with_drug_rollup", dest="with_drug_rollup", action="store_true")
     parser.add_argument(
         "--include_inpatient_hour_token",
         dest="include_inpatient_hour_token",
         action="store_true",
     )
-    parser.add_argument(
-        "--continue_from_events", dest="continue_from_events", action="store_true"
-    )
+    parser.add_argument("--continue_from_events", dest="continue_from_events", action="store_true")
     parser.add_argument(
         "--att_type",
         dest="att_type",

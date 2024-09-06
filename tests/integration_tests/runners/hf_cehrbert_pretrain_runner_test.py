@@ -24,9 +24,7 @@ class HfCehrBertRunnerIntegrationTest(unittest.TestCase):
         self.temp_dir = tempfile.mkdtemp()
         self.model_folder_path = os.path.join(self.temp_dir, "model")
         Path(self.model_folder_path).mkdir(parents=True, exist_ok=True)
-        self.dataset_prepared_path = os.path.join(
-            self.temp_dir, "dataset_prepared_path"
-        )
+        self.dataset_prepared_path = os.path.join(self.temp_dir, "dataset_prepared_path")
         Path(self.dataset_prepared_path).mkdir(parents=True, exist_ok=True)
         sys.argv = [
             "hf_cehrbert_pretraining_runner.py",

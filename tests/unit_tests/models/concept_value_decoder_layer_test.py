@@ -28,12 +28,8 @@ class TestConceptValuePredictionLayer(unittest.TestCase):
         # Create mock data for testing
         batch_size = 2
         context_window = 3
-        original_concept_embeddings = tf.random.normal(
-            (batch_size, context_window, embedding_size)
-        )
-        concept_val_embeddings = tf.random.normal(
-            (batch_size, context_window, embedding_size)
-        )
+        original_concept_embeddings = tf.random.normal((batch_size, context_window, embedding_size))
+        concept_val_embeddings = tf.random.normal((batch_size, context_window, embedding_size))
         concept_value_masks = tf.random.uniform(
             (batch_size, context_window), minval=0, maxval=2, dtype=tf.int32
         )

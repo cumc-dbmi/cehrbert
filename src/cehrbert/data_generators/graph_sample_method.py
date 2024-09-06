@@ -34,9 +34,7 @@ class GraphSampler(ABC):
         """
         return self._concept_similarity_type != SimilarityType.NONE.value
 
-    def _init_similarity(
-        self, concept_similarity_type: str, concept_similarity_path: str
-    ):
+    def _init_similarity(self, concept_similarity_type: str, concept_similarity_path: str):
         concept_dict = {}
         similarity_dict = {}
 

@@ -43,9 +43,7 @@ def main(input_folder, output_folder, domain_table_list, date_filter):
     This function creates the information content table based on the given domain tables
     """
 
-    spark = SparkSession.builder.appName(
-        "Generate the information content table"
-    ).getOrCreate()
+    spark = SparkSession.builder.appName("Generate the information content table").getOrCreate()
 
     logger = logging.getLogger(__name__)
     logger.info(
@@ -59,9 +57,7 @@ def main(input_folder, output_folder, domain_table_list, date_filter):
     concept_ancestor = preprocess_domain_table(spark, input_folder, CONCEPT_ANCESTOR)
     domain_tables = []
     for domain_table_name in domain_table_list:
-        domain_tables.append(
-            preprocess_domain_table(spark, input_folder, domain_table_name)
-        )
+        domain_tables.append(preprocess_domain_table(spark, input_folder, domain_table_name))
 
     patient_events = join_domain_tables(domain_tables)
 
@@ -99,9 +95,7 @@ def main(input_folder, output_folder, domain_table_list, date_filter):
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Arguments for generate training data for Bert"
-    )
+    parser = argparse.ArgumentParser(description="Arguments for generate training data for Bert")
     parser.add_argument(
         "-i",
         "--input_folder",
@@ -140,6 +134,4 @@ if __name__ == "__main__":
 
     ARGS = parser.parse_args()
 
-    main(
-        ARGS.input_folder, ARGS.output_folder, ARGS.domain_table_list, ARGS.date_filter
-    )
+    main(ARGS.input_folder, ARGS.output_folder, ARGS.domain_table_list, ARGS.date_filter)

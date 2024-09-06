@@ -62,9 +62,7 @@ def main(spark_args):
         query=hospitalization_query,
     )
 
-    create_prediction_cohort(
-        spark_args, copd_inpatient, hospitalization, DOMAIN_TABLE_LIST
-    )
+    create_prediction_cohort(spark_args, copd_inpatient, hospitalization, DOMAIN_TABLE_LIST)
 
 
 if __name__ == "__main__":

@@ -40,9 +40,7 @@ def transformer_bert_model_visit_prediction(
     masked_concept_ids = tf.keras.Input(
         shape=[max_seq_length], dtype="int32", name="masked_concept_ids"
     )
-    visit_segments = tf.keras.Input(
-        shape=[max_seq_length], dtype="int32", name="visit_segments"
-    )
+    visit_segments = tf.keras.Input(shape=[max_seq_length], dtype="int32", name="visit_segments")
     visit_concept_orders = tf.keras.Input(
         shape=[max_seq_length], dtype="int32", name="visit_concept_orders"
     )
@@ -50,15 +48,11 @@ def transformer_bert_model_visit_prediction(
     masked_visit_concepts = tf.keras.Input(
         shape=[max_seq_length], dtype="int32", name="masked_visit_concepts"
     )
-    mask_visit = tf.keras.Input(
-        shape=[max_seq_length], dtype="int32", name="mask_visit"
-    )
+    mask_visit = tf.keras.Input(shape=[max_seq_length], dtype="int32", name="mask_visit")
     concept_value_masks = tf.keras.Input(
         shape=[max_seq_length], dtype="int32", name="concept_value_masks"
     )
-    concept_values = tf.keras.Input(
-        shape=[max_seq_length], dtype="float32", name="concept_values"
-    )
+    concept_values = tf.keras.Input(shape=[max_seq_length], dtype="float32", name="concept_values")
 
     default_inputs = [
         masked_concept_ids,
@@ -71,9 +65,7 @@ def transformer_bert_model_visit_prediction(
         concept_values,
     ]
 
-    l2_regularizer = (
-        tf.keras.regularizers.l2(l2_reg_penalty) if l2_reg_penalty else None
-    )
+    l2_regularizer = tf.keras.regularizers.l2(l2_reg_penalty) if l2_reg_penalty else None
 
     concept_embedding_layer = ReusableEmbedding(
         concept_vocab_size,
@@ -129,9 +121,7 @@ def transformer_bert_model_visit_prediction(
     visit_softmax_layer = tf.keras.layers.Softmax(name="visit_predictions")
 
     # embeddings for encoder input
-    input_for_encoder, concept_embedding_matrix = concept_embedding_layer(
-        masked_concept_ids
-    )
+    input_for_encoder, concept_embedding_matrix = concept_embedding_layer(masked_concept_ids)
 
     # Transform the concept embeddings by combining their concept embeddings with the
     # corresponding val
@@ -142,24 +132,18 @@ def transformer_bert_model_visit_prediction(
     )
 
     # embeddings for decoder input
-    input_for_decoder, visit_embedding_matrix = visit_embedding_layer(
-        masked_visit_concepts
-    )
+    input_for_decoder, visit_embedding_matrix = visit_embedding_layer(masked_visit_concepts)
 
     # Building a Vanilla Transformer (described in
     # "Attention is all you need", 2017)
     input_for_encoder = visit_segment_layer([visit_segments, input_for_encoder])
 
     if use_behrt:
-        ages = tf.keras.layers.Input(
-            shape=(max_seq_length,), dtype="int32", name="ages"
-        )
+        ages = tf.keras.layers.Input(shape=(max_seq_length,), dtype="int32", name="ages")
         default_inputs.extend([ages])
         age_embedding_layer = TimeEmbeddingLayer(embedding_size=embedding_size)
         input_for_encoder = input_for_encoder + age_embedding_layer(ages)
-        positional_encoding_layer = PositionalEncodingLayer(
-            embedding_size=embedding_size
-        )
+        positional_encoding_layer = PositionalEncodingLayer(embedding_size=embedding_size)
         input_for_encoder += positional_encoding_layer(visit_concept_orders)
 
     elif use_time_embedding:
@@ -167,9 +151,7 @@ def transformer_bert_model_visit_prediction(
         time_stamps = tf.keras.layers.Input(
             shape=(max_seq_length,), dtype="int32", name="time_stamps"
         )
-        ages = tf.keras.layers.Input(
-            shape=(max_seq_length,), dtype="int32", name="ages"
-        )
+        ages = tf.keras.layers.Input(shape=(max_seq_length,), dtype="int32", name="ages")
         default_inputs.extend([time_stamps, ages])
 
         # # define the time embedding layer for absolute time stamps (since 1970)
@@ -217,9 +199,7 @@ def transformer_bert_model_visit_prediction(
             )
         )
     else:
-        positional_encoding_layer = PositionalEncodingLayer(
-            embedding_size=embedding_size
-        )
+        positional_encoding_layer = PositionalEncodingLayer(embedding_size=embedding_size)
         input_for_encoder += positional_encoding_layer(visit_concept_orders)
 
     input_for_encoder, att_weights = encoder(
@@ -241,8 +221,6 @@ def transformer_bert_model_visit_prediction(
         output_layer_2([decoder_output, visit_embedding_matrix])
     )
 
-    model = tf.keras.Model(
-        inputs=default_inputs, outputs=[concept_predictions, visit_predictions]
-    )
+    model = tf.keras.Model(inputs=default_inputs, outputs=[concept_predictions, visit_predictions])
 
     return model

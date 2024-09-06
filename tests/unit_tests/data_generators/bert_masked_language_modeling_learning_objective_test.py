@@ -79,9 +79,7 @@ class TestMaskedLanguageModelLearningObjective(unittest.TestCase):
 
     def test_process_batch(self):
         # Test the process_batch method with a mock input
-        mock_rows = [
-            self.create_mock_row() for _ in range(5)
-        ]  # Create a list of mock rows
+        mock_rows = [self.create_mock_row() for _ in range(5)]  # Create a list of mock rows
 
         input_dict, output_dict = self.learning_obj.process_batch(mock_rows)
 

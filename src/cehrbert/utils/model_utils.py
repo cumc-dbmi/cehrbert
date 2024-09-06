@@ -2,19 +2,19 @@ import datetime
 import inspect
 import logging
 import os
-import pathlib
 import pickle
 import random
 import re
 from collections import Counter
 from itertools import chain
+from pathlib import Path
 from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-from dask.dataframe import DataFrame as dd_dataframe
-from pandas import DataFrame as pd_dataframe
+from dask.dataframe import DataFrame as DaskDataFrame
+from pandas import DataFrame as PandasDataFrame
 from sklearn import metrics
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GridSearchCV
@@ -30,20 +30,25 @@ DECIMAL_PLACE = 4
 LOGGER = logging.getLogger(__name__)
 
 
-def create_folder_if_not_exist(folder, sub_folder_name):
+def create_sub_folder(folder: str, sub_folder_name: str) -> Path:
     """
-    Create the sub-folder if not exists.
+    Creates a subfolder if it does not exist and returns the full Path object.
 
-    Will do not thing if the sub-folder already exists.
+    Args:
+        folder (str): The parent folder where the subfolder will be created.
+        sub_folder_name (str): The name of the subfolder to be created.
 
-    :param folder:
-    :param sub_folder_name:
-    :return:
+    Returns:
+        Path: The full path to the created or existing subfolder.
+
+    Example:
+        create_sub_folder("/home/user", "new_folder")
+        # Creates /home/user/new_folder if it doesn't exist and returns the path.
     """
-    sub_folder = os.path.join(folder, sub_folder_name)
-    if not os.path.exists(sub_folder):
-        LOGGER.info(f"Create folder: {sub_folder}")
-        pathlib.Path(sub_folder).mkdir(parents=True, exist_ok=True)
+    sub_folder = Path(folder) / sub_folder_name
+    if not sub_folder.exists():
+        LOGGER.info("Create folder: %s", sub_folder)
+        sub_folder.mkdir(parents=True, exist_ok=True)
     return sub_folder
 
 
@@ -55,12 +60,12 @@ def log_function_decorator(function):
 
         beginning = datetime.datetime.now()
         logging.getLogger(function.__name__).info(
-            f"Started running {module_name}: {function_name} at line {line_no}"
+            "Started running %s: %s at line %s", module_name, function_name, line_no
         )
         output = function(self, *args, **kwargs)
         ending = datetime.datetime.now()
         logging.getLogger(function.__name__).info(
-            f"Took {ending - beginning} to run {module_name}: {function_name}."
+            "Took %s to run %s: %s.", ending - beginning, module_name, function_name
         )
         return output
 
@@ -69,7 +74,7 @@ def log_function_decorator(function):
 
 @log_function_decorator
 def tokenize_one_field(
-    training_data: Union[pd_dataframe, dd_dataframe],
+    training_data: Union[PandasDataFrame, DaskDataFrame],
     column_name,
     tokenized_column_name,
     tokenizer_path,
@@ -83,9 +88,7 @@ def tokenize_one_field(
     :return:
     """
     tokenize_fields_info = [
-        TokenizeFieldInfo(
-            column_name=column_name, tokenized_column_name=tokenized_column_name
-        )
+        TokenizeFieldInfo(column_name=column_name, tokenized_column_name=tokenized_column_name)
     ]
     return tokenize_multiple_fields(
         training_data, tokenize_fields_info, tokenizer_path, oov_token, encode, recreate
@@ -94,7 +97,7 @@ def tokenize_one_field(
 
 @log_function_decorator
 def tokenize_multiple_fields(
-    training_data: Union[pd_dataframe, dd_dataframe],
+    training_data: Union[PandasDataFrame, DaskDataFrame],
     tokenize_fields_info: List[TokenizeFieldInfo],
     tokenizer_path,
     oov_token=DEFAULT_OOV_TOKEN,
@@ -120,14 +123,12 @@ def tokenize_multiple_fields(
         :param _tokenize_field_info:
         :return:
         """
-        if isinstance(training_data, dd_dataframe):
+        if isinstance(training_data, DaskDataFrame):
             training_data[_tokenize_field_info.tokenized_column_name] = training_data[
                 _tokenize_field_info.column_name
             ].map_partitions(
                 lambda ds: pd.Series(
-                    tokenizer.encode(
-                        map(lambda t: list(t[1]), ds.iteritems()), is_generator=True
-                    ),
+                    tokenizer.encode(map(lambda t: list(t[1]), ds.iteritems()), is_generator=True),
                     name=_tokenize_field_info.tokenized_column_name,
                 ),
                 meta="iterable",
@@ -136,20 +137,16 @@ def tokenize_multiple_fields(
             training_data[_tokenize_field_info.column_name] = training_data[
                 _tokenize_field_info.column_name
             ].apply(list)
-            training_data[_tokenize_field_info.tokenized_column_name] = (
-                tokenizer.encode(training_data[_tokenize_field_info.column_name])
+            training_data[_tokenize_field_info.tokenized_column_name] = tokenizer.encode(
+                training_data[_tokenize_field_info.column_name]
             )
 
     if not os.path.exists(tokenizer_path) or recreate:
         tokenizer = ConceptTokenizer(oov_token=oov_token)
         for tokenize_field_info in tokenize_fields_info:
-            tokenizer.fit_on_concept_sequences(
-                training_data[tokenize_field_info.column_name]
-            )
+            tokenizer.fit_on_concept_sequences(training_data[tokenize_field_info.column_name])
     else:
-        logging.getLogger(__name__).info(
-            "Loading the existing tokenizer from %s", tokenizer_path
-        )
+        logging.getLogger(__name__).info("Loading the existing tokenizer from %s", tokenizer_path)
         with open(tokenizer_path, "rb") as f:
             tokenizer = pickle.load(f)
 
@@ -158,7 +155,8 @@ def tokenize_multiple_fields(
             tokenize_one_column(tokenize_field_info)
 
     if not os.path.exists(tokenizer_path) or recreate:
-        pickle.dump(tokenizer, open(tokenizer_path, "wb"))
+        with open(tokenizer_path, "wb") as f:
+            pickle.dump(tokenizer, f)
     return tokenizer
 
 
@@ -199,9 +197,7 @@ def calculate_pr_auc(labels, probabilities):
     :return:
     """
     # Calculate precision-recall auc
-    precisions, recalls, _ = metrics.precision_recall_curve(
-        labels, np.asarray(probabilities)
-    )
+    precisions, recalls, _ = metrics.precision_recall_curve(labels, np.asarray(probabilities))
     return metrics.auc(recalls, precisions)
 
 
@@ -317,12 +313,8 @@ def compute_binary_metrics(
 
     if evaluation_model_folder:
         validate_folder(evaluation_model_folder)
-        prediction_pd = pd.DataFrame(
-            zip(labels, probabilities), columns=["label", "prediction"]
-        )
-        prediction_pd.to_parquet(
-            os.path.join(evaluation_model_folder, f"{current_time}.parquet")
-        )
+        prediction_pd = pd.DataFrame(zip(labels, probabilities), columns=["label", "prediction"])
+        prediction_pd.to_parquet(os.path.join(evaluation_model_folder, f"{current_time}.parquet"))
 
     return data_metrics
 

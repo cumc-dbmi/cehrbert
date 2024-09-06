@@ -13,8 +13,12 @@ from tokenizers.pre_tokenizers import WhitespaceSplit
 from tokenizers.trainers import WordLevelTrainer
 from transformers.tokenization_utils_base import PushToHubMixin
 
-from ...runners.hf_runner_argument_dataclass import DataTrainingArguments
-from .tokenization_utils import _agg_helper, agg_statistics, map_statistics
+from cehrbert.models.hf_models.tokenization_utils import (
+    _agg_helper,
+    agg_statistics,
+    map_statistics,
+)
+from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments
 
 PAD_TOKEN = "[PAD]"
 CLS_TOKEN = "[CLS]"
@@ -93,11 +97,7 @@ class CehrBertTokenizer(PushToHubMixin):
             OUT_OF_VOCABULARY_TOKEN,
         ]
         return self.encode(
-            [
-                _["concept_id"]
-                for _ in self._lab_stats
-                if _["concept_id"] not in reserved_tokens
-            ]
+            [_["concept_id"] for _ in self._lab_stats if _["concept_id"] not in reserved_tokens]
         )
 
     def encode(self, concept_ids: Sequence[str]) -> Sequence[int]:
@@ -242,9 +242,7 @@ class CehrBertTokenizer(PushToHubMixin):
 
         # Use the Fast Tokenizer from the Huggingface tokenizers Rust implementation.
         # https://github.com/huggingface/tokenizers
-        tokenizer = Tokenizer(
-            WordLevel(unk_token=OUT_OF_VOCABULARY_TOKEN, vocab=dict())
-        )
+        tokenizer = Tokenizer(WordLevel(unk_token=OUT_OF_VOCABULARY_TOKEN, vocab=dict()))
         tokenizer.pre_tokenizer = WhitespaceSplit()
         trainer = WordLevelTrainer(
             special_tokens=[
@@ -272,9 +270,7 @@ class CehrBertTokenizer(PushToHubMixin):
                 def batched_generator():
                     iterator = iter(concatenated_features)
                     while True:
-                        batch = list(
-                            islice(iterator, data_args.preprocessing_batch_size)
-                        )
+                        batch = list(islice(iterator, data_args.preprocessing_batch_size))
                         if not batch:
                             break
                         yield [example[feature_name] for example in batch]
@@ -326,17 +322,13 @@ class CehrBertTokenizer(PushToHubMixin):
                 "std": online_stats.standard_deviation(),
                 "count": online_stats.count,
             }
-            for (concept_id, unit), online_stats in current[
-                "numeric_stats_by_lab"
-            ].items()
+            for (concept_id, unit), online_stats in current["numeric_stats_by_lab"].items()
         ]
 
         return CehrBertTokenizer(tokenizer, lab_stats, concept_name_mapping)
 
     @classmethod
-    def batch_concat_concepts(
-        cls, records: Dict[str, List], feature_name
-    ) -> Dict[str, List]:
+    def batch_concat_concepts(cls, records: Dict[str, List], feature_name) -> Dict[str, List]:
         return {feature_name: [" ".join(map(str, _)) for _ in records[feature_name]]}
 
     def normalize(self, concept_id, concept_value) -> float:

@@ -11,22 +11,24 @@ from sklearn.metrics import accuracy_score, auc, precision_recall_curve, roc_auc
 from transformers import EarlyStoppingCallback, Trainer, set_seed
 from transformers.utils import logging
 
-from ..data_generators.hf_data_generator.hf_dataset import (
+from cehrbert.data_generators.hf_data_generator.hf_dataset import (
     create_cehrbert_finetuning_dataset,
 )
-from ..data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
-from ..data_generators.hf_data_generator.meds_utils import (
+from cehrbert.data_generators.hf_data_generator.hf_dataset_collator import (
+    CehrBertDataCollator,
+)
+from cehrbert.data_generators.hf_data_generator.meds_utils import (
     create_dataset_from_meds_reader,
 )
-from ..models.hf_models.config import CehrBertConfig
-from ..models.hf_models.hf_cehrbert import (
+from cehrbert.models.hf_models.config import CehrBertConfig
+from cehrbert.models.hf_models.hf_cehrbert import (
     CehrBertForClassification,
     CehrBertLstmForClassification,
     CehrBertPreTrainedModel,
 )
-from ..models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
-from .hf_runner_argument_dataclass import FineTuneModelType
-from .runner_util import (
+from cehrbert.models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
+from cehrbert.runners.hf_runner_argument_dataclass import FineTuneModelType
+from cehrbert.runners.runner_util import (
     generate_prepared_ds_path,
     get_last_hf_checkpoint,
     get_meds_extension_path,
@@ -152,9 +154,7 @@ def main():
                 dataset_prepared_path=data_args.dataset_prepared_path,
             )
             try:
-                LOG.info(
-                    f"Trying to load the MEDS extension from disk at {meds_extension_path}..."
-                )
+                LOG.info(f"Trying to load the MEDS extension from disk at {meds_extension_path}...")
                 dataset = load_from_disk(meds_extension_path)
                 if data_args.streaming:
                     dataset = dataset.to_iterable_dataset(
@@ -162,9 +162,7 @@ def main():
                     )
             except Exception as e:
                 LOG.exception(e)
-                dataset = create_dataset_from_meds_reader(
-                    data_args, is_pretraining=False
-                )
+                dataset = create_dataset_from_meds_reader(data_args, is_pretraining=False)
                 if not data_args.streaming:
                     dataset.save_to_disk(meds_extension_path)
             train_set = dataset["train"]
@@ -180,9 +178,7 @@ def main():
                 dataset = dataset.sort("index_date")
                 # Determine the split index
                 total_size = len(dataset)
-                train_end = int(
-                    (1 - data_args.validation_split_percentage) * total_size
-                )
+                train_end = int((1 - data_args.validation_split_percentage) * total_size)
                 # Perform the chronological split, use the historical data for training and future data
                 # for validation/testing
                 train_set = dataset.select(range(0, train_end))
@@ -197,15 +193,12 @@ def main():
             elif data_args.split_by_patient:
                 LOG.info(f"Using the split_by_patient strategy")
                 unique_patient_ids = np.unique(dataset["person_id"])
-                LOG.info(
-                    f"There are {len(unique_patient_ids)} num of patients in total"
-                )
+                LOG.info(f"There are {len(unique_patient_ids)} num of patients in total")
                 np.random.seed(training_args.seed)
                 np.random.shuffle(unique_patient_ids)
 
                 train_end = int(
-                    len(unique_patient_ids)
-                    * (1 - data_args.validation_split_percentage)
+                    len(unique_patient_ids) * (1 - data_args.validation_split_percentage)
                 )
                 train_patient_ids = set(unique_patient_ids[:train_end])
                 if not test_set:
@@ -321,9 +314,7 @@ def main():
         eval_dataset=processed_dataset["validation"],
         compute_metrics=compute_metrics,
         callbacks=[
-            EarlyStoppingCallback(
-                early_stopping_patience=model_args.early_stopping_patience
-            )
+            EarlyStoppingCallback(early_stopping_patience=model_args.early_stopping_patience)
         ],
         args=training_args,
     )
@@ -342,7 +333,8 @@ def main():
         # If do_train is set to False, we need to load the model from the checkpoint.
         if not training_args.do_train:
             LOG.info(
-                f"The do_train flag is set to False. Loading the weights form {training_args.output_dir}"
+                "The do_train flag is set to False. Loading the weights from %s",
+                training_args.output_dir,
             )
             trainer._load_from_checkpoint(training_args.output_dir)
 

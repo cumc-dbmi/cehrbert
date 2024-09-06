@@ -69,19 +69,17 @@ class HierarchicalBertLayer(tf.keras.layers.Layer):
             dtype=tf.float32,
         )
 
-        self.merge_matrix = tf.constant(
-            [1] + [0] * (self.num_of_concepts - 1), dtype=tf.float32
-        )[tf.newaxis, tf.newaxis, :, tf.newaxis]
+        self.merge_matrix = tf.constant([1] + [0] * (self.num_of_concepts - 1), dtype=tf.float32)[
+            tf.newaxis, tf.newaxis, :, tf.newaxis
+        ]
 
         self.merge_matrix_inverse = tf.constant(
             [0] + [1] * (self.num_of_concepts - 1), dtype=tf.float32
         )[tf.newaxis, tf.newaxis, :, tf.newaxis]
 
         self.global_embedding_dropout_layer = tf.keras.layers.Dropout(dropout_rate)
-        self.global_concept_embeddings_normalization = (
-            tf.keras.layers.LayerNormalization(
-                name="global_concept_embeddings_normalization", epsilon=1e-6
-            )
+        self.global_concept_embeddings_normalization = tf.keras.layers.LayerNormalization(
+            name="global_concept_embeddings_normalization", epsilon=1e-6
         )
 
     def get_config(self):
@@ -153,9 +151,7 @@ class HierarchicalBertLayer(tf.keras.layers.Layer):
 
             # Insert the att embeddings between visit embedidngs
             # (batch_size, num_of_visits + num_of_visits - 1, embedding_size)
-            augmented_visit_embeddings = (
-                expanded_visit_embeddings + expanded_att_embeddings
-            )
+            augmented_visit_embeddings = expanded_visit_embeddings + expanded_att_embeddings
 
             # Step 3 encoder applied to patient level
             # Feed augmented visit embeddings into encoders to get contextualized visit embeddings
@@ -190,8 +186,7 @@ class HierarchicalBertLayer(tf.keras.layers.Layer):
 
             global_concept_embeddings += (
                 global_concept_embeddings * self.merge_matrix_inverse
-                + tf.expand_dims(visit_embeddings_without_att, axis=-2)
-                * self.merge_matrix
+                + tf.expand_dims(visit_embeddings_without_att, axis=-2) * self.merge_matrix
             )
 
             temporal_concept_embeddings = tf.reshape(

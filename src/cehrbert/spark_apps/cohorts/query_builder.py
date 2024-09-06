@@ -29,8 +29,7 @@ class QuerySpec(NamedTuple):
 
     def __str__(self):
         return (
-            f"table={self.table_name}\n"
-            f"query={self.query_template.format(**self.parameters)}\n"
+            f"table={self.table_name}\n" f"query={self.query_template.format(**self.parameters)}\n"
         )
 
 

@@ -115,9 +115,7 @@ class PatientBlock:
                 for matching_rule in self.conversion.get_discharge_matching_rules():
                     if matching_rule in event.code:
                         discharge_facility = event.code.replace(matching_rule, "")
-                        discharge_facility = re.sub(
-                            r"[^a-zA-Z]", "_", discharge_facility
-                        )
+                        discharge_facility = re.sub(r"[^a-zA-Z]", "_", discharge_facility)
                         return discharge_facility
         return None
 
@@ -129,9 +127,7 @@ class PatientBlock:
         # We try to parse the numeric values from the text value, in other words,
         # we try to construct numeric events from the event with a text value
         if numeric_value is None and text_value is not None:
-            conversion_rule = self.conversion.get_text_event_to_numeric_events_rule(
-                code
-            )
+            conversion_rule = self.conversion.get_text_event_to_numeric_events_rule(code)
             if conversion_rule:
                 match = re.search(conversion_rule.parsing_pattern, text_value)
                 if match:
@@ -206,18 +202,14 @@ def convert_one_patient(
             if current_date.date() == e.time.date():
                 events_for_current_date.append(e)
             else:
-                patient_blocks.append(
-                    PatientBlock(events_for_current_date, visit_id, conversion)
-                )
+                patient_blocks.append(PatientBlock(events_for_current_date, visit_id, conversion))
                 events_for_current_date = list()
                 events_for_current_date.append(e)
                 current_date = e.time
                 visit_id += 1
 
     if events_for_current_date:
-        patient_blocks.append(
-            PatientBlock(events_for_current_date, visit_id, conversion)
-        )
+        patient_blocks.append(PatientBlock(events_for_current_date, visit_id, conversion))
 
     admit_discharge_pairs = []
     active_ed_index = None
@@ -277,9 +269,7 @@ def convert_one_patient(
         # we need to check if the time stamp of the next block is within 12 hours
         if discharge_index + 1 < len(patient_blocks):
             next_block = patient_blocks[discharge_index + 1]
-            hour_diff = (
-                next_block.min_time - discharge_block.max_time
-            ).total_seconds() / 3600
+            hour_diff = (next_block.min_time - discharge_block.max_time).total_seconds() / 3600
             assert hour_diff >= 0, (
                 f"next_block.min_time: {next_block.min_time} "
                 f"must be GE discharge_block.max_time: {discharge_block.max_time}"
@@ -311,9 +301,7 @@ def convert_one_patient(
                 visit_type=visit_type,
                 visit_start_datetime=visit_start_datetime,
                 visit_end_datetime=visit_end_datetime,
-                discharge_facility=(
-                    discharge_facility if discharge_facility else UNKNOWN_VALUE
-                ),
+                discharge_facility=(discharge_facility if discharge_facility else UNKNOWN_VALUE),
                 events=visit_events,
             )
         )
@@ -409,9 +397,7 @@ def _create_cehrbert_data_from_meds(
         for patient_id in patient_split[split]:
             batches.append((patient_id, None, None))
 
-    split_batches = np.array_split(
-        np.asarray(batches), data_args.preprocessing_num_workers
-    )
+    split_batches = np.array_split(np.asarray(batches), data_args.preprocessing_num_workers)
     batch_func = functools.partial(
         _meds_to_cehrbert_generator,
         path_to_db=data_args.data_folder,
@@ -422,9 +408,7 @@ def _create_cehrbert_data_from_meds(
         gen_kwargs={
             "shards": split_batches,
         },
-        num_proc=(
-            data_args.preprocessing_num_workers if not data_args.streaming else None
-        ),
+        num_proc=(data_args.preprocessing_num_workers if not data_args.streaming else None),
         writer_batch_size=data_args.preprocessing_batch_size,
         streaming=data_args.streaming,
     )

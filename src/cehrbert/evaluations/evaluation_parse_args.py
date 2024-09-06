@@ -1,7 +1,7 @@
 import argparse
 from sys import argv
 
-from .evaluation_parameters import (
+from cehrbert.evaluations.evaluation_parameters import (
     BASELINE_MODEL,
     EVALUATION_CHOICES,
     HIERARCHICAL_BERT_LSTM,
@@ -15,9 +15,7 @@ from .evaluation_parameters import (
 
 
 def create_evaluation_args():
-    main_parser = argparse.ArgumentParser(
-        description="Arguments for evaluating the models"
-    )
+    main_parser = argparse.ArgumentParser(description="Arguments for evaluating the models")
 
     sequence_model_required = BASELINE_MODEL not in argv
     baseline_model_required = SEQUENCE_MODEL not in argv
@@ -156,9 +154,7 @@ def create_evaluation_args():
         action="store",
         required=temporal_bert_lstm,
     )
-    group.add_argument(
-        "--stride", dest="stride", action="store", type=int, required=sliding_bert
-    )
+    group.add_argument("--stride", dest="stride", action="store", type=int, required=sliding_bert)
     group.add_argument(
         "--context_window",
         dest="context_window",
@@ -180,9 +176,7 @@ def create_evaluation_args():
         type=int,
         required=hierarchical_bert,
     )
-    group.add_argument(
-        "--depth", dest="depth", action="store", type=int, default=5, required=False
-    )
+    group.add_argument("--depth", dest="depth", action="store", type=int, default=5, required=False)
     group.add_argument(
         "-nh",
         "--num_heads",
@@ -228,9 +222,7 @@ def create_evaluation_args():
         action="store_true",
         required=False,
     )
-    group.add_argument(
-        "--k_fold_test", dest="k_fold_test", action="store_true", required=False
-    )
+    group.add_argument("--k_fold_test", dest="k_fold_test", action="store_true", required=False)
     group.add_argument(
         "--grid_search_config",
         dest="grid_search_config",

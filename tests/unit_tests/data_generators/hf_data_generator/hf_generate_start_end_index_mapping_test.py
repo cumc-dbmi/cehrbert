@@ -23,15 +23,11 @@ class TestGenerateStartEndIndexMapping(unittest.TestCase):
             "year:2000",
             "age:20-30",
         ]
-        self.data_collator = CehrBertDataCollator(
-            tokenizer=self.mock_tokenizer, max_length=10
-        )
+        self.data_collator = CehrBertDataCollator(tokenizer=self.mock_tokenizer, max_length=10)
 
     def test_long_sequence(self):
         # Test with a sequence longer than max_sequence_length
-        record = {
-            "input_ids": [2, 4, 3, 5, 2, 6, 7, 8, 9, 10, 3, 11, 2, 12, 3, 13, 2, 14, 3]
-        }
+        record = {"input_ids": [2, 4, 3, 5, 2, 6, 7, 8, 9, 10, 3, 11, 2, 12, 3, 13, 2, 14, 3]}
         result = self.data_collator.generate_start_end_index(record)
         self.assertListEqual(result["input_ids"], [2, 4, 3, 5, 2, 6, 7, 8, 9])
 
@@ -56,8 +52,7 @@ class TestGenerateStartEndIndexMapping(unittest.TestCase):
         default_val = self.data_collator.truncate_type
         self.data_collator.truncate_type = TruncationType.TAIL
         record = {
-            "input_ids": [13, 14, 15, 16]
-            + list(range(2, 8)),  # Exactly max_sequence_length - 1,
+            "input_ids": [13, 14, 15, 16] + list(range(2, 8)),  # Exactly max_sequence_length - 1,
             "dates": [0, 0, 0, 0] + list(range(2052, 2058)),
         }
         result = self.data_collator.generate_start_end_index(record)

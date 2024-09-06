@@ -231,8 +231,7 @@ def create_spark_args():
         "--include_visit_type",
         dest="include_visit_type",
         action="store_true",
-        help="Specify whether to include visit types for "
-        "generating the training data",
+        help="Specify whether to include visit types for " "generating the training data",
     )
     parser.add_argument(
         "-ev",
@@ -327,8 +326,7 @@ def create_spark_args():
         "--is_population_estimation",
         dest="is_population_estimation",
         action="store_true",
-        help="Indicate whether the cohort is constructed for population level "
-        "estimation",
+        help="Indicate whether the cohort is constructed for population level " "estimation",
     )
     parser.add_argument(
         "--att_type",

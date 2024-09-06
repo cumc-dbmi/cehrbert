@@ -62,9 +62,7 @@ class TestCehrBertTokenizer(unittest.TestCase):
 
     def test_convert_id_to_token_oov(self):
         # Test decoding an out-of-vocabulary token ID
-        decoded = self.tokenizer._convert_id_to_token(
-            99
-        )  # Assuming 99 is not in the index
+        decoded = self.tokenizer._convert_id_to_token(99)  # Assuming 99 is not in the index
         self.assertEqual(decoded, OUT_OF_VOCABULARY_TOKEN)
 
 

@@ -90,9 +90,7 @@ class EncoderLayer(tf.keras.layers.Layer):
 
         ffn_output = self.ffn(out1)  # (batch_size, input_seq_len, d_model)
         ffn_output = self.dropout2(ffn_output, **kwargs)
-        out2 = self.layernorm2(
-            out1 + ffn_output
-        )  # (batch_size, input_seq_len, d_model)
+        out2 = self.layernorm2(out1 + ffn_output)  # (batch_size, input_seq_len, d_model)
         return out2, attn_weights
 
 
@@ -115,9 +113,7 @@ class Encoder(tf.keras.layers.Layer):
         self.dff = dff
         self.dropout_rate = dropout_rate
         self.enc_layers = [
-            EncoderLayer(
-                d_model, num_heads, dff, dropout_rate, name="transformer" + str(i)
-            )
+            EncoderLayer(d_model, num_heads, dff, dropout_rate, name="transformer" + str(i))
             for i in range(num_layers)
         ]
         self.dropout = tf.keras.layers.Dropout(dropout_rate)
@@ -136,9 +132,7 @@ class Encoder(tf.keras.layers.Layer):
         for i in range(self.num_layers):
             x, attn_weights = self.enc_layers[i](x, mask, **kwargs)
             attention_weights.append(attn_weights)
-        return x, tf.stack(
-            attention_weights, axis=0
-        )  # (batch_size, input_seq_len, d_model)
+        return x, tf.stack(attention_weights, axis=0)  # (batch_size, input_seq_len, d_model)
 
 
 class GptDecoder(tf.keras.layers.Layer):
@@ -160,9 +154,7 @@ class GptDecoder(tf.keras.layers.Layer):
         self.dff = dff
         self.dropout_rate = dropout_rate
         self.decoder_layers = [
-            GptDecoderLayer(
-                d_model, num_heads, dff, dropout_rate, name="transformer" + str(i)
-            )
+            GptDecoderLayer(d_model, num_heads, dff, dropout_rate, name="transformer" + str(i))
             for i in range(num_layers)
         ]
         self.dropout = tf.keras.layers.Dropout(dropout_rate)
@@ -263,9 +255,7 @@ class DecoderLayer(tf.keras.layers.Layer):
 
         ffn_output = self.ffn(out2)  # (batch_size, target_seq_len, d_model)
         ffn_output = self.dropout3(ffn_output, **kwargs)
-        out3 = self.layernorm3(
-            ffn_output + out2
-        )  # (batch_size, target_seq_len, d_model)
+        out3 = self.layernorm3(ffn_output + out2)  # (batch_size, target_seq_len, d_model)
 
         return out3, attn_weights_block1, attn_weights_block2
 
@@ -324,9 +314,7 @@ class GptDecoderLayer(tf.keras.layers.Layer):
 
         ffn_output = self.ffn(out)  # (batch_size, target_seq_len, d_model)
         ffn_output = self.dropout2(ffn_output, **kwargs)
-        out2 = self.layernorm2(
-            ffn_output + out
-        )  # (batch_size, target_seq_len, d_model)
+        out2 = self.layernorm2(ffn_output + out)  # (batch_size, target_seq_len, d_model)
 
         return out2, attn_weights_block
 
@@ -415,15 +403,11 @@ class SimpleDecoderLayer(tf.keras.layers.Layer):
             **kwargs,
         )  # (batch_size, target_seq_len, d_model)
         attn = self.mha_dropout_layer(attn, **kwargs)
-        out2 = self.mha_layernorm(
-            attn + decoder_input
-        )  # (batch_size, target_seq_len, d_model)
+        out2 = self.mha_layernorm(attn + decoder_input)  # (batch_size, target_seq_len, d_model)
 
         ffn_output = self.ffn(out2)  # (batch_size, target_seq_len, d_model)
         ffn_output = self.ffn_dropout_layer(ffn_output, **kwargs)
-        out3 = self.ffn_layernorm(
-            ffn_output + out2
-        )  # (batch_size, target_seq_len, d_model)
+        out3 = self.ffn_layernorm(ffn_output + out2)  # (batch_size, target_seq_len, d_model)
 
         return out3, attn_weights_block
 
@@ -447,13 +431,10 @@ class PositionalEncodingLayer(tf.keras.layers.Layer):
         # Take the absolute value to make sure the padded values are not negative after
         # normalization
         visit_concept_orders = tf.abs(
-            visit_concept_orders
-            - tf.reduce_min(visit_concept_orders, axis=-1)[..., tf.newaxis]
+            visit_concept_orders - tf.reduce_min(visit_concept_orders, axis=-1)[..., tf.newaxis]
         )
         # Get the same positional encodings for the concepts with the same visit_order
-        positional_embeddings = tf.gather(
-            self.pos_encoding, visit_concept_orders, axis=0
-        )
+        positional_embeddings = tf.gather(self.pos_encoding, visit_concept_orders, axis=0)
         return positional_embeddings
 
 
@@ -532,22 +513,16 @@ class ConceptValuePredictionLayer(tf.keras.layers.Layer):
         config["embedding_size"] = self.embedding_size
         return config
 
-    def call(
-        self, original_concept_embeddings, concept_val_embeddings, concept_value_masks
-    ):
+    def call(self, original_concept_embeddings, concept_val_embeddings, concept_value_masks):
         # (batch_size, context_window, 2 * embedding_size)
-        context = tf.concat(
-            [original_concept_embeddings, concept_val_embeddings], axis=-1
-        )
+        context = tf.concat([original_concept_embeddings, concept_val_embeddings], axis=-1)
         # (batch_size, context_window, 1)
         concept_vals = self.concept_value_decoder_layer(context)
 
         # (batch_size, context_window, 1)
         concept_value_masks = tf.expand_dims(concept_value_masks, axis=-1)
         # Zero out the positions without a val
-        concept_vals = tf.multiply(
-            concept_vals, tf.cast(concept_value_masks, dtype=tf.float32)
-        )
+        concept_vals = tf.multiply(concept_vals, tf.cast(concept_value_masks, dtype=tf.float32))
         return concept_vals
 
 
@@ -573,9 +548,7 @@ class ConceptValueTransformationLayer(tf.keras.layers.Layer):
         # (batch_size, num_of_visits, num_of_concepts, 1)
         concept_value_masks = tf.expand_dims(concept_value_masks, axis=-1)
         # (batch_size, num_of_visits, num_of_concepts, 1 + embedding_size)
-        concept_embeddings_with_val = tf.concat(
-            [concept_embeddings, concept_values], axis=-1
-        )
+        concept_embeddings_with_val = tf.concat([concept_embeddings, concept_values], axis=-1)
         # Run through a dense layer to bring the dimension back to embedding_size
         concept_embeddings_with_val = self.merge_value_transformation_layer(
             concept_embeddings_with_val
@@ -596,9 +569,7 @@ class ConceptValueTransformationLayer(tf.keras.layers.Layer):
         )
 
         # Merge two sets of concept embeddings
-        concept_embeddings = (
-            concept_embeddings_without_val + concept_embeddings_with_val
-        )
+        concept_embeddings = concept_embeddings_without_val + concept_embeddings_with_val
 
         return concept_embeddings
 
@@ -635,16 +606,12 @@ class TemporalTransformationLayer(tf.keras.layers.Layer):
         config["embedding_size"] = self.embedding_size
         return config
 
-    def call(
-        self, concept_embeddings, pat_seq_age, pat_seq_time, visit_rank_order, **kwargs
-    ):
+    def call(self, concept_embeddings, pat_seq_age, pat_seq_time, visit_rank_order, **kwargs):
         _, _, num_of_concepts = pat_seq_age.shape
 
         pt_seq_age_embeddings = self.age_embedding_layer(pat_seq_age, **kwargs)
         pt_seq_time_embeddings = self.time_embedding_layer(pat_seq_time, **kwargs)
-        visit_positional_encoding = self.positional_encoding_layer(
-            visit_rank_order, **kwargs
-        )
+        visit_positional_encoding = self.positional_encoding_layer(visit_rank_order, **kwargs)
 
         visit_positional_encoding = tf.tile(
             visit_positional_encoding[:, :, tf.newaxis, :], [1, 1, num_of_concepts, 1]
@@ -670,9 +637,7 @@ class BertLayer(tf.keras.layers.Layer):
 
     def __init__(self, model_path: str, *args, **kwargs):
         super(BertLayer, self).__init__(*args, **kwargs)
-        bert_model = tf.keras.models.load_model(
-            model_path, custom_objects=get_custom_objects()
-        )
+        bert_model = tf.keras.models.load_model(model_path, custom_objects=get_custom_objects())
 
         self.model_path = model_path
         self.concept_embedding_layer = bert_model.get_layer("concept_embeddings")
@@ -681,9 +646,7 @@ class BertLayer(tf.keras.layers.Layer):
             for layer in bert_model.layers
             if layer.name in ["visit_embedding_layer", "visit_segment_layer"]
         ][0]
-        self.positional_encoding_layer = bert_model.get_layer(
-            "positional_encoding_layer"
-        )
+        self.positional_encoding_layer = bert_model.get_layer("positional_encoding_layer")
         self.time_embedding_layer = bert_model.get_layer("time_embedding_layer")
         self.age_embedding_layer = bert_model.get_layer("age_embedding_layer")
         self.scale_pat_seq_layer = bert_model.get_layer("scale_pat_seq_layer")
@@ -692,9 +655,7 @@ class BertLayer(tf.keras.layers.Layer):
         self.attention_dense = tf.keras.layers.Dense(
             self.scale_pat_seq_layer.units, activation="tanh"
         )
-        self.dense = tf.keras.layers.Dense(
-            self.scale_pat_seq_layer.units, activation="tanh"
-        )
+        self.dense = tf.keras.layers.Dense(self.scale_pat_seq_layer.units, activation="tanh")
 
     def get_config(self):
         config = super().get_config()
@@ -716,9 +677,7 @@ class BertLayer(tf.keras.layers.Layer):
         concept_embeddings, _ = self.concept_embedding_layer(local_concept_ids)
         time_embeddings = self.time_embedding_layer(local_time_stamps)
         age_embeddings = self.age_embedding_layer(local_ages)
-        positional_encoddings = self.positional_encoding_layer(
-            local_visit_concept_orders
-        )
+        positional_encoddings = self.positional_encoding_layer(local_visit_concept_orders)
         concept_mask = create_concept_mask(local_mask, max_seq_length)
 
         input_for_encoder = self.scale_pat_seq_layer(
@@ -732,16 +691,10 @@ class BertLayer(tf.keras.layers.Layer):
                 axis=-1,
             )
         )
-        input_for_encoder = self.visit_segment_layer(
-            [local_visit_segments, input_for_encoder]
-        )
-        contextualized_embeddings, _ = self.encoder_layer(
-            input_for_encoder, concept_mask
-        )
+        input_for_encoder = self.visit_segment_layer([local_visit_segments, input_for_encoder])
+        contextualized_embeddings, _ = self.encoder_layer(input_for_encoder, concept_mask)
         _, _, embedding_size = contextualized_embeddings.get_shape().as_list()
-        mask_embeddings = tf.tile(
-            tf.expand_dims(local_mask == 0, -1), [1, 1, embedding_size]
-        )
+        mask_embeddings = tf.tile(tf.expand_dims(local_mask == 0, -1), [1, 1, embedding_size])
         contextualized_embeddings = tf.math.multiply(
             contextualized_embeddings, tf.cast(mask_embeddings, dtype=tf.float32)
         )
@@ -752,9 +705,7 @@ class BertLayer(tf.keras.layers.Layer):
             + (tf.cast(tf.expand_dims(local_mask, axis=-1), dtype="float32") * -1e9),
             axis=1,
         )
-        context_representation = tf.reduce_sum(
-            multi_dim_att * contextualized_embeddings, axis=1
-        )
+        context_representation = tf.reduce_sum(multi_dim_att * contextualized_embeddings, axis=1)
 
         #         conv_output = self.conv_1d(contextualized_embeddings)
         #         conv_output += (tf.cast(tf.expand_dims(local_mask, axis=-1), dtype='float32') * -1e9)
@@ -799,9 +750,7 @@ class ConvolutionBertLayer(tf.keras.layers.Layer):
         return config
 
     def call(self, inputs, **kwargs):
-        concept_ids, visit_segments, visit_concept_orders, time_stamps, ages, mask = (
-            inputs
-        )
+        concept_ids, visit_segments, visit_concept_orders, time_stamps, ages, mask = inputs
 
         bert_outputs = []
         bert_output_masking = []
@@ -825,9 +774,7 @@ class ConvolutionBertLayer(tf.keras.layers.Layer):
                 mask_step,
             ]
 
-            output_masking = tf.cast(
-                tf.reduce_all(mask_step == 1, axis=-1), dtype=tf.int32
-            )
+            output_masking = tf.cast(tf.reduce_all(mask_step == 1, axis=-1), dtype=tf.int32)
 
             output_step = self.bert_layer(inputs_step)
             bert_outputs.append(output_step)
@@ -842,12 +789,7 @@ class ConvolutionBertLayer(tf.keras.layers.Layer):
 
         attn = self.attention_dense(bert_output_tensor)
 
-        attn += (
-            tf.cast(
-                tf.expand_dims(bert_output_masking_tensor, axis=-1), dtype="float32"
-            )
-            * -1e9
-        )
+        attn += tf.cast(tf.expand_dims(bert_output_masking_tensor, axis=-1), dtype="float32") * -1e9
 
         _, _, embedding_size = bert_output_tensor.get_shape().as_list()
 
@@ -936,18 +878,14 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
 
         # Calculate the probability distribution entropy
         phenotype_prob_entropy = -tf.reduce_sum(
-            visit_phenotype_probs
-            * tf.math.log(visit_phenotype_probs)
-            * converted_visit_mask,
+            visit_phenotype_probs * tf.math.log(visit_phenotype_probs) * converted_visit_mask,
             axis=-1,
         )
         # Add the entropy to the model metrics
         self.add_metric(phenotype_prob_entropy, name="phenotype_probability_entropy")
 
         # Get phenotype pairwise distance metrics
-        phe_inv_loss, phe_dist_metric, phe_dist_var = (
-            self.get_inverse_phenotype_dist_loss_metric()
-        )
+        phe_inv_loss, phe_dist_metric, phe_dist_var = self.get_inverse_phenotype_dist_loss_metric()
 
         self.add_metric(phe_dist_metric, name="phenotype_euclidean_distance")
 
@@ -964,9 +902,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
 
         ffn_output = self.ffn(out1)  # (batch_size, input_seq_len, d_model)
         ffn_output = self.dropout2(ffn_output, training=kwargs.get("training"))
-        out2 = self.layernorm2(
-            out1 + ffn_output
-        )  # (batch_size, input_seq_len, d_model)
+        out2 = self.layernorm2(out1 + ffn_output)  # (batch_size, input_seq_len, d_model)
 
         return out2, visit_phenotype_probs
 
@@ -976,10 +912,7 @@ class VisitPhenotypeLayer(tf.keras.layers.Layer):
         r = tf.reshape(r, [-1, 1])
         euclidean_distances_full = (
             r
-            - 2
-            * tf.matmul(
-                self.phenotype_embeddings, tf.transpose(self.phenotype_embeddings)
-            )
+            - 2 * tf.matmul(self.phenotype_embeddings, tf.transpose(self.phenotype_embeddings))
             + tf.transpose(r)
         )
 
@@ -1005,14 +938,10 @@ def distance_matrix(matrix_1, matrix_2):
     ), f"The number of components for vectors in A \
             {matrix_1.shape[1]} does not match that of B {matrix_2.shape[1]}!"
 
-    matrix_1_dots = tf.reshape(
-        tf.reduce_sum(matrix_1 * matrix_1, axis=1), (m, 1)
-    ) * tf.ones((1, n))
+    matrix_1_dots = tf.reshape(tf.reduce_sum(matrix_1 * matrix_1, axis=1), (m, 1)) * tf.ones((1, n))
     matrix_2_dots = tf.reduce_sum(matrix_2 * matrix_2, axis=1) * tf.ones((m, 1))
 
-    matrix_distance_squared = (
-        matrix_1_dots + matrix_2_dots - 2 * matrix_1 @ tf.transpose(matrix_2)
-    )
+    matrix_distance_squared = matrix_1_dots + matrix_2_dots - 2 * matrix_1 @ tf.transpose(matrix_2)
 
     return tf.sqrt(matrix_distance_squared)
 

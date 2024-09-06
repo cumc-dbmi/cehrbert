@@ -69,8 +69,7 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         else:
             self._grid_search_config = GridSearchConfig()
             self.get_logger().info(
-                f"grid_search_config is None and initializing default "
-                f"GridSearchConfig"
+                f"grid_search_config is None and initializing default " f"GridSearchConfig"
             )
 
         # Set the GPU to memory growth to true to prevent the entire GPU memory from being
@@ -120,9 +119,7 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             self.eval_model_cross_validation_test()
         else:
             inputs, labels = self.extract_model_inputs()
-            for i, (train, val, test) in enumerate(
-                self.k_fold(features=inputs, labels=labels)
-            ):
+            for i, (train, val, test) in enumerate(self.k_fold(features=inputs, labels=labels)):
                 self._model = self._create_model()
                 self.train_model(
                     training_data=train,
@@ -218,9 +215,7 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
 
             with tf.device("/CPU:0"):
                 hold_out_set = (
-                    tf.data.Dataset.from_tensor_slices(
-                        (held_out_set_inputs, held_out_set_labels)
-                    )
+                    tf.data.Dataset.from_tensor_slices((held_out_set_inputs, held_out_set_labels))
                     .cache()
                     .batch(self._batch_size)
                 )
@@ -342,9 +337,7 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         # This preserves the percentage of samples for each class (0 and 1 for binary
         # classification)
         if self._k_fold_test:
-            stratified_splitter = StratifiedKFold(
-                n_splits=self._num_of_folds, random_state=10
-            )
+            stratified_splitter = StratifiedKFold(n_splits=self._num_of_folds, random_state=10)
         else:
             stratified_splitter = StratifiedShuffleSplit(
                 n_splits=self._num_of_folds, test_size=0.15, random_state=10
@@ -392,9 +385,7 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             yield training_set, val_set, test_set
 
     def get_model_name(self):
-        return (
-            self._sequence_model_name if self._sequence_model_name else self._model.name
-        )
+        return self._sequence_model_name if self._sequence_model_name else self._model.name
 
     def _get_callbacks(self):
         """
@@ -403,9 +394,7 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         :return:
         """
         learning_rate_scheduler = tf.keras.callbacks.LearningRateScheduler(
-            CosineLRSchedule(
-                lr_high=self._learning_rate, lr_low=1e-8, initial_period=10
-            ),
+            CosineLRSchedule(lr_high=self._learning_rate, lr_low=1e-8, initial_period=10),
             verbose=1,
         )
 
@@ -471,9 +460,7 @@ class BiLstmModelEvaluator(SequenceModelEvaluator):
 
         embeddings = get_concept_embeddings()
         strategy = tf.distribute.MirroredStrategy()
-        self.get_logger().info(
-            "Number of devices: {}".format(strategy.num_replicas_in_sync)
-        )
+        self.get_logger().info("Number of devices: {}".format(strategy.num_replicas_in_sync))
         with strategy.scope():
             model = create_bi_lstm_model(
                 self._max_seq_length,

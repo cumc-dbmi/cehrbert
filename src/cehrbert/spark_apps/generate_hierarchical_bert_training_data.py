@@ -72,9 +72,7 @@ def main(
     This function preprocesses domain tables, filters and processes measurement data,
     and generates hierarchical sequence data for training BERT models on EHR records.
     """
-    spark = SparkSession.builder.appName(
-        "Generate Hierarchical Bert Training Data"
-    ).getOrCreate()
+    spark = SparkSession.builder.appName("Generate Hierarchical Bert Training Data").getOrCreate()
 
     logger = logging.getLogger(__name__)
     logger.info(
@@ -101,9 +99,7 @@ def main(
     # in a different way
     for domain_table_name in domain_table_list:
         if domain_table_name != MEASUREMENT:
-            domain_tables.append(
-                preprocess_domain_table(spark, input_folder, domain_table_name)
-            )
+            domain_tables.append(preprocess_domain_table(spark, input_folder, domain_table_name))
 
     observation_period = (
         preprocess_domain_table(spark, input_folder, OBSERVATION_PERIOD)
@@ -143,21 +139,19 @@ def main(
         )
         # The select is necessary to make sure the order of the columns is the same as the
         # original dataframe
-        patient_events = patient_events.join(
-            qualified_concepts, "standard_concept_id"
-        ).select(column_names)
+        patient_events = patient_events.join(qualified_concepts, "standard_concept_id").select(
+            column_names
+        )
 
     # Process the measurement table if exists
     if MEASUREMENT in domain_table_list:
         measurement = preprocess_domain_table(spark, input_folder, MEASUREMENT)
-        required_measurement = preprocess_domain_table(
-            spark, input_folder, REQUIRED_MEASUREMENT
-        )
+        required_measurement = preprocess_domain_table(spark, input_folder, REQUIRED_MEASUREMENT)
         # The select is necessary to make sure the order of the columns is the same as the
         # original dataframe, otherwise the union might use the wrong columns
-        scaled_measurement = process_measurement(
-            spark, measurement, required_measurement
-        ).select(column_names)
+        scaled_measurement = process_measurement(spark, measurement, required_measurement).select(
+            column_names
+        )
 
         if patient_events:
             # Union all measurement records together with other domain records
@@ -177,9 +171,7 @@ def main(
         include_incomplete_visit=include_incomplete_visit,
     )
 
-    sequence_data.write.mode("overwrite").parquet(
-        os.path.join(output_folder, PARQUET_DATA_PATH)
-    )
+    sequence_data.write.mode("overwrite").parquet(os.path.join(output_folder, PARQUET_DATA_PATH))
 
 
 if __name__ == "__main__":
@@ -241,9 +233,7 @@ if __name__ == "__main__":
         help="Minimum observation period in days",
         required=False,
     )
-    parser.add_argument(
-        "--include_concept_list", dest="include_concept_list", action="store_true"
-    )
+    parser.add_argument("--include_concept_list", dest="include_concept_list", action="store_true")
     parser.add_argument(
         "--include_incomplete_visit",
         dest="include_incomplete_visit",

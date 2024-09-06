@@ -1,31 +1,49 @@
-import os
-import logging
 import configparser
+import logging
+import os
+
 import pandas as pd
 
 from cehrbert.config import output_names as p
 from cehrbert.config.grid_search_config import LEARNING_RATE, LSTM_DIRECTION, LSTM_UNIT
-from cehrbert.utils.checkpoint_utils import find_tokenizer_path, find_visit_tokenizer_path
-from cehrbert.utils.model_utils import validate_folder
+from cehrbert.evaluations.evaluation_parameters import (
+    BASELINE_MODEL,
+    FULL,
+    HIERARCHICAL_BERT_LSTM,
+    HIERARCHICAL_BERT_POOLING,
+    LSTM,
+    RANDOM_HIERARCHICAL_BERT_LSTM,
+    RANDOM_VANILLA_BERT_LSTM,
+    SEQUENCE_MODEL,
+    SLIDING_BERT,
+    VANILLA_BERT_FEED_FORWARD,
+    VANILLA_BERT_LSTM,
+)
 from cehrbert.evaluations.evaluation_parse_args import create_evaluation_args
 from cehrbert.evaluations.model_evaluators.bert_model_evaluators import (
-    BertFeedForwardModelEvaluator, SlidingBertModelEvaluator, BertLstmModelEvaluator,
-    RandomVanillaLstmBertModelEvaluator
+    BertFeedForwardModelEvaluator,
+    BertLstmModelEvaluator,
+    RandomVanillaLstmBertModelEvaluator,
+    SlidingBertModelEvaluator,
 )
 from cehrbert.evaluations.model_evaluators.frequency_model_evaluators import (
-    LogisticRegressionModelEvaluator, XGBClassifierEvaluator
+    LogisticRegressionModelEvaluator,
+    XGBClassifierEvaluator,
 )
 from cehrbert.evaluations.model_evaluators.hierarchical_bert_evaluators import (
-    HierarchicalBertEvaluator, HierarchicalBertPoolingEvaluator, RandomHierarchicalBertEvaluator
+    HierarchicalBertEvaluator,
+    HierarchicalBertPoolingEvaluator,
+    RandomHierarchicalBertEvaluator,
 )
 from cehrbert.evaluations.model_evaluators.sequence_model_evaluators import (
-    GridSearchConfig, BiLstmModelEvaluator
+    BiLstmModelEvaluator,
+    GridSearchConfig,
 )
-from cehrbert.evaluations.evaluation_parameters import (
-    LSTM, VANILLA_BERT_LSTM, VANILLA_BERT_FEED_FORWARD, RANDOM_VANILLA_BERT_LSTM,
-    SLIDING_BERT, HIERARCHICAL_BERT_LSTM, HIERARCHICAL_BERT_POOLING, RANDOM_HIERARCHICAL_BERT_LSTM,
-    BASELINE_MODEL, SEQUENCE_MODEL, FULL
+from cehrbert.utils.checkpoint_utils import (
+    find_tokenizer_path,
+    find_visit_tokenizer_path,
 )
+from cehrbert.utils.model_utils import validate_folder
 
 
 def get_grid_search_config(grid_search_config) -> GridSearchConfig:
@@ -40,12 +58,8 @@ def get_grid_search_config(grid_search_config) -> GridSearchConfig:
             config = configparser.ConfigParser()
             config.read(grid_search_config)
 
-            learning_rates = [
-                float(v) for v in dict(config[LEARNING_RATE].items()).values()
-            ]
-            lstm_directions = [
-                bool(int(v)) for v in dict(config[LSTM_DIRECTION].items()).values()
-            ]
+            learning_rates = [float(v) for v in dict(config[LEARNING_RATE].items()).values()]
+            lstm_directions = [bool(int(v)) for v in dict(config[LSTM_DIRECTION].items()).values()]
             lstm_units = [int(v) for v in dict(config[LSTM_UNIT].items()).values()]
 
             return GridSearchConfig(
@@ -57,9 +71,7 @@ def get_grid_search_config(grid_search_config) -> GridSearchConfig:
     except Exception as e:
         print(f'{grid_search_config} cannot be parsed. Error message" {e}')
     else:
-        print(
-            f"grid_search_config is not provided, will use the default GridSearchConfig"
-        )
+        print(f"grid_search_config is not provided, will use the default GridSearchConfig")
 
     return GridSearchConfig()
 
@@ -74,9 +86,7 @@ def evaluate_sequence_models(args):
     grid_search_config = get_grid_search_config(args.grid_search_config)
     if LSTM in args.model_evaluators:
         validate_folder(args.time_attention_model_folder)
-        time_attention_tokenizer_path = find_tokenizer_path(
-            args.time_attention_model_folder
-        )
+        time_attention_tokenizer_path = find_tokenizer_path(args.time_attention_model_folder)
         time_aware_model_path = os.path.join(
             args.time_attention_model_folder, p.TIME_ATTENTION_MODEL_PATH
         )
@@ -104,9 +114,7 @@ def evaluate_sequence_models(args):
     if VANILLA_BERT_FEED_FORWARD in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
         bert_tokenizer_path = find_tokenizer_path(args.vanilla_bert_model_folder)
-        bert_model_path = os.path.join(
-            args.vanilla_bert_model_folder, p.BERT_MODEL_VALIDATION_PATH
-        )
+        bert_model_path = os.path.join(args.vanilla_bert_model_folder, p.BERT_MODEL_VALIDATION_PATH)
         BertFeedForwardModelEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
@@ -130,9 +138,7 @@ def evaluate_sequence_models(args):
     if SLIDING_BERT in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
         bert_tokenizer_path = find_tokenizer_path(args.vanilla_bert_model_folder)
-        bert_model_path = os.path.join(
-            args.vanilla_bert_model_folder, p.BERT_MODEL_VALIDATION_PATH
-        )
+        bert_model_path = os.path.join(args.vanilla_bert_model_folder, p.BERT_MODEL_VALIDATION_PATH)
         SlidingBertModelEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
@@ -157,9 +163,7 @@ def evaluate_sequence_models(args):
     if VANILLA_BERT_LSTM in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
         bert_tokenizer_path = find_tokenizer_path(args.vanilla_bert_model_folder)
-        bert_model_path = os.path.join(
-            args.vanilla_bert_model_folder, p.BERT_MODEL_VALIDATION_PATH
-        )
+        bert_model_path = os.path.join(args.vanilla_bert_model_folder, p.BERT_MODEL_VALIDATION_PATH)
         BertLstmModelEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
@@ -184,9 +188,7 @@ def evaluate_sequence_models(args):
 
     if RANDOM_VANILLA_BERT_LSTM in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
-        bert_model_path = os.path.join(
-            args.vanilla_bert_model_folder, p.BERT_MODEL_VALIDATION_PATH
-        )
+        bert_model_path = os.path.join(args.vanilla_bert_model_folder, p.BERT_MODEL_VALIDATION_PATH)
         bert_tokenizer_path = find_tokenizer_path(args.vanilla_bert_model_folder)
         visit_tokenizer_path = find_visit_tokenizer_path(args.vanilla_bert_model_folder)
 
@@ -220,14 +222,10 @@ def evaluate_sequence_models(args):
 
     if HIERARCHICAL_BERT_LSTM in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
-        bert_model_path = os.path.join(
-            args.vanilla_bert_model_folder, p.BERT_MODEL_VALIDATION_PATH
-        )
+        bert_model_path = os.path.join(args.vanilla_bert_model_folder, p.BERT_MODEL_VALIDATION_PATH)
 
         bert_tokenizer_path = find_tokenizer_path(args.vanilla_bert_model_folder)
-        bert_visit_tokenizer_path = find_visit_tokenizer_path(
-            args.vanilla_bert_model_folder
-        )
+        bert_visit_tokenizer_path = find_visit_tokenizer_path(args.vanilla_bert_model_folder)
 
         HierarchicalBertEvaluator(
             dataset=dataset,
@@ -255,14 +253,10 @@ def evaluate_sequence_models(args):
 
     if HIERARCHICAL_BERT_POOLING in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
-        bert_model_path = os.path.join(
-            args.vanilla_bert_model_folder, p.BERT_MODEL_VALIDATION_PATH
-        )
+        bert_model_path = os.path.join(args.vanilla_bert_model_folder, p.BERT_MODEL_VALIDATION_PATH)
 
         bert_tokenizer_path = find_tokenizer_path(args.vanilla_bert_model_folder)
-        bert_visit_tokenizer_path = find_visit_tokenizer_path(
-            args.vanilla_bert_model_folder
-        )
+        bert_visit_tokenizer_path = find_visit_tokenizer_path(args.vanilla_bert_model_folder)
 
         HierarchicalBertPoolingEvaluator(
             dataset=dataset,
@@ -290,14 +284,10 @@ def evaluate_sequence_models(args):
 
     if RANDOM_HIERARCHICAL_BERT_LSTM in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
-        bert_model_path = os.path.join(
-            args.vanilla_bert_model_folder, p.BERT_MODEL_VALIDATION_PATH
-        )
+        bert_model_path = os.path.join(args.vanilla_bert_model_folder, p.BERT_MODEL_VALIDATION_PATH)
 
         bert_tokenizer_path = find_tokenizer_path(args.vanilla_bert_model_folder)
-        bert_visit_tokenizer_path = find_visit_tokenizer_path(
-            args.vanilla_bert_model_folder
-        )
+        bert_visit_tokenizer_path = find_visit_tokenizer_path(args.vanilla_bert_model_folder)
 
         RandomHierarchicalBertEvaluator(
             dataset=dataset,

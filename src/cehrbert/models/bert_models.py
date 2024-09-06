@@ -69,9 +69,7 @@ def transformer_bert_model(
         concept_values,
     ]
 
-    l2_regularizer = (
-        tf.keras.regularizers.l2(l2_reg_penalty) if l2_reg_penalty else None
-    )
+    l2_regularizer = tf.keras.regularizers.l2(l2_reg_penalty) if l2_reg_penalty else None
 
     embedding_layer = ReusableEmbedding(
         vocab_size,
@@ -117,24 +115,18 @@ def transformer_bert_model(
     )
 
     if use_behrt:
-        ages = tf.keras.layers.Input(
-            shape=(max_seq_length,), dtype="int32", name="ages"
-        )
+        ages = tf.keras.layers.Input(shape=(max_seq_length,), dtype="int32", name="ages")
         default_inputs.extend([ages])
         age_embedding_layer = TimeEmbeddingLayer(embedding_size=embedding_size)
         next_step_input = next_step_input + age_embedding_layer(ages)
-        positional_encoding_layer = PositionalEncodingLayer(
-            embedding_size=embedding_size
-        )
+        positional_encoding_layer = PositionalEncodingLayer(embedding_size=embedding_size)
         next_step_input += positional_encoding_layer(visit_concept_orders)
 
     elif use_time_embedding:
         time_stamps = tf.keras.layers.Input(
             shape=(max_seq_length,), dtype="int32", name="time_stamps"
         )
-        ages = tf.keras.layers.Input(
-            shape=(max_seq_length,), dtype="int32", name="ages"
-        )
+        ages = tf.keras.layers.Input(shape=(max_seq_length,), dtype="int32", name="ages")
         default_inputs.extend([time_stamps, ages])
         # # define the time embedding layer for absolute time stamps (since 1970)
         time_embedding_layer = TimeEmbeddingLayer(
@@ -166,9 +158,7 @@ def transformer_bert_model(
             )
         )
     else:
-        positional_encoding_layer = PositionalEncodingLayer(
-            embedding_size=embedding_size
-        )
+        positional_encoding_layer = PositionalEncodingLayer(embedding_size=embedding_size)
         next_step_input += positional_encoding_layer(visit_concept_orders)
 
     # Building a Vanilla Transformer (described in
@@ -177,9 +167,7 @@ def transformer_bert_model(
 
     next_step_input, _ = encoder(next_step_input, concept_mask)
 
-    concept_predictions = softmax_layer(
-        output_layer([next_step_input, embedding_matrix])
-    )
+    concept_predictions = softmax_layer(output_layer([next_step_input, embedding_matrix]))
 
     outputs = [concept_predictions]
 
@@ -189,22 +177,16 @@ def transformer_bert_model(
             [1, 1, embedding_size],
             name="bert_tile_prolonged",
         )
-        mask_embeddings = tf.cast(
-            mask_embeddings, dtype=tf.float32, name="bert_cast_prolonged"
-        )
+        mask_embeddings = tf.cast(mask_embeddings, dtype=tf.float32, name="bert_cast_prolonged")
         contextualized_embeddings = tf.math.multiply(
             next_step_input, mask_embeddings, name="bert_multiply_prolonged"
         )
-        summed_contextualized_embeddings = tf.reduce_sum(
-            contextualized_embeddings, axis=-1
-        )
+        summed_contextualized_embeddings = tf.reduce_sum(contextualized_embeddings, axis=-1)
         prolonged_length_stay_prediction = tf.keras.layers.Dense(
             1, name="prolonged_length_stay", activation="sigmoid"
         )
 
-        outputs.append(
-            prolonged_length_stay_prediction(summed_contextualized_embeddings)
-        )
+        outputs.append(prolonged_length_stay_prediction(summed_contextualized_embeddings))
 
     model = tf.keras.Model(inputs=default_inputs, outputs=outputs)
 

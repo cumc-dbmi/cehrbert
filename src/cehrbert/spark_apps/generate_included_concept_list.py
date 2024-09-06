@@ -29,9 +29,7 @@ from ..utils.spark_utils import join_domain_tables, preprocess_domain_table
 DOMAIN_TABLE_LIST = ["condition_occurrence", "procedure_occurrence", "drug_exposure"]
 
 
-def main(
-    input_folder, output_folder, min_num_of_patients, with_drug_rollup: bool = True
-):
+def main(input_folder, output_folder, min_num_of_patients, with_drug_rollup: bool = True):
     """
     Main function to generate a qualified concept list based on patient event data from multiple.
 
@@ -110,9 +108,7 @@ if __name__ == "__main__":
         help="Min no.of patients linked to concepts to be included",
         required=False,
     )
-    parser.add_argument(
-        "--with_drug_rollup", dest="with_drug_rollup", action="store_true"
-    )
+    parser.add_argument("--with_drug_rollup", dest="with_drug_rollup", action="store_true")
 
     ARGS = parser.parse_args()
 

@@ -48,9 +48,7 @@ def main(input_folder, output_folder, num_of_numeric_labs, num_of_categorical_la
     )
 
     popular_categorical_labs = (
-        popular_labs.withColumn(
-            "is_categorical", F.col("categorical_percentage") >= 0.5
-        )
+        popular_labs.withColumn("is_categorical", F.col("categorical_percentage") >= 0.5)
         .where("is_categorical")
         .withColumn("is_numeric", ~F.col("is_categorical"))
         .withColumn("rn", F.row_number().over(W.orderBy(F.desc("freq"))))
@@ -59,9 +57,9 @@ def main(input_folder, output_folder, num_of_numeric_labs, num_of_categorical_la
         .drop("rn")
     )
 
-    popular_numeric_labs.unionAll(popular_categorical_labs).write.mode(
-        "overwrite"
-    ).parquet(os.path.join(output_folder, REQUIRED_MEASUREMENT))
+    popular_numeric_labs.unionAll(popular_categorical_labs).write.mode("overwrite").parquet(
+        os.path.join(output_folder, REQUIRED_MEASUREMENT)
+    )
 
 
 if __name__ == "__main__":

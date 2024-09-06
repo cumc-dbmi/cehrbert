@@ -14,8 +14,10 @@ from sklearn.preprocessing import StandardScaler, normalize
 from tensorflow.keras.preprocessing.text import Tokenizer
 from xgboost import XGBClassifier
 
-from ...utils.model_utils import compute_binary_metrics
-from ..model_evaluators.model_evaluators import AbstractModelEvaluator
+from cehrbert.evaluations.model_evaluators.model_evaluators import (
+    AbstractModelEvaluator,
+)
+from cehrbert.utils.model_utils import compute_binary_metrics
 
 
 class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
@@ -44,13 +46,9 @@ class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
                 self._model = self._model.fit(x, y)
             else:
                 self._model.fit(x, y)
-            compute_binary_metrics(
-                self._model, test_data, self.get_model_metrics_folder()
-            )
+            compute_binary_metrics(self._model, test_data, self.get_model_metrics_folder())
         else:
-            for train, test in self.k_fold(
-                features=(inputs, age, person_ids), labels=labels
-            ):
+            for train, test in self.k_fold(features=(inputs, age, person_ids), labels=labels):
                 x, y = train
                 self._model = self._create_model()
                 if isinstance(self._model, GridSearchCV):
@@ -58,9 +56,7 @@ class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
                 else:
                     self._model.fit(x, y)
 
-                compute_binary_metrics(
-                    self._model, test, self.get_model_metrics_folder()
-                )
+                compute_binary_metrics(self._model, test, self.get_model_metrics_folder())
 
     def get_model_name(self):
         return type(self._model).__name__
@@ -73,9 +69,7 @@ class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
         (inputs, age, person_ids) = features
 
         if self._k_fold_test:
-            stratified_splitter = StratifiedKFold(
-                n_splits=self._num_of_folds, random_state=10
-            )
+            stratified_splitter = StratifiedKFold(n_splits=self._num_of_folds, random_state=10)
         else:
             stratified_splitter = StratifiedShuffleSplit(
                 n_splits=1, test_size=0.15, random_state=10
@@ -105,9 +99,7 @@ class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
         # Tokenize the concepts
         tokenizer = Tokenizer(filters="", lower=False)
         tokenizer.fit_on_texts(self._dataset["concept_ids"])
-        self._dataset["token_ids"] = tokenizer.texts_to_sequences(
-            self._dataset["concept_ids"]
-        )
+        self._dataset["token_ids"] = tokenizer.texts_to_sequences(self._dataset["concept_ids"])
 
         # Create the row index
         dataset = self._dataset.reset_index().reset_index()

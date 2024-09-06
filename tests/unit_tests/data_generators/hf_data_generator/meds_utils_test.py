@@ -23,9 +23,7 @@ class TestGetMedsToCehrBertConversionCls(unittest.TestCase):
         # Test for an invalid conversion type
         with self.assertRaises(RuntimeError) as context:
             get_meds_to_cehrbert_conversion_cls(AttType.CEHR_BERT)
-        self.assertIn(
-            "is not a valid MedsToCehrBertConversionType", str(context.exception)
-        )
+        self.assertIn("is not a valid MedsToCehrBertConversionType", str(context.exception))
 
 
 if __name__ == "__main__":

@@ -6,8 +6,8 @@ import numpy as np
 import torch
 from torch.nn.utils.rnn import pad_sequence
 
-from ...data_generators.hf_data_generator.hf_dataset_mapping import TruncationType
-from ...models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
+from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import TruncationType
+from cehrbert.models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 
 
 class CehrBertDataCollator:
@@ -50,29 +50,21 @@ class CehrBertDataCollator:
         batch_size = len(examples)
 
         # Assume that each example in the batch is a dictionary with 'input_ids' and 'attention_mask'
-        batch_input_ids = [
-            self._convert_to_tensor(example["input_ids"]) for example in examples
-        ]
+        batch_input_ids = [self._convert_to_tensor(example["input_ids"]) for example in examples]
         batch_attention_mask = [
-            torch.ones_like(
-                self._convert_to_tensor(example["input_ids"]), dtype=torch.float
-            )
+            torch.ones_like(self._convert_to_tensor(example["input_ids"]), dtype=torch.float)
             for example in examples
         ]
         batch_ages = [self._convert_to_tensor(example["ages"]) for example in examples]
-        batch_dates = [
-            self._convert_to_tensor(example["dates"]) for example in examples
-        ]
+        batch_dates = [self._convert_to_tensor(example["dates"]) for example in examples]
         batch_visit_concept_orders = [
-            self._convert_to_tensor(example["visit_concept_orders"])
-            for example in examples
+            self._convert_to_tensor(example["visit_concept_orders"]) for example in examples
         ]
         batch_concept_values = [
             self._convert_to_tensor(example["concept_values"]) for example in examples
         ]
         batch_concept_value_masks = [
-            self._convert_to_tensor(example["concept_value_masks"])
-            for example in examples
+            self._convert_to_tensor(example["concept_value_masks"]) for example in examples
         ]
         batch_visit_segments = [
             self._convert_to_tensor(example["visit_segments"]) for example in examples
@@ -162,12 +154,8 @@ class CehrBertDataCollator:
             # For example, the mlm_skip_values=1, this means this is a lab value and
             # we don't want to predict the tokens at this position
             if "labels" in examples[0]:
-                batch_labels = [
-                    self._convert_to_tensor(example["labels"]) for example in examples
-                ]
-                batch["labels"] = pad_sequence(
-                    batch_labels, batch_first=True, padding_value=-100
-                )
+                batch_labels = [self._convert_to_tensor(example["labels"]) for example in examples]
+                batch["labels"] = pad_sequence(batch_labels, batch_first=True, padding_value=-100)
                 # Disable MLM for the CLS token
                 batch["labels"] = torch.cat(
                     [torch.full((batch_size, 1), -100), batch["labels"]], dim=1
@@ -201,9 +189,7 @@ class CehrBertDataCollator:
 
         return batch
 
-    def torch_mask_tokens(
-        self, inputs: torch.Tensor, labels: torch.Tensor
-    ) -> Tuple[Any, Any]:
+    def torch_mask_tokens(self, inputs: torch.Tensor, labels: torch.Tensor) -> Tuple[Any, Any]:
         """Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original."""
         # We sample a few tokens in each sequence for MLM training (with probability `self.mlm_probability`)
         probability_matrix = torch.full(labels.shape, self.mlm_probability)
@@ -214,9 +200,7 @@ class CehrBertDataCollator:
         labels[~masked_indices] = -100  # We only compute loss on masked tokens
 
         # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-        indices_replaced = (
-            torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
-        )
+        indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
         inputs[indices_replaced] = self.tokenizer.mask_token_index
 
         # 10% of the time, we replace masked input tokens with random word
@@ -225,9 +209,7 @@ class CehrBertDataCollator:
             & masked_indices
             & ~indices_replaced
         )
-        random_words = torch.randint(
-            self.tokenizer.vocab_size, labels.shape, dtype=torch.long
-        )
+        random_words = torch.randint(self.tokenizer.vocab_size, labels.shape, dtype=torch.long)
         inputs[indices_random] = random_words[indices_random]
 
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
@@ -261,9 +243,7 @@ class CehrBertDataCollator:
                 if current_token == self.vs_token_id:
                     starting_points.append(i)
 
-            assert (
-                len(starting_points) > 0
-            ), f"{record['input_ids'][:seq_length - new_max_length]}"
+            assert len(starting_points) > 0, f"{record['input_ids'][:seq_length - new_max_length]}"
             start_index = random.choice(starting_points)
             end_index = min(start_index + new_max_length, seq_length)
 

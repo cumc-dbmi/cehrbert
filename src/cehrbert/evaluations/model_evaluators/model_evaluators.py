@@ -47,9 +47,9 @@ class AbstractModelEvaluator(AbstractModel):
         self._test_person_ids = test_person_ids
 
         if is_transfer_learning:
-            extension = "transfer_learning_{:.2f}".format(
-                self._training_percentage
-            ).replace(".", "_")
+            extension = "transfer_learning_{:.2f}".format(self._training_percentage).replace(
+                ".", "_"
+            )
             self._evaluation_folder = os.path.join(self._evaluation_folder, extension)
 
         self.get_logger().info(
@@ -63,9 +63,7 @@ class AbstractModelEvaluator(AbstractModel):
         )
 
         if self._is_chronological_test:
-            self.get_logger().info(
-                f"Start sorting dataset chronologically using index date"
-            )
+            self.get_logger().info(f"Start sorting dataset chronologically using index date")
             self._dataset = self._dataset.sort_values("index_date").reset_index()
             self.get_logger().info(f"Finish sorting dataset chronologically")
 

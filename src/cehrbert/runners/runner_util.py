@@ -52,9 +52,7 @@ def load_parquet_as_dataset(
     """
     data_abspath = os.path.abspath(data_folder)
     data_files = glob.glob(os.path.join(data_abspath, "*.parquet"))
-    dataset = load_dataset(
-        "parquet", data_files=data_files, split=split, streaming=streaming
-    )
+    dataset = load_dataset("parquet", data_files=data_files, split=split, streaming=streaming)
     return dataset
 
 
@@ -116,9 +114,7 @@ def get_last_hf_checkpoint(training_args):
                 f"Output directory ({output_dir_abspath}) already exists and is not empty. "
                 "Use --overwrite_output_dir to overcome."
             )
-        elif (
-            last_checkpoint is not None and training_args.resume_from_checkpoint is None
-        ):
+        elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
             LOG.info(
                 "Checkpoint detected, resuming training at %s. To avoid this behavior, change "
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch.",
@@ -227,9 +223,7 @@ def generate_prepared_ds_path(data_args, model_args, data_folder=None) -> Path:
     return prepared_ds_path
 
 
-def parse_runner_args() -> (
-    Tuple[DataTrainingArguments, ModelArguments, TrainingArguments]
-):
+def parse_runner_args() -> Tuple[DataTrainingArguments, ModelArguments, TrainingArguments]:
     """
     Parses command line arguments provided to a script for training a model using the Hugging Face.
 
@@ -267,9 +261,7 @@ def parse_runner_args() -> (
         Or using a YAML configuration file:
         $ python training_script.py config.yaml
     """
-    parser = HfArgumentParser(
-        (ModelArguments, DataTrainingArguments, TrainingArguments)
-    )
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
@@ -360,7 +352,5 @@ def get_meds_extension_path(data_folder: str, dataset_prepared_path: str):
     if data_folder.endswith("\\"):
         data_folder = data_folder.rstrip("\\")
     basename = os.path.basename(data_folder)
-    meds_extension_path = os.path.join(
-        dataset_prepared_path, f"{basename}_meds_extension"
-    )
+    meds_extension_path = os.path.join(dataset_prepared_path, f"{basename}_meds_extension")
     return meds_extension_path

@@ -26,9 +26,7 @@ class TestCehrBert(unittest.TestCase):
         layer = self.model.bert.cehr_bert_embeddings.positional_embedding_layer
         embedding_size = self.config.n_time_embd
         visit_concept_orders = torch.arange(10, 15).unsqueeze(0).repeat(2, 1)
-        visit_concept_orders = torch.cat(
-            [visit_concept_orders, torch.full((2, 1), 5)], dim=-1
-        )
+        visit_concept_orders = torch.cat([visit_concept_orders, torch.full((2, 1), 5)], dim=-1)
         output = layer(visit_concept_orders)
         self.assertEqual(output.shape, (2, 6, embedding_size))
 

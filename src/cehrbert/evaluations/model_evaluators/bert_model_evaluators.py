@@ -1,19 +1,21 @@
 import pickle
 
 import numpy as np
+import tensorflow as tf
 
-from ...data_generators.learning_objective import post_pad_pre_truncate
-from ...models.evaluation_models import (
+from cehrbert.data_generators.learning_objective import post_pad_pre_truncate
+from cehrbert.evaluations.model_evaluators.model_evaluators import get_metrics
+from cehrbert.evaluations.model_evaluators.sequence_model_evaluators import (
+    SequenceModelEvaluator,
+)
+from cehrbert.models.evaluation_models import (
     create_probabilistic_bert_bi_lstm_model,
     create_random_vanilla_bert_bi_lstm_model,
     create_sliding_bert_model,
     create_temporal_bert_bi_lstm_model,
     create_vanilla_bert_bi_lstm_model,
     create_vanilla_feed_forward_model,
-    tf,
 )
-from ..model_evaluators.model_evaluators import get_metrics
-from ..model_evaluators.sequence_model_evaluators import SequenceModelEvaluator
 
 
 class BertLstmModelEvaluator(SequenceModelEvaluator):
@@ -43,9 +45,7 @@ class BertLstmModelEvaluator(SequenceModelEvaluator):
 
     def _create_model(self, **kwargs):
         strategy = tf.distribute.MirroredStrategy()
-        self.get_logger().info(
-            "Number of devices: {}".format(strategy.num_replicas_in_sync)
-        )
+        self.get_logger().info("Number of devices: {}".format(strategy.num_replicas_in_sync))
         with strategy.scope():
             create_model_fn = (
                 create_temporal_bert_bi_lstm_model
@@ -53,14 +53,10 @@ class BertLstmModelEvaluator(SequenceModelEvaluator):
                 else create_vanilla_bert_bi_lstm_model
             )
             try:
-                model = create_model_fn(
-                    self._max_seq_length, self._bert_model_path, **kwargs
-                )
+                model = create_model_fn(self._max_seq_length, self._bert_model_path, **kwargs)
             except ValueError as e:
                 self.get_logger().exception(e)
-                model = create_model_fn(
-                    self._max_seq_length, self._bert_model_path, **kwargs
-                )
+                model = create_model_fn(self._max_seq_length, self._bert_model_path, **kwargs)
 
             model.compile(
                 loss="binary_crossentropy",
@@ -84,9 +80,7 @@ class BertLstmModelEvaluator(SequenceModelEvaluator):
         padded_token_ides = post_pad_pre_truncate(
             token_ids, self._tokenizer.get_unused_token_id(), self._max_seq_length
         )
-        padded_visit_segments = post_pad_pre_truncate(
-            visit_segments, 0, self._max_seq_length
-        )
+        padded_visit_segments = post_pad_pre_truncate(visit_segments, 0, self._max_seq_length)
         mask = (padded_token_ides == self._tokenizer.get_unused_token_id()).astype(int)
 
         padded_time_stamps = post_pad_pre_truncate(time_stamps, 0, self._max_seq_length)
@@ -126,9 +120,7 @@ class ProbabilisticBertModelEvaluator(BertLstmModelEvaluator):
 
     def _create_model(self):
         strategy = tf.distribute.MirroredStrategy()
-        self.get_logger().info(
-            "Number of devices: {}".format(strategy.num_replicas_in_sync)
-        )
+        self.get_logger().info("Number of devices: {}".format(strategy.num_replicas_in_sync))
         with strategy.scope():
             try:
                 model = create_probabilistic_bert_bi_lstm_model(
@@ -154,9 +146,7 @@ class BertFeedForwardModelEvaluator(BertLstmModelEvaluator):
 
     def _create_model(self):
         strategy = tf.distribute.MirroredStrategy()
-        self.get_logger().info(
-            "Number of devices: {}".format(strategy.num_replicas_in_sync)
-        )
+        self.get_logger().info("Number of devices: {}".format(strategy.num_replicas_in_sync))
         with strategy.scope():
             try:
                 model = create_vanilla_feed_forward_model((self._bert_model_path))
@@ -180,9 +170,7 @@ class SlidingBertModelEvaluator(BertLstmModelEvaluator):
 
     def _create_model(self):
         strategy = tf.distribute.MirroredStrategy()
-        self.get_logger().info(
-            "Number of devices: {}".format(strategy.num_replicas_in_sync)
-        )
+        self.get_logger().info("Number of devices: {}".format(strategy.num_replicas_in_sync))
         with strategy.scope():
             try:
                 model = create_sliding_bert_model(
@@ -239,9 +227,7 @@ class RandomVanillaLstmBertModelEvaluator(BertLstmModelEvaluator):
 
     def _create_model(self):
         strategy = tf.distribute.MirroredStrategy()
-        self.get_logger().info(
-            "Number of devices: {}".format(strategy.num_replicas_in_sync)
-        )
+        self.get_logger().info("Number of devices: {}".format(strategy.num_replicas_in_sync))
         with strategy.scope():
 
             try:

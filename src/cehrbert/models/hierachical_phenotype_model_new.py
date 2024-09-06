@@ -28,9 +28,7 @@ def create_visit_masks(visit_mask, num_of_visits):
     )[:-1, :-1]
 
     # (batch_size, 1, num_of_visits_with_att, num_of_visits_with_att)
-    look_ahead_visit_mask_with_att = tf.maximum(
-        visit_mask_with_att, look_ahead_visit_mask_with_att
-    )
+    look_ahead_visit_mask_with_att = tf.maximum(visit_mask_with_att, look_ahead_visit_mask_with_att)
 
     return look_ahead_visit_mask_with_att
 
@@ -103,9 +101,7 @@ class HierarchicalBertModel(tf.keras.Model):
         self.include_att_prediction = include_att_prediction
 
         # output the embedding_matrix:
-        self.l2_regularizer = (
-            tf.keras.regularizers.l2(l2_reg_penalty) if l2_reg_penalty else None
-        )
+        self.l2_regularizer = tf.keras.regularizers.l2(l2_reg_penalty) if l2_reg_penalty else None
 
         self.concept_embedding_layer = ReusableEmbedding(
             concept_vocab_size,
@@ -266,8 +262,8 @@ class HierarchicalBertModel(tf.keras.Model):
         visit_embeddings = concept_embeddings[:, :, 0]
 
         # (batch_size, num_of_visits, embedding_size)
-        visit_type_embeddings, visit_type_embedding_matrix = (
-            self.visit_type_embedding_layer(visit_visit_type, **kwargs)
+        visit_type_embeddings, visit_type_embedding_matrix = self.visit_type_embedding_layer(
+            visit_visit_type, **kwargs
         )
 
         # Combine visit_type_embeddings with visit_embeddings
@@ -276,9 +272,7 @@ class HierarchicalBertModel(tf.keras.Model):
         )
 
         # (batch_size, num_of_visits, embedding_size)
-        expanded_att_embeddings = tf.concat(
-            [att_embeddings, att_embeddings[:, 0:1, :]], axis=1
-        )
+        expanded_att_embeddings = tf.concat([att_embeddings, att_embeddings[:, 0:1, :]], axis=1)
 
         # Insert the att embeddings between visit embeddings
         # (batch_size, num_of_visits + num_of_visits + num_of_visits - 1, embedding_size)
@@ -290,9 +284,7 @@ class HierarchicalBertModel(tf.keras.Model):
             (-1, 3 * self.num_of_visits, self.embedding_size),
         )[:, :-1, :]
 
-        look_ahead_visit_mask_with_att = create_visit_masks(
-            visit_mask, self.num_of_visits
-        )
+        look_ahead_visit_mask_with_att = create_visit_masks(visit_mask, self.num_of_visits)
 
         # Feed augmented visit embeddings into encoders to get contextualized visit embeddings
         visit_embeddings, _ = self.visit_encoder(
@@ -301,9 +293,7 @@ class HierarchicalBertModel(tf.keras.Model):
 
         # Pad contextualized_visit_embeddings on axis 1 with one extra visit, we can extract the
         # visit embeddings using reshape trick
-        padded_visit_embeddings = tf.concat(
-            [visit_embeddings, visit_embeddings[:, 0:1, :]], axis=1
-        )
+        padded_visit_embeddings = tf.concat([visit_embeddings, visit_embeddings[:, 0:1, :]], axis=1)
 
         # Extract the visit embeddings elements
         visit_embeddings_without_att = tf.reshape(
@@ -370,9 +360,7 @@ class HierarchicalBertModel(tf.keras.Model):
             )
 
             att_predictions = self.att_prediction_layer(
-                self.concept_output_layer(
-                    [contextualized_att_embeddings, embedding_matrix]
-                )
+                self.concept_output_layer([contextualized_att_embeddings, embedding_matrix])
             )
             outputs["att_predictions"] = att_predictions
 
@@ -394,9 +382,7 @@ class HierarchicalBertModel(tf.keras.Model):
         config["num_of_concept_neighbors"] = self.num_of_concept_neighbors
         config["phenotype_entropy_weight"] = self.phenotype_entropy_weight
         config["phenotype_euclidean_weight"] = self.phenotype_euclidean_weight
-        config["phenotype_concept_distance_weight"] = (
-            self.phenotype_concept_distance_weight
-        )
+        config["phenotype_concept_distance_weight"] = self.phenotype_concept_distance_weight
         config["include_att_prediction"] = self.include_att_prediction
         return config
 
@@ -459,9 +445,7 @@ class MultiTaskHierarchicalBertModel(HierarchicalBertModel):
             outputs["visit_predictions"] = visit_predictions
 
         if self.include_readmission:
-            is_readmission_output = self.is_readmission_layer(
-                visit_embeddings_without_att
-            )
+            is_readmission_output = self.is_readmission_layer(visit_embeddings_without_att)
             outputs["is_readmission"] = is_readmission_output
 
         if self.include_prolonged_length_stay:

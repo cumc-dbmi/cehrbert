@@ -1,15 +1,16 @@
-import copy
 import inspect
 import logging
+import random
+from abc import ABC, abstractmethod
 from collections import ChainMap
-from itertools import chain
-from typing import Set
+from itertools import chain, islice
+from typing import List, Set
 
-from pandas import DataFrame
+import numpy as np
+import pandas as pd
 
-from .data_classes import RecordStatus, RowSlicer
+from .data_classes import RowSlicer
 from .learning_objective import (
-    ABC,
     BertFineTuningLearningObjective,
     DemographicsLearningObjective,
     HierarchicalArtificialTokenPredictionLearningObjective,
@@ -18,20 +19,10 @@ from .learning_objective import (
     HierarchicalReadmissionLearningObjective,
     HierarchicalVisitTypePredictionLearningObjective,
     LearningObjective,
-    List,
     MaskedLanguageModelLearningObjective,
-    PredictNextValueLearningObjective,
     ProlongedLengthStayLearningObjective,
-    RandomSampleCache,
-    SequenceGenerationLearningObjective,
     TimeAttentionLearningObjective,
     VisitPredictionLearningObjective,
-    abstractmethod,
-    islice,
-    np,
-    pd,
-    random,
-    random_slice_gpt_sequence,
 )
 from .tokenizer import ConceptTokenizer
 
@@ -56,8 +47,7 @@ def create_indexes_by_time_window(dates, cursor, max_seq_len, time_window_size):
     time_deltas = context_dates - dates[cursor]
     context_indexes = np.squeeze(
         np.argwhere(
-            (time_deltas >= -half_time_window_size)
-            & (time_deltas <= half_time_window_size)
+            (time_deltas >= -half_time_window_size) & (time_deltas <= half_time_window_size)
         ),
         axis=-1,
     )
@@ -85,7 +75,7 @@ class AbstractDataGeneratorBase(ABC):
 
     def __init__(
         self,
-        training_data: DataFrame,
+        training_data: pd.DataFrame,
         batch_size: int,
         max_seq_len: int,
         min_num_of_concepts: int,
@@ -146,9 +136,7 @@ class AbstractDataGeneratorBase(ABC):
             """
             learning_object_input = dict()
             params = get_required_params(learning_objective)
-            for required_param in [
-                param["name"] for param in params if param["required"]
-            ]:
+            for required_param in [param["name"] for param in params if param["required"]]:
                 if required_param in kwargs:
                     learning_object_input[required_param] = kwargs[required_param]
             return learning_objective(**learning_object_input)
@@ -196,9 +184,7 @@ class AbstractDataGeneratorBase(ABC):
                     input_dicts = []
                     output_dicts = []
                     for learning_objective in self._learning_objectives:
-                        input_dict, output_dict = learning_objective.process_batch(
-                            list(rows)
-                        )
+                        input_dict, output_dict = learning_objective.process_batch(list(rows))
                         input_dicts.append(input_dict)
                         output_dicts.append(output_dict)
                     yield dict(ChainMap(*input_dicts)), dict(ChainMap(*output_dicts))
@@ -269,9 +255,7 @@ class AbstractDataGeneratorBase(ABC):
         input_dict_schemas = []
         output_dict_schemas = []
         for learning_objective in self._learning_objectives:
-            input_dict_schema, output_dict_schema = (
-                learning_objective.get_tf_dataset_schema()
-            )
+            input_dict_schema, output_dict_schema = learning_objective.get_tf_dataset_schema()
             input_dict_schemas.append(input_dict_schema)
             output_dict_schemas.append(output_dict_schema)
         return dict(ChainMap(*input_dict_schemas)), dict(ChainMap(*output_dict_schemas))
@@ -328,213 +312,9 @@ class BertDataGenerator(AbstractDataGeneratorBase):
         return len(self._training_data)
 
 
-class GptDataGenerator(BertDataGenerator):
-    def __init__(
-        self,
-        concept_tokenizer: ConceptTokenizer,
-        min_num_of_visits: int,
-        max_num_of_visits: int,
-        including_long_sequence: bool = False,
-        sampling_dataset_enabled: bool = False,
-        include_numeric_value: bool = False,
-        efficient_training: bool = False,
-        is_weighted_sample: bool = False,
-        weighted_sample_scaling_factor: float = 0.5,
-        weighted_sample_bin_width: int = 20,
-        sort_sequence_by_length: bool = False,
-        *args,
-        **kwargs,
-    ):
-        self._min_num_of_visits = min_num_of_visits
-        self._max_num_of_visits = max_num_of_visits
-        self._including_long_sequence = including_long_sequence
-        self._concept_tokenizer = concept_tokenizer
-        self._sampling_dataset_enabled = sampling_dataset_enabled
-        self._include_numeric_value = include_numeric_value
-        self._efficient_training = efficient_training
-        self._is_weighted_sample = is_weighted_sample
-        self._weighted_sample_scaling_factor = weighted_sample_scaling_factor
-        self._weighted_sample_bin_width = weighted_sample_bin_width
-        self._sort_sequence_by_length = sort_sequence_by_length
-
-        super(BertDataGenerator, self).__init__(
-            concept_tokenizer=concept_tokenizer, *args, **kwargs
-        )
-
-    def _clean_dataframe(self):
-        self._training_data = self._training_data[
-            self._training_data["num_of_visits"] >= self._min_num_of_visits
-        ]
-        self._training_data = self._training_data[
-            self._training_data["num_of_visits"] <= self._max_num_of_visits
-        ]
-        self._training_data = self._training_data[
-            self._training_data["num_of_concepts"] >= self._min_num_of_concepts
-        ]
-
-        # Only remove the long sequences when these two options are not enabled
-        if not self._including_long_sequence and not self._is_random_cursor:
-            self._training_data = self._training_data[
-                self._training_data["num_of_concepts"] <= self._max_seq_len
-            ]
-
-        if self._efficient_training:
-            self._training_data = self._training_data.sort_values("num_of_concepts")
-            self._training_data["row_num"] = self._training_data.reset_index().index + 1
-            self._training_data["batch_num"] = (
-                self._training_data.row_num // self._batch_size
-            )
-
-        if self._sampling_dataset_enabled and self._is_weighted_sample:
-            self._training_data["bucket"] = (
-                self._training_data.num_of_concepts // self._weighted_sample_bin_width
-            )
-            # Calculate the bucket counts
-            bucket_counts = self._training_data.groupby(["bucket"])[
-                "num_of_concepts"
-            ].count()
-            buck_prob_pd = bucket_counts / len(self._training_data)
-
-            # Dampen the bucket probabilities by applying a power function e.g. 0.5
-            buck_dampened_probs = np.power(
-                buck_prob_pd, self._weighted_sample_scaling_factor
-            )
-            # re-scale the probability distribution so it sums up to 1
-            buck_dampened_probs = buck_dampened_probs / buck_dampened_probs.sum()
-
-            # Check the probability distribution
-            assert buck_dampened_probs.sum() - 1 < 1e-8
-
-            buck_dampened_prob_df = pd.DataFrame(
-                {"bucket_freq": bucket_counts, "sample_weight": buck_dampened_probs}
-            ).reset_index()
-
-            # Calculate the individual sample weight by dividing the bucket probability by the total number of
-            # patient sequences in the bucket
-            buck_dampened_prob_df["sample_weight"] = (
-                buck_dampened_prob_df["sample_weight"]
-                / buck_dampened_prob_df["bucket_freq"]
-            )
-            self._training_data = self._training_data.merge(
-                buck_dampened_prob_df, on="bucket"
-            )
-
-        # This is important so that the iloc works correctly when retrieving records from the dataframe
-        self._training_data = self._training_data.reset_index()
-
-    def _get_learning_objective_classes(self):
-        learning_objs = [SequenceGenerationLearningObjective]
-        if self._include_numeric_value:
-            learning_objs.append(PredictNextValueLearningObjective)
-        return learning_objs
-
-    def _create_iterator(self):
-        """
-        Create an iterator that will iterate through all training data.
-
-        :return:
-        """
-        if self._efficient_training:
-            if self._sort_sequence_by_length:
-                # This sorts the training data from short to long, the model will be fed with short sequences first,
-                # then long sequences gradually
-                self._training_data = self._training_data.sort_values("batch_num")
-            else:
-                unique_batch_nums = self._training_data["batch_num"].unique()
-                uniform_random_order = np.random.uniform(size=unique_batch_nums.size)
-                random_order_pd = pd.DataFrame(
-                    {
-                        "batch_num": unique_batch_nums,
-                        "random_order": uniform_random_order,
-                    }
-                )
-                # Random order the batches of examples so that all the data points in the same batch have the same
-                # number of concepts
-                self._training_data = (
-                    self._training_data.merge(random_order_pd, on="batch_num")
-                    .sort_values(["random_order", "batch_num"])
-                    .drop(columns=["random_order"])
-                )
-        else:
-            self._training_data = self._training_data.sample(frac=1.0)
-
-        # Create a random sample cache utility class to generate a batch of indices
-        if self._sampling_dataset_enabled:
-            sample_weights = (
-                self._training_data.sample_weight if self._is_weighted_sample else None
-            )
-            random_sample_cache = RandomSampleCache(
-                data_indices=self._training_data.index,
-                cache_size=self._batch_size,
-                sample_weights=sample_weights,
-            )
-        else:
-            random_sample_cache = None
-
-        for row_index in self._training_data.index:
-            # If the sampling strategy is enabled, we will randomly sample a record every time
-            if self._sampling_dataset_enabled:
-                # Overwrite row_index with a random index sampled from randomized_indices
-                row_index = random_sample_cache.next()
-            row = self._training_data.iloc[row_index]
-            seq_length = len(row.token_ids)
-            if seq_length <= self._max_seq_len:
-                yield RowSlicer(row, 0, seq_length)
-            elif self._is_random_cursor:
-                try:
-                    starting_index, end_index, demographic_tokens = (
-                        random_slice_gpt_sequence(row.concept_ids, self._max_seq_len)
-                    )
-                    # This indicates the VE token is not found
-                    if starting_index == end_index:
-                        continue
-
-                    # concept_ids = demographic_tokens + row.concept_ids[starting_index:end_index + 1]
-                    concept_ids = row.concept_ids[starting_index : end_index + 1]
-                    token_ids = self._concept_tokenizer.encode([concept_ids])[0]
-                    visit_concept_orders = row.visit_concept_orders[
-                        starting_index : end_index + 1
-                    ]
-                    # visit_concept_orders = np.concatenate(
-                    #     [row.visit_concept_orders[:len(demographic_tokens)],
-                    #      row.visit_concept_orders[starting_index:end_index + 1]]
-                    # )
-                    new_row = copy.deepcopy(row)
-                    new_row.token_ids = token_ids
-                    new_row.concept_ids = concept_ids
-                    new_row.visit_concept_orders = visit_concept_orders
-                    assert len(new_row.token_ids) <= self._max_seq_len
-                    yield RowSlicer(
-                        new_row,
-                        0,
-                        len(new_row.token_ids),
-                        record_status=RecordStatus.TRUNCATION,
-                    )
-                except RuntimeError as e:
-                    print(e)
-            elif self._including_long_sequence:
-                # Because the sequence is longer than the context window, we identify the last VE token in the
-                # sequence and take the patient history before that point
-                last_ve_token_index = 0
-                for i, token in enumerate(row.token_ids):
-                    # When the index exceeds the context window, we break out of the loop
-                    if i >= self._max_seq_len:
-                        break
-                    if token == self._concept_tokenizer.get_visit_end_token_id():
-                        last_ve_token_index = i
-                yield RowSlicer(
-                    row,
-                    0,
-                    last_ve_token_index + 1,
-                    record_status=RecordStatus.RIGHT_TRUNCATION,
-                )
-
-
 class BertVisitPredictionDataGenerator(BertDataGenerator):
     def __init__(self, visit_tokenizer: ConceptTokenizer, *args, **kwargs):
-        super(BertDataGenerator, self).__init__(
-            visit_tokenizer=visit_tokenizer, *args, **kwargs
-        )
+        super(BertDataGenerator, self).__init__(visit_tokenizer=visit_tokenizer, *args, **kwargs)
         self._visit_tokenizer = visit_tokenizer
 
     def _get_learning_objective_classes(self):
@@ -580,9 +360,7 @@ class HierarchicalBertDataGenerator(AbstractDataGeneratorBase):
 
         :return:
         """
-        min_num_of_concepts = max(
-            self.default_min_num_of_concepts, self._min_num_of_concepts
-        )
+        min_num_of_concepts = max(self.default_min_num_of_concepts, self._min_num_of_concepts)
         criteria = (self._training_data["num_of_concepts"] >= min_num_of_concepts) & (
             self._training_data["num_of_visits"] >= self._min_num_of_visits
         )
@@ -608,9 +386,7 @@ class HierarchicalBertDataGenerator(AbstractDataGeneratorBase):
                     start_index = 0
                     end_index = row.num_of_visits
                 else:
-                    start_index = random.randint(
-                        0, row.num_of_visits - self._max_num_of_visits
-                    )
+                    start_index = random.randint(0, row.num_of_visits - self._max_num_of_visits)
                     end_index = start_index + self._max_num_of_visits
 
                 assert start_index < end_index

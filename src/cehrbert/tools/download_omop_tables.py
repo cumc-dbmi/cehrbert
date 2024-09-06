@@ -50,9 +50,7 @@ def download_omop_tables_with_partitions(
         .option("lowerBound", 1)
         .option(
             "upperBound",
-            find_num_of_records(
-                domain_table, db_properties, column_name, spark_session
-            ),
+            find_num_of_records(domain_table, db_properties, column_name, spark_session),
         )
         .load()
     )
@@ -72,9 +70,7 @@ def download_omop_tables(domain_table, db_properties, output_folder, spark_sessi
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Arguments for downloading OMOP tables"
-    )
+    parser = argparse.ArgumentParser(description="Arguments for downloading OMOP tables")
 
     parser.add_argument(
         "-c",
@@ -132,9 +128,7 @@ if __name__ == "__main__":
     if not os.path.exists(patient_splits_folder):
         print("Creating the patient splits")
         person = spark.read.parquet(os.path.join(download_folder, "person"))
-        train_split, test_split = person.select("person_id").randomSplit(
-            [0.8, 0.2], seed=42
-        )
+        train_split, test_split = person.select("person_id").randomSplit([0.8, 0.2], seed=42)
         train_split = train_split.withColumn("split", f.lit("train"))
         test_split = test_split.withColumn("split", f.lit("test"))
         patient_splits = train_split.unionByName(test_split)

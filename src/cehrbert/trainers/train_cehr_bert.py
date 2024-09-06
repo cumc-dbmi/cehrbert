@@ -102,16 +102,12 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
 
     def _create_model(self):
         strategy = tf.distribute.MirroredStrategy()
-        self.get_logger().info(
-            "Number of devices: {}".format(strategy.num_replicas_in_sync)
-        )
+        self.get_logger().info("Number of devices: {}".format(strategy.num_replicas_in_sync))
         with strategy.scope():
             if self.checkpoint_exists():
                 model = self.restore_from_checkpoint()
             else:
-                optimizer = optimizers.Adam(
-                    lr=self._learning_rate, beta_1=0.9, beta_2=0.999
-                )
+                optimizer = optimizers.Adam(lr=self._learning_rate, beta_1=0.9, beta_2=0.999)
 
                 if self._include_visit_prediction:
                     model = transformer_bert_model_visit_prediction(

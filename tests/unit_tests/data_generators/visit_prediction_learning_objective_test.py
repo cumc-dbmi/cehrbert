@@ -11,13 +11,9 @@ from cehrbert.data_generators.tokenizer import ConceptTokenizer
 class TestVisitPredictionLearningObjective(unittest.TestCase):
 
     def setUp(self):
-        self.visit_tokenizer = (
-            ConceptTokenizer()
-        )  # Use a real or mock ConceptTokenizer as needed
+        self.visit_tokenizer = ConceptTokenizer()  # Use a real or mock ConceptTokenizer as needed
         self.max_seq_len = 5
-        self.learning_obj = VisitPredictionLearningObjective(
-            self.visit_tokenizer, self.max_seq_len
-        )
+        self.learning_obj = VisitPredictionLearningObjective(self.visit_tokenizer, self.max_seq_len)
 
     @staticmethod
     def create_mock_row():
@@ -46,9 +42,7 @@ class TestVisitPredictionLearningObjective(unittest.TestCase):
 
     def test_process_batch(self):
         # Test the process_batch method with a mock input
-        mock_rows = [
-            self.create_mock_row() for _ in range(5)
-        ]  # Create a list of mock rows
+        mock_rows = [self.create_mock_row() for _ in range(5)]  # Create a list of mock rows
         input_dict, output_dict = self.learning_obj.process_batch(mock_rows)
 
         self.assertIn("masked_visit_concepts", input_dict)
@@ -56,9 +50,7 @@ class TestVisitPredictionLearningObjective(unittest.TestCase):
         self.assertIn("visit_predictions", output_dict)
 
         # Test the concept mask, where 1 indicates attention and 0 indicates mask
-        self.assertTrue(
-            (input_dict["mask_visit"][0] == np.asarray([1, 1, 1, 0, 0])).all()
-        )
+        self.assertTrue((input_dict["mask_visit"][0] == np.asarray([1, 1, 1, 0, 0])).all())
 
 
 if __name__ == "__main__":

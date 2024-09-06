@@ -54,9 +54,7 @@ def cohort_validator(required_columns_attribute):
             required_columns = getattr(self, required_columns_attribute)
             for required_column in required_columns:
                 if required_column not in cohort.columns:
-                    raise AssertionError(
-                        f"{required_column} is a required column in the cohort"
-                    )
+                    raise AssertionError(f"{required_column} is a required column in the cohort")
             return cohort
 
         return wrapper
@@ -110,9 +108,7 @@ class BaseCohortBuilder(ABC):
         self._age_upper_bound = age_upper_bound
         self._prior_observation_period = prior_observation_period
         self._post_observation_period = post_observation_period
-        cohort_name = re.sub(
-            "[^a-z0-9]+", "_", self._query_builder.get_cohort_name().lower()
-        )
+        cohort_name = re.sub("[^a-z0-9]+", "_", self._query_builder.get_cohort_name().lower())
         self._output_data_folder = os.path.join(self._output_folder, cohort_name)
 
         self.get_logger().info(
@@ -133,9 +129,7 @@ class BaseCohortBuilder(ABC):
         validate_folder(self._input_folder)
         validate_folder(self._output_folder)
         # Validate if the data folders exist
-        validate_date_folder(
-            self._input_folder, self._query_builder.get_dependency_list()
-        )
+        validate_date_folder(self._input_folder, self._query_builder.get_dependency_list())
 
         self.spark = SparkSession.builder.appName(
             f"Generate {self._query_builder.get_cohort_name()}"
@@ -161,58 +155,38 @@ class BaseCohortBuilder(ABC):
                     if ancestor_table_spec.is_standard
                     else build_ancestry_table_for
                 )
-                ancestor_table = func(
-                    self.spark, ancestor_table_spec.ancestor_concept_ids
-                )
-                ancestor_table.createOrReplaceGlobalTempView(
-                    ancestor_table_spec.table_name
-                )
+                ancestor_table = func(self.spark, ancestor_table_spec.ancestor_concept_ids)
+                ancestor_table.createOrReplaceGlobalTempView(ancestor_table_spec.table_name)
 
         # Build the dependencies for the main query to use if the dependency_queries are available
         if self._query_builder.get_dependency_queries():
             for dependency_query in self._query_builder.get_dependency_queries():
-                query = dependency_query.query_template.format(
-                    **dependency_query.parameters
-                )
+                query = dependency_query.query_template.format(**dependency_query.parameters)
                 dependency_table = self.spark.sql(query)
-                dependency_table.createOrReplaceGlobalTempView(
-                    dependency_query.table_name
-                )
+                dependency_table.createOrReplaceGlobalTempView(dependency_query.table_name)
 
         # Build the dependency for the entry cohort if exists
         if self._query_builder.get_entry_cohort_query():
             entry_cohort_query = self._query_builder.get_entry_cohort_query()
-            query = entry_cohort_query.query_template.format(
-                **entry_cohort_query.parameters
-            )
+            query = entry_cohort_query.query_template.format(**entry_cohort_query.parameters)
             dependency_table = self.spark.sql(query)
-            dependency_table.createOrReplaceGlobalTempView(
-                entry_cohort_query.table_name
-            )
+            dependency_table.createOrReplaceGlobalTempView(entry_cohort_query.table_name)
 
         # Build the negative cohort if exists
         if self._query_builder.get_negative_query():
             negative_cohort_query = self._query_builder.get_negative_query()
-            query = negative_cohort_query.query_template.format(
-                **negative_cohort_query.parameters
-            )
+            query = negative_cohort_query.query_template.format(**negative_cohort_query.parameters)
             dependency_table = self.spark.sql(query)
-            dependency_table.createOrReplaceGlobalTempView(
-                negative_cohort_query.table_name
-            )
+            dependency_table.createOrReplaceGlobalTempView(negative_cohort_query.table_name)
 
         main_query = self._query_builder.get_query()
-        cohort = self.spark.sql(
-            main_query.query_template.format(**main_query.parameters)
-        )
+        cohort = self.spark.sql(main_query.query_template.format(**main_query.parameters))
         cohort.createOrReplaceGlobalTempView(main_query.table_name)
 
         # Post process the cohort if the post_process_queries are available
         if self._query_builder.get_post_process_queries():
             for post_query in self._query_builder.get_post_process_queries():
-                cohort = self.spark.sql(
-                    post_query.query_template.format(**post_query.parameters)
-                )
+                cohort = self.spark.sql(post_query.query_template.format(**post_query.parameters))
                 cohort.createOrReplaceGlobalTempView(main_query.table_name)
 
         return cohort
@@ -399,9 +373,7 @@ class NestedCohortBuilder:
             f"single_contribution: {single_contribution}\n"
         )
 
-        self.spark = SparkSession.builder.appName(
-            f"Generate {self._cohort_name}"
-        ).getOrCreate()
+        self.spark = SparkSession.builder.appName(f"Generate {self._cohort_name}").getOrCreate()
         self._dependency_dict = instantiate_dependencies(
             self.spark, self._input_folder, DEFAULT_DEPENDENCY
         )
@@ -519,20 +491,14 @@ class NestedCohortBuilder:
                 F.desc("label")
             )
         )
-        cohort = (
-            cohort.withColumn("row_rank", row_rank)
-            .where("row_rank == 1")
-            .drop("row_rank")
-        )
+        cohort = cohort.withColumn("row_rank", row_rank).where("row_rank == 1").drop("row_rank")
 
         # We only allow the patient to contribute once to the dataset
         # If the patient has any positive outcomes, we will take the most recent positive outcome,
         # otherwise we will take the most recent negative outcome
         if self._single_contribution:
             record_rank = F.row_number().over(
-                Window.partitionBy("person_id").orderBy(
-                    F.desc("label"), F.desc("index_date")
-                )
+                Window.partitionBy("person_id").orderBy(F.desc("label"), F.desc("index_date"))
             )
             cohort = (
                 cohort.withColumn("record_rank", record_rank)
@@ -553,13 +519,9 @@ class NestedCohortBuilder:
             patient_splits = self.spark.read.parquet(self._patient_splits_folder)
             cohort.join(patient_splits, "person_id").orderBy(
                 "person_id", "cohort_member_id"
-            ).write.mode("overwrite").parquet(
-                os.path.join(self._output_data_folder, "temp")
-            )
+            ).write.mode("overwrite").parquet(os.path.join(self._output_data_folder, "temp"))
             # Reload the data from the disk
-            cohort = self.spark.read.parquet(
-                os.path.join(self._output_data_folder, "temp")
-            )
+            cohort = self.spark.read.parquet(os.path.join(self._output_data_folder, "temp"))
             cohort.where('split="train"').write.mode("overwrite").parquet(
                 os.path.join(self._output_data_folder, "train")
             )
@@ -568,9 +530,9 @@ class NestedCohortBuilder:
             )
             shutil.rmtree(os.path.join(self._output_data_folder, "temp"))
         else:
-            cohort.orderBy("person_id", "cohort_member_id").write.mode(
-                "overwrite"
-            ).parquet(self._output_data_folder)
+            cohort.orderBy("person_id", "cohort_member_id").write.mode("overwrite").parquet(
+                self._output_data_folder
+            )
 
     def extract_ehr_records_for_cohort(self, cohort: DataFrame):
         """
@@ -631,12 +593,7 @@ class NestedCohortBuilder:
                 & (ehr_records.cohort_member_id == cohort.cohort_member_id),
             )
             .where(record_window_filter)
-            .select(
-                [
-                    ehr_records[field_name]
-                    for field_name in ehr_records.schema.fieldNames()
-                ]
-            )
+            .select([ehr_records[field_name] for field_name in ehr_records.schema.fieldNames()])
         )
 
         if self._is_hierarchical_bert:
@@ -663,8 +620,7 @@ class NestedCohortBuilder:
             )
 
             age_udf = F.ceil(
-                F.months_between(F.col("visit_start_date"), F.col("birth_datetime"))
-                / F.lit(12)
+                F.months_between(F.col("visit_start_date"), F.col("birth_datetime")) / F.lit(12)
             )
             visit_occurrence_person = (
                 self._dependency_dict[VISIT_OCCURRENCE]
@@ -678,9 +634,7 @@ class NestedCohortBuilder:
                 visit_occurrence=visit_occurrence_person,
                 include_visit_type=self._include_visit_type,
                 exclude_visit_tokens=self._exclude_visit_tokens,
-                patient_demographic=(
-                    patient_demographic if self._gpt_patient_sequence else None
-                ),
+                patient_demographic=(patient_demographic if self._gpt_patient_sequence else None),
                 att_type=self._att_type,
                 exclude_demographic=self._exclude_demographic,
                 use_age_group=self._use_age_group,
@@ -739,21 +693,15 @@ def create_prediction_cohort(
     is_observation_window_unbounded = spark_args.is_observation_window_unbounded
     # If the outcome negative query exists, that means we need to remove those questionable
     # outcomes from the target cohort
-    is_questionable_outcome_existed = (
-        outcome_query_builder.get_negative_query() is not None
-    )
+    is_questionable_outcome_existed = outcome_query_builder.get_negative_query() is not None
 
     # Do we want to remove those records whose outcome occur between index_date and the start of
     # the prediction window
     is_remove_index_prediction_starts = spark_args.is_remove_index_prediction_starts
 
     # Toggle the prior/post observation_period depending on the is_window_post_index flag
-    prior_observation_period = (
-        0 if is_window_post_index else observation_window + hold_off_window
-    )
-    post_observation_period = (
-        observation_window + hold_off_window if is_window_post_index else 0
-    )
+    prior_observation_period = 0 if is_window_post_index else observation_window + hold_off_window
+    post_observation_period = observation_window + hold_off_window if is_window_post_index else 0
 
     # Generate the target cohort
     target_cohort = (

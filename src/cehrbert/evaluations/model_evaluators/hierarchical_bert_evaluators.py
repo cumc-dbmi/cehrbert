@@ -1,15 +1,19 @@
 from tensorflow.keras.utils import pad_sequences
 
-from ...data_generators.learning_objective import post_pad_pre_truncate
-from ...models.evaluation_models import (
+from cehrbert.data_generators.learning_objective import post_pad_pre_truncate
+from cehrbert.evaluations.model_evaluators.model_evaluators import get_metrics
+from cehrbert.evaluations.model_evaluators.sequence_model_evaluators import (
+    SequenceModelEvaluator,
+)
+from cehrbert.models.evaluation_models import (
     create_hierarchical_bert_bi_lstm_model,
     create_hierarchical_bert_bi_lstm_model_with_model,
     create_hierarchical_bert_model_with_pooling,
 )
-from ...models.hierachical_bert_model_v2 import transformer_hierarchical_bert_model
-from ...utils.model_utils import convert_to_list_of_lists, np, pickle, tf
-from ..model_evaluators.model_evaluators import get_metrics
-from ..model_evaluators.sequence_model_evaluators import SequenceModelEvaluator
+from cehrbert.models.hierachical_bert_model_v2 import (
+    transformer_hierarchical_bert_model,
+)
+from cehrbert.utils.model_utils import convert_to_list_of_lists, np, pickle, tf
 
 
 class HierarchicalBertEvaluator(SequenceModelEvaluator):
@@ -45,9 +49,7 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
 
     def _create_model(self, **kwargs):
         strategy = tf.distribute.MirroredStrategy()
-        self.get_logger().info(
-            "Number of devices: {}".format(strategy.num_replicas_in_sync)
-        )
+        self.get_logger().info("Number of devices: {}".format(strategy.num_replicas_in_sync))
         with strategy.scope():
             try:
                 model = create_hierarchical_bert_bi_lstm_model(
@@ -132,13 +134,11 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
 
         # Process concept ids
         # Retrieve the values associated with the concepts, this is mostly for measurements
-        concept_values = self._dataset.concept_values.apply(
-            convert_to_list_of_lists
-        ).apply(lambda tokens: self._pad(tokens, padded_token=-1.0, dtype="float32"))
+        concept_values = self._dataset.concept_values.apply(convert_to_list_of_lists).apply(
+            lambda tokens: self._pad(tokens, padded_token=-1.0, dtype="float32")
+        )
         padded_concept_values = np.reshape(
-            post_pad_pre_truncate(
-                concept_values.apply(lambda d: d.flatten()), 0, max_seq_len
-            ),
+            post_pad_pre_truncate(concept_values.apply(lambda d: d.flatten()), 0, max_seq_len),
             (-1, self._max_num_of_visits, self._max_num_of_concepts),
         )
 
@@ -146,9 +146,7 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
             convert_to_list_of_lists
         ).apply(lambda tokens: self._pad(tokens, padded_token=0))
         padded_concept_value_masks = np.reshape(
-            post_pad_pre_truncate(
-                concept_value_masks.apply(lambda d: d.flatten()), 0, max_seq_len
-            ),
+            post_pad_pre_truncate(concept_value_masks.apply(lambda d: d.flatten()), 0, max_seq_len),
             (-1, self._max_num_of_visits, self._max_num_of_concepts),
         )
 
@@ -213,9 +211,7 @@ class HierarchicalBertPoolingEvaluator(HierarchicalBertEvaluator):
 
     def _create_model(self, **kwargs):
         strategy = tf.distribute.MirroredStrategy()
-        self.get_logger().info(
-            "Number of devices: {}".format(strategy.num_replicas_in_sync)
-        )
+        self.get_logger().info("Number of devices: {}".format(strategy.num_replicas_in_sync))
         with strategy.scope():
             try:
                 model = create_hierarchical_bert_model_with_pooling(
@@ -271,9 +267,7 @@ class RandomHierarchicalBertEvaluator(HierarchicalBertEvaluator):
 
     def _create_model(self):
         strategy = tf.distribute.MirroredStrategy()
-        self.get_logger().info(
-            "Number of devices: {}".format(strategy.num_replicas_in_sync)
-        )
+        self.get_logger().info("Number of devices: {}".format(strategy.num_replicas_in_sync))
         with strategy.scope():
 
             try:
@@ -287,14 +281,10 @@ class RandomHierarchicalBertEvaluator(HierarchicalBertEvaluator):
                     num_of_exchanges=self._num_of_exchanges,
                     time_embeddings_size=self._time_embeddings_size,
                 )
-                model = create_hierarchical_bert_bi_lstm_model_with_model(
-                    cherbert_model
-                )
+                model = create_hierarchical_bert_bi_lstm_model_with_model(cherbert_model)
             except ValueError as e:
                 self.get_logger().exception(e)
-                model = create_hierarchical_bert_bi_lstm_model_with_model(
-                    cherbert_model
-                )
+                model = create_hierarchical_bert_bi_lstm_model_with_model(cherbert_model)
             model.compile(
                 loss="binary_crossentropy",
                 optimizer=tf.keras.optimizers.Adam(1e-4),

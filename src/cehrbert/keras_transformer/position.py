@@ -42,8 +42,7 @@ class TransformerCoordinateEmbedding(tf.keras.layers.Layer):
         depth = kwargs.get("step")
         if depth is None:
             raise ValueError(
-                "Please, provide current Transformer's step"
-                "using 'step' keyword argument."
+                "Please, provide current Transformer's step" "using 'step' keyword argument."
             )
         result = inputs + self.word_position_embeddings
         if depth is not None:

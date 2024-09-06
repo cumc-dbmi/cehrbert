@@ -13,8 +13,8 @@ from transformers.models.bert.modeling_bert import (
 )
 from transformers.utils import logging
 
-from ...models.hf_models.config import CehrBertConfig
-from ...models.hf_models.hf_modeling_outputs import (
+from cehrbert.models.hf_models.config import CehrBertConfig
+from cehrbert.models.hf_models.hf_modeling_outputs import (
     CehrBertModelOutput,
     CehrBertSequenceClassifierOutput,
 )
@@ -44,9 +44,7 @@ class PositionalEncodingLayer(nn.Module):
             visit_concept_orders,
             torch.tensor(LARGE_POSITION_VALUE),
         )
-        first_vals = torch.min(masked_visit_concept_orders, dim=1).values.unsqueeze(
-            dim=-1
-        )
+        first_vals = torch.min(masked_visit_concept_orders, dim=1).values.unsqueeze(dim=-1)
         visit_concept_orders = visit_concept_orders - first_vals
         visit_concept_orders = torch.maximum(
             visit_concept_orders, torch.zeros_like(visit_concept_orders)
@@ -88,9 +86,7 @@ class TimeEmbeddingLayer(nn.Module):
 class ConceptValueTransformationLayer(nn.Module):
     def __init__(self, embedding_size):
         super(ConceptValueTransformationLayer, self).__init__()
-        self.merge_value_transformation_layer = nn.Linear(
-            embedding_size + 1, embedding_size
-        )
+        self.merge_value_transformation_layer = nn.Linear(embedding_size + 1, embedding_size)
 
     def forward(
         self,
@@ -107,9 +103,7 @@ class ConceptValueTransformationLayer(nn.Module):
         # (batch_size, seq_length, 1)
         concept_value_masks = concept_value_masks.unsqueeze(-1)
         # (batch_size, seq_length, 1 + embedding_size)
-        concept_embeddings_with_val = torch.cat(
-            [concept_embeddings, concept_values], dim=-1
-        )
+        concept_embeddings_with_val = torch.cat([concept_embeddings, concept_values], dim=-1)
         # Run through a dense layer to bring the dimension back to embedding_size
         concept_embeddings_with_val = self.merge_value_transformation_layer(
             concept_embeddings_with_val
@@ -144,9 +138,7 @@ class CehrBertEmbeddings(nn.Module):
     def __init__(self, config: CehrBertConfig):
         super(CehrBertEmbeddings, self).__init__()
         self.concept_embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.visit_segment_embeddings = nn.Embedding(
-            config.n_visit_segments, config.hidden_size
-        )
+        self.visit_segment_embeddings = nn.Embedding(config.n_visit_segments, config.hidden_size)
         self.time_embedding_layer = TimeEmbeddingLayer(
             config.n_time_embd, scaling_factor=config.time_embedding_scaling_factor
         )
@@ -176,16 +168,12 @@ class CehrBertEmbeddings(nn.Module):
         # Get the concept embeddings
         x = self.concept_embeddings(input_ids)
         # Combine values with the concept embeddings
-        x = self.concept_value_transformation_layer(
-            x, concept_values, concept_value_masks
-        )
+        x = self.concept_value_transformation_layer(x, concept_values, concept_value_masks)
         age_embeddings = self.age_embedding_layer(ages)
         time_embeddings = self.age_embedding_layer(dates)
         positional_embeddings = self.positional_embedding_layer(visit_concept_orders)
         x = self.linear_proj(
-            torch.cat(
-                [x, time_embeddings, age_embeddings, positional_embeddings], dim=-1
-            )
+            torch.cat([x, time_embeddings, age_embeddings, positional_embeddings], dim=-1)
         )
         x = gelu_new(x)
         x += self.visit_segment_embeddings(visit_segments)
@@ -194,9 +182,9 @@ class CehrBertEmbeddings(nn.Module):
 
 class CehrBertPreTrainedModel(PreTrainedModel):
     """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained.
+    An abstract class to handle weights initialization and a simple interface for downloading.
 
-    models.
+    and loading pretrained models.
     """
 
     config_class = CehrBertConfig
@@ -223,11 +211,6 @@ class CehrBertPreTrainedModel(PreTrainedModel):
 
 
 class CehrBert(CehrBertPreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained.
-
-    models.
-    """
 
     def __init__(self, config: CehrBertConfig):
         super().__init__(config)
@@ -253,9 +236,7 @@ class CehrBert(CehrBertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> CehrBertModelOutput:
         output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
+            output_attentions if output_attentions is not None else self.config.output_attentions
         )
         output_hidden_states = (
             output_hidden_states
@@ -266,7 +247,8 @@ class CehrBert(CehrBertPreTrainedModel):
         self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
         input_shape = input_ids.size()
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
+        # We can provide a self-attention mask of dimensions
+        # [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
             attention_mask, input_shape
@@ -306,9 +288,7 @@ class CehrBertForPreTraining(CehrBertPreTrainedModel):
 
         self.bert = CehrBert(config)
         if self.config.include_value_prediction:
-            self.concept_value_decoder_layer = ConceptValuePredictionLayer(
-                config.hidden_size
-            )
+            self.concept_value_decoder_layer = ConceptValuePredictionLayer(config.hidden_size)
         self.cls = BertOnlyMLMHead(config)
 
         # Initialize weights and apply final processing
@@ -373,13 +353,10 @@ class CehrBertForPreTraining(CehrBertPreTrainedModel):
                 predicted_values = self.concept_value_decoder_layer(
                     cehrbert_output.last_hidden_state
                 )
-                num_items = (
-                    torch.sum(concept_value_masks.to(torch.float32), dim=-1) + 1e-6
-                )
+                num_items = torch.sum(concept_value_masks.to(torch.float32), dim=-1) + 1e-6
                 values_ = (predicted_values.squeeze(-1) - concept_values) ** 2
                 masked_mse = (
-                    torch.sum(values_ * concept_value_masks * mlm_masks, dim=-1)
-                    / num_items
+                    torch.sum(values_ * concept_value_masks * mlm_masks, dim=-1) / num_items
                 )
                 total_loss += torch.mean(masked_mse)
 

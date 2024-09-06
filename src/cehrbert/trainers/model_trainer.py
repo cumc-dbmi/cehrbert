@@ -104,9 +104,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
 
         # shuffle the training data
         if self._shuffle_training_data and not self._use_dask:
-            self._training_data = self._training_data.sample(frac=1).reset_index(
-                drop=True
-            )
+            self._training_data = self._training_data.sample(frac=1).reset_index(drop=True)
 
         self._load_dependencies()
 
@@ -176,9 +174,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         ).prefetch(tf.data.experimental.AUTOTUNE)
 
         if self._cache_dataset:
-            dataset = (
-                dataset.take(data_generator.get_steps_per_epoch()).cache().repeat()
-            )
+            dataset = dataset.take(data_generator.get_steps_per_epoch()).cache().repeat()
             dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
         val_dataset = None
@@ -206,24 +202,16 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         save_training_history(history, self.get_model_history_folder())
 
     def restore_from_checkpoint(self):
-        existing_model_path = os.path.join(
-            self.get_model_folder(), self._checkpoint_name
-        )
+        existing_model_path = os.path.join(self.get_model_folder(), self._checkpoint_name)
         current_epoch = get_checkpoint_epoch(existing_model_path)
         self._current_epoch = current_epoch
         self._epochs += current_epoch
-        self.get_logger().info(
-            f"The {self} model will be loaded from {existing_model_path}"
-        )
-        model = tf.keras.models.load_model(
-            existing_model_path, custom_objects=get_custom_objects()
-        )
+        self.get_logger().info(f"The {self} model will be loaded from {existing_model_path}")
+        model = tf.keras.models.load_model(existing_model_path, custom_objects=get_custom_objects())
         return model
 
     def _get_callbacks(self):
-        tensor_board_callback = tf.keras.callbacks.TensorBoard(
-            log_dir=self._tf_board_log_path
-        )
+        tensor_board_callback = tf.keras.callbacks.TensorBoard(log_dir=self._tf_board_log_path)
 
         model_checkpoint_args = {
             "filepath": self.get_model_path_epoch(),
@@ -233,9 +221,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         }
         model_checkpoint = tf.keras.callbacks.ModelCheckpoint(**model_checkpoint_args)
         learning_rate_scheduler = tf.keras.callbacks.LearningRateScheduler(
-            CosineLRSchedule(
-                lr_high=self._learning_rate, lr_low=1e-8, initial_period=10
-            ),
+            CosineLRSchedule(lr_high=self._learning_rate, lr_low=1e-8, initial_period=10),
             verbose=1,
         )
 
@@ -274,9 +260,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
         return os.path.join(self.get_model_folder(), model_name)
 
     def get_model_path_step(self):
-        model_name = (
-            f"{self.get_model_name()}" + "_epoch_{epoch:02d}_batch_{batch:02d}.h5"
-        )
+        model_name = f"{self.get_model_name()}" + "_epoch_{epoch:02d}_batch_{batch:02d}.h5"
         return os.path.join(self.get_model_folder(), model_name)
 
     def get_tokenizer_name(self):
@@ -293,9 +277,7 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
 
     def checkpoint_exists(self):
         if self._checkpoint_name:
-            existing_model_path = os.path.join(
-                self.get_model_folder(), self._checkpoint_name
-            )
+            existing_model_path = os.path.join(self.get_model_folder(), self._checkpoint_name)
             return os.path.exists(existing_model_path)
         return False
 

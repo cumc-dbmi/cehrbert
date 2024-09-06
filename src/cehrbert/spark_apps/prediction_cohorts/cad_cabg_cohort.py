@@ -8,9 +8,7 @@ DOMAIN_TABLE_LIST = ["condition_occurrence", "drug_exposure", "procedure_occurre
 if __name__ == "__main__":
     spark_args = create_spark_args()
 
-    ehr_table_list = (
-        spark_args.ehr_table_list if spark_args.ehr_table_list else DOMAIN_TABLE_LIST
-    )
+    ehr_table_list = spark_args.ehr_table_list if spark_args.ehr_table_list else DOMAIN_TABLE_LIST
 
     create_prediction_cohort(
         spark_args,

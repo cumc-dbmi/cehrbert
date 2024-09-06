@@ -49,8 +49,7 @@ def transformer_hierarchical_bert_model(
     # If the second tiered learning objectives are enabled, visit_vocab_size needs to be provided
     if include_visit_type_prediction and not visit_vocab_size:
         raise RuntimeError(
-            f"visit_vocab_size can not be null "
-            f"when the second learning objectives are enabled"
+            f"visit_vocab_size can not be null " f"when the second learning objectives are enabled"
         )
 
     pat_seq = tf.keras.layers.Input(
@@ -102,9 +101,7 @@ def transformer_hierarchical_bert_model(
         name="concept_value_masks",
     )
 
-    visit_mask = tf.keras.layers.Input(
-        shape=(num_of_visits,), dtype="int32", name="visit_mask"
-    )
+    visit_mask = tf.keras.layers.Input(shape=(num_of_visits,), dtype="int32", name="visit_mask")
 
     visit_time_delta_att = tf.keras.layers.Input(
         shape=(num_of_visits - 1,), dtype="int32", name="visit_time_delta_att"
@@ -138,9 +135,7 @@ def transformer_hierarchical_bert_model(
     ]
 
     # output the embedding_matrix:
-    l2_regularizer = (
-        tf.keras.regularizers.l2(l2_reg_penalty) if l2_reg_penalty else None
-    )
+    l2_regularizer = tf.keras.regularizers.l2(l2_reg_penalty) if l2_reg_penalty else None
     concept_embedding_layer = ReusableEmbedding(
         concept_vocab_size,
         embedding_size,
@@ -174,9 +169,7 @@ def transformer_hierarchical_bert_model(
     att_embeddings, _ = concept_embedding_layer(visit_time_delta_att)
 
     # Re-purpose token id 0 as the visit start embedding
-    visit_start_embeddings, _ = concept_embedding_layer(
-        tf.zeros_like(visit_mask, dtype=tf.int32)
-    )
+    visit_start_embeddings, _ = concept_embedding_layer(tf.zeros_like(visit_mask, dtype=tf.int32))
 
     temporal_transformation_layer = TemporalTransformationLayer(
         time_embeddings_size=time_embeddings_size,
@@ -199,9 +192,7 @@ def transformer_hierarchical_bert_model(
         dropout_rate=transformer_dropout,
     )
 
-    concept_embeddings = tf.reshape(
-        concept_embeddings, shape=(-1, num_of_concepts, embedding_size)
-    )
+    concept_embeddings = tf.reshape(concept_embeddings, shape=(-1, num_of_concepts, embedding_size))
 
     concept_embeddings, _ = concept_encoder(
         concept_embeddings, pat_concept_mask  # be reused  # not change
@@ -232,16 +223,12 @@ def transformer_hierarchical_bert_model(
     )
 
     # (batch_size, num_of_visits, embedding_size)
-    expanded_att_embeddings = tf.concat(
-        [att_embeddings, att_embeddings[:, 0:1, :]], axis=1
-    )
+    expanded_att_embeddings = tf.concat([att_embeddings, att_embeddings[:, 0:1, :]], axis=1)
 
     # Insert the att embeddings between visit embeddings
     # (batch_size, num_of_visits + num_of_visits + num_of_visits - 1, embedding_size)
     contextualized_visit_embeddings = tf.reshape(
-        tf.concat(
-            [visit_start_embeddings, visit_embeddings, expanded_att_embeddings], axis=-1
-        ),
+        tf.concat([visit_start_embeddings, visit_embeddings, expanded_att_embeddings], axis=-1),
         (-1, 3 * num_of_visits, embedding_size),
     )[:, :-1, :]
 
@@ -269,9 +256,7 @@ def transformer_hierarchical_bert_model(
     )
 
     # (batch_size, 1, num_of_visits_with_att, num_of_visits_with_att)
-    look_ahead_visit_mask_with_att = tf.maximum(
-        visit_mask_with_att, look_ahead_visit_mask_with_att
-    )
+    look_ahead_visit_mask_with_att = tf.maximum(visit_mask_with_att, look_ahead_visit_mask_with_att)
 
     # (batch_size, 1, num_of_visits * num_of_concepts, num_of_visits)
     look_ahead_concept_mask = tf.maximum(
@@ -348,9 +333,7 @@ def transformer_hierarchical_bert_model(
 
         # Create the att to concept mask ATT tokens only attend to the concepts in the
         # neighboring visits
-        att_concept_mask = create_att_concept_mask(
-            num_of_concepts, num_of_visits, visit_mask
-        )
+        att_concept_mask = create_att_concept_mask(num_of_concepts, num_of_visits, visit_mask)
 
         # Use the simple decoder layer to decode att embeddings using the neighboring concept
         # embeddings
@@ -395,9 +378,7 @@ def transformer_hierarchical_bert_model(
         outputs.append(visit_predictions)
 
     if include_readmission:
-        is_readmission_layer = tf.keras.layers.Dense(
-            1, activation="sigmoid", name="is_readmission"
-        )
+        is_readmission_layer = tf.keras.layers.Dense(1, activation="sigmoid", name="is_readmission")
 
         is_readmission_output = is_readmission_layer(visit_embeddings_without_att)
 
@@ -408,9 +389,7 @@ def transformer_hierarchical_bert_model(
             1, activation="sigmoid", name="visit_prolonged_stay"
         )
 
-        visit_prolonged_stay_output = visit_prolonged_stay_layer(
-            visit_embeddings_without_att
-        )
+        visit_prolonged_stay_output = visit_prolonged_stay_layer(visit_embeddings_without_att)
 
         outputs.append(visit_prolonged_stay_output)
 
@@ -429,9 +408,7 @@ def create_att_concept_mask(num_of_concepts, num_of_visits, visit_mask):
     """
     att_concept_mask = tf.eye(num_of_visits - 1, num_of_visits, dtype=tf.int32)
     att_concept_mask = (
-        1
-        - att_concept_mask
-        - tf.roll(att_concept_mask, axis=-1, shift=1)[tf.newaxis, :, :]
+        1 - att_concept_mask - tf.roll(att_concept_mask, axis=-1, shift=1)[tf.newaxis, :, :]
     )
     att_concept_mask = tf.maximum(att_concept_mask, visit_mask[:, 1:, tf.newaxis])
     att_concept_mask = tf.reshape(

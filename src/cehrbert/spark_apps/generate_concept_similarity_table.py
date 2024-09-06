@@ -42,9 +42,7 @@ def extract_data(spark: SparkSession, input_folder: str, domain_table_list: List
     """
     domain_tables = []
     for domain_table_name in domain_table_list:
-        domain_tables.append(
-            preprocess_domain_table(spark, input_folder, domain_table_name)
-        )
+        domain_tables.append(preprocess_domain_table(spark, input_folder, domain_table_name))
     patient_event = join_domain_tables(domain_tables)
     # Remove all concept_id records
     patient_event = patient_event.where("standard_concept_id <> 0")
@@ -164,14 +162,8 @@ def compute_information_content_similarity(
     # Join the MICA to pairs of concepts
     features = information_content_concept_pair.join(
         mica_ancestor,
-        (
-            information_content_concept_pair["concept_id_1"]
-            == mica_ancestor["concept_id_1"]
-        )
-        & (
-            information_content_concept_pair["concept_id_2"]
-            == mica_ancestor["concept_id_2"]
-        ),
+        (information_content_concept_pair["concept_id_1"] == mica_ancestor["concept_id_1"])
+        & (information_content_concept_pair["concept_id_2"] == mica_ancestor["concept_id_2"]),
         "left_outer",
     ).select(
         [
@@ -219,8 +211,7 @@ def compute_information_content_similarity(
         & (features["concept_id_2"] == intersection_sum["concept_id_2"]),
         "left_outer",
     ).select(
-        [features[f] for f in features.schema.fieldNames()]
-        + [F.col("ancestor_intersection_ic")]
+        [features[f] for f in features.schema.fieldNames()] + [F.col("ancestor_intersection_ic")]
     )
 
     # Join to get the summed information content of the common ancestors of concept_id_1 and
@@ -230,10 +221,7 @@ def compute_information_content_similarity(
         (features["concept_id_1"] == union_sum["concept_id_1"])
         & (features["concept_id_2"] == union_sum["concept_id_2"]),
         "left_outer",
-    ).select(
-        [features[f] for f in features.schema.fieldNames()]
-        + [F.col("ancestor_union_ic")]
-    )
+    ).select([features[f] for f in features.schema.fieldNames()] + [F.col("ancestor_union_ic")])
 
     # Compute the graph information content measure
     features = features.withColumn(
@@ -318,9 +306,7 @@ def compute_semantic_similarity(spark, patient_event, concept, concept_ancestor)
     concept_pair = concept_pair.join(
         root_concept_relationship,
         F.col("common_ancestor_concept_id") == F.col("descendant_concept_id"),
-    ).select(
-        "concept_id_1", "concept_id_2", "distance_1", "distance_2", "root_distance"
-    )
+    ).select("concept_id_1", "concept_id_2", "distance_1", "distance_2", "root_distance")
 
     # Compute the semantic similarity
     concept_pair_similarity = concept_pair.withColumn(
@@ -330,9 +316,9 @@ def compute_semantic_similarity(spark, patient_event, concept, concept_ancestor)
         / (2 * F.col("root_distance") + F.col("distance_1") + F.col("distance_2")),
     )
     # Find the maximum semantic similarity
-    concept_pair_similarity = concept_pair_similarity.groupBy(
-        "concept_id_1", "concept_id_2"
-    ).agg(F.max("semantic_similarity").alias("semantic_similarity"))
+    concept_pair_similarity = concept_pair_similarity.groupBy("concept_id_1", "concept_id_2").agg(
+        F.max("semantic_similarity").alias("semantic_similarity")
+    )
 
     return concept_pair_similarity
 
@@ -355,9 +341,7 @@ def main(
         include_concept_list (bool): Whether to include a filtered concept list.
     """
 
-    spark = SparkSession.builder.appName(
-        "Generate the concept similarity table"
-    ).getOrCreate()
+    spark = SparkSession.builder.appName("Generate the concept similarity table").getOrCreate()
 
     logger = logging.getLogger(__name__)
     logger.info(
@@ -386,9 +370,9 @@ def main(
             preprocess_domain_table(spark, input_folder, QUALIFIED_CONCEPT_LIST_PATH)
         )
 
-        patient_event = patient_event.join(
-            qualified_concepts, "standard_concept_id"
-        ).select("standard_concept_id")
+        patient_event = patient_event.join(qualified_concepts, "standard_concept_id").select(
+            "standard_concept_id"
+        )
 
     concept_pair_similarity = compute_semantic_similarity(
         spark, patient_event, concept, concept_ancestor
@@ -403,22 +387,14 @@ def main(
         concept_pair_similarity[f] for f in concept_pair_similarity.schema.fieldNames()
     ]
     concept_pair_ic_similarity_columns = [
-        f
-        for f in concept_pair_ic_similarity.schema.fieldNames()
-        if "concept_id" not in f
+        f for f in concept_pair_ic_similarity.schema.fieldNames() if "concept_id" not in f
     ]
 
     # Join two dataframes to get the final result
     concept_pair_similarity = concept_pair_similarity.join(
         concept_pair_ic_similarity,
-        (
-            concept_pair_similarity["concept_id_1"]
-            == concept_pair_ic_similarity["concept_id_1"]
-        )
-        & (
-            concept_pair_similarity["concept_id_2"]
-            == concept_pair_ic_similarity["concept_id_2"]
-        ),
+        (concept_pair_similarity["concept_id_1"] == concept_pair_ic_similarity["concept_id_1"])
+        & (concept_pair_similarity["concept_id_2"] == concept_pair_ic_similarity["concept_id_2"]),
     ).select(concept_pair_similarity_columns + concept_pair_ic_similarity_columns)
 
     concept_pair_similarity.write.mode("overwrite").parquet(
@@ -429,9 +405,7 @@ def main(
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Arguments for generate Concept Similarity Table"
-    )
+    parser = argparse.ArgumentParser(description="Arguments for generate Concept Similarity Table")
     parser.add_argument(
         "-i",
         "--input_folder",
@@ -467,9 +441,7 @@ if __name__ == "__main__":
         required=False,
         default="2018-01-01",
     )
-    parser.add_argument(
-        "--include_concept_list", dest="include_concept_list", action="store_true"
-    )
+    parser.add_argument("--include_concept_list", dest="include_concept_list", action="store_true")
 
     ARGS = parser.parse_args()
 

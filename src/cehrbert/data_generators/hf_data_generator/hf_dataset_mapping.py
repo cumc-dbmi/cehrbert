@@ -13,9 +13,9 @@ from dateutil.relativedelta import relativedelta
 from meds.schema import birth_code, death_code
 from pandas import Series
 
-from ...models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
-from ...runners.hf_runner_argument_dataclass import DataTrainingArguments
-from ...spark_apps.decorators.patient_event_decorator import get_att_function
+from cehrbert.models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
+from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments
+from cehrbert.spark_apps.decorators.patient_event_decorator import get_att_function
 
 birth_codes = [birth_code, "MEDS_BIRTH"]
 death_codes = [death_code, "MEDS_DEATH"]
@@ -66,9 +66,7 @@ class TruncationType(Enum):
 
 class DatasetMapping(ABC):
 
-    def batch_transform(
-        self, records: Union[LazyBatch, Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+    def batch_transform(self, records: Union[LazyBatch, Dict[str, Any]]) -> List[Dict[str, Any]]:
         if isinstance(records, LazyBatch):
             dataframe = records.pa_table.to_pandas()
         else:
@@ -204,16 +202,13 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                 continue
 
             visit_start_datetime = visit["visit_start_datetime"]
-            time_delta = (
-                (visit_start_datetime - date_cursor).days if date_cursor else None
-            )
+            time_delta = (visit_start_datetime - date_cursor).days if date_cursor else None
             date_cursor = visit_start_datetime
 
             # We assume the first measurement to be the visit type of the current visit
             visit_type = visit["visit_type"]
             is_inpatient = (
-                visit_type in INPATIENT_VISIT_TYPES
-                or visit_type in INPATIENT_VISIT_TYPE_CODES
+                visit_type in INPATIENT_VISIT_TYPES or visit_type in INPATIENT_VISIT_TYPE_CODES
             )
 
             # Add artificial time tokens to the patient timeline if timedelta exists
@@ -229,8 +224,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
             age = relativedelta(visit["visit_start_datetime"], birth_datetime).years
             # Calculate the week number since the epoch time
             date = (
-                visit["visit_start_datetime"]
-                - datetime.datetime(year=1970, month=1, day=1)
+                visit["visit_start_datetime"] - datetime.datetime(year=1970, month=1, day=1)
             ).days // 7
             visit_segment = int(visit_segment_indicator) + 1
 
@@ -266,9 +260,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                     # Calculate age using the event time stamp
                     age = relativedelta(e["time"], birth_datetime).years
                     # Calculate the week number since the epoch time
-                    date = (
-                        e["time"] - datetime.datetime(year=1970, month=1, day=1)
-                    ).days // 7
+                    date = (e["time"] - datetime.datetime(year=1970, month=1, day=1)).days // 7
                 else:
                     # For outpatient visits, we use the visit time stamp to calculate age and time because we assume
                     # the outpatient visits start and end on the same day
@@ -327,8 +319,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                     # facility event
                     discharge_facility = (
                         visit["discharge_facility"]
-                        if ("discharge_facility" in visit)
-                        and visit["discharge_facility"]
+                        if ("discharge_facility" in visit) and visit["discharge_facility"]
                         else "0"
                     )
 
@@ -357,9 +348,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
             visit_segment_indicator = not visit_segment_indicator
 
         # Generate the orders of the concepts that the cehrbert dataset mapping function expects
-        cehrbert_record["orders"] = list(
-            range(1, len(cehrbert_record["concept_ids"]) + 1)
-        )
+        cehrbert_record["orders"] = list(range(1, len(cehrbert_record["concept_ids"]) + 1))
 
         # Add some count information for this sequence
         cehrbert_record["num_of_concepts"] = len(cehrbert_record["concept_ids"])

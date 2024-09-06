@@ -34,9 +34,7 @@ def get_checkpoint_epoch(checkpoint_path):
 
 def find_latest_checkpoint_path(checkpoint_dir):
     # Try to find the checkpoint with the legacy model naming convention
-    legacy_checkpoint_path_dict = find_latest_checkpoint_legacy_model_path(
-        checkpoint_dir
-    )
+    legacy_checkpoint_path_dict = find_latest_checkpoint_legacy_model_path(checkpoint_dir)
     if legacy_checkpoint_path_dict:
         return legacy_checkpoint_path_dict["checkpoint_path"]
 
@@ -116,9 +114,7 @@ def find_latest_epoch_checkpoint_path(checkpoint_dir):
     for filename in files:
         match = EPOCH_CHECKPOINT_PATTERN.search(filename)
         if match:
-            epoch = int(
-                match.group(1)
-            )  # Convert the matched epoch number to an integer
+            epoch = int(match.group(1))  # Convert the matched epoch number to an integer
             checkpoints.append((epoch, filename))
 
     # Sort the checkpoints by epoch in descending order (to get the latest one first)
@@ -172,9 +168,7 @@ def find_tokenizer_path(model_folder: str):
             tokenizer_path = os.path.join(model_folder, tokenizer_name)
             return tokenizer_path
     else:
-        for candidate_name in glob.glob(
-            os.path.join(model_folder, "*tokenizer.pickle")
-        ):
+        for candidate_name in glob.glob(os.path.join(model_folder, "*tokenizer.pickle")):
             if "visit_tokenizer.pickle" not in candidate_name:
                 return os.path.join(model_folder, candidate_name)
 
@@ -195,9 +189,7 @@ def find_visit_tokenizer_path(model_folder: str):
             visit_tokenizer_path = os.path.join(model_folder, visit_tokenizer_name)
             return visit_tokenizer_path
     else:
-        for candidate_name in glob.glob(
-            os.path.join(model_folder, "*visit_tokenizer.pickle")
-        ):
+        for candidate_name in glob.glob(os.path.join(model_folder, "*visit_tokenizer.pickle")):
             return os.path.join(model_folder, candidate_name)
 
     raise RuntimeError(

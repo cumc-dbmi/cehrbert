@@ -5,9 +5,7 @@ from ..data_generators.graph_sample_method import SimilarityType
 
 
 def create_parse_args():
-    parser = argparse.ArgumentParser(
-        description="Arguments for concept embedding model"
-    )
+    parser = argparse.ArgumentParser(description="Arguments for concept embedding model")
     parser.add_argument(
         "--training_data_parquet_path",
         dest="training_data_parquet_path",
@@ -268,9 +266,7 @@ def create_parse_args_gpt():
     parser.add_argument(
         "--including_long_sequence", dest="including_long_sequence", action="store_true"
     )
-    parser.add_argument(
-        "--save_checkpoint", dest="save_checkpoint", action="store_true"
-    )
+    parser.add_argument("--save_checkpoint", dest="save_checkpoint", action="store_true")
     parser.add_argument(
         "--save_freq",
         dest="save_freq",
@@ -289,24 +285,18 @@ def create_parse_args_gpt():
         dest="is_random_cursor_long_sequence",
         action="store_true",
     )
-    parser.add_argument(
-        "--efficient_training", dest="efficient_training", action="store_true"
-    )
+    parser.add_argument("--efficient_training", dest="efficient_training", action="store_true")
     parser.add_argument(
         "--include_numeric_value", dest="include_numeric_value", action="store_true"
     )
-    parser.add_argument(
-        "--shuffle_records", dest="shuffle_records", action="store_true"
-    )
+    parser.add_argument("--shuffle_records", dest="shuffle_records", action="store_true")
     parser.add_argument(
         "--val_data_parquet_path",
         dest="val_data_parquet_path",
         action="store",
         required=False,
     )
-    parser.add_argument(
-        "--is_weighted_sample", dest="is_weighted_sample", action="store_true"
-    )
+    parser.add_argument("--is_weighted_sample", dest="is_weighted_sample", action="store_true")
     parser.add_argument(
         "--weighted_sample_scaling_factor",
         dest="weighted_sample_scaling_factor",
@@ -323,12 +313,8 @@ def create_parse_args_gpt():
         type=int,
         default=20,
     )
-    parser.add_argument(
-        "--num_steps", dest="num_steps", action="store", required=False, type=int
-    )
-    parser.add_argument(
-        "--include_penalty", dest="include_penalty", action="store_true"
-    )
+    parser.add_argument("--num_steps", dest="num_steps", action="store", required=False, type=int)
+    parser.add_argument("--include_penalty", dest="include_penalty", action="store_true")
     parser.add_argument(
         "--include_positional_encoding",
         dest="include_positional_encoding",
@@ -357,9 +343,7 @@ def create_parse_args_hierarchical_bert():
     def check_prob(value):
         ivalue = float(value)
         if ivalue < 0 or ivalue > 1:
-            raise argparse.ArgumentTypeError(
-                "%s is an invalid positive int value" % value
-            )
+            raise argparse.ArgumentTypeError("%s is an invalid positive int value" % value)
         return ivalue
 
     parser = create_parse_args_base_bert()
@@ -390,15 +374,12 @@ def create_parse_args_hierarchical_bert():
     parser.add_argument(
         "--include_att_prediction", dest="include_att_prediction", action="store_true"
     )
-    parser.add_argument(
-        "--include_readmission", dest="include_readmission", action="store_true"
-    )
+    parser.add_argument("--include_readmission", dest="include_readmission", action="store_true")
     parser.add_argument(
         "--random_mask_prob",
         dest="random_mask_prob",
         type=check_prob,
-        required="include_readmission" in argv
-        or "include_prolonged_length_stay" in argv,
+        required="include_readmission" in argv or "include_prolonged_length_stay" in argv,
         default=1.0,
         help="The probability the secondary learning objective uses. The value 0.2 "
         "indicates there is a 20% chance of masking in pre-training "

@@ -16,7 +16,7 @@ def load_json_file(json_file):
         raise RuntimeError(f"Can't load the json file at {json_file} due to {e}")
 
 
-def _agg_helper(*args, map_func):
+def agg_helper(*args, map_func):
     result = map_func(*args)
     return {"data": [pickle.dumps(result)]}
 
@@ -25,9 +25,7 @@ def map_statistics(batch: Dict[str, Any]) -> Dict[str, Any]:
     if "units" in batch:
         concept_value_units = batch["units"]
     else:
-        concept_value_units = [
-            ["default_unit" for _ in cons] for cons in batch["concept_ids"]
-        ]
+        concept_value_units = [["default_unit" for _ in cons] for cons in batch["concept_ids"]]
 
     numeric_stats_by_lab = collections.defaultdict(OnlineStatistics)
     for concept_ids, concept_values, concept_value_indicators, units in zip(

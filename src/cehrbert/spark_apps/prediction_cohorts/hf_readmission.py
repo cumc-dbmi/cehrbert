@@ -70,9 +70,7 @@ def main(spark_args):
         query=hospitalization_query,
     )
 
-    ehr_table_list = (
-        spark_args.ehr_table_list if spark_args.ehr_table_list else DOMAIN_TABLE_LIST
-    )
+    ehr_table_list = spark_args.ehr_table_list if spark_args.ehr_table_list else DOMAIN_TABLE_LIST
 
     create_prediction_cohort(
         spark_args, hf_inpatient_target_querybuilder, hospitalization, ehr_table_list

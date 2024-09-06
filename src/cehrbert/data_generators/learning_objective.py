@@ -8,10 +8,10 @@ import pandas as pd
 from tensorflow.dtypes import DType, float32, int32
 from tensorflow.keras.utils import pad_sequences
 
-from ..utils.model_utils import convert_to_list_of_lists
-from .data_classes import RowSlicer
-from .graph_sample_method import GraphSampler
-from .tokenizer import ConceptTokenizer
+from cehrbert.data_generators.data_classes import RowSlicer
+from cehrbert.data_generators.graph_sample_method import GraphSampler
+from cehrbert.data_generators.tokenizer import ConceptTokenizer
+from cehrbert.utils.model_utils import convert_to_list_of_lists
 
 
 def validate_columns_decorator(function):
@@ -30,9 +30,7 @@ def validate_columns_decorator(function):
         for row_slicer in rows:
             for column in required_columns:
                 if not hasattr(row_slicer.row, column):
-                    raise AttributeError(
-                        f"The required column {column} is missing for {self}"
-                    )
+                    raise AttributeError(f"The required column {column} is missing for {self}")
             break
 
         return function(self, rows, *args, **kwargs)
@@ -50,9 +48,7 @@ def post_pad_pre_truncate(inputs, pad_value, max_seq_len, d_type="int32"):
     :param d_type:
     :return:
     """
-    return pad_sequences(
-        inputs, maxlen=max_seq_len, padding="post", value=pad_value, dtype=d_type
-    )
+    return pad_sequences(inputs, maxlen=max_seq_len, padding="post", value=pad_value, dtype=d_type)
 
 
 class LearningObjective(ABC):
@@ -124,9 +120,7 @@ class CustomLearningObjective(LearningObjective):
             for output_column in self.output_columns:
                 if output_column not in output_dict:
                     output_dict[output_column] = []
-                output_dict[output_column].append(
-                    getattr(row_slicer.row, output_column)
-                )
+                output_dict[output_column].append(getattr(row_slicer.row, output_column))
 
         return input_dict, output_dict
 
@@ -225,9 +219,7 @@ class VisitPredictionLearningObjective(LearningObjective):
 
         unused_token_id = self._visit_tokenizer.get_unused_token_id()
 
-        visit_concepts = post_pad_pre_truncate(
-            visit_concepts, unused_token_id, self._max_seq_len
-        )
+        visit_concepts = post_pad_pre_truncate(visit_concepts, unused_token_id, self._max_seq_len)
         masked_visit_concepts = post_pad_pre_truncate(
             masked_visit_concepts, unused_token_id, self._max_seq_len
         )
@@ -263,9 +255,7 @@ class VisitPredictionLearningObjective(LearningObjective):
             *islice(sorted(iterator, key=lambda tup2: tup2[0]), left_index, right_index)
         )
 
-        masked_visit_concepts, output_mask = self._mask_visit_concepts(
-            visit_concept_ids
-        )
+        masked_visit_concepts, output_mask = self._mask_visit_concepts(visit_concept_ids)
 
         return output_mask, masked_visit_concepts, visit_concept_ids
 
@@ -281,9 +271,7 @@ class VisitPredictionLearningObjective(LearningObjective):
         for word_pos in range(0, len(visit_concepts)):
             if random.random() < 0.5:
                 output_mask[word_pos] = 1
-                masked_visit_concepts[word_pos] = (
-                    self._visit_tokenizer.get_mask_token_id()
-                )
+                masked_visit_concepts[word_pos] = self._visit_tokenizer.get_mask_token_id()
         return masked_visit_concepts, output_mask
 
 
@@ -342,13 +330,9 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
         unused_token_id = self._concept_tokenizer.get_unused_token_id()
 
         # The main inputs for bert
-        masked_concepts = post_pad_pre_truncate(
-            masked_concepts, unused_token_id, self._max_seq_len
-        )
+        masked_concepts = post_pad_pre_truncate(masked_concepts, unused_token_id, self._max_seq_len)
         concepts = post_pad_pre_truncate(concepts, unused_token_id, self._max_seq_len)
-        concept_value_masks = post_pad_pre_truncate(
-            concept_value_masks, 0, self._max_seq_len
-        )
+        concept_value_masks = post_pad_pre_truncate(concept_value_masks, 0, self._max_seq_len)
         concept_values = post_pad_pre_truncate(
             concept_values, -1.0, self._max_seq_len, d_type="float32"
         )
@@ -376,9 +360,7 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
             "concept_values": concept_values,
         }
 
-        output_dict = {
-            "concept_predictions": np.stack([concepts, output_mask], axis=-1)
-        }
+        output_dict = {"concept_predictions": np.stack([concepts, output_mask], axis=-1)}
 
         return input_dict, output_dict
 
@@ -394,9 +376,7 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
 
         row, left_index, right_index, *_ = row_slicer
 
-        sorting_columns = (
-            getattr(row, "orders") if hasattr(row, "orders") else row.dates
-        )
+        sorting_columns = getattr(row, "orders") if hasattr(row, "orders") else row.dates
 
         iterator = zip(
             map(int, sorting_columns),
@@ -459,9 +439,7 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
                 if random.random() < 0.15:
                     dice = random.random()
                     if dice < 0.8:
-                        masked_concepts[word_pos] = (
-                            self._concept_tokenizer.get_mask_token_id()
-                        )
+                        masked_concepts[word_pos] = self._concept_tokenizer.get_mask_token_id()
                     elif dice < 0.9:
                         masked_concepts[word_pos] = random.randint(
                             self._concept_tokenizer.get_first_token_index(),
@@ -500,9 +478,7 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
         self._max_num_of_visits = max_num_of_visits
         self._max_num_of_concepts = max_num_of_concepts
         self._is_pretraining = is_pretraining
-        self._graph_sampler = GraphSampler(
-            concept_similarity_path, concept_similarity_type
-        )
+        self._graph_sampler = GraphSampler(concept_similarity_path, concept_similarity_type)
 
     def get_tf_dataset_schema(self):
         input_dict_schema = {
@@ -531,9 +507,7 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
     def _concept_mask(self, concept_ids):
         return list(
             map(
-                lambda c: (c == self._concept_tokenizer.get_unused_token_id()).astype(
-                    int
-                ),
+                lambda c: (c == self._concept_tokenizer.get_unused_token_id()).astype(int),
                 concept_ids,
             )
         )
@@ -612,9 +586,7 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
         )
 
         padded_concept_values = np.reshape(
-            post_pad_pre_truncate(
-                concept_values.apply(lambda d: d.flatten()), -1.0, max_seq_len
-            ),
+            post_pad_pre_truncate(concept_values.apply(lambda d: d.flatten()), -1.0, max_seq_len),
             (-1, self._max_num_of_visits, self._max_num_of_concepts),
         )
 
@@ -631,9 +603,7 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
         )
 
         padded_concept_value_masks = np.reshape(
-            post_pad_pre_truncate(
-                concept_value_masks.apply(lambda d: d.flatten()), 0, max_seq_len
-            ),
+            post_pad_pre_truncate(concept_value_masks.apply(lambda d: d.flatten()), 0, max_seq_len),
             (-1, self._max_num_of_visits, self._max_num_of_concepts),
         )
 
@@ -702,11 +672,7 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
         output_concept_masks = (
             pd.Series(output_concept_masks)
             .apply(convert_to_list_of_lists)
-            .apply(
-                lambda masks: self._pad(
-                    masks, padded_token=0, maxlen=self._max_num_of_concepts
-                )
-            )
+            .apply(lambda masks: self._pad(masks, padded_token=0, maxlen=self._max_num_of_concepts))
         )
 
         # Reshape this into 1-D for the MLM prediction
@@ -717,9 +683,7 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
         )
 
         output_dict = {
-            "concept_predictions": np.stack(
-                [padded_concepts, padded_output_concept_masks], axis=-1
-            )
+            "concept_predictions": np.stack([padded_concepts, padded_output_concept_masks], axis=-1)
         }
 
         return input_dict, output_dict
@@ -797,9 +761,7 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
                 if random.random() < 0.15:
                     dice = random.random()
                     if dice < 0.8:
-                        masked_concepts[word_pos] = (
-                            self._concept_tokenizer.get_mask_token_id()
-                        )
+                        masked_concepts[word_pos] = self._concept_tokenizer.get_mask_token_id()
                     elif dice < 0.9:
                         masked_concepts[word_pos] = random.randint(
                             self._concept_tokenizer.get_first_token_index(),
@@ -926,15 +888,11 @@ class HierarchicalVisitTypePredictionLearningObjective(
             for word_pos in range(0, len(visit_concepts)):
                 if random.random() < 0.5:
                     output_mask[word_pos] = 1
-                    masked_visit_concepts[word_pos] = (
-                        self._visit_tokenizer.get_mask_token_id()
-                    )
+                    masked_visit_concepts[word_pos] = self._visit_tokenizer.get_mask_token_id()
         return masked_visit_concepts, output_mask
 
 
-class HierarchicalReadmissionLearningObjective(
-    HierarchicalVisitTypePredictionLearningObjective
-):
+class HierarchicalReadmissionLearningObjective(HierarchicalVisitTypePredictionLearningObjective):
     required_columns = ["is_readmissions", "is_inpatients"]
 
     def __init__(
@@ -973,18 +931,14 @@ class HierarchicalReadmissionLearningObjective(
         )
 
         # if _random_mask_prob=0.2, there is 20% chance of being masked
-        random_mask = (
-            np.random.rand(*padded_is_inpatients.shape) < self._random_mask_prob
-        )
+        random_mask = np.random.rand(*padded_is_inpatients.shape) < self._random_mask_prob
         mask = padded_is_inpatients & random_mask
 
         if self._counter < self._warmup_step:
             self._counter += 1
             mask = np.zeros_like(mask)
 
-        output_dict = {
-            "is_readmission": np.stack([padded_is_readmissions, mask], axis=-1)
-        }
+        output_dict = {"is_readmission": np.stack([padded_is_readmissions, mask], axis=-1)}
 
         return {}, output_dict
 
@@ -1047,9 +1001,7 @@ class HierarchicalProlongedLengthStayLearningObjective(
         )
 
         # if _random_mask_prob=0.2, there is 20% chance of being masked
-        random_mask = (
-            np.random.rand(*padded_is_inpatients.shape) < self._random_mask_prob
-        )
+        random_mask = np.random.rand(*padded_is_inpatients.shape) < self._random_mask_prob
         mask = padded_is_inpatients & random_mask
 
         if self._counter < self._warmup_step:
@@ -1057,9 +1009,7 @@ class HierarchicalProlongedLengthStayLearningObjective(
             mask = np.zeros_like(mask)
 
         output_dict = {
-            "visit_prolonged_stay": np.stack(
-                [padded_visit_prolonged_stays, mask], axis=-1
-            )
+            "visit_prolonged_stay": np.stack([padded_visit_prolonged_stays, mask], axis=-1)
         }
 
         return {}, output_dict
@@ -1076,9 +1026,7 @@ class HierarchicalProlongedLengthStayLearningObjective(
 
         row, start_index, end_index, *_ = row_slicer
 
-        visit_prolonged_stays = row.visit_prolonged_stays[start_index:end_index].astype(
-            int
-        )
+        visit_prolonged_stays = row.visit_prolonged_stays[start_index:end_index].astype(int)
         is_inpatients = row.is_inpatients[start_index:end_index]
 
         return (visit_prolonged_stays, is_inpatients)
@@ -1148,9 +1096,9 @@ class HierarchicalArtificialTokenPredictionLearningObjective(
                 self._max_num_of_visits,
             )[:, 1:]
 
-            padded_output_mask = post_pad_pre_truncate(
-                output_mask, 0, self._max_num_of_visits
-            )[:, 1:]
+            padded_output_mask = post_pad_pre_truncate(output_mask, 0, self._max_num_of_visits)[
+                :, 1:
+            ]
 
             output_dict.update(
                 {
@@ -1199,10 +1147,7 @@ class HierarchicalArtificialTokenPredictionLearningObjective(
             for word_pos in range(0, len(time_interval_att_tokens)):
 
                 # Do not mask the [UNUSED] token
-                if (
-                    time_interval_att_tokens[word_pos]
-                    == self._concept_tokenizer.get_unused_token()
-                ):
+                if time_interval_att_tokens[word_pos] == self._concept_tokenizer.get_unused_token():
                     break
 
                 if random.random() < 0.15:
@@ -1254,12 +1199,8 @@ class TimeAttentionLearningObjective(LearningObjective):
             self._max_seq_len,
         )
 
-        context_time_stamps = post_pad_pre_truncate(
-            context_time_stamps, 0, self._max_seq_len
-        )
-        mask = (
-            context_concepts == self._concept_tokenizer.get_unused_token_id()
-        ).astype(int)
+        context_time_stamps = post_pad_pre_truncate(context_time_stamps, 0, self._max_seq_len)
+        mask = (context_concepts == self._concept_tokenizer.get_unused_token_id()).astype(int)
 
         input_dict = {
             "target_concepts": target_concepts,

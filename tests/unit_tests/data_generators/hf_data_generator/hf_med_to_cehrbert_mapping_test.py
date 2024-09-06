@@ -26,9 +26,7 @@ class TestMedToCehrBertDatasetMapping(unittest.TestCase):
             discharge_facility="8536",
             events=[
                 Event(time=datetime(2024, 4, 21, 0, 0), code="320128"),
-                Event(
-                    time=datetime(2024, 4, 22, 0, 0), code="4134120", numeric_value=0.5
-                ),
+                Event(time=datetime(2024, 4, 22, 0, 0), code="4134120", numeric_value=0.5),
             ],
         )
 
@@ -136,9 +134,7 @@ class TestMedToCehrBertDatasetMapping(unittest.TestCase):
         )
 
         # Test ages, age=-1 used for the ATT tokens
-        self.assertListEqual(
-            transformed_record["ages"], [44, 44, 44, -1, 44, 44, 44, 44]
-        )
+        self.assertListEqual(transformed_record["ages"], [44, 44, 44, -1, 44, 44, 44, 44])
 
         # Test dates, dates=0 used for the ATT tokens
         self.assertListEqual(
@@ -146,19 +142,13 @@ class TestMedToCehrBertDatasetMapping(unittest.TestCase):
         )
 
         # Test visit_segments, visit_segment=0 used for the ATT tokens
-        self.assertListEqual(
-            transformed_record["visit_segments"], [1, 1, 1, 0, 2, 2, 2, 2]
-        )
+        self.assertListEqual(transformed_record["visit_segments"], [1, 1, 1, 0, 2, 2, 2, 2])
 
         # Test visit_concept_orders, we visit_concept_order to be same as next visit for the ATT tokens
-        self.assertListEqual(
-            transformed_record["visit_concept_orders"], [1, 1, 1, 2, 2, 2, 2, 2]
-        )
+        self.assertListEqual(transformed_record["visit_concept_orders"], [1, 1, 1, 2, 2, 2, 2, 2])
 
         # Test concept_value_masks
-        self.assertListEqual(
-            transformed_record["concept_value_masks"], [0, 0, 0, 0, 0, 0, 1, 0]
-        )
+        self.assertListEqual(transformed_record["concept_value_masks"], [0, 0, 0, 0, 0, 0, 1, 0])
 
         # Test concept_values, concept_value=-1 is a default value associated with non-numeric measurements
         self.assertListEqual(
@@ -166,9 +156,7 @@ class TestMedToCehrBertDatasetMapping(unittest.TestCase):
         )
 
         # Test mlm_skip_values
-        self.assertListEqual(
-            transformed_record["mlm_skip_values"], [0, 0, 0, 0, 0, 0, 1, 0]
-        )
+        self.assertListEqual(transformed_record["mlm_skip_values"], [0, 0, 0, 0, 0, 0, 1, 0])
 
     def test_cehrgpt_transform(self):
         data_args = DataTrainingArguments(
