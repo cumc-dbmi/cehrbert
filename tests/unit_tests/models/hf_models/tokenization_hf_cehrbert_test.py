@@ -58,7 +58,7 @@ class TestCehrBertTokenizer(unittest.TestCase):
     def test_oov_token(self):
         # Test the encoding of an out-of-vocabulary token
         encoded = self.tokenizer.encode(["nonexistent"])
-        self.assertEqual(encoded, [self.tokenizer._oov_token_index])
+        self.assertEqual(encoded, [self.tokenizer.oov_token_index])
 
     def test_convert_id_to_token_oov(self):
         # Test decoding an out-of-vocabulary token ID

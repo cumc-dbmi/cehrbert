@@ -85,6 +85,10 @@ class CehrBertTokenizer(PushToHubMixin):
         return self._tokenizer.get_vocab_size()
 
     @property
+    def oov_token_index(self):
+        return self._oov_token_index
+
+    @property
     def mask_token_index(self):
         return self._mask_token_index
 
