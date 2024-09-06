@@ -1,6 +1,7 @@
-from typing import Optional, Tuple
-import torch
 from dataclasses import dataclass
+from typing import Optional, Tuple
+
+import torch
 from transformers.modeling_outputs import ModelOutput
 
 
@@ -152,6 +153,7 @@ class CehrBertModelOutput(ModelOutput):
             the classification token after processing through a linear layer and a tanh activation function. The linear
             layer weights are trained from the next sentence prediction (classification) objective during pretraining.
     """
+
     loss: Optional[torch.FloatTensor] = None
     prediction_logits: Optional[torch.FloatTensor] = None
     pooler_output: torch.FloatTensor = None

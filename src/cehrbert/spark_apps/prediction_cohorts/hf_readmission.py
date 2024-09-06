@@ -4,8 +4,8 @@ from ..spark_parse_args import create_spark_args
 
 HEART_FAILURE_HOSPITALIZATION_QUERY = """
 WITH hf_concepts AS (
-    SELECT DISTINCT 
-        descendant_concept_id AS concept_id 
+    SELECT DISTINCT
+        descendant_concept_id AS concept_id
     FROM global_temp.concept_ancestor AS ca
     WHERE ca.ancestor_concept_id = 316139
 )
@@ -35,45 +35,45 @@ FROM global_temp.visit_occurrence AS v
 WHERE v.visit_concept_id IN (9201, 262, 8971, 8920) --inpatient, er-inpatient
 """
 
-HF_HOSPITALIZATION_COHORT = 'hf_hospitalization'
-HOSPITALIZATION_COHORT = 'hospitalization'
-DEPENDENCY_LIST = ['person', 'condition_occurrence', 'visit_occurrence']
-DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure', 'procedure_occurrence', 'measurement']
+HF_HOSPITALIZATION_COHORT = "hf_hospitalization"
+HOSPITALIZATION_COHORT = "hospitalization"
+DEPENDENCY_LIST = ["person", "condition_occurrence", "visit_occurrence"]
+DOMAIN_TABLE_LIST = [
+    "condition_occurrence",
+    "drug_exposure",
+    "procedure_occurrence",
+    "measurement",
+]
 
 
 def main(spark_args):
     hf_inpatient_target_query = QuerySpec(
         table_name=HF_HOSPITALIZATION_COHORT,
         query_template=HEART_FAILURE_HOSPITALIZATION_QUERY,
-        parameters={'date_lower_bound': spark_args.date_lower_bound}
+        parameters={"date_lower_bound": spark_args.date_lower_bound},
     )
 
     hf_inpatient_target_querybuilder = QueryBuilder(
         cohort_name=HF_HOSPITALIZATION_COHORT,
         dependency_list=DEPENDENCY_LIST,
-        query=hf_inpatient_target_query
+        query=hf_inpatient_target_query,
     )
 
     hospitalization_query = QuerySpec(
         table_name=HOSPITALIZATION_COHORT,
         query_template=HOSPITALIZATION_QUERY,
-        parameters={}
+        parameters={},
     )
     hospitalization = QueryBuilder(
         cohort_name=HOSPITALIZATION_COHORT,
         dependency_list=DEPENDENCY_LIST,
-        query=hospitalization_query
+        query=hospitalization_query,
     )
 
     ehr_table_list = spark_args.ehr_table_list if spark_args.ehr_table_list else DOMAIN_TABLE_LIST
 
-    create_prediction_cohort(
-        spark_args,
-        hf_inpatient_target_querybuilder,
-        hospitalization,
-        ehr_table_list
-    )
+    create_prediction_cohort(spark_args, hf_inpatient_target_querybuilder, hospitalization, ehr_table_list)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main(create_spark_args())

@@ -1,10 +1,12 @@
-from typing import Dict, Any, List
+from typing import Dict, List
+
 from transformers import PretrainedConfig
 
 
 class CEHRGPTConfig(PretrainedConfig):
     """
     Args:
+
         vocab_size (`int`, *optional*, defaults to 50257):
             Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`GPT2Model`] or [`TFGPT2Model`].
@@ -87,40 +89,40 @@ class CEHRGPTConfig(PretrainedConfig):
     }
 
     def __init__(
-            self,
-            vocab_size=50257,
-            time_token_vocab_size=50257,
-            n_positions=1024,
-            n_embd=768,
-            n_layer=12,
-            n_head=12,
-            n_inner=None,
-            activation_function="gelu_new",
-            resid_pdrop=0.1,
-            embd_pdrop=0.1,
-            attn_pdrop=0.1,
-            layer_norm_epsilon=1e-5,
-            initializer_range=0.02,
-            summary_type="cls_index",
-            summary_use_proj=True,
-            summary_activation=None,
-            summary_proj_to_labels=True,
-            summary_first_dropout=0.1,
-            scale_attn_weights=True,
-            use_cache=True,
-            bos_token_id=50256,
-            eos_token_id=50256,
-            lab_token_ids=None,
-            scale_attn_by_inverse_layer_idx=False,
-            reorder_and_upcast_attn=False,
-            exclude_position_ids=False,
-            include_values=False,
-            include_ttv_prediction=False,
-            use_sub_time_tokenization=True,
-            time_token_loss_weight=1.0,
-            time_to_visit_loss_weight=1.0,
-            token_to_time_token_mapping: Dict[int, List] = None,
-            **kwargs,
+        self,
+        vocab_size=50257,
+        time_token_vocab_size=50257,
+        n_positions=1024,
+        n_embd=768,
+        n_layer=12,
+        n_head=12,
+        n_inner=None,
+        activation_function="gelu_new",
+        resid_pdrop=0.1,
+        embd_pdrop=0.1,
+        attn_pdrop=0.1,
+        layer_norm_epsilon=1e-5,
+        initializer_range=0.02,
+        summary_type="cls_index",
+        summary_use_proj=True,
+        summary_activation=None,
+        summary_proj_to_labels=True,
+        summary_first_dropout=0.1,
+        scale_attn_weights=True,
+        use_cache=True,
+        bos_token_id=50256,
+        eos_token_id=50256,
+        lab_token_ids=None,
+        scale_attn_by_inverse_layer_idx=False,
+        reorder_and_upcast_attn=False,
+        exclude_position_ids=False,
+        include_values=False,
+        include_ttv_prediction=False,
+        use_sub_time_tokenization=True,
+        time_token_loss_weight=1.0,
+        time_to_visit_loss_weight=1.0,
+        token_to_time_token_mapping: Dict[int, List] = None,
+        **kwargs,
     ):
         if token_to_time_token_mapping is None:
             token_to_time_token_mapping = {}
@@ -165,8 +167,7 @@ class CEHRGPTConfig(PretrainedConfig):
     def token_to_time_token_mapping(self) -> Dict[int, List[int]]:
         # The saved _token_to_time_token_mapping converts the key to string, so we need to convert it back to int
         return {
-            int(token): list(map(int, sub_tokens))
-            for token, sub_tokens in self._token_to_time_token_mapping.items()
+            int(token): list(map(int, sub_tokens)) for token, sub_tokens in self._token_to_time_token_mapping.items()
         }
 
 
@@ -174,32 +175,32 @@ class CehrBertConfig(PretrainedConfig):
     model_type = "cehrbert"
 
     def __init__(
-            self,
-            vocab_size=20000,
-            n_visit_segments=3,
-            hidden_size=128,
-            n_time_embd=16,
-            num_hidden_layers=12,
-            num_attention_heads=8,
-            intermediate_size=2048,
-            hidden_act="gelu",
-            hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
-            max_position_embeddings=512,
-            type_vocab_size=2,
-            initializer_range=0.02,
-            layer_norm_eps=1e-12,
-            pad_token_id=0,
-            lab_token_ids=None,
-            tie_word_embeddings=True,
-            num_labels=2,
-            classifier_dropout=0.1,
-            bidirectional=True,
-            include_value_prediction=False,
-            mlm_probability=0.15,
-            time_embedding_scaling_factor: float = 1000,
-            age_embedding_scaling_factor: float = 100,
-            **kwargs,
+        self,
+        vocab_size=20000,
+        n_visit_segments=3,
+        hidden_size=128,
+        n_time_embd=16,
+        num_hidden_layers=12,
+        num_attention_heads=8,
+        intermediate_size=2048,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=2,
+        initializer_range=0.02,
+        layer_norm_eps=1e-12,
+        pad_token_id=0,
+        lab_token_ids=None,
+        tie_word_embeddings=True,
+        num_labels=2,
+        classifier_dropout=0.1,
+        bidirectional=True,
+        include_value_prediction=False,
+        mlm_probability=0.15,
+        time_embedding_scaling_factor: float = 1000,
+        age_embedding_scaling_factor: float = 100,
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size

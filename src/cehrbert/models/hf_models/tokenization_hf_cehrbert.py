@@ -1,24 +1,25 @@
-import os
 import json
+import os
 import pickle
 from functools import partial
-from typing import Sequence, Union, List, Dict, Any
 from itertools import islice
+from typing import Any, Dict, List, Sequence, Union
 
 import transformers
 from datasets import Dataset, DatasetDict
 from tokenizers import Tokenizer
 from tokenizers.models import WordLevel
-from tokenizers.trainers import WordLevelTrainer
 from tokenizers.pre_tokenizers import WhitespaceSplit
+from tokenizers.trainers import WordLevelTrainer
 from transformers.tokenization_utils_base import PushToHubMixin
-from .tokenization_utils import agg_statistics, map_statistics, _agg_helper
-from ...runners.hf_runner_argument_dataclass import DataTrainingArguments
+
+from cehrbert.models.hf_models.tokenization_utils import agg_helper, agg_statistics, map_statistics
+from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments
 
 PAD_TOKEN = "[PAD]"
 CLS_TOKEN = "[CLS]"
 MASK_TOKEN = "[MASK]"
-UNUSED_TOKEN = '[UNUSED]'
+UNUSED_TOKEN = "[UNUSED]"
 OUT_OF_VOCABULARY_TOKEN = "[OOV]"
 
 TOKENIZER_FILE_NAME = "tokenizer.json"
@@ -26,34 +27,45 @@ CONCEPT_MAPPING_FILE_NAME = "concept_name_mapping.json"
 LAB_STATS_FILE_NAME = "cehrgpt_lab_stats.json"
 
 
-def load_json_file(
-        json_file
-):
+def load_json_file(json_file) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
+    """
+    Loads a JSON file and returns the parsed JSON object.
+
+    Args:
+       json_file (str): The path to the JSON file.
+
+    Returns:
+       dict: The parsed JSON object.
+
+    Raises:
+       RuntimeError: If the JSON file cannot be read.
+    """
     try:
         with open(json_file, "r", encoding="utf-8") as reader:
             file_contents = reader.read()
             parsed_json = json.loads(file_contents)
             return parsed_json
-    except Exception as e:
-        raise RuntimeError(f"Can't load the json file at {json_file} due to {e}")
+    except RuntimeError as e:
+        raise RuntimeError(f"Can't load the json file at {json_file}") from e
 
 
 class CehrBertTokenizer(PushToHubMixin):
 
     def __init__(
-            self,
-            tokenizer: Tokenizer,
-            lab_stats: List[Dict[str, Any]],
-            concept_name_mapping: Dict[str, str]
+        self,
+        tokenizer: Tokenizer,
+        lab_stats: List[Dict[str, Any]],
+        concept_name_mapping: Dict[str, str],
     ):
         self._tokenizer = tokenizer
         self._lab_stats = lab_stats
         self._lab_stat_mapping = {
             lab_stat["concept_id"]: {
-                'unit': lab_stat["unit"],
-                'mean': lab_stat['mean'],
-                'std': lab_stat['std']
-            } for lab_stat in lab_stats
+                "unit": lab_stat["unit"],
+                "mean": lab_stat["mean"],
+                "std": lab_stat["std"],
+            }
+            for lab_stat in lab_stats
         }
         self._concept_name_mapping = concept_name_mapping
         self._oov_token_index = self._tokenizer.token_to_id(OUT_OF_VOCABULARY_TOKEN)
@@ -67,6 +79,10 @@ class CehrBertTokenizer(PushToHubMixin):
     @property
     def vocab_size(self):
         return self._tokenizer.get_vocab_size()
+
+    @property
+    def oov_token_index(self):
+        return self._oov_token_index
 
     @property
     def mask_token_index(self):
@@ -87,25 +103,26 @@ class CehrBertTokenizer(PushToHubMixin):
     @property
     def lab_token_ids(self):
         reserved_tokens = [
-            OUT_OF_VOCABULARY_TOKEN, PAD_TOKEN, UNUSED_TOKEN, OUT_OF_VOCABULARY_TOKEN
+            OUT_OF_VOCABULARY_TOKEN,
+            PAD_TOKEN,
+            UNUSED_TOKEN,
+            OUT_OF_VOCABULARY_TOKEN,
         ]
-        return self.encode(
-            [_['concept_id'] for _ in self._lab_stats if _['concept_id'] not in reserved_tokens]
-        )
+        return self.encode([_["concept_id"] for _ in self._lab_stats if _["concept_id"] not in reserved_tokens])
 
     def encode(self, concept_ids: Sequence[str]) -> Sequence[int]:
         encoded = self._tokenizer.encode(concept_ids, is_pretokenized=True)
         return encoded.ids
 
     def decode(self, concept_token_ids: List[int]) -> List[str]:
-        return self._tokenizer.decode(concept_token_ids).split(' ')
+        return self._tokenizer.decode(concept_token_ids).split(" ")
 
-    def _convert_token_to_id(self, token):
+    def convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
         token_id = self._tokenizer.token_to_id(token)
         return token_id if token_id else self._oov_token_index
 
-    def _convert_id_to_token(self, index):
+    def convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
         token = self._tokenizer.id_to_token(index)
         return token if token else OUT_OF_VOCABULARY_TOKEN
@@ -115,10 +132,14 @@ class CehrBertTokenizer(PushToHubMixin):
         out_string = " ".join([self._concept_name_mapping[t] for t in tokens])
         return out_string
 
-    def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
+    def save_pretrained(
+        self,
+        save_directory: Union[str, os.PathLike],
+        push_to_hub: bool = False,
+        **kwargs,
+    ):
         """
         Save the Cehrbert tokenizer.
-
 
         This method make sure the batch processor can then be re-loaded using the
         .from_pretrained class method.
@@ -126,7 +147,7 @@ class CehrBertTokenizer(PushToHubMixin):
         Args:
             save_directory (`str` or `os.PathLike`): The path to a directory where the tokenizer will be saved.
             push_to_hub (`bool`, *optional*, defaults to `False`):
-                Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
+                Whether to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
                 namespace).
             kwargs (`Dict[str, Any]`, *optional*):
@@ -161,9 +182,9 @@ class CehrBertTokenizer(PushToHubMixin):
 
     @classmethod
     def from_pretrained(
-            cls,
-            pretrained_model_name_or_path: Union[str, os.PathLike],
-            **kwargs,
+        cls,
+        pretrained_model_name_or_path: Union[str, os.PathLike],
+        **kwargs,
     ):
         """
         Load the CehrBert tokenizer.
@@ -187,7 +208,7 @@ class CehrBertTokenizer(PushToHubMixin):
         )
 
         if not tokenizer_file:
-            return None
+            raise RuntimeError(f"tokenizer_file does not exist: {tokenizer_file}")
 
         tokenizer = Tokenizer.from_file(tokenizer_file)
 
@@ -195,13 +216,13 @@ class CehrBertTokenizer(PushToHubMixin):
             pretrained_model_name_or_path, LAB_STATS_FILE_NAME, **kwargs
         )
         if not lab_stats_file:
-            return None
+            raise RuntimeError(f"lab_stats_file does not exist: {lab_stats_file}")
 
         concept_name_mapping_file = transformers.utils.hub.cached_file(
             pretrained_model_name_or_path, CONCEPT_MAPPING_FILE_NAME, **kwargs
         )
         if not concept_name_mapping_file:
-            return None
+            raise RuntimeError(f"concept_name_mapping_file does not exist: {concept_name_mapping_file}")
 
         lab_stats = load_json_file(lab_stats_file)
 
@@ -211,29 +232,37 @@ class CehrBertTokenizer(PushToHubMixin):
 
     @classmethod
     def train_tokenizer(
-            cls,
-            dataset: Union[Dataset, DatasetDict],
-            feature_names: List[str],
-            concept_name_mapping: Dict[str, str],
-            data_args: DataTrainingArguments
+        cls,
+        dataset: Union[Dataset, DatasetDict],
+        feature_names: List[str],
+        concept_name_mapping: Dict[str, str],
+        data_args: DataTrainingArguments,
     ):
         """
-        Train a huggingface word level tokenizer. To use their tokenizer, we need to concatenate all the concepts
+        Train a huggingface word level tokenizer.
+
+        To use their tokenizer, we need to concatenate all the concepts
         together and treat it as a sequence.
         """
 
         if isinstance(dataset, DatasetDict):
-            dataset = dataset['train']
+            dataset = dataset["train"]
 
         # Use the Fast Tokenizer from the Huggingface tokenizers Rust implementation.
         # https://github.com/huggingface/tokenizers
         tokenizer = Tokenizer(WordLevel(unk_token=OUT_OF_VOCABULARY_TOKEN, vocab=dict()))
         tokenizer.pre_tokenizer = WhitespaceSplit()
         trainer = WordLevelTrainer(
-            special_tokens=[PAD_TOKEN, MASK_TOKEN, OUT_OF_VOCABULARY_TOKEN, CLS_TOKEN, UNUSED_TOKEN],
+            special_tokens=[
+                PAD_TOKEN,
+                MASK_TOKEN,
+                OUT_OF_VOCABULARY_TOKEN,
+                CLS_TOKEN,
+                UNUSED_TOKEN,
+            ],
             vocab_size=data_args.vocab_size,
             min_frequency=data_args.min_frequency,
-            show_progress=True
+            show_progress=True,
         )
         for feature_name in feature_names:
             batch_concat_concepts_partial_func = partial(cls.batch_concat_concepts, feature_name=feature_name)
@@ -241,7 +270,7 @@ class CehrBertTokenizer(PushToHubMixin):
                 concatenated_features = dataset.map(
                     batch_concat_concepts_partial_func,
                     batched=True,
-                    batch_size=data_args.preprocessing_batch_size
+                    batch_size=data_args.preprocessing_batch_size,
                 )
 
                 def batched_generator():
@@ -250,9 +279,7 @@ class CehrBertTokenizer(PushToHubMixin):
                         batch = list(islice(iterator, data_args.preprocessing_batch_size))
                         if not batch:
                             break
-                        yield [
-                            example[feature_name] for example in batch
-                        ]
+                        yield [example[feature_name] for example in batch]
 
                 # We pass a generator of list of texts (concatenated concept_ids) to train_from_iterator
                 # for efficient training
@@ -263,7 +290,7 @@ class CehrBertTokenizer(PushToHubMixin):
                     num_proc=data_args.preprocessing_num_workers,
                     batched=True,
                     batch_size=data_args.preprocessing_batch_size,
-                    remove_columns=dataset.column_names
+                    remove_columns=dataset.column_names,
                 )
                 generator = concatenated_features[feature_name]
 
@@ -271,14 +298,14 @@ class CehrBertTokenizer(PushToHubMixin):
 
         if data_args.streaming:
             parts = dataset.map(
-                partial(_agg_helper, map_func=map_statistics),
+                partial(agg_helper, map_func=map_statistics),
                 batched=True,
                 batch_size=data_args.preprocessing_batch_size,
-                remove_columns=dataset.column_names
+                remove_columns=dataset.column_names,
             )
         else:
             parts = dataset.map(
-                partial(_agg_helper, map_func=map_statistics),
+                partial(agg_helper, map_func=map_statistics),
                 batched=True,
                 batch_size=data_args.preprocessing_batch_size,
                 remove_columns=dataset.column_names,
@@ -295,13 +322,13 @@ class CehrBertTokenizer(PushToHubMixin):
                 current = agg_statistics(current, fixed_stat)
         lab_stats = [
             {
-                'concept_id': concept_id,
-                'unit': unit,
-                'mean': online_stats.mean(),
-                'std': online_stats.standard_deviation(),
-                'count': online_stats.count
+                "concept_id": concept_id,
+                "unit": unit,
+                "mean": online_stats.mean(),
+                "std": online_stats.standard_deviation(),
+                "count": online_stats.count,
             }
-            for (concept_id, unit), online_stats in current['numeric_stats_by_lab'].items()
+            for (concept_id, unit), online_stats in current["numeric_stats_by_lab"].items()
         ]
 
         return CehrBertTokenizer(tokenizer, lab_stats, concept_name_mapping)
@@ -312,10 +339,10 @@ class CehrBertTokenizer(PushToHubMixin):
 
     def normalize(self, concept_id, concept_value) -> float:
         if concept_id in self._lab_stat_mapping:
-            mean_ = (concept_value - self._lab_stat_mapping[concept_id]['mean'])
-            std = self._lab_stat_mapping[concept_id]['std']
+            mean_ = concept_value - self._lab_stat_mapping[concept_id]["mean"]
+            std = self._lab_stat_mapping[concept_id]["std"]
             if std > 0:
-                normalized_value = mean_ / self._lab_stat_mapping[concept_id]['std']
+                normalized_value = mean_ / self._lab_stat_mapping[concept_id]["std"]
             else:
                 normalized_value = mean_
             return normalized_value

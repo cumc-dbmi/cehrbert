@@ -12,6 +12,7 @@ authors = [
 ]
 description = "CEHR-BERT: Incorporating temporal information from structured EHR data to improve prediction tasks"
 readme = "README.md"
+license = { text = "MIT License" }
 requires-python = ">=3.10.0"
 
 classifiers = [
@@ -47,7 +48,7 @@ dependencies = [
     "scikit-learn==1.4.0",
     "scipy==1.12.0",
     "tensorflow==2.15.0",
-    "tensorflow-metal==1.1.0; sys_platform == 'darwin'",  # macOS only
+    "tensorflow-metal==1.1.0; sys_platform == 'darwin'", # macOS only
     "tensorflow-datasets==4.5.2",
     "tqdm==4.66.1",
     "torch==2.4.0",
@@ -60,11 +61,25 @@ dependencies = [
 
 [tool.setuptools_scm]
 
+[project.urls]
+Homepage = "https://github.com/cumc-dbmi/cehr-bert"
+
 [project.scripts]
 cehrbert-pretraining = "cehrbert.runner.hf_cehrbert_pretrain_runner:main"
 cehrbert-finetuning = "cehrbert.runner.hf_cehrbert_finetuning_runner:main"
 
 [project.optional-dependencies]
 dev = [
-    "pre-commit", "pytest", "pytest-cov", "pytest-subtests", "rootutils", "hypothesis"
+    "pre-commit", "pytest", "pytest-cov", "pytest-subtests", "rootutils", "hypothesis", "black"
 ]
+
+[tool.isort]
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+line_length = 120
+
+[tool.black]
+line_length = 120

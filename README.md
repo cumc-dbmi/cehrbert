@@ -57,7 +57,7 @@ pip install -e .[dev]
 
 Download [jtds-1.3.1.jar](jtds-1.3.1.jar) into the spark jars folder in the python environment
 ```console
-cp jtds-1.3.1.jar .venv/lib/python3.10/site-packages/pyspark/jars/ 
+cp jtds-1.3.1.jar .venv/lib/python3.10/site-packages/pyspark/jars/
 ```
 
 ## Instructions for Use with [MEDS](https://github.com/Medical-Event-Data-Standard/meds)
@@ -65,7 +65,7 @@ cp jtds-1.3.1.jar .venv/lib/python3.10/site-packages/pyspark/jars/
 ### 1. Convert MEDS to the [meds_reader](https://github.com/som-shahlab/meds_reader) database
 
 If you don't have the MEDS dataset, you could convert the OMOP dataset to the MEDS
-using [meds_etl](https://github.com/Medical-Event-Data-Standard/meds_etl). 
+using [meds_etl](https://github.com/Medical-Event-Data-Standard/meds_etl).
 We have prepared a synthea dataset with 1M patients for you to test, you could download it
 at [omop_synthea.tar.gz](https://drive.google.com/file/d/1k7-cZACaDNw8A1JRI37mfMAhEErxKaQJ/view?usp=share_link)
 ```console
@@ -115,7 +115,7 @@ The sequence can be seen conceptually as [VS] [V1] [VE] [ATT] [VS] [V2] [VE], wh
 concepts associated with those visits.
 
 ```console
-PYTHONPATH=./: spark-submit spark_apps/generate_training_data.py -i ~/Documents/omop_test/ -o ~/Documents/omop_test/cehr-bert -tc condition_occurrence procedure_occurrence drug_exposure -d 1985-01-01 --is_new_patient_representation -iv 
+PYTHONPATH=./: spark-submit spark_apps/generate_training_data.py -i ~/Documents/omop_test/ -o ~/Documents/omop_test/cehr-bert -tc condition_occurrence procedure_occurrence drug_exposure -d 1985-01-01 --is_new_patient_representation -iv
 ```
 
 ### 3. Pre-train CEHR-BERT
@@ -125,7 +125,7 @@ at `sample/patient_sequence` in the repo. CEHR-BERT expects the data folder to b
 ```console
 mkdir test_dataset_prepared;
 mkdir test_results;
-python -m cehrbert.runners.hf_cehrbert_pretrain_runner sample_configs/hf_cehrbert_pretrain_runner_config.yaml 
+python -m cehrbert.runners.hf_cehrbert_pretrain_runner sample_configs/hf_cehrbert_pretrain_runner_config.yaml
 ```
 
 If your dataset is large, you could add ```--use_dask``` in the command above

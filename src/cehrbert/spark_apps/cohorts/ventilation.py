@@ -8,15 +8,15 @@ SELECT DISTINCT
 FROM global_temp.vent AS vent
 """
 
-DEFAULT_COHORT_NAME = 'ventilation'
-DEPENDENCY_LIST = ['vent']
+DEFAULT_COHORT_NAME = "ventilation"
+DEPENDENCY_LIST = ["vent"]
 
 
 def query_builder():
-    query = QuerySpec(table_name=DEFAULT_COHORT_NAME,
-                      query_template=VENTILATION_COHORT_QUERY,
-                      parameters={})
+    query = QuerySpec(
+        table_name=DEFAULT_COHORT_NAME,
+        query_template=VENTILATION_COHORT_QUERY,
+        parameters={},
+    )
 
-    return QueryBuilder(cohort_name=DEFAULT_COHORT_NAME,
-                        dependency_list=DEPENDENCY_LIST,
-                        query=query)
+    return QueryBuilder(cohort_name=DEFAULT_COHORT_NAME, dependency_list=DEPENDENCY_LIST, query=query)

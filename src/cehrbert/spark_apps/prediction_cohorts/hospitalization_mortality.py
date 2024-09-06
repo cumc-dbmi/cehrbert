@@ -1,10 +1,14 @@
-from ..cohorts.spark_app_base import create_prediction_cohort
-
-from ..spark_parse_args import create_spark_args
 from ..cohorts.query_builder import QueryBuilder, QuerySpec
+from ..cohorts.spark_app_base import create_prediction_cohort
+from ..spark_parse_args import create_spark_args
 
-DEPENDENCY_LIST = ['visit_occurrence']
-DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure', 'procedure_occurrence', 'measurement']
+DEPENDENCY_LIST = ["visit_occurrence"]
+DOMAIN_TABLE_LIST = [
+    "condition_occurrence",
+    "drug_exposure",
+    "procedure_occurrence",
+    "measurement",
+]
 
 HOSPITALIZATION_QUERY = """
 SELECT DISTINCT
@@ -12,7 +16,7 @@ SELECT DISTINCT
     v.visit_occurrence_id,
     v.index_date,
     v.expired
-FROM 
+FROM
 (
     SELECT
         v.person_id,
@@ -39,41 +43,39 @@ FROM global_temp.{target_table_name} AS v
 WHERE expired = 1
 """
 
-HOSPITALIZATION_TARGET_COHORT = 'hospitalization_target'
-MORTALITY_COHORT = 'hospitalization_mortality'
+HOSPITALIZATION_TARGET_COHORT = "hospitalization_target"
+MORTALITY_COHORT = "hospitalization_mortality"
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     spark_args = create_spark_args()
     ehr_table_list = spark_args.ehr_table_list if spark_args.ehr_table_list else DOMAIN_TABLE_LIST
 
     hospitalization_target_query = QuerySpec(
         table_name=HOSPITALIZATION_TARGET_COHORT,
         query_template=HOSPITALIZATION_QUERY,
-        parameters={
-            'date_lower_bound': spark_args.date_lower_bound
-        }
+        parameters={"date_lower_bound": spark_args.date_lower_bound},
     )
 
     hospitalization_querybuilder = QueryBuilder(
         cohort_name=HOSPITALIZATION_TARGET_COHORT,
         dependency_list=DEPENDENCY_LIST,
-        query=hospitalization_target_query
+        query=hospitalization_target_query,
     )
 
     hospitalization_mortality_query = QuerySpec(
         table_name=MORTALITY_COHORT,
         query_template=MORTALITY_QUERY,
-        parameters={'target_table_name': HOSPITALIZATION_TARGET_COHORT}
+        parameters={"target_table_name": HOSPITALIZATION_TARGET_COHORT},
     )
     hospitalization_mortality_querybuilder = QueryBuilder(
         cohort_name=MORTALITY_COHORT,
         dependency_list=DEPENDENCY_LIST,
-        query=hospitalization_mortality_query
+        query=hospitalization_mortality_query,
     )
 
     create_prediction_cohort(
         spark_args,
         hospitalization_querybuilder,
         hospitalization_mortality_querybuilder,
-        ehr_table_list
+        ehr_table_list,
     )

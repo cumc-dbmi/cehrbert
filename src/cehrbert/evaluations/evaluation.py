@@ -1,19 +1,51 @@
 import configparser
-from ..config import output_names as p
-from ..config.grid_search_config import LEARNING_RATE, LSTM_DIRECTION, LSTM_UNIT
-from .evaluation_parameters import *
-from .evaluation_parse_args import create_evaluation_args
-from .model_evaluators.hierarchical_bert_evaluators import *
-from .model_evaluators.bert_model_evaluators import *
-from .model_evaluators.sequence_model_evaluators import *
-from .model_evaluators.frequency_model_evaluators import *
-from ..utils.model_utils import *
-from ..utils.checkpoint_utils import find_tokenizer_path, find_visit_tokenizer_path
+import logging
+import os
+
+import pandas as pd
+import tensorflow as tf
+
+tf.keras.utils.set_random_seed(0)
+
+from cehrbert.config import output_names as p
+from cehrbert.config.grid_search_config import LEARNING_RATE, LSTM_DIRECTION, LSTM_UNIT
+from cehrbert.evaluations.evaluation_parameters import (
+    BASELINE_MODEL,
+    FULL,
+    HIERARCHICAL_BERT_LSTM,
+    HIERARCHICAL_BERT_POOLING,
+    LSTM,
+    RANDOM_HIERARCHICAL_BERT_LSTM,
+    RANDOM_VANILLA_BERT_LSTM,
+    SEQUENCE_MODEL,
+    SLIDING_BERT,
+    VANILLA_BERT_FEED_FORWARD,
+    VANILLA_BERT_LSTM,
+)
+from cehrbert.evaluations.evaluation_parse_args import create_evaluation_args
+from cehrbert.evaluations.model_evaluators.bert_model_evaluators import (
+    BertFeedForwardModelEvaluator,
+    BertLstmModelEvaluator,
+    RandomVanillaLstmBertModelEvaluator,
+    SlidingBertModelEvaluator,
+)
+from cehrbert.evaluations.model_evaluators.frequency_model_evaluators import (
+    LogisticRegressionModelEvaluator,
+    XGBClassifierEvaluator,
+)
+from cehrbert.evaluations.model_evaluators.hierarchical_bert_evaluators import (
+    HierarchicalBertEvaluator,
+    HierarchicalBertPoolingEvaluator,
+    RandomHierarchicalBertEvaluator,
+)
+from cehrbert.evaluations.model_evaluators.sequence_model_evaluators import BiLstmModelEvaluator, GridSearchConfig
+from cehrbert.utils.checkpoint_utils import find_tokenizer_path, find_visit_tokenizer_path
+from cehrbert.utils.model_utils import validate_folder
 
 
 def get_grid_search_config(grid_search_config) -> GridSearchConfig:
     """
-    Read the grid search config file and load learning_rates, lstm_directions and lstm_units
+    Read the grid search config file and load learning_rates, lstm_directions and lstm_units.
 
     :param grid_search_config:
     :return:
@@ -30,13 +62,13 @@ def get_grid_search_config(grid_search_config) -> GridSearchConfig:
             return GridSearchConfig(
                 learning_rates=learning_rates,
                 lstm_directions=lstm_directions,
-                lstm_units=lstm_units
+                lstm_units=lstm_units,
             )
 
     except Exception as e:
         print(f'{grid_search_config} cannot be parsed. Error message" {e}')
     else:
-        print(f'grid_search_config is not provided, will use the default GridSearchConfig')
+        print(f"grid_search_config is not provided, will use the default GridSearchConfig")
 
     return GridSearchConfig()
 
@@ -45,19 +77,14 @@ def evaluate_sequence_models(args):
     # Load the training data
     dataset = pd.read_parquet(args.sequence_model_data_path)
     logging.getLogger(__name__).info(
-        f'sequence_model_data_path: {args.sequence_model_data_path}\n'
-        f'args.grid_search_config: {args.grid_search_config}\n'
+        f"sequence_model_data_path: {args.sequence_model_data_path}\n"
+        f"args.grid_search_config: {args.grid_search_config}\n"
     )
-    grid_search_config = get_grid_search_config(
-        args.grid_search_config
-    )
+    grid_search_config = get_grid_search_config(args.grid_search_config)
     if LSTM in args.model_evaluators:
         validate_folder(args.time_attention_model_folder)
         time_attention_tokenizer_path = find_tokenizer_path(args.time_attention_model_folder)
-        time_aware_model_path = os.path.join(
-            args.time_attention_model_folder,
-            p.TIME_ATTENTION_MODEL_PATH
-        )
+        time_aware_model_path = os.path.join(args.time_attention_model_folder, p.TIME_ATTENTION_MODEL_PATH)
         BiLstmModelEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
@@ -76,14 +103,13 @@ def evaluate_sequence_models(args):
             grid_search_config=grid_search_config,
             is_chronological_test=args.is_chronological_test,
             k_fold_test=args.k_fold_test,
-            multiple_test_run=args.multiple_test_run
+            multiple_test_run=args.multiple_test_run,
         ).eval_model()
 
     if VANILLA_BERT_FEED_FORWARD in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
         bert_tokenizer_path = find_tokenizer_path(args.vanilla_bert_model_folder)
-        bert_model_path = os.path.join(args.vanilla_bert_model_folder,
-                                       p.BERT_MODEL_VALIDATION_PATH)
+        bert_model_path = os.path.join(args.vanilla_bert_model_folder, p.BERT_MODEL_VALIDATION_PATH)
         BertFeedForwardModelEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
@@ -101,14 +127,13 @@ def evaluate_sequence_models(args):
             cross_validation_test=args.cross_validation_test,
             grid_search_config=grid_search_config,
             k_fold_test=args.k_fold_test,
-            multiple_test_run=args.multiple_test_run
+            multiple_test_run=args.multiple_test_run,
         ).eval_model()
 
     if SLIDING_BERT in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
         bert_tokenizer_path = find_tokenizer_path(args.vanilla_bert_model_folder)
-        bert_model_path = os.path.join(args.vanilla_bert_model_folder,
-                                       p.BERT_MODEL_VALIDATION_PATH)
+        bert_model_path = os.path.join(args.vanilla_bert_model_folder, p.BERT_MODEL_VALIDATION_PATH)
         SlidingBertModelEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
@@ -127,14 +152,13 @@ def evaluate_sequence_models(args):
             cross_validation_test=args.cross_validation_test,
             grid_search_config=grid_search_config,
             k_fold_test=args.k_fold_test,
-            multiple_test_run=args.multiple_test_run
+            multiple_test_run=args.multiple_test_run,
         ).eval_model()
 
     if VANILLA_BERT_LSTM in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
         bert_tokenizer_path = find_tokenizer_path(args.vanilla_bert_model_folder)
-        bert_model_path = os.path.join(args.vanilla_bert_model_folder,
-                                       p.BERT_MODEL_VALIDATION_PATH)
+        bert_model_path = os.path.join(args.vanilla_bert_model_folder, p.BERT_MODEL_VALIDATION_PATH)
         BertLstmModelEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
@@ -154,13 +178,12 @@ def evaluate_sequence_models(args):
             is_chronological_test=args.is_chronological_test,
             freeze_pretrained_model=args.freeze_pretrained_model,
             k_fold_test=args.k_fold_test,
-            multiple_test_run=args.multiple_test_run
+            multiple_test_run=args.multiple_test_run,
         ).eval_model()
 
     if RANDOM_VANILLA_BERT_LSTM in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
-        bert_model_path = os.path.join(args.vanilla_bert_model_folder,
-                                       p.BERT_MODEL_VALIDATION_PATH)
+        bert_model_path = os.path.join(args.vanilla_bert_model_folder, p.BERT_MODEL_VALIDATION_PATH)
         bert_tokenizer_path = find_tokenizer_path(args.vanilla_bert_model_folder)
         visit_tokenizer_path = find_visit_tokenizer_path(args.vanilla_bert_model_folder)
 
@@ -189,13 +212,12 @@ def evaluate_sequence_models(args):
             is_chronological_test=args.is_chronological_test,
             freeze_pretrained_model=args.freeze_pretrained_model,
             k_fold_test=args.k_fold_test,
-            multiple_test_run=args.multiple_test_run
+            multiple_test_run=args.multiple_test_run,
         ).eval_model()
 
     if HIERARCHICAL_BERT_LSTM in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
-        bert_model_path = os.path.join(args.vanilla_bert_model_folder,
-                                       p.BERT_MODEL_VALIDATION_PATH)
+        bert_model_path = os.path.join(args.vanilla_bert_model_folder, p.BERT_MODEL_VALIDATION_PATH)
 
         bert_tokenizer_path = find_tokenizer_path(args.vanilla_bert_model_folder)
         bert_visit_tokenizer_path = find_visit_tokenizer_path(args.vanilla_bert_model_folder)
@@ -221,13 +243,12 @@ def evaluate_sequence_models(args):
             is_chronological_test=args.is_chronological_test,
             freeze_pretrained_model=args.freeze_pretrained_model,
             k_fold_test=args.k_fold_test,
-            multiple_test_run=args.multiple_test_run
+            multiple_test_run=args.multiple_test_run,
         ).eval_model()
 
     if HIERARCHICAL_BERT_POOLING in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
-        bert_model_path = os.path.join(args.vanilla_bert_model_folder,
-                                       p.BERT_MODEL_VALIDATION_PATH)
+        bert_model_path = os.path.join(args.vanilla_bert_model_folder, p.BERT_MODEL_VALIDATION_PATH)
 
         bert_tokenizer_path = find_tokenizer_path(args.vanilla_bert_model_folder)
         bert_visit_tokenizer_path = find_visit_tokenizer_path(args.vanilla_bert_model_folder)
@@ -253,13 +274,12 @@ def evaluate_sequence_models(args):
             is_chronological_test=args.is_chronological_test,
             freeze_pretrained_model=args.freeze_pretrained_model,
             k_fold_test=args.k_fold_test,
-            multiple_test_run=args.multiple_test_run
+            multiple_test_run=args.multiple_test_run,
         ).eval_model()
 
     if RANDOM_HIERARCHICAL_BERT_LSTM in args.model_evaluators:
         validate_folder(args.vanilla_bert_model_folder)
-        bert_model_path = os.path.join(args.vanilla_bert_model_folder,
-                                       p.BERT_MODEL_VALIDATION_PATH)
+        bert_model_path = os.path.join(args.vanilla_bert_model_folder, p.BERT_MODEL_VALIDATION_PATH)
 
         bert_tokenizer_path = find_tokenizer_path(args.vanilla_bert_model_folder)
         bert_visit_tokenizer_path = find_visit_tokenizer_path(args.vanilla_bert_model_folder)
@@ -290,7 +310,7 @@ def evaluate_sequence_models(args):
             include_att_tokens=args.include_att_tokens,
             is_chronological_test=args.is_chronological_test,
             k_fold_test=args.k_fold_test,
-            multiple_test_run=args.multiple_test_run
+            multiple_test_run=args.multiple_test_run,
         ).eval_model()
 
 
@@ -308,7 +328,7 @@ def evaluate_baseline_models(args):
         is_transfer_learning=args.is_transfer_learning,
         training_percentage=args.training_percentage,
         k_fold_test=args.k_fold_test,
-        test_person_ids=test_person_ids
+        test_person_ids=test_person_ids,
     ).eval_model()
 
     XGBClassifierEvaluator(
@@ -318,13 +338,11 @@ def evaluate_baseline_models(args):
         is_transfer_learning=args.is_transfer_learning,
         training_percentage=args.training_percentage,
         k_fold_test=args.k_fold_test,
-        test_person_ids=test_person_ids
+        test_person_ids=test_person_ids,
     ).eval_model()
 
 
 def main(args):
-    tf.keras.utils.set_random_seed(0)
-
     if args.action == BASELINE_MODEL or args.action == FULL:
         evaluate_baseline_models(args)
 

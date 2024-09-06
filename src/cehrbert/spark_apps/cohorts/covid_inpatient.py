@@ -1,7 +1,7 @@
 from ..cohorts.query_builder import QueryBuilder, QuerySpec
 
 COVID_COHORT_QUERY = """
-WITH covid_positive AS 
+WITH covid_positive AS
 (
 
     SELECT DISTINCT
@@ -20,7 +20,7 @@ WITH covid_positive AS
         WHERE measurement_concept_id IN (723475,723479,706178,723473,723474,586515,706177,706163,706180,706181)
             AND value_source_value = 'Detected'
 
-        UNION 
+        UNION
 
         SELECT DISTINCT
             co.person_id,
@@ -66,22 +66,18 @@ SELECT DISTINCT
     FIRST_VALUE(vo.visit_occurrence_id) OVER(PARTITION BY vo.person_id ORDER BY vo.index_date) AS visit_occurrence_id
 FROM
 (
-    SELECT 
+    SELECT
         co.*
     FROM all_covid_tests AS co
     WHERE visit_concept_id IN (262, 9203, 9201)
 ) vo
 """
 
-DEFAULT_COHORT_NAME = 'covid19'
-DEPENDENCY_LIST = ['person', 'visit_occurrence', 'measurement', 'condition_occurrence']
+DEFAULT_COHORT_NAME = "covid19"
+DEPENDENCY_LIST = ["person", "visit_occurrence", "measurement", "condition_occurrence"]
 
 
 def query_builder():
-    query = QuerySpec(table_name=DEFAULT_COHORT_NAME,
-                      query_template=COVID_COHORT_QUERY,
-                      parameters={})
+    query = QuerySpec(table_name=DEFAULT_COHORT_NAME, query_template=COVID_COHORT_QUERY, parameters={})
 
-    return QueryBuilder(cohort_name=DEFAULT_COHORT_NAME,
-                        dependency_list=DEPENDENCY_LIST,
-                        query=query)
+    return QueryBuilder(cohort_name=DEFAULT_COHORT_NAME, dependency_list=DEPENDENCY_LIST, query=query)

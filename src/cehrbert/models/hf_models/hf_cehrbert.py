@@ -1,26 +1,23 @@
 import math
 from typing import Optional
+
 import torch
 from torch import nn
 from torch.nn.utils.rnn import pack_padded_sequence
-
-from transformers.models.bert.modeling_bert import BertEncoder, BertPooler, BertOnlyMLMHead
 from transformers import PreTrainedModel
 from transformers.activations import gelu_new
-from ...models.hf_models.config import CehrBertConfig
-from ...models.hf_models.hf_modeling_outputs import CehrBertModelOutput, CehrBertSequenceClassifierOutput
+from transformers.models.bert.modeling_bert import BertEncoder, BertOnlyMLMHead, BertPooler
 from transformers.utils import logging
+
+from cehrbert.models.hf_models.config import CehrBertConfig
+from cehrbert.models.hf_models.hf_modeling_outputs import CehrBertModelOutput, CehrBertSequenceClassifierOutput
 
 logger = logging.get_logger("transformers")
 LARGE_POSITION_VALUE = 1000000
 
 
 class PositionalEncodingLayer(nn.Module):
-    def __init__(
-            self,
-            embedding_size: int,
-            max_sequence_length: int
-    ):
+    def __init__(self, embedding_size: int, max_sequence_length: int):
         super(PositionalEncodingLayer, self).__init__()
 
         self.max_sequence_length = max_sequence_length
@@ -29,26 +26,19 @@ class PositionalEncodingLayer(nn.Module):
         pe = torch.zeros(max_sequence_length, embedding_size)
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
-        self.register_buffer('pe', pe)
+        self.register_buffer("pe", pe)
 
-    def forward(
-            self,
-            visit_concept_orders: torch.IntTensor
-    ) -> torch.Tensor:
+    def forward(self, visit_concept_orders: torch.IntTensor) -> torch.Tensor:
         # Normalize the visit_orders using the smallest visit_concept_orders
         masked_visit_concept_orders = torch.where(
             visit_concept_orders > 0,
             visit_concept_orders,
-            torch.tensor(LARGE_POSITION_VALUE)
+            torch.tensor(LARGE_POSITION_VALUE),
         )
         first_vals = torch.min(masked_visit_concept_orders, dim=1).values.unsqueeze(dim=-1)
         visit_concept_orders = visit_concept_orders - first_vals
-        visit_concept_orders = torch.maximum(
-            visit_concept_orders, torch.zeros_like(visit_concept_orders)
-        )
-        visit_concept_orders = torch.minimum(
-            visit_concept_orders, torch.tensor(self.max_sequence_length) - 1
-        )
+        visit_concept_orders = torch.maximum(visit_concept_orders, torch.zeros_like(visit_concept_orders))
+        visit_concept_orders = torch.minimum(visit_concept_orders, torch.tensor(self.max_sequence_length) - 1)
         # Get the same positional encodings for the concepts with the same visit_order
         positional_embeddings = self.pe[visit_concept_orders]
         return positional_embeddings
@@ -56,10 +46,10 @@ class PositionalEncodingLayer(nn.Module):
 
 class TimeEmbeddingLayer(nn.Module):
     def __init__(
-            self,
-            embedding_size: int,
-            is_time_delta: bool = False,
-            scaling_factor: float = 1.0
+        self,
+        embedding_size: int,
+        is_time_delta: bool = False,
+        scaling_factor: float = 1.0,
     ):
         super(TimeEmbeddingLayer, self).__init__()
         self.embedding_size = embedding_size
@@ -68,17 +58,13 @@ class TimeEmbeddingLayer(nn.Module):
         self.w = nn.Parameter(torch.randn(1, self.embedding_size))
         self.phi = nn.Parameter(torch.randn(1, self.embedding_size))
 
-    def forward(
-            self,
-            dates: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, dates: torch.Tensor) -> torch.Tensor:
         dates = dates.to(torch.float)
         dates = dates / self.scaling_factor
         if self.is_time_delta:
             dates = torch.cat(
-                [torch.zeros(dates[..., 0:1].shape),
-                 dates[..., 1:] - dates[..., :-1]],
-                dim=-1
+                [torch.zeros(dates[..., 0:1].shape), dates[..., 1:] - dates[..., :-1]],
+                dim=-1,
             )
         next_input = dates.unsqueeze(-1) * self.w + self.phi
         return torch.sin(next_input)
@@ -87,19 +73,16 @@ class TimeEmbeddingLayer(nn.Module):
 class ConceptValueTransformationLayer(nn.Module):
     def __init__(self, embedding_size):
         super(ConceptValueTransformationLayer, self).__init__()
-        self.merge_value_transformation_layer = nn.Linear(
-            embedding_size + 1,
-            embedding_size
-        )
+        self.merge_value_transformation_layer = nn.Linear(embedding_size + 1, embedding_size)
 
     def forward(
-            self,
-            concept_embeddings: torch.Tensor,
-            concept_values: Optional[torch.FloatTensor] = None,
-            concept_value_masks: Optional[torch.FloatTensor] = None,
+        self,
+        concept_embeddings: torch.Tensor,
+        concept_values: Optional[torch.FloatTensor] = None,
+        concept_value_masks: Optional[torch.FloatTensor] = None,
     ):
         if concept_values is None or concept_value_masks is None:
-            logger.warning('concept_values and concept_value_masks are ignored')
+            logger.warning("concept_values and concept_value_masks are ignored")
             return concept_embeddings
 
         # (batch_size, seq_length, 1)
@@ -107,18 +90,14 @@ class ConceptValueTransformationLayer(nn.Module):
         # (batch_size, seq_length, 1)
         concept_value_masks = concept_value_masks.unsqueeze(-1)
         # (batch_size, seq_length, 1 + embedding_size)
-        concept_embeddings_with_val = torch.cat(
-            [concept_embeddings, concept_values], dim=-1
-        )
+        concept_embeddings_with_val = torch.cat([concept_embeddings, concept_values], dim=-1)
         # Run through a dense layer to bring the dimension back to embedding_size
-        concept_embeddings_with_val = self.merge_value_transformation_layer(
-            concept_embeddings_with_val
-        )
+        concept_embeddings_with_val = self.merge_value_transformation_layer(concept_embeddings_with_val)
 
         merged = torch.where(
             concept_value_masks.to(torch.bool),
             concept_embeddings_with_val,
-            concept_embeddings
+            concept_embeddings,
         )
 
         return merged
@@ -134,10 +113,7 @@ class ConceptValuePredictionLayer(nn.Module):
             nn.Linear(embedding_size // 2, 1),
         )
 
-    def forward(
-            self,
-            hidden_states: Optional[torch.FloatTensor]
-    ):
+    def forward(self, hidden_states: Optional[torch.FloatTensor]):
         # (batch_size, context_window, 1)
         concept_vals = self.concept_value_decoder_layer(hidden_states)
         return concept_vals
@@ -159,29 +135,23 @@ class CehrBertEmbeddings(nn.Module):
         self.linear_proj = nn.Linear(config.hidden_size + 3 * config.n_time_embd, config.hidden_size)
 
     def forward(
-            self,
-            input_ids: Optional[torch.LongTensor] = None,
-            ages: Optional[torch.LongTensor] = None,
-            dates: Optional[torch.LongTensor] = None,
-            visit_concept_orders: Optional[torch.LongTensor] = None,
-            concept_values: Optional[torch.FloatTensor] = None,
-            concept_value_masks: Optional[torch.FloatTensor] = None,
-            visit_segments: Optional[torch.LongTensor] = None
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        ages: Optional[torch.LongTensor] = None,
+        dates: Optional[torch.LongTensor] = None,
+        visit_concept_orders: Optional[torch.LongTensor] = None,
+        concept_values: Optional[torch.FloatTensor] = None,
+        concept_value_masks: Optional[torch.FloatTensor] = None,
+        visit_segments: Optional[torch.LongTensor] = None,
     ) -> torch.Tensor:
         # Get the concept embeddings
         x = self.concept_embeddings(input_ids)
         # Combine values with the concept embeddings
-        x = self.concept_value_transformation_layer(
-            x,
-            concept_values,
-            concept_value_masks
-        )
+        x = self.concept_value_transformation_layer(x, concept_values, concept_value_masks)
         age_embeddings = self.age_embedding_layer(ages)
         time_embeddings = self.age_embedding_layer(dates)
         positional_embeddings = self.positional_embedding_layer(visit_concept_orders)
-        x = self.linear_proj(
-            torch.cat([x, time_embeddings, age_embeddings, positional_embeddings], dim=-1)
-        )
+        x = self.linear_proj(torch.cat([x, time_embeddings, age_embeddings, positional_embeddings], dim=-1))
         x = gelu_new(x)
         x += self.visit_segment_embeddings(visit_segments)
         return x
@@ -189,8 +159,9 @@ class CehrBertEmbeddings(nn.Module):
 
 class CehrBertPreTrainedModel(PreTrainedModel):
     """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
+    An abstract class to handle weights initialization and a simple interface for downloading.
+
+    and loading pretrained models.
     """
 
     config_class = CehrBertConfig
@@ -200,7 +171,7 @@ class CehrBertPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["BertLayer"]
 
     def _init_weights(self, module):
-        """Initialize the weights"""
+        """Initialize the weights."""
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -217,10 +188,6 @@ class CehrBertPreTrainedModel(PreTrainedModel):
 
 
 class CehrBert(CehrBertPreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
 
     def __init__(self, config: CehrBertConfig):
         super().__init__(config)
@@ -233,17 +200,17 @@ class CehrBert(CehrBertPreTrainedModel):
         self.post_init()
 
     def forward(
-            self,
-            input_ids: torch.LongTensor,
-            attention_mask: torch.Tensor,
-            ages: Optional[torch.LongTensor] = None,
-            dates: Optional[torch.LongTensor] = None,
-            visit_concept_orders: Optional[torch.LongTensor] = None,
-            concept_values: Optional[torch.FloatTensor] = None,
-            concept_value_masks: Optional[torch.FloatTensor] = None,
-            visit_segments: Optional[torch.LongTensor] = None,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None
+        self,
+        input_ids: torch.LongTensor,
+        attention_mask: torch.Tensor,
+        ages: Optional[torch.LongTensor] = None,
+        dates: Optional[torch.LongTensor] = None,
+        visit_concept_orders: Optional[torch.LongTensor] = None,
+        concept_values: Optional[torch.FloatTensor] = None,
+        concept_value_masks: Optional[torch.FloatTensor] = None,
+        visit_segments: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
     ) -> CehrBertModelOutput:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -253,7 +220,8 @@ class CehrBert(CehrBertPreTrainedModel):
         self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
         input_shape = input_ids.size()
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
+        # We can provide a self-attention mask of dimensions
+        # [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
 
@@ -264,14 +232,14 @@ class CehrBert(CehrBertPreTrainedModel):
             visit_concept_orders=visit_concept_orders,
             concept_values=concept_values,
             concept_value_masks=concept_value_masks,
-            visit_segments=visit_segments
+            visit_segments=visit_segments,
         )
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True
+            return_dict=True,
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)
@@ -279,7 +247,7 @@ class CehrBert(CehrBertPreTrainedModel):
         return CehrBertModelOutput(
             last_hidden_state=encoder_outputs.last_hidden_state,
             attentions=encoder_outputs.attentions,
-            pooler_output=pooled_output
+            pooler_output=pooled_output,
         )
 
 
@@ -310,19 +278,19 @@ class CehrBertForPreTraining(CehrBertPreTrainedModel):
         self.cls.predictions.decoder = new_embeddings
 
     def forward(
-            self,
-            input_ids: torch.LongTensor,
-            attention_mask: torch.Tensor,
-            ages: Optional[torch.LongTensor] = None,
-            dates: Optional[torch.LongTensor] = None,
-            visit_concept_orders: Optional[torch.LongTensor] = None,
-            concept_values: Optional[torch.FloatTensor] = None,
-            concept_value_masks: Optional[torch.FloatTensor] = None,
-            visit_segments: Optional[torch.LongTensor] = None,
-            mlm_skip_values: Optional[torch.BoolTensor] = None,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            labels: Optional[torch.LongTensor] = None
+        self,
+        input_ids: torch.LongTensor,
+        attention_mask: torch.Tensor,
+        ages: Optional[torch.LongTensor] = None,
+        dates: Optional[torch.LongTensor] = None,
+        visit_concept_orders: Optional[torch.LongTensor] = None,
+        concept_values: Optional[torch.FloatTensor] = None,
+        concept_value_masks: Optional[torch.FloatTensor] = None,
+        visit_segments: Optional[torch.LongTensor] = None,
+        mlm_skip_values: Optional[torch.BoolTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
     ) -> CehrBertModelOutput:
         cehrbert_output = self.bert(
             input_ids,
@@ -334,7 +302,7 @@ class CehrBertForPreTraining(CehrBertPreTrainedModel):
             concept_value_masks,
             visit_segments,
             output_attentions,
-            output_hidden_states
+            output_hidden_states,
         )
 
         prediction_scores = self.cls(cehrbert_output.last_hidden_state)
@@ -354,9 +322,7 @@ class CehrBertForPreTraining(CehrBertPreTrainedModel):
                 predicted_values = self.concept_value_decoder_layer(cehrbert_output.last_hidden_state)
                 num_items = torch.sum(concept_value_masks.to(torch.float32), dim=-1) + 1e-6
                 values_ = (predicted_values.squeeze(-1) - concept_values) ** 2
-                masked_mse = torch.sum(
-                    values_ * concept_value_masks * mlm_masks, dim=-1
-                ) / num_items
+                masked_mse = torch.sum(values_ * concept_value_masks * mlm_masks, dim=-1) / num_items
                 total_loss += torch.mean(masked_mse)
 
         return CehrBertModelOutput(
@@ -364,7 +330,7 @@ class CehrBertForPreTraining(CehrBertPreTrainedModel):
             prediction_logits=prediction_scores,
             last_hidden_state=cehrbert_output.last_hidden_state,
             attentions=cehrbert_output.attentions,
-            pooler_output=cehrbert_output.pooler_output
+            pooler_output=cehrbert_output.pooler_output,
         )
 
 
@@ -388,19 +354,19 @@ class CehrBertForClassification(CehrBertPreTrainedModel):
         self.post_init()
 
     def forward(
-            self,
-            input_ids: torch.LongTensor,
-            attention_mask: torch.Tensor,
-            age_at_index: torch.FloatTensor,
-            ages: Optional[torch.LongTensor] = None,
-            dates: Optional[torch.LongTensor] = None,
-            visit_concept_orders: Optional[torch.LongTensor] = None,
-            concept_values: Optional[torch.FloatTensor] = None,
-            concept_value_masks: Optional[torch.FloatTensor] = None,
-            visit_segments: Optional[torch.LongTensor] = None,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            classifier_label: Optional[torch.FloatTensor] = None
+        self,
+        input_ids: torch.LongTensor,
+        attention_mask: torch.Tensor,
+        age_at_index: torch.FloatTensor,
+        ages: Optional[torch.LongTensor] = None,
+        dates: Optional[torch.LongTensor] = None,
+        visit_concept_orders: Optional[torch.LongTensor] = None,
+        concept_values: Optional[torch.FloatTensor] = None,
+        concept_value_masks: Optional[torch.FloatTensor] = None,
+        visit_segments: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        classifier_label: Optional[torch.FloatTensor] = None,
     ) -> CehrBertSequenceClassifierOutput:
         normalized_age = self.age_batch_norm(age_at_index)
 
@@ -414,7 +380,7 @@ class CehrBertForClassification(CehrBertPreTrainedModel):
             concept_value_masks,
             visit_segments,
             output_attentions,
-            output_hidden_states
+            output_hidden_states,
         )
 
         next_input = self.dropout(cehrbert_output.pooler_output)
@@ -433,7 +399,7 @@ class CehrBertForClassification(CehrBertPreTrainedModel):
             loss=loss,
             logits=logits,
             hidden_states=cehrbert_output.last_hidden_state,
-            attentions=cehrbert_output.attentions
+            attentions=cehrbert_output.attentions,
         )
 
 
@@ -449,7 +415,7 @@ class CehrBertLstmForClassification(CehrBertPreTrainedModel):
             input_size=config.hidden_size,
             hidden_size=config.hidden_size,
             batch_first=True,
-            bidirectional=config.bidirectional
+            bidirectional=config.bidirectional,
         )
 
         classifier_dropout = (
@@ -464,19 +430,19 @@ class CehrBertLstmForClassification(CehrBertPreTrainedModel):
         self.post_init()
 
     def forward(
-            self,
-            input_ids: torch.LongTensor,
-            attention_mask: torch.Tensor,
-            age_at_index: torch.FloatTensor,
-            ages: Optional[torch.LongTensor] = None,
-            dates: Optional[torch.LongTensor] = None,
-            visit_concept_orders: Optional[torch.LongTensor] = None,
-            concept_values: Optional[torch.FloatTensor] = None,
-            concept_value_masks: Optional[torch.FloatTensor] = None,
-            visit_segments: Optional[torch.LongTensor] = None,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            classifier_label: Optional[torch.FloatTensor] = None
+        self,
+        input_ids: torch.LongTensor,
+        attention_mask: torch.Tensor,
+        age_at_index: torch.FloatTensor,
+        ages: Optional[torch.LongTensor] = None,
+        dates: Optional[torch.LongTensor] = None,
+        visit_concept_orders: Optional[torch.LongTensor] = None,
+        concept_values: Optional[torch.FloatTensor] = None,
+        concept_value_masks: Optional[torch.FloatTensor] = None,
+        visit_segments: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        classifier_label: Optional[torch.FloatTensor] = None,
     ) -> CehrBertSequenceClassifierOutput:
         normalized_age = self.age_batch_norm(age_at_index)
 
@@ -490,13 +456,14 @@ class CehrBertLstmForClassification(CehrBertPreTrainedModel):
             concept_value_masks,
             visit_segments,
             output_attentions,
-            output_hidden_states
+            output_hidden_states,
         )
         lengths = torch.sum(attention_mask, dim=-1)
         packed_input = pack_padded_sequence(
-            cehrbert_output.last_hidden_state, lengths.cpu(),
+            cehrbert_output.last_hidden_state,
+            lengths.cpu(),
             batch_first=True,
-            enforce_sorted=False
+            enforce_sorted=False,
         )
         _, (h_n, c_n) = self.lstm(packed_input)
         next_input = self.dropout(h_n.transpose(1, 0).reshape([h_n.shape[1], -1]))
@@ -515,5 +482,5 @@ class CehrBertLstmForClassification(CehrBertPreTrainedModel):
             loss=loss,
             logits=logits,
             hidden_states=cehrbert_output.last_hidden_state,
-            attentions=cehrbert_output.attentions
+            attentions=cehrbert_output.attentions,
         )

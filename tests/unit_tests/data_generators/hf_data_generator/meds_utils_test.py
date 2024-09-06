@@ -1,7 +1,8 @@
 import unittest
+
 from cehrbert.data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules import MedsToBertMimic4
 from cehrbert.data_generators.hf_data_generator.meds_utils import get_meds_to_cehrbert_conversion_cls
-from cehrbert.runners.hf_runner_argument_dataclass import MedsToCehrBertConversionType, AttType
+from cehrbert.runners.hf_runner_argument_dataclass import AttType, MedsToCehrBertConversionType
 
 
 class TestGetMedsToCehrBertConversionCls(unittest.TestCase):
@@ -18,5 +19,5 @@ class TestGetMedsToCehrBertConversionCls(unittest.TestCase):
         self.assertIn("is not a valid MedsToCehrBertConversionType", str(context.exception))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

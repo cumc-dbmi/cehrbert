@@ -2,8 +2,8 @@ import math
 
 
 class CosineLRSchedule:
-    """
-    Cosine annealing with warm restarts, described in paper
+    """Cosine annealing with warm restarts, described in paper.
+
     "SGDR: stochastic gradient descent with warm restarts"
     https://arxiv.org/abs/1608.03983
 
@@ -20,8 +20,14 @@ class CosineLRSchedule:
     `keras.callbacks.LearningRateScheduler`.
     """
 
-    def __init__(self, lr_high: float, lr_low: float, initial_period: int = 50,
-                 period_mult: float = 2, high_lr_mult: float = 0.97):
+    def __init__(
+        self,
+        lr_high: float,
+        lr_low: float,
+        initial_period: int = 50,
+        period_mult: float = 2,
+        high_lr_mult: float = 0.97,
+    ):
         self._lr_high = lr_high
         self._lr_low = lr_low
         self._initial_period = initial_period
@@ -39,9 +45,7 @@ class CosineLRSchedule:
         result = lr_max
         for i in range(epoch + 1):
             if i == epoch:  # last iteration
-                result = (self._lr_low +
-                          0.5 * (lr_max - self._lr_low) *
-                          (1 + math.cos(math.pi * t_cur / period)))
+                result = self._lr_low + 0.5 * (lr_max - self._lr_low) * (1 + math.cos(math.pi * t_cur / period))
             else:
                 if t_cur == period:
                     period *= self._period_mult

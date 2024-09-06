@@ -1,15 +1,19 @@
-from typing import TypedDict, List, Mapping, Any, Union, Optional
-from typing_extensions import NotRequired
 import datetime
+from typing import Any, List, Mapping, Optional, TypedDict, Union
 
-Event = TypedDict('Event', {
-    'time': NotRequired[datetime.datetime],
-    'code': str,
-    'text_value': NotRequired[Optional[str]],
-    'numeric_value': NotRequired[Optional[float]],
-    'datetime_value': NotRequired[datetime.datetime],
-    'properties': NotRequired[Optional[Mapping[str, Any]]],
-})
+from typing_extensions import NotRequired
+
+Event = TypedDict(
+    "Event",
+    {
+        "time": NotRequired[datetime.datetime],
+        "code": str,
+        "text_value": NotRequired[Optional[str]],
+        "numeric_value": NotRequired[Optional[float]],
+        "datetime_value": NotRequired[datetime.datetime],
+        "properties": NotRequired[Optional[Mapping[str, Any]]],
+    },
+)
 
 
 class Visit(TypedDict):

@@ -5,7 +5,7 @@ SELECT DISTINCT
     v.person_id,
     v.visit_occurrence_id,
     v.index_date
-FROM 
+FROM
 (
     SELECT
         v.person_id,
@@ -21,18 +21,14 @@ FROM
     WHERE v.rn = 1 AND v.index_date >= '{date_lower_bound}'
 """
 
-DEPENDENCY_LIST = ['person', 'visit_occurrence']
-DEFAULT_COHORT_NAME = 'last_visit_discharge_home'
+DEPENDENCY_LIST = ["person", "visit_occurrence"]
+DEFAULT_COHORT_NAME = "last_visit_discharge_home"
 
 
 def query_builder(spark_args):
     query = QuerySpec(
         table_name=DEFAULT_COHORT_NAME,
         query_template=COHORT_QUERY,
-        parameters={'date_lower_bound': spark_args.date_lower_bound}
+        parameters={"date_lower_bound": spark_args.date_lower_bound},
     )
-    return QueryBuilder(
-        cohort_name=DEFAULT_COHORT_NAME,
-        dependency_list=DEPENDENCY_LIST,
-        query=query
-    )
+    return QueryBuilder(cohort_name=DEFAULT_COHORT_NAME, dependency_list=DEPENDENCY_LIST, query=query)
