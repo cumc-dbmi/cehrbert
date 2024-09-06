@@ -16,8 +16,8 @@ class TestGenerateStartEndIndexMapping(unittest.TestCase):
         self.mock_tokenizer.mask_token_index = 1
         self.mock_tokenizer.unused_token_index = 99
         self.mock_tokenizer.encode.return_value = [10, 20, 30]  # Example token IDs
-        self.mock_tokenizer._convert_token_to_id.side_effect = [2, 3, 17, 18]
-        self.mock_tokenizer._convert_id_to_token.side_effect = [
+        self.mock_tokenizer.convert_token_to_id.side_effect = [2, 3, 17, 18]
+        self.mock_tokenizer.convert_id_to_token.side_effect = [
             "year:2000",
             "age:20-30",
         ]
