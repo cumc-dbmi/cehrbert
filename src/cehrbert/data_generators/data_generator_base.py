@@ -275,9 +275,7 @@ class BertDataGenerator(AbstractDataGeneratorBase):
 
     def _clean_dataframe(self):
         self._training_data = self._training_data[
-            self._training_data[self.default_required_column].apply(
-                lambda token_ids: len(token_ids)
-            )
+            self._training_data[self.default_required_column].apply(len)
             >= max(self.default_min_num_of_concepts, self._min_num_of_concepts)
         ]
 
@@ -330,9 +328,9 @@ class HierarchicalBertDataGenerator(AbstractDataGeneratorBase):
         max_num_of_concepts: int,
         include_att_prediction: bool,
         include_visit_prediction: bool,
+        *args,
         min_num_of_concepts: int = 5,
         min_num_of_visits: int = 2,
-        *args,
         **kwargs,
     ):
 
@@ -341,7 +339,7 @@ class HierarchicalBertDataGenerator(AbstractDataGeneratorBase):
         self._max_num_of_visits = max_num_of_visits
         self._max_num_of_concepts = max_num_of_concepts
 
-        super(HierarchicalBertDataGenerator, self).__init__(
+        super().__init__(
             concept_tokenizer=concept_tokenizer,
             visit_tokenizer=visit_tokenizer,
             max_num_of_visits=max_num_of_visits,
@@ -410,8 +408,7 @@ class HierarchicalBertMultiTaskDataGenerator(HierarchicalBertDataGenerator):
     ):
         self._include_readmission = include_readmission
         self._include_prolonged_length_stay = include_prolonged_length_stay
-
-        super(HierarchicalBertMultiTaskDataGenerator, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def _get_learning_objective_classes(self):
 
