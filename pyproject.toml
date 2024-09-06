@@ -66,5 +66,5 @@ cehrbert-finetuning = "cehrbert.runner.hf_cehrbert_finetuning_runner:main"
 
 [project.optional-dependencies]
 dev = [
-    "pre-commit", "pytest", "pytest-cov", "pytest-subtests", "rootutils", "hypothesis"
+    "pre-commit", "pytest", "pytest-cov", "pytest-subtests", "rootutils", "hypothesis", "black"
 ]
