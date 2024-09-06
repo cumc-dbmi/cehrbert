@@ -1,7 +1,6 @@
-from ..cohorts.spark_app_base import create_prediction_cohort
-
-from ..spark_parse_args import create_spark_args
 from ..cohorts.query_builder import QueryBuilder, QuerySpec
+from ..cohorts.spark_app_base import create_prediction_cohort
+from ..spark_parse_args import create_spark_args
 
 DEPENDENCY_LIST = ["visit_occurrence"]
 DOMAIN_TABLE_LIST = [
@@ -17,7 +16,7 @@ SELECT DISTINCT
     v.visit_occurrence_id,
     v.index_date,
     v.expired
-FROM 
+FROM
 (
     SELECT
         v.person_id,

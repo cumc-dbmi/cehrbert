@@ -4,8 +4,8 @@ from ..spark_parse_args import create_spark_args
 
 HEART_FAILURE_HOSPITALIZATION_QUERY = """
 WITH hf_concepts AS (
-    SELECT DISTINCT 
-        descendant_concept_id AS concept_id 
+    SELECT DISTINCT
+        descendant_concept_id AS concept_id
     FROM global_temp.concept_ancestor AS ca
     WHERE ca.ancestor_concept_id = 316139
 )

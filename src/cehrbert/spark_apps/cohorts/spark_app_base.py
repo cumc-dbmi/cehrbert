@@ -1,15 +1,29 @@
 import os
 import re
-from abc import ABC
 import shutil
+from abc import ABC
 
 from pandas import to_datetime
-from pyspark.sql import DataFrame
-from pyspark.sql import SparkSession
+from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.window import Window
 
-from ..cohorts.query_builder import QueryBuilder, ENTRY_COHORT, NEGATIVE_COHORT
-from ...utils.spark_utils import *
+from ...utils.spark_utils import (
+    VISIT_OCCURRENCE,
+    AttType,
+    F,
+    List,
+    W,
+    build_ancestry_table_for,
+    create_concept_frequency_data,
+    create_hierarchical_sequence_data,
+    create_sequence_data,
+    create_sequence_data_with_att,
+    extract_ehr_records,
+    get_descendant_concept_ids,
+    logging,
+    preprocess_domain_table,
+)
+from ..cohorts.query_builder import ENTRY_COHORT, NEGATIVE_COHORT, QueryBuilder
 
 COHORT_TABLE_NAME = "cohort"
 PERSON = "person"
@@ -26,7 +40,8 @@ DEFAULT_DEPENDENCY = [
 
 def cohort_validator(required_columns_attribute):
     """
-    Decorator for validating the cohort dataframe returned by build function in
+    Decorator for validating the cohort dataframe returned by build function in.
+
     AbstractCohortBuilderBase
     :param required_columns_attribute: attribute for storing cohort_required_columns
     in :class:`spark_apps.spark_app_base.AbstractCohortBuilderBase`
@@ -133,7 +148,8 @@ class BaseCohortBuilder(ABC):
     @cohort_validator("cohort_required_columns")
     def create_cohort(self):
         """
-        Create cohort
+        Create cohort.
+
         :return:
         """
         # Build the ancestor tables for the main query to use  if the ancestor_table_specs are
@@ -202,9 +218,7 @@ class BaseCohortBuilder(ABC):
         return cohort
 
     def build(self):
-        """
-        Build the cohort and write the dataframe as parquet files to _output_data_folder
-        """
+        """Build the cohort and write the dataframe as parquet files to _output_data_folder."""
         cohort = self.create_cohort()
 
         cohort = self._apply_observation_period(cohort)
@@ -234,9 +248,9 @@ class BaseCohortBuilder(ABC):
             """
         SELECT
             c.*
-        FROM global_temp.cohort AS c 
-        JOIN global_temp.observation_period AS p 
-            ON c.person_id = p.person_id 
+        FROM global_temp.cohort AS c
+        JOIN global_temp.observation_period AS p
+            ON c.person_id = p.person_id
                 AND DATE_ADD(c.index_date, -{prior_observation_period}) >= p.observation_period_start_date
                 AND DATE_ADD(c.index_date, {post_observation_period}) <= p.observation_period_end_date
         """.format(
@@ -419,7 +433,7 @@ class NestedCohortBuilder:
             LEFT JOIN global_temp.{entry_cohort} AS o
                 ON t.person_id = o.person_id
                     AND DATE_ADD(t.index_date, {prediction_start_days}) > o.index_date
-            WHERE o.person_id IS NULL       
+            WHERE o.person_id IS NULL
             """.format(
                     entry_cohort=ENTRY_COHORT,
                     prediction_start_days=prediction_start_days,
@@ -435,7 +449,7 @@ class NestedCohortBuilder:
             FROM global_temp.target_cohort AS t
             LEFT JOIN global_temp.{questionnation_outcome_cohort} AS o
                 ON t.person_id = o.person_id
-            WHERE o.person_id IS NULL       
+            WHERE o.person_id IS NULL
             """.format(
                     questionnation_outcome_cohort=NEGATIVE_COHORT
                 )
@@ -448,11 +462,11 @@ class NestedCohortBuilder:
                 """
             SELECT DISTINCT
                 t.*
-            FROM global_temp.target_cohort AS t 
+            FROM global_temp.target_cohort AS t
             LEFT JOIN global_temp.outcome_cohort AS exclusion
                 ON t.person_id = exclusion.person_id
-                    AND exclusion.index_date BETWEEN t.index_date 
-                        AND DATE_ADD(t.index_date, {prediction_start_days}) 
+                    AND exclusion.index_date BETWEEN t.index_date
+                        AND DATE_ADD(t.index_date, {prediction_start_days})
             WHERE exclusion.person_id IS NULL
             """.format(
                     prediction_start_days=max(prediction_start_days - 1, 0)
@@ -466,10 +480,10 @@ class NestedCohortBuilder:
                 t.*,
                 o.index_date as outcome_date,
                 CAST(ISNOTNULL(o.person_id) AS INT) AS label
-            FROM global_temp.target_cohort AS t 
+            FROM global_temp.target_cohort AS t
             LEFT JOIN global_temp.outcome_cohort AS o
                 ON t.person_id = o.person_id
-                    AND o.index_date >= DATE_ADD(t.index_date, {prediction_start_days}) 
+                    AND o.index_date >= DATE_ADD(t.index_date, {prediction_start_days})
             """
         else:
             query_template = """
@@ -477,13 +491,13 @@ class NestedCohortBuilder:
                 t.*,
                 o.index_date as outcome_date,
                 CAST(ISNOTNULL(o.person_id) AS INT) AS label
-            FROM global_temp.target_cohort AS t 
+            FROM global_temp.target_cohort AS t
             LEFT JOIN global_temp.observation_period AS op
-                ON t.person_id = op.person_id 
+                ON t.person_id = op.person_id
                     AND DATE_ADD(t.index_date, {prediction_window}) <= op.observation_period_end_date
             LEFT JOIN global_temp.outcome_cohort AS o
                 ON t.person_id = o.person_id
-                    AND o.index_date BETWEEN DATE_ADD(t.index_date, {prediction_start_days}) 
+                    AND o.index_date BETWEEN DATE_ADD(t.index_date, {prediction_start_days})
                         AND DATE_ADD(t.index_date, {prediction_window})
             WHERE op.person_id IS NOT NULL OR o.person_id IS NOT NULL
             """
@@ -560,7 +574,7 @@ class NestedCohortBuilder:
 
     def extract_ehr_records_for_cohort(self, cohort: DataFrame):
         """
-        Create the patient sequence based on the observation window for the given cohort
+        Create the patient sequence based on the observation window for the given cohort.
 
         :param cohort:
         :return:
@@ -691,7 +705,8 @@ def create_prediction_cohort(
     ehr_table_list,
 ):
     """
-    TODO
+    TODO.
+
     :param spark_args:
     :param target_query_builder:
     :param outcome_query_builder:

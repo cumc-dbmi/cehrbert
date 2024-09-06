@@ -1,5 +1,7 @@
 import unittest
+
 import torch
+
 from cehrbert.models.hf_models.config import CehrBertConfig
 from cehrbert.models.hf_models.hf_cehrbert import CehrBertForPreTraining
 
@@ -24,7 +26,9 @@ class TestCehrBert(unittest.TestCase):
         layer = self.model.bert.cehr_bert_embeddings.positional_embedding_layer
         embedding_size = self.config.n_time_embd
         visit_concept_orders = torch.arange(10, 15).unsqueeze(0).repeat(2, 1)
-        visit_concept_orders = torch.cat([visit_concept_orders, torch.full((2, 1), 5)], dim=-1)
+        visit_concept_orders = torch.cat(
+            [visit_concept_orders, torch.full((2, 1), 5)], dim=-1
+        )
         output = layer(visit_concept_orders)
         self.assertEqual(output.shape, (2, 6, embedding_size))
 
@@ -69,36 +73,28 @@ class TestCehrBert(unittest.TestCase):
             concept_value_masks=concept_value_masks,
             visit_segments=visit_segments,
             labels=input_ids,
-            mlm_skip_values=mlm_skip_values
+            mlm_skip_values=mlm_skip_values,
         )
 
-        self.assertTrue(hasattr(output, 'loss'))
-        self.assertTrue(hasattr(output, 'last_hidden_state'))
-        self.assertTrue(hasattr(output, 'attentions'))
-        self.assertTrue(hasattr(output, 'prediction_logits'))
-        self.assertTrue(hasattr(output, 'pooler_output'))
+        self.assertTrue(hasattr(output, "loss"))
+        self.assertTrue(hasattr(output, "last_hidden_state"))
+        self.assertTrue(hasattr(output, "attentions"))
+        self.assertTrue(hasattr(output, "prediction_logits"))
+        self.assertTrue(hasattr(output, "pooler_output"))
 
         self.assertEqual(
-            output.prediction_logits.shape,
-            torch.Size([1, 10, self.config.vocab_size])
+            output.prediction_logits.shape, torch.Size([1, 10, self.config.vocab_size])
         )
+        self.assertEqual(output.pooler_output.shape, torch.Size([1, 128]))
         self.assertEqual(
-            output.pooler_output.shape,
-            torch.Size([1, 128])
+            output.last_hidden_state.shape, torch.Size([1, 10, self.config.hidden_size])
         )
-        self.assertEqual(
-            output.last_hidden_state.shape,
-            torch.Size([1, 10, self.config.hidden_size])
-        )
-        self.assertEqual(
-            len(output.attentions),
-            self.config.num_hidden_layers
-        )
+        self.assertEqual(len(output.attentions), self.config.num_hidden_layers)
         self.assertEqual(
             output.attentions[0].shape,
-            torch.Size([1, self.config.num_attention_heads, 10, 10])
+            torch.Size([1, self.config.num_attention_heads, 10, 10]),
         )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

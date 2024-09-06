@@ -1,6 +1,6 @@
 from ..cohorts.query_builder import (
-    QueryBuilder,
     AncestorTableSpec,
+    QueryBuilder,
     QuerySpec,
     create_cohort_entry_query_spec,
     create_negative_query_spec,
@@ -125,9 +125,9 @@ FROM
     SELECT DISTINCT
         v.person_id,
         v.visit_occurrence_id,
-        first(DATE(c.condition_start_date)) OVER (PARTITION BY v.person_id 
+        first(DATE(c.condition_start_date)) OVER (PARTITION BY v.person_id
             ORDER BY DATE(c.condition_start_date)) AS earliest_condition_start_date,
-        first(DATE(v.visit_start_date)) OVER (PARTITION BY v.person_id 
+        first(DATE(v.visit_start_date)) OVER (PARTITION BY v.person_id
             ORDER BY DATE(v.visit_start_date)) AS earliest_visit_start_date,
         first(v.visit_occurrence_id) OVER (PARTITION BY v.person_id
             ORDER BY DATE(v.visit_start_date)) AS earliest_visit_occurrence_id
@@ -148,7 +148,7 @@ WITH hf_conditions AS (
 ),
 
 worsen_hf_diagnosis AS (
-    SELECT DISTINCT person_id, visit_occurrence_id 
+    SELECT DISTINCT person_id, visit_occurrence_id
     FROM global_temp.condition_occurrence AS co
     JOIN global_temp.{worsen_hf_dx_concepts} AS w_hf
     ON co.condition_concept_id = w_hf.concept_id
@@ -167,7 +167,7 @@ bnp_cohort AS (
     JOIN global_temp.{bnp_concepts} AS bnp
     ON m.measurement_concept_id = bnp.concept_id
     AND m.value_source_value > 500
-    UNION ALL 
+    UNION ALL
     SELECT DISTINCT person_id, visit_occurrence_id
     FROM global_temp.measurement AS m
     JOIN global_temp.{nt_pro_bnp_concepts} AS nt_bnp
@@ -176,15 +176,15 @@ bnp_cohort AS (
 ),
 
 drug_concepts AS (
-    SELECT DISTINCT 
+    SELECT DISTINCT
         *
     FROM
     (
-        SELECT *  
-        FROM global_temp.{drug_concepts} 
-        
-        UNION 
-        
+        SELECT *
+        FROM global_temp.{drug_concepts}
+
+        UNION
+
         SELECT  *
         FROM global_temp.diuretics_concepts
     ) d
@@ -239,9 +239,9 @@ entry_cohort AS (
         SELECT DISTINCT
             v.person_id,
             v.visit_occurrence_id,
-            first(DATE(c.condition_start_date)) OVER (PARTITION BY v.person_id 
+            first(DATE(c.condition_start_date)) OVER (PARTITION BY v.person_id
                 ORDER BY DATE(c.condition_start_date)) AS earliest_condition_start_date,
-            first(DATE(v.visit_start_date)) OVER (PARTITION BY v.person_id 
+            first(DATE(v.visit_start_date)) OVER (PARTITION BY v.person_id
                 ORDER BY DATE(v.visit_start_date)) AS earliest_visit_start_date,
             first(v.visit_occurrence_id) OVER (PARTITION BY v.person_id
                 ORDER BY DATE(v.visit_start_date)) AS earliest_visit_occurrence_id
@@ -261,13 +261,13 @@ SELECT DISTINCT person_id FROM bnp_cohort
 ) AS bnp
     ON c.person_id = bnp.person_id
 LEFT JOIN (
-    SELECT DISTINCT 
+    SELECT DISTINCT
         person_id
     FROM treatment_cohort
 ) AS tc
     ON c.person_id = tc.person_id
 LEFT JOIN (
-    SELECT DISTINCT 
+    SELECT DISTINCT
         hf.person_id
     FROM hf_conditions hf
     JOIN drug_cohort dc

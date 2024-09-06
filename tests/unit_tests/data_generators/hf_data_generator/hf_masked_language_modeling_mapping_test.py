@@ -1,7 +1,10 @@
-import unittest
 import random
+import unittest
 from unittest.mock import MagicMock
-from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import HFTokenizationMapping
+
+from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import (
+    HFTokenizationMapping,
+)
 
 
 class TestHFMaskedLanguageModellingMapping(unittest.TestCase):
@@ -19,10 +22,14 @@ class TestHFMaskedLanguageModellingMapping(unittest.TestCase):
     def test_transform_with_valid_indices(self):
         # Given a valid record with start and end indices
         record = {
-            'concept_ids': ['c1', 'c2', 'c3'],
-            'mlm_skip_values': [0, 0, 0, ],
-            'concept_value_masks': [0, 0, 0],
-            'concept_values': [0., 0., 0.],
+            "concept_ids": ["c1", "c2", "c3"],
+            "mlm_skip_values": [
+                0,
+                0,
+                0,
+            ],
+            "concept_value_masks": [0, 0, 0],
+            "concept_values": [0.0, 0.0, 0.0],
         }
 
         # Random seed for predictability in tests
@@ -31,28 +38,32 @@ class TestHFMaskedLanguageModellingMapping(unittest.TestCase):
         # Expected masked input ids might depend on random masking logic
         # Here we assume the second token gets masked with the mask token index (1)
         expected_masked_input_ids = [10, 20, 30]
-        expected_labels = [10, 20, 30]  # Only non-masked tokens are labeled with original ids
+        expected_labels = [
+            10,
+            20,
+            30,
+        ]  # Only non-masked tokens are labeled with original ids
 
         result = self.mapping.transform(record)
 
         # Check if the tokenizer's encode method was called correctly
-        self.mock_tokenizer.encode.assert_called_once_with(['c1', 'c2', 'c3'])
+        self.mock_tokenizer.encode.assert_called_once_with(["c1", "c2", "c3"])
 
         # Validate the output
-        self.assertEqual(result['input_ids'], expected_masked_input_ids)
-        self.assertEqual(result['labels'], expected_labels)
+        self.assertEqual(result["input_ids"], expected_masked_input_ids)
+        self.assertEqual(result["labels"], expected_labels)
 
     def test_transform_assertion(self):
         # Given a valid record with start and end indices
         record = {
-            'concept_ids': ['c1', 'c2', 'c3', 'c4'],
-            'mlm_skip_values': [0, 0, 0, 1],
-            'concept_value_masks': [0, 0, 0, 0],
-            'concept_values': [0., 0., 0., 0.],
+            "concept_ids": ["c1", "c2", "c3", "c4"],
+            "mlm_skip_values": [0, 0, 0, 1],
+            "concept_value_masks": [0, 0, 0, 0],
+            "concept_values": [0.0, 0.0, 0.0, 0.0],
         }
         with self.assertRaises(AssertionError):
             self.mapping.transform(record)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

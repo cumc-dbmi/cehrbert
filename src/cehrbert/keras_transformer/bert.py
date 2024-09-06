@@ -15,14 +15,15 @@ Language Understanding](https://arxiv.org/abs/1810.04805). A quote from it:
 """
 
 import tensorflow as tf
-from tensorflow.keras.losses import binary_crossentropy
 from tensorflow.keras import backend as K
+from tensorflow.keras.losses import binary_crossentropy
 from tensorflow.keras.utils import get_custom_objects
 
 
 def masked_perplexity(y_true, y_pred):
     """
-    Masked version of popular metric for evaluating performance of
+    Masked version of popular metric for evaluating performance of.
+
     language modelling architectures. It assumes that y_pred has shape
     (batch_size, sequence_length, 2), containing both
       - the original token ids
@@ -58,7 +59,8 @@ class MaskedMeanSquaredError(object):
 
 class MaskedPenalizedSparseCategoricalCrossentropy(object):
     """
-    Masked cross-entropy (see `masked_perplexity` for more details)
+    Masked cross-entropy (see `masked_perplexity` for more details).
+
     loss function with penalized confidence.
     Combines two loss functions: cross-entropy and negative entropy
     (weighted by `penalty_weight` parameter), following paper

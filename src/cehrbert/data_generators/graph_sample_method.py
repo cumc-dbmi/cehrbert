@@ -1,8 +1,9 @@
+import random
 from abc import ABC
+from enum import Enum
+
 import networkx as nx
 import pandas as pd
-from enum import Enum
-import random
 
 
 class SimilarityType(Enum):
@@ -27,7 +28,8 @@ class GraphSampler(ABC):
 
     def _is_sampling_enabled(self):
         """
-        Check whether the graph sampling is enabled
+        Check whether the graph sampling is enabled.
+
         :return:
         """
         return self._concept_similarity_type != SimilarityType.NONE.value

@@ -8,7 +8,7 @@ import random
 import re
 from collections import Counter
 from itertools import chain
-from typing import Dict, Union, Tuple, List
+from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -22,16 +22,19 @@ from tensorflow.data import Dataset
 from tensorflow.keras.models import Model
 from xgboost import XGBClassifier
 
-from ..data_generators.data_classes import TokenizeFieldInfo
-from ..data_generators.tokenizer import ConceptTokenizer
+from cehrbert.data_generators.data_classes import TokenizeFieldInfo
+from cehrbert.data_generators.tokenizer import ConceptTokenizer
 
+DEFAULT_OOV_TOKEN = "-1"
 DECIMAL_PLACE = 4
 LOGGER = logging.getLogger(__name__)
 
 
 def create_folder_if_not_exist(folder, sub_folder_name):
     """
-    Create the sub-folder if not exists. Will do not thing if the sub-folder already exists.
+    Create the sub-folder if not exists.
+
+    Will do not thing if the sub-folder already exists.
 
     :param folder:
     :param sub_folder_name:
@@ -70,12 +73,13 @@ def tokenize_one_field(
     column_name,
     tokenized_column_name,
     tokenizer_path,
-    oov_token="-1",
+    oov_token=DEFAULT_OOV_TOKEN,
     encode=True,
     recreate=False,
 ):
     """
-    Tokenize the concept sequence and save the tokenizer as a pickle file
+    Tokenize the concept sequence and save the tokenizer as a pickle file.
+
     :return:
     """
     tokenize_fields_info = [
@@ -93,12 +97,13 @@ def tokenize_multiple_fields(
     training_data: Union[pd_dataframe, dd_dataframe],
     tokenize_fields_info: List[TokenizeFieldInfo],
     tokenizer_path,
-    oov_token="-1",
+    oov_token=DEFAULT_OOV_TOKEN,
     encode=True,
     recreate=False,
 ):
     """
-    Tokenize a list of fields
+    Tokenize a list of fields.
+
     :param training_data:
     :param tokenize_fields_info:
     :param tokenizer_path:
@@ -110,7 +115,8 @@ def tokenize_multiple_fields(
 
     def tokenize_one_column(_tokenize_field_info: TokenizeFieldInfo):
         """
-        Tokenize a field
+        Tokenize a field.
+
         :param _tokenize_field_info:
         :return:
         """
@@ -142,9 +148,10 @@ def tokenize_multiple_fields(
             )
     else:
         logging.getLogger(__name__).info(
-            f"Loading the existing tokenizer from {tokenizer_path}"
+            "Loading the existing tokenizer from %s", tokenizer_path
         )
-        tokenizer = pickle.load(open(tokenizer_path, "rb"))
+        with open(tokenizer_path, "rb") as f:
+            tokenizer = pickle.load(f)
 
     if encode:
         for tokenize_field_info in tokenize_fields_info:
@@ -185,7 +192,7 @@ def run_model(
 
 def calculate_pr_auc(labels, probabilities):
     """
-    Calculate PR AUC given labels and probabilities
+    Calculate PR AUC given labels and probabilities.
 
     :param labels:
     :param probabilities:
@@ -209,7 +216,7 @@ def compute_binary_metrics(
     calculate_ci: bool = True,
 ):
     """
-    Compute Recall, Precision, F1-score and PR-AUC for the test data
+    Compute Recall, Precision, F1-score and PR-AUC for the test data.
 
     :param model:
     :param test_data:
@@ -223,7 +230,8 @@ def compute_binary_metrics(
 
     def compute_confidence_interval(x, y, metric_func):
         """
-        A helper function to calculate the 95% confidence interval for a given metric function
+        A helper function to calculate the 95% confidence interval for a given metric function.
+
         :param x:
         :param y:
         :param metric_func:
@@ -321,7 +329,8 @@ def compute_binary_metrics(
 
 def save_training_history(history: Dict, history_folder, model_name: str = None):
     """
-    Save the training metrics in the history dictionary as pandas dataframe to the file
+    Save the training metrics in the history dictionary as pandas dataframe to the file.
+
     system in parquet format
 
     :param history:

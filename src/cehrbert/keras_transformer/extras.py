@@ -1,20 +1,22 @@
 """
-Tools that are not necessary for the Transformer by itself, but might be
+Tools that are not necessary for the Transformer by itself, but might be.
+
 useful in building models with it.
 """
 
 import math
+
 import tensorflow as tf
-
-from tensorflow.keras import activations, regularizers
+from tensorflow.keras import activations
 from tensorflow.keras import backend as K
-
+from tensorflow.keras import regularizers
 from tensorflow.keras.utils import get_custom_objects
 
 
 class ReusableEmbedding(tf.keras.layers.Embedding):
     """
-    A "reusable" form of the Embedding layer, which returns its
+    A "reusable" form of the Embedding layer, which returns its.
+
     full embedding matrix as one of the outputs.
     This is necessary to guarantee correct work of Keras when the matrix
     is being re-used again in TiedOutputEmbedding layer.
@@ -33,7 +35,8 @@ class ReusableEmbedding(tf.keras.layers.Embedding):
 
 class TiedOutputEmbedding(tf.keras.layers.Layer):
     """
-    Allows to reuse the same word embedding matrix both for the input and
+    Allows to reuse the same word embedding matrix both for the input and.
+
     the output layers of the network.
     This is called Weight Tying and is proven to improve performance
     of neural network language models, as well as decrease their number

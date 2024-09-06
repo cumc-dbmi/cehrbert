@@ -2,12 +2,13 @@ import copy
 from abc import abstractmethod
 
 from ...trainers.model_trainer import AbstractModel
-from ...utils.model_utils import *
+from ...utils.model_utils import os, pathlib, tf
 
 
 def get_metrics():
     """
-    Standard metrics used for compiling the models
+    Standard metrics used for compiling the models.
+
     :return:
     """
 

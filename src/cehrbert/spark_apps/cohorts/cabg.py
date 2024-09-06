@@ -1,4 +1,4 @@
-from ..cohorts.query_builder import QueryBuilder, QuerySpec, AncestorTableSpec
+from ..cohorts.query_builder import AncestorTableSpec, QueryBuilder, QuerySpec
 
 COHORT_QUERY_TEMPLATE = """
 SELECT DISTINCT
@@ -9,15 +9,15 @@ FROM
 (
     SELECT DISTINCT
         vo.person_id,
-        FIRST(DATE(vo.visit_start_date)) OVER (PARTITION BY po.person_id 
+        FIRST(DATE(vo.visit_start_date)) OVER (PARTITION BY po.person_id
             ORDER BY DATE(vo.visit_start_date), vo.visit_occurrence_id) AS index_date,
-        FIRST(vo.visit_occurrence_id) OVER (PARTITION BY po.person_id 
+        FIRST(vo.visit_occurrence_id) OVER (PARTITION BY po.person_id
             ORDER BY DATE(vo.visit_start_date), vo.visit_occurrence_id) AS visit_occurrence_id
     FROM global_temp.procedure_occurrence AS po
     JOIN global_temp.visit_occurrence AS vo
         ON po.visit_occurrence_id = vo.visit_occurrence_id
     WHERE EXISTS (
-        SELECT 1 
+        SELECT 1
         FROM global_temp.{cabg_concept_table} AS ie
         WHERE po.procedure_concept_id = ie.concept_id
     )

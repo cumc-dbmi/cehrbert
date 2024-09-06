@@ -1,12 +1,13 @@
 import collections
 import random
+from typing import Any, Dict, Tuple
+
 import numpy as np
-from typing import Any, Tuple, Dict
 import torch
 from torch.nn.utils.rnn import pad_sequence
 
-from ...models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from ...data_generators.hf_data_generator.hf_dataset_mapping import TruncationType
+from ...models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 
 
 class CehrBertDataCollator:
@@ -203,9 +204,7 @@ class CehrBertDataCollator:
     def torch_mask_tokens(
         self, inputs: torch.Tensor, labels: torch.Tensor
     ) -> Tuple[Any, Any]:
-        """
-        Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
-        """
+        """Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original."""
         # We sample a few tokens in each sequence for MLM training (with probability `self.mlm_probability`)
         probability_matrix = torch.full(labels.shape, self.mlm_probability)
         pad_token_mask = inputs == self.tokenizer.pad_token_index
@@ -236,7 +235,7 @@ class CehrBertDataCollator:
 
     def generate_start_end_index(self, record: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Adapted from https://github.com/OHDSI/Apollo/blob/main/data_loading/data_transformer.py
+        Adapted from https://github.com/OHDSI/Apollo/blob/main/data_loading/data_transformer.py.
 
         Adding the start and end indices to extract a portion of the patient sequence
         """

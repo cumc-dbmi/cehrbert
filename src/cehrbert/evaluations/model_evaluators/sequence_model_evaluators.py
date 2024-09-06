@@ -1,21 +1,30 @@
-from abc import ABC, abstractmethod
-
 import math
-from scipy import stats
+from abc import ABC, abstractmethod
 from itertools import product
+
+from scipy import stats
 from sklearn.model_selection import (
-    StratifiedShuffleSplit,
     StratifiedKFold,
+    StratifiedShuffleSplit,
     train_test_split,
 )
 from tensorflow.python.keras.utils.generic_utils import get_custom_objects
 
-from .model_evaluators import AbstractModelEvaluator, get_metrics
 from ...config.grid_search_config import GridSearchConfig
 from ...data_generators.learning_objective import post_pad_pre_truncate
 from ...models.evaluation_models import create_bi_lstm_model
 from ...models.loss_schedulers import CosineLRSchedule
-from ...utils.model_utils import *
+from ...utils.model_utils import (
+    compute_binary_metrics,
+    multimode,
+    np,
+    os,
+    pd,
+    pickle,
+    save_training_history,
+    tf,
+)
+from .model_evaluators import AbstractModelEvaluator, get_metrics
 
 # Define a list of learning rates to fine-tune the model with
 LEARNING_RATES = [0.5e-4, 0.8e-4, 1.0e-4, 1.2e-4]
@@ -85,7 +94,8 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         **kwargs,
     ):
         """
-        Training the model for the keras based sequence models
+        Training the model for the keras based sequence models.
+
         :param training_data:
         :param val_data:
         :param model_name:
@@ -128,8 +138,9 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
 
     def eval_model_cross_validation_test(self):
         """
+        The data is split into train_val and test partitions.
 
-        The data is split into train_val and test partitions. It carries out a k-fold cross
+        It carries out a k-fold cross
         validation on the train_val partition first, then
 
         :return:
@@ -228,7 +239,8 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
 
     def grid_search_cross_validation(self, features, labels):
         """
-        This method conducts a grid search via cross validation to determine the best combination
+        This method conducts a grid search via cross validation to determine the best combination.
+
         of hyperparameters
 
         :param features:
@@ -323,10 +335,9 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
 
     def k_fold(self, features, labels):
         """
-
         :param features:
-        :param labels:
 
+        :param labels:
         """
         # This preserves the percentage of samples for each class (0 and 1 for binary
         # classification)
@@ -387,7 +398,8 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
 
     def _get_callbacks(self):
         """
-        Standard callbacks for the evaluations
+        Standard callbacks for the evaluations.
+
         :return:
         """
         learning_rate_scheduler = tf.keras.callbacks.LearningRateScheduler(

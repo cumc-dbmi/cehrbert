@@ -1,10 +1,12 @@
-import unittest
+import os
+import shutil
 import sys
 import tempfile
-import shutil
-import os
-from datasets import disable_caching
+import unittest
 from pathlib import Path
+
+from datasets import disable_caching
+
 from cehrbert.runners.hf_cehrbert_pretrain_runner import main
 
 disable_caching()
@@ -17,27 +19,29 @@ class HfCehrBertRunnerIntegrationTest(unittest.TestCase):
     def setUp(self):
         # Get the root folder of the project
         root_folder = Path(os.path.abspath(__file__)).parent.parent.parent.parent
-        data_folder = os.path.join(root_folder, 'sample_data', 'pretrain')
+        data_folder = os.path.join(root_folder, "sample_data", "pretrain")
         # Create a temporary directory to store model and tokenizer
         self.temp_dir = tempfile.mkdtemp()
-        self.model_folder_path = os.path.join(self.temp_dir, 'model')
+        self.model_folder_path = os.path.join(self.temp_dir, "model")
         Path(self.model_folder_path).mkdir(parents=True, exist_ok=True)
-        self.dataset_prepared_path = os.path.join(self.temp_dir, 'dataset_prepared_path')
+        self.dataset_prepared_path = os.path.join(
+            self.temp_dir, "dataset_prepared_path"
+        )
         Path(self.dataset_prepared_path).mkdir(parents=True, exist_ok=True)
         sys.argv = [
-            'hf_cehrbert_pretraining_runner.py',
-            '--model_name_or_path',
+            "hf_cehrbert_pretraining_runner.py",
+            "--model_name_or_path",
             self.model_folder_path,
-            '--tokenizer_name_or_path',
+            "--tokenizer_name_or_path",
             self.model_folder_path,
-            '--output_dir',
+            "--output_dir",
             self.model_folder_path,
-            '--data_folder',
+            "--data_folder",
             data_folder,
-            '--dataset_prepared_path',
+            "--dataset_prepared_path",
             self.dataset_prepared_path,
-            '--max_steps',
-            '10'
+            "--max_steps",
+            "10",
         ]
 
     def tearDown(self):
@@ -48,5 +52,5 @@ class HfCehrBertRunnerIntegrationTest(unittest.TestCase):
         main()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

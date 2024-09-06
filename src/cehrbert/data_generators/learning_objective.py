@@ -1,21 +1,23 @@
 import random
 from abc import ABC, abstractmethod
 from itertools import islice
-from typing import List, Dict
+from typing import Dict, List
+
 import numpy as np
 import pandas as pd
-from tensorflow.dtypes import int32, float32, DType
+from tensorflow.dtypes import DType, float32, int32
 from tensorflow.keras.utils import pad_sequences
 
+from ..utils.model_utils import convert_to_list_of_lists
 from .data_classes import RowSlicer
 from .graph_sample_method import GraphSampler
 from .tokenizer import ConceptTokenizer
-from ..utils.model_utils import convert_to_list_of_lists
 
 
 def validate_columns_decorator(function):
     """
-    A decorator to validate whether the parameter rows passed to LearningObjective.process_batch
+    A decorator to validate whether the parameter rows passed to LearningObjective.process_batch.
+
     contain the required columns. It raises AttributeError if any of the required columns is
     missing from the rows
 
@@ -40,7 +42,7 @@ def validate_columns_decorator(function):
 
 def post_pad_pre_truncate(inputs, pad_value, max_seq_len, d_type="int32"):
     """
-    Post _pad and pre-truncate the sequence
+    Post _pad and pre-truncate the sequence.
 
     :param inputs:
     :param pad_value:
@@ -63,24 +65,25 @@ class LearningObjective(ABC):
     @abstractmethod
     def process_batch(self, rows: List[RowSlicer]):
         """
-        Process a batch of rows to generate input and output data for the learning objective
+        Process a batch of rows to generate input and output data for the learning objective.
+
         :param rows:
         :return:
         """
-        pass
 
     @abstractmethod
     def get_tf_dataset_schema(self):
         """
-        Get the schema for the input and output to the tensorflow Dataset
+        Get the schema for the input and output to the tensorflow Dataset.
+
         :return:
         """
-        pass
 
     @classmethod
     def get_required_columns(cls):
         """
-        Get the required columns for this learning objective
+        Get the required columns for this learning objective.
+
         :return:
         """
         return cls.required_columns
@@ -104,7 +107,8 @@ class CustomLearningObjective(LearningObjective):
     @validate_columns_decorator
     def process_batch(self, rows: List[RowSlicer]):
         """
-        Process a batch of rows to generate input and output data for the learning objective
+        Process a batch of rows to generate input and output data for the learning objective.
+
         :param rows:
         :return:
         """
@@ -137,7 +141,8 @@ class BertFineTuningLearningObjective(LearningObjective):
     @validate_columns_decorator
     def process_batch(self, rows: List[RowSlicer]):
         """
-        Process a batch of rows to generate input and output data for the learning objective
+        Process a batch of rows to generate input and output data for the learning objective.
+
         :param rows:
         :return:
         """
@@ -159,7 +164,8 @@ class DemographicsLearningObjective(LearningObjective):
     @validate_columns_decorator
     def process_batch(self, rows: List[RowSlicer]):
         """
-        Process a batch of rows to generate input and output data for the learning objective
+        Process a batch of rows to generate input and output data for the learning objective.
+
         :param rows:
         :return:
         """
@@ -184,7 +190,8 @@ class ProlongedLengthStayLearningObjective(LearningObjective):
     @validate_columns_decorator
     def process_batch(self, rows: List[RowSlicer]):
         """
-        Process a batch of rows to generate input and output data for the learning objective
+        Process a batch of rows to generate input and output data for the learning objective.
+
         :param rows:
         :return:
         """
@@ -241,7 +248,7 @@ class VisitPredictionLearningObjective(LearningObjective):
 
     def _make_record(self, row_slicer: RowSlicer):
         """
-        A method for making a bert record for the bert data generator to yield
+        A method for making a bert record for the bert data generator to yield.
 
         :param row_slicer: a namedtuple containing a pandas row,
         left_index and right_index for slicing the sequences such as concepts
@@ -264,7 +271,8 @@ class VisitPredictionLearningObjective(LearningObjective):
 
     def _mask_visit_concepts(self, visit_concepts):
         """
-        Any visit has 50% chance to be masked
+        Any visit has 50% chance to be masked.
+
         :param visit_concepts:
         :return:
         """
@@ -376,7 +384,7 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
 
     def _make_record(self, row_slicer: RowSlicer):
         """
-        A method for making a bert record for the bert data generator to yield
+        A method for making a bert record for the bert data generator to yield.
 
         :param row_slicer: a tuple containing a pandas row,
         left_index and right_index for slicing the sequences such as concepts
@@ -431,7 +439,7 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
 
     def _mask_concepts(self, concepts, mlm_skip_values):
         """
-        Mask out 15% of the concepts
+        Mask out 15% of the concepts.
 
         :param concepts:
         :param mlm_skip_values:
@@ -718,7 +726,7 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
 
     def _make_record(self, row_slicer: RowSlicer):
         """
-        A method for making a bert record for the bert data generator to yield
+        A method for making a bert record for the bert data generator to yield.
 
         :param row_slicer: a tuple containing a pandas row,
         left_index and right_index for slicing the sequences such as concepts
@@ -765,7 +773,8 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
 
     def _mask_concepts(self, concepts_tuple):
         """
-        Mask out 15% of the concepts
+        Mask out 15% of the concepts.
+
         :param concepts_tuple:
         :return:
         """
@@ -838,7 +847,8 @@ class HierarchicalVisitTypePredictionLearningObjective(
     @validate_columns_decorator
     def process_batch(self, rows: List[RowSlicer]):
         """
-        Process a batch of rows to generate input and output data for the learning objective
+        Process a batch of rows to generate input and output data for the learning objective.
+
         :param rows:
         :return:
         """
@@ -887,7 +897,7 @@ class HierarchicalVisitTypePredictionLearningObjective(
 
     def _make_record(self, row_slicer: RowSlicer):
         """
-        A method for making a bert record for the bert data generator to yield
+        A method for making a bert record for the bert data generator to yield.
 
         :param row_slicer: a tuple containing a pandas row,
         left_index and right_index for slicing the sequences such as concepts
@@ -905,7 +915,8 @@ class HierarchicalVisitTypePredictionLearningObjective(
 
     def _mask_visit_concepts(self, visit_concepts):
         """
-        Any visit has 50% chance to be masked
+        Any visit has 50% chance to be masked.
+
         :param visit_concepts:
         :return:
         """
@@ -946,7 +957,8 @@ class HierarchicalReadmissionLearningObjective(
     @validate_columns_decorator
     def process_batch(self, rows: List[RowSlicer]):
         """
-        Process a batch of rows to generate input and output data for the learning objective
+        Process a batch of rows to generate input and output data for the learning objective.
+
         :param rows:
         :return:
         """
@@ -978,7 +990,7 @@ class HierarchicalReadmissionLearningObjective(
 
     def _make_record(self, row_slicer: RowSlicer):
         """
-        A method for making a bert record for the bert data generator to yield
+        A method for making a bert record for the bert data generator to yield.
 
         :param row_slicer: a tuple containing a pandas row,
         left_index and right_index for slicing the sequences such as concepts
@@ -1019,7 +1031,8 @@ class HierarchicalProlongedLengthStayLearningObjective(
     @validate_columns_decorator
     def process_batch(self, rows: List[RowSlicer]):
         """
-        Process a batch of rows to generate input and output data for the learning objective
+        Process a batch of rows to generate input and output data for the learning objective.
+
         :param rows:
         :return:
         """
@@ -1053,7 +1066,7 @@ class HierarchicalProlongedLengthStayLearningObjective(
 
     def _make_record(self, row_slicer: RowSlicer):
         """
-        A method for making a bert record for the bert data generator to yield
+        A method for making a bert record for the bert data generator to yield.
 
         :param row_slicer: a tuple containing a pandas row,
         left_index and right_index for slicing the sequences such as concepts
@@ -1099,7 +1112,8 @@ class HierarchicalArtificialTokenPredictionLearningObjective(
     @validate_columns_decorator
     def process_batch(self, rows: List[RowSlicer]):
         """
-        Process a batch of rows to generate input and output data for the learning objective
+        Process a batch of rows to generate input and output data for the learning objective.
+
         :param rows:
         :return:
         """
@@ -1150,7 +1164,7 @@ class HierarchicalArtificialTokenPredictionLearningObjective(
 
     def _make_record(self, row_slicer: RowSlicer):
         """
-        A method for making a bert record for the bert data generator to yield
+        A method for making a bert record for the bert data generator to yield.
 
         :param row_slicer: a tuple containing a pandas row,
         left_index and right_index for slicing the sequences such as concepts
@@ -1168,7 +1182,8 @@ class HierarchicalArtificialTokenPredictionLearningObjective(
 
     def _mask_visit_concepts(self, time_interval_att_tokens):
         """
-        Any visit has 50% chance to be masked when att prediction is enabled, otherwise just
+        Any visit has 50% chance to be masked when att prediction is enabled, otherwise just.
+
         return the time_interval_att_tokens as the masked_time_interval_att_tokens
 
         :param time_interval_att_tokens:
@@ -1260,7 +1275,7 @@ class TimeAttentionLearningObjective(LearningObjective):
 
     def _make_record(self, row_slicer: RowSlicer):
         """
-        A method for making a bert record for the time attention data generator to yield
+        A method for making a bert record for the time attention data generator to yield.
 
         :param row_slicer: a tuple containing a pandas row,
         left_index and right_index for slicing the sequences such as concepts

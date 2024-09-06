@@ -1,4 +1,4 @@
-from ..cohorts.query_builder import QueryBuilder, QuerySpec, AncestorTableSpec
+from ..cohorts.query_builder import AncestorTableSpec, QueryBuilder, QuerySpec
 
 COHORT_QUERY_TEMPLATE = """
 WITH prior_graft_stent AS (
@@ -20,27 +20,27 @@ FROM
 (
     SELECT DISTINCT
         vo.person_id,
-        FIRST(DATE(vo.visit_start_date)) OVER (PARTITION BY co.person_id 
+        FIRST(DATE(vo.visit_start_date)) OVER (PARTITION BY co.person_id
             ORDER BY DATE(vo.visit_start_date), vo.visit_occurrence_id) AS index_date,
-        FIRST(vo.visit_occurrence_id) OVER (PARTITION BY co.person_id 
+        FIRST(vo.visit_occurrence_id) OVER (PARTITION BY co.person_id
             ORDER BY DATE(vo.visit_start_date), vo.visit_occurrence_id) AS visit_occurrence_id
     FROM global_temp.condition_occurrence AS co
     JOIN global_temp.visit_occurrence AS vo
         ON co.visit_occurrence_id = vo.visit_occurrence_id
     WHERE EXISTS (
-        SELECT 1 
+        SELECT 1
         FROM global_temp.{cad_concept_table} AS ie
         WHERE co.condition_concept_id = ie.concept_id
     )
 ) c
 WHERE NOT EXISTS (
-    -- The patients who had a graft or stent procedures before the index date 
+    -- The patients who had a graft or stent procedures before the index date
     -- need to be removed from the cohort
     SELECT 1
     FROM prior_graft_stent AS exclusion
-    WHERE exclusion.person_id = c.person_id 
+    WHERE exclusion.person_id = c.person_id
         AND c.index_date > exclusion.procedure_date
-) AND c.index_date >= '{date_lower_bound}' 
+) AND c.index_date >= '{date_lower_bound}'
 """
 
 DEFAULT_COHORT_NAME = "coronary_artery_disease"

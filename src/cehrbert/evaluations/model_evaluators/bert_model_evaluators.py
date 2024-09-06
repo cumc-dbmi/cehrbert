@@ -3,9 +3,17 @@ import pickle
 import numpy as np
 
 from ...data_generators.learning_objective import post_pad_pre_truncate
+from ...models.evaluation_models import (
+    create_probabilistic_bert_bi_lstm_model,
+    create_random_vanilla_bert_bi_lstm_model,
+    create_sliding_bert_model,
+    create_temporal_bert_bi_lstm_model,
+    create_vanilla_bert_bi_lstm_model,
+    create_vanilla_feed_forward_model,
+    tf,
+)
 from ..model_evaluators.model_evaluators import get_metrics
 from ..model_evaluators.sequence_model_evaluators import SequenceModelEvaluator
-from ...models.evaluation_models import *
 
 
 class BertLstmModelEvaluator(SequenceModelEvaluator):

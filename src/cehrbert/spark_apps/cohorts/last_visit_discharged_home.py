@@ -5,7 +5,7 @@ SELECT DISTINCT
     v.person_id,
     v.visit_occurrence_id,
     v.index_date
-FROM 
+FROM
 (
     SELECT
         v.person_id,

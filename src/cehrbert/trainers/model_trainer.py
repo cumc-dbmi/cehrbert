@@ -1,6 +1,6 @@
-import os
-import json
 import copy
+import json
+import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -9,15 +9,15 @@ import pandas as pd
 import tensorflow as tf
 
 from ..data_generators.data_generator_base import AbstractDataGeneratorBase
-from ..models.loss_schedulers import CosineLRSchedule
 from ..models.layers.custom_layers import get_custom_objects
-from ..utils.logging_utils import *
+from ..models.loss_schedulers import CosineLRSchedule
+from ..utils.checkpoint_utils import MODEL_CONFIG_FILE, get_checkpoint_epoch
+from ..utils.logging_utils import logging
 from ..utils.model_utils import (
-    log_function_decorator,
     create_folder_if_not_exist,
+    log_function_decorator,
     save_training_history,
 )
-from ..utils.checkpoint_utils import get_checkpoint_epoch, MODEL_CONFIG_FILE
 
 
 class AbstractModel(ABC):
@@ -150,20 +150,22 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
     def create_data_generator(self) -> AbstractDataGeneratorBase:
         """
         Prepare _training_data for the model such as tokenize concepts.
+
         :return:
         """
-        pass
 
     def create_val_data_generator(self) -> AbstractDataGeneratorBase:
         """
         Prepare _training_data for the model such as tokenize concepts.
+
         :return:
         """
         return None
 
     def train_model(self):
         """
-        Train the model and save the history metrics into the model folder
+        Train the model and save the history metrics into the model folder.
+
         :return:
         """
         data_generator = self.create_data_generator()
@@ -261,7 +263,8 @@ class AbstractConceptEmbeddingTrainer(AbstractModel):
 
     def get_model_folder(self):
         """
-        Infer the model folder from the property model_path
+        Infer the model folder from the property model_path.
+
         :return:
         """
         return str(Path(self._model_folder))

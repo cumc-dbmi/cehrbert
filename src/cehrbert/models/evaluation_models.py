@@ -1,11 +1,9 @@
 import tensorflow as tf
-
 from tensorflow.keras.initializers import Constant
 from tensorflow.keras.models import Model
 
-from .layers.custom_layers import get_custom_objects
-from .layers.custom_layers import ConvolutionBertLayer
 from .bert_models_visit_prediction import transformer_bert_model_visit_prediction
+from .layers.custom_layers import ConvolutionBertLayer, get_custom_objects
 
 
 def create_bi_lstm_model(
@@ -74,7 +72,8 @@ def create_bi_lstm_model(
 
 def create_vanilla_feed_forward_model(vanilla_bert_model_path):
     """
-    BERT + Feedforward model for binary prediction
+    BERT + Feedforward model for binary prediction.
+
     :param vanilla_bert_model_path:
     :return:
     """
@@ -535,8 +534,8 @@ def create_hierarchical_bert_model_with_pooling(
 
 def create_prob_phenotype_bi_lstm_model_with_model(bert_model_path):
     """
-
     :param bert_model_path:
+
     :return:
     """
     model = tf.keras.models.load_model(

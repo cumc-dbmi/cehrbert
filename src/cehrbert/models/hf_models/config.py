@@ -1,10 +1,12 @@
-from typing import Dict, Any, List
+from typing import Dict, List
+
 from transformers import PretrainedConfig
 
 
 class CEHRGPTConfig(PretrainedConfig):
     """
     Args:
+
         vocab_size (`int`, *optional*, defaults to 50257):
             Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`GPT2Model`] or [`TFGPT2Model`].

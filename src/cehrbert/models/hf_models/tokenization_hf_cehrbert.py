@@ -1,19 +1,20 @@
-import os
 import json
+import os
 import pickle
 from functools import partial
-from typing import Sequence, Union, List, Dict, Any
 from itertools import islice
+from typing import Any, Dict, List, Sequence, Union
 
 import transformers
 from datasets import Dataset, DatasetDict
 from tokenizers import Tokenizer
 from tokenizers.models import WordLevel
-from tokenizers.trainers import WordLevelTrainer
 from tokenizers.pre_tokenizers import WhitespaceSplit
+from tokenizers.trainers import WordLevelTrainer
 from transformers.tokenization_utils_base import PushToHubMixin
-from .tokenization_utils import agg_statistics, map_statistics, _agg_helper
+
 from ...runners.hf_runner_argument_dataclass import DataTrainingArguments
+from .tokenization_utils import _agg_helper, agg_statistics, map_statistics
 
 PAD_TOKEN = "[PAD]"
 CLS_TOKEN = "[CLS]"
@@ -130,7 +131,6 @@ class CehrBertTokenizer(PushToHubMixin):
         """
         Save the Cehrbert tokenizer.
 
-
         This method make sure the batch processor can then be re-loaded using the
         .from_pretrained class method.
 
@@ -231,7 +231,9 @@ class CehrBertTokenizer(PushToHubMixin):
         data_args: DataTrainingArguments,
     ):
         """
-        Train a huggingface word level tokenizer. To use their tokenizer, we need to concatenate all the concepts
+        Train a huggingface word level tokenizer.
+
+        To use their tokenizer, we need to concatenate all the concepts
         together and treat it as a sequence.
         """
 

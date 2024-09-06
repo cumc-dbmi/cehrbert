@@ -1,19 +1,22 @@
 import tensorflow as tf
-from ..models.parse_args import create_parse_args_base_bert
-from ..trainers.model_trainer import AbstractConceptEmbeddingTrainer
-from ..utils.model_utils import tokenize_one_field
+from tensorflow.keras import optimizers
+
+from ..data_generators.data_generator_base import (
+    BertDataGenerator,
+    BertVisitPredictionDataGenerator,
+    MedBertDataGenerator,
+)
+from ..keras_transformer.bert import (
+    MaskedPenalizedSparseCategoricalCrossentropy,
+    masked_perplexity,
+)
+from ..models.bert_models import transformer_bert_model
 from ..models.bert_models_visit_prediction import (
     transformer_bert_model_visit_prediction,
 )
-from ..models.bert_models import transformer_bert_model
-from ..data_generators.data_generator_base import *
-
-from ..keras_transformer.bert import (
-    masked_perplexity,
-    MaskedPenalizedSparseCategoricalCrossentropy,
-)
-
-from tensorflow.keras import optimizers
+from ..models.parse_args import create_parse_args_base_bert
+from ..trainers.model_trainer import AbstractConceptEmbeddingTrainer
+from ..utils.model_utils import tokenize_one_field
 
 
 class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):

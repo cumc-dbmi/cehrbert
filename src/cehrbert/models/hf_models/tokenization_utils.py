@@ -1,7 +1,7 @@
 import collections
 import json
 import pickle
-from typing import Dict, Any
+from typing import Any, Dict
 
 from femr.stat_utils import OnlineStatistics
 

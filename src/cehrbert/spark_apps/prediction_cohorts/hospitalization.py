@@ -1,6 +1,6 @@
-from ..spark_parse_args import create_spark_args
-from ..cohorts.spark_app_base import create_prediction_cohort
 from ..cohorts.query_builder import QueryBuilder, QuerySpec
+from ..cohorts.spark_app_base import create_prediction_cohort
+from ..spark_parse_args import create_spark_args
 
 HOSPITALIZATION_OUTCOME_QUERY = """
 SELECT DISTINCT
@@ -23,7 +23,7 @@ WITH INDEX_VISIT_TABLE AS
 ),
 HOSPITAL_TARGET AS
 (
-    SELECT DISTINCT 
+    SELECT DISTINCT
         iv.person_id,
         iv.index_date,
         count(distinct case when v1.visit_concept_id IN (9201, 262) then v1.visit_occurrence_id end) as num_of_hospitalizations,
@@ -37,7 +37,7 @@ HOSPITAL_TARGET AS
     GROUP BY iv.person_id, iv.index_date
 )
 
-SELECT 
+SELECT
     person_id,
     index_date,
     CAST(null AS INT) AS visit_occurrence_id

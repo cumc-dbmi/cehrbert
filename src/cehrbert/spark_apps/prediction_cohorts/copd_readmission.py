@@ -1,12 +1,11 @@
-from ..spark_parse_args import create_spark_args
+from ..cohorts.query_builder import AncestorTableSpec, QueryBuilder, QuerySpec
 from ..cohorts.spark_app_base import create_prediction_cohort
-from ..cohorts.query_builder import QueryBuilder, AncestorTableSpec, QuerySpec
-
+from ..spark_parse_args import create_spark_args
 
 COPD_HOSPITALIZATION_QUERY = """
 WITH copd_conditions AS (
-    SELECT DISTINCT 
-        descendant_concept_id AS concept_id 
+    SELECT DISTINCT
+        descendant_concept_id AS concept_id
     FROM global_temp.concept_ancestor AS ca
     WHERE ca.ancestor_concept_id in (255573, 258780)
 )

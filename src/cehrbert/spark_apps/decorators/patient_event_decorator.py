@@ -5,9 +5,11 @@ from typing import Optional, Union
 
 import numpy as np
 from pyspark.sql import DataFrame
-from pyspark.sql import functions as F, Window as W, types as T
+from pyspark.sql import Window as W
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
 
-from ...const.common import MEASUREMENT, CATEGORICAL_MEASUREMENT
+from ...const.common import CATEGORICAL_MEASUREMENT, MEASUREMENT
 
 
 class AttType(Enum):
@@ -81,7 +83,8 @@ class PatientEventBaseDecorator(PatientEventDecorator):
 
     def _decorate(self, patient_events: DataFrame):
         """
-        patient_events contains the following columns (cohort_member_id, person_id,
+        Patient_events contains the following columns (cohort_member_id, person_id,.
+
         standard_concept_id, date, visit_occurrence_id, domain, concept_value)
 
         :param patient_events:

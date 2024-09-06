@@ -2,8 +2,8 @@ import os
 
 from pyspark.sql import SparkSession
 
-from ..utils.spark_utils import *
-from ..const.common import MEASUREMENT, REQUIRED_MEASUREMENT, CONCEPT
+from ..const.common import CONCEPT, MEASUREMENT, REQUIRED_MEASUREMENT
+from ..utils.spark_utils import F, W, argparse, preprocess_domain_table
 
 
 def main(input_folder, output_folder, num_of_numeric_labs, num_of_categorical_labs):
@@ -22,8 +22,8 @@ def main(input_folder, output_folder, num_of_numeric_labs, num_of_categorical_la
     popular_labs = spark.sql(
         """
         SELECT
-            m.measurement_concept_id, 
-            c.concept_name, 
+            m.measurement_concept_id,
+            c.concept_name,
             COUNT(*) AS freq,
             SUM(CASE WHEN m.value_as_number IS NOT NULL THEN 1 ELSE 0 END) / COUNT(*) AS numeric_percentage,
             SUM(CASE WHEN m.value_as_concept_id IS NOT NULL AND m.value_as_concept_id <> 0 THEN 1 ELSE 0 END) / COUNT(*) AS categorical_percentage

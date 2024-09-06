@@ -1,5 +1,6 @@
 """
-This module defines functions for parsing command-line arguments for Spark applications
+This module defines functions for parsing command-line arguments for Spark applications.
+
 that generate cohort definitions. It includes argument parsing for cohort specifications,
 date ranges, patient information, and EHR data extraction settings.
 
@@ -18,6 +19,7 @@ from .decorators.patient_event_decorator import AttType
 def valid_date(s):
     """
     Validates and converts a date string into a datetime object.
+
     Args:
         s (str): The date string in the format 'YYYY-MM-DD'.
     Returns:
@@ -33,7 +35,8 @@ def valid_date(s):
 
 def create_spark_args():
     """
-    Defines and parses the command-line arguments for Spark applications
+    Defines and parses the command-line arguments for Spark applications.
+
     that generate cohort definitions based on EHR data.
 
     Returns:

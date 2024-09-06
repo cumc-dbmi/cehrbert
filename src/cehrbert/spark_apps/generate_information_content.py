@@ -1,5 +1,6 @@
 """
 This module generates an information content table based on a list of domain tables from OMOP data.
+
 It processes patient event data, calculates the frequency of each concept, and computes information
 conten using the concept ancestor hierarchy. The results are written to a specified output path.
 
@@ -16,22 +17,24 @@ Command-line Arguments:
     - date_filter: Optional date filter for processing the data.
 """
 
-import os
-import logging
 import datetime
+import logging
+import os
+
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
-from ..utils.spark_utils import (
-    preprocess_domain_table,
-    join_domain_tables,
-    validate_table_names,
-)
+
 from ..config.output_names import INFORMATION_CONTENT_DATA_PATH
 from ..const.common import CONCEPT_ANCESTOR
+from ..utils.spark_utils import (
+    join_domain_tables,
+    preprocess_domain_table,
+    validate_table_names,
+)
 
 
 def main(input_folder, output_folder, domain_table_list, date_filter):
-    """Create the information content table
+    """Create the information content table.
 
     Keyword arguments:
     domain_tables -- the array containing the OMOP domain tables except visit_occurrence

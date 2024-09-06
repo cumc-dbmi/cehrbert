@@ -1,29 +1,28 @@
 import os
+from typing import Optional, Union
 
-from typing import Union, Optional
-
-from datasets import DatasetDict, IterableDatasetDict, Dataset, load_from_disk
-from transformers.utils import logging
+from datasets import Dataset, DatasetDict, IterableDatasetDict, load_from_disk
 from transformers import AutoConfig, Trainer, set_seed
+from transformers.utils import logging
 
-from ..data_generators.hf_data_generator.meds_utils import (
-    create_dataset_from_meds_reader,
-)
-from ..data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
 from ..data_generators.hf_data_generator.hf_dataset import (
     create_cehrbert_pretraining_dataset,
 )
-from ..models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
+from ..data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
+from ..data_generators.hf_data_generator.meds_utils import (
+    create_dataset_from_meds_reader,
+)
 from ..models.hf_models.config import CehrBertConfig
 from ..models.hf_models.hf_cehrbert import CehrBertForPreTraining
+from ..models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
+from .hf_runner_argument_dataclass import DataTrainingArguments, ModelArguments
 from .runner_util import (
     generate_prepared_ds_path,
-    load_parquet_as_dataset,
     get_last_hf_checkpoint,
-    parse_runner_args,
     get_meds_extension_path,
+    load_parquet_as_dataset,
+    parse_runner_args,
 )
-from .hf_runner_argument_dataclass import DataTrainingArguments, ModelArguments
 
 LOG = logging.get_logger("transformers")
 

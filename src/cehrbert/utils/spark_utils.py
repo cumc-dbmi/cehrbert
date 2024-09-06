@@ -11,24 +11,24 @@ from pyspark.sql.pandas.functions import pandas_udf
 
 from ..config.output_names import QUALIFIED_CONCEPT_LIST_PATH
 from ..const.common import (
-    PERSON,
-    VISIT_OCCURRENCE,
-    UNKNOWN_CONCEPT,
-    MEASUREMENT,
     CATEGORICAL_MEASUREMENT,
-    REQUIRED_MEASUREMENT,
     CDM_TABLES,
+    MEASUREMENT,
+    PERSON,
+    REQUIRED_MEASUREMENT,
+    UNKNOWN_CONCEPT,
+    VISIT_OCCURRENCE,
 )
 from ..spark_apps.decorators.patient_event_decorator import (
+    AttType,
+    DeathEventDecorator,
     DemographicPromptDecorator,
     PatientEventAttDecorator,
     PatientEventBaseDecorator,
-    DeathEventDecorator,
     time_token_func,
-    AttType,
 )
 from ..spark_apps.sql_templates import measurement_unit_stats_query
-from ..utils.logging_utils import *
+from ..utils.logging_utils import logging
 
 DOMAIN_KEY_FIELDS = {
     "condition_occurrence_id": [
@@ -111,7 +111,7 @@ def create_file_path(input_folder, table_name):
 
 
 def join_domain_tables(domain_tables):
-    """Standardize the format of OMOP domain tables using a time frame
+    """Standardize the format of OMOP domain tables using a time frame.
 
     Keyword arguments:
     domain_tables -- the array containing the OMOOP domain tabls except visit_occurrence
@@ -121,7 +121,6 @@ def join_domain_tables(domain_tables):
     (person_id, standard_concept_id, date, lower_bound, upper_bound, domain).
     In this case, co-occurrence is defined as those concept ids that have co-occurred
     within the same time window of a patient.
-
     """
     patient_event = None
 
@@ -551,7 +550,8 @@ def create_sequence_data(
     patient_event, date_filter=None, include_visit_type=False, classic_bert_seq=False
 ):
     """
-    Create a sequence of the events associated with one patient in a chronological order
+    Create a sequence of the events associated with one patient in a chronological order.
+
     :param patient_event:
     :param date_filter:
     :param include_visit_type:
@@ -705,7 +705,7 @@ def create_sequence_data_with_att(
     include_inpatient_hour_token: bool = False,
 ):
     """
-    Create a sequence of the events associated with one patient in a chronological order
+    Create a sequence of the events associated with one patient in a chronological order.
 
     :param patient_events:
     :param visit_occurrence:
@@ -962,7 +962,7 @@ def build_ancestry_table_for(spark, concept_ids):
     SELECT
         cr.concept_id_1 AS ancestor_concept_id,
         cr.concept_id_2 AS descendant_concept_id,
-        1 AS distance 
+        1 AS distance
     FROM global_temp.concept_relationship AS cr
     WHERE cr.concept_id_1 in ({concept_ids}) AND cr.relationship_id = 'Subsumes'
     """
@@ -985,7 +985,7 @@ def build_ancestry_table_for(spark, concept_ids):
         *
     FROM global_temp.ancestry_table
 
-    UNION 
+    UNION
 
     SELECT
         *
@@ -1007,7 +1007,7 @@ def build_ancestry_table_for(spark, concept_ids):
 
     ancestry_table = spark.sql(
         """
-    SELECT 
+    SELECT
         *
     FROM global_temp.ancestry_table
     """
@@ -1024,7 +1024,8 @@ def build_ancestry_table_for(spark, concept_ids):
 
 def get_descendant_concept_ids(spark, concept_ids):
     """
-    Query concept_ancestor table to get all descendant_concept_ids for the given list of concept_ids
+    Query concept_ancestor table to get all descendant_concept_ids for the given list of concept_ids.
+
     :param spark:
     :param concept_ids:
     :return:
@@ -1034,7 +1035,7 @@ def get_descendant_concept_ids(spark, concept_ids):
         SELECT DISTINCT
             c.*
         FROM global_temp.concept_ancestor AS ca
-        JOIN global_temp.concept AS c 
+        JOIN global_temp.concept AS c
             ON ca.descendant_concept_id = c.concept_id
         WHERE ca.ancestor_concept_id IN ({concept_ids})
     """.format(
@@ -1050,7 +1051,7 @@ def get_standard_concept_ids(spark, concept_ids):
             SELECT DISTINCT
                 c.*
             FROM global_temp.concept_relationship AS cr
-            JOIN global_temp.concept AS c 
+            JOIN global_temp.concept AS c
                 ON ca.concept_id_2 = c.concept_id AND cr.relationship_id = 'Maps to'
             WHERE ca.concept_id_1 IN ({concept_ids})
         """.format(
@@ -1074,7 +1075,8 @@ def create_hierarchical_sequence_data(
     allow_measurement_only=False,
 ):
     """
-    This creates a hierarchical data frame for the hierarchical bert model
+    This creates a hierarchical data frame for the hierarchical bert model.
+
     :param person:
     :param visit_occurrence:
     :param patient_events:
@@ -1319,7 +1321,7 @@ def create_hierarchical_sequence_data(
 
 def create_visit_person_join(person, visit_occurrence, include_incomplete_visit=True):
     """
-    Create a new spark data frame based on person and visit_occurrence
+    Create a new spark data frame based on person and visit_occurrence.
 
     :param person:
     :param visit_occurrence:
@@ -1435,7 +1437,9 @@ def process_measurement(
     spark, measurement, required_measurement, output_folder: str = None
 ):
     """
-    Remove the measurement values that are outside the 0.01-0.99 quantiles. And scale the the
+    Remove the measurement values that are outside the 0.01-0.99 quantiles.
+
+    And scale the the
     measurement value by substracting the mean and dividing by the standard deivation :param
 
     spark: :param
@@ -1476,7 +1480,7 @@ def process_measurement(
             (m.value_as_number - s.value_mean) / value_stddev AS concept_value
         FROM measurement AS m
         JOIN measurement_unit_stats AS s
-            ON s.measurement_concept_id = m.measurement_concept_id 
+            ON s.measurement_concept_id = m.measurement_concept_id
                 AND s.unit_concept_id = m.unit_concept_id
         WHERE m.visit_occurrence_id IS NOT NULL
             AND m.value_as_number IS NOT NULL
@@ -1504,7 +1508,7 @@ def process_measurement(
         WHERE EXISTS (
             SELECT
                 1
-            FROM required_measurement AS r 
+            FROM required_measurement AS r
             WHERE r.measurement_concept_id = m.measurement_concept_id
             AND r.is_numeric = false
         )
@@ -1526,7 +1530,7 @@ def process_measurement(
 
 def get_mlm_skip_domains(spark, input_folder, mlm_skip_table_list):
     """
-    Translate the domain_table_name to the domain name
+    Translate the domain_table_name to the domain name.
 
     :param spark:
     :param input_folder:

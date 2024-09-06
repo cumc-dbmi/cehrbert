@@ -1,5 +1,6 @@
 """
-This module generates a qualified concept list by processing patient event data across various
+This module generates a qualified concept list by processing patient event data across various.
+
 domain tables (e.g., condition_occurrence, procedure_occurrence, drug_exposure) and applying a
 patient frequency filter to retain concepts linked to a minimum number of patients.
 
@@ -21,9 +22,9 @@ import os
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 
-from ..utils.spark_utils import preprocess_domain_table, join_domain_tables
-from ..const.common import MEASUREMENT
 from ..config.output_names import QUALIFIED_CONCEPT_LIST_PATH
+from ..const.common import MEASUREMENT
+from ..utils.spark_utils import join_domain_tables, preprocess_domain_table
 
 DOMAIN_TABLE_LIST = ["condition_occurrence", "procedure_occurrence", "drug_exposure"]
 
@@ -32,7 +33,8 @@ def main(
     input_folder, output_folder, min_num_of_patients, with_drug_rollup: bool = True
 ):
     """
-    Main function to generate a qualified concept list based on patient event data from multiple
+    Main function to generate a qualified concept list based on patient event data from multiple.
+
     domain tables.
 
     Args:

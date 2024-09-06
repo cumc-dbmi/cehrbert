@@ -1,32 +1,30 @@
-import os
-import re
 import collections
 import functools
-
-from typing import Dict, List, Optional, Union, Tuple, Iterable
+import os
+import re
 from datetime import datetime
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import meds_reader
 import numpy as np
 import pandas as pd
+from datasets import Dataset, DatasetDict, Split
 
-from ...runners.hf_runner_argument_dataclass import (
-    DataTrainingArguments,
-    MedsToCehrBertConversionType,
+from ...data_generators.hf_data_generator.hf_dataset import (
+    apply_cehrbert_dataset_mapping,
 )
 from ...data_generators.hf_data_generator.hf_dataset_mapping import (
-    birth_codes,
     MedToCehrBertDatasetMapping,
+    birth_codes,
 )
 from ...data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules.meds_to_cehrbert_base import (
     MedsToCehrBertConversion,
 )
-from ...data_generators.hf_data_generator.hf_dataset import (
-    apply_cehrbert_dataset_mapping,
+from ...med_extension.schema_extension import CehrBertPatient, Event, Visit
+from ...runners.hf_runner_argument_dataclass import (
+    DataTrainingArguments,
+    MedsToCehrBertConversionType,
 )
-from ...med_extension.schema_extension import CehrBertPatient, Visit, Event
-
-from datasets import Dataset, DatasetDict, Split
 
 UNKNOWN_VALUE = "Unknown"
 DEFAULT_ED_CONCEPT_ID = "9203"
@@ -90,9 +88,7 @@ class PatientBlock:
             self.visit_type = DEFAULT_OUTPATIENT_CONCEPT_ID
 
     def _has_ed_admission(self) -> bool:
-        """
-        Make this configurable in the future
-        """
+        """Make this configurable in the future."""
         for event in self.events:
             for matching_rule in self.conversion.get_ed_admission_matching_rules():
                 if re.match(matching_rule, event.code):

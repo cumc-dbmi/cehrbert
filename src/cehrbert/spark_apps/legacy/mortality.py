@@ -5,9 +5,9 @@ from ..cohorts.spark_app_base import LastVisitCohortBuilderBase
 from ..spark_parse_args import create_spark_args
 
 QUALIFIED_DEATH_DATE_QUERY = """
-WITH max_death_date_cte AS 
+WITH max_death_date_cte AS
 (
-    SELECT 
+    SELECT
         person_id,
         MAX(death_date) AS death_date
     FROM global_temp.death
@@ -34,7 +34,7 @@ COHORT_QUERY_TEMPLATE = """
 WITH last_visit_cte AS (
     SELECT
         v.*,
-        COUNT(CASE WHEN DATE(v.visit_start_date) >= DATE_SUB(index_date, {observation_period}) 
+        COUNT(CASE WHEN DATE(v.visit_start_date) >= DATE_SUB(index_date, {observation_period})
             AND DATE(v.visit_start_date) < index_date
             THEN 1 ELSE NULL END) OVER (PARTITION BY v.person_id) AS num_of_visits
     FROM
@@ -42,13 +42,13 @@ WITH last_visit_cte AS (
         SELECT DISTINCT
             v.person_id,
             v.visit_start_date,
-            FIRST(v.visit_occurrence_id) OVER(PARTITION BY v.person_id 
+            FIRST(v.visit_occurrence_id) OVER(PARTITION BY v.person_id
                 ORDER BY DATE(v.visit_start_date) DESC) AS visit_occurrence_id,
-            FIRST(DATE(v.visit_start_date)) OVER(PARTITION BY v.person_id 
+            FIRST(DATE(v.visit_start_date)) OVER(PARTITION BY v.person_id
                 ORDER BY DATE(v.visit_start_date) DESC) AS index_date,
-            FIRST(v.discharge_to_concept_id) OVER(PARTITION BY v.person_id 
+            FIRST(v.discharge_to_concept_id) OVER(PARTITION BY v.person_id
                 ORDER BY DATE(v.visit_start_date) DESC) AS discharge_to_concept_id,
-            FIRST(DATE(v.visit_start_date)) OVER(PARTITION BY v.person_id 
+            FIRST(DATE(v.visit_start_date)) OVER(PARTITION BY v.person_id
                 ORDER BY DATE(v.visit_start_date)) AS earliest_visit_start_date
         FROM global_temp.visit_occurrence AS v
         -- Need to make sure the there is enough observation for the observation window.
@@ -116,7 +116,8 @@ class MortalityCohortBuilder(LastVisitCohortBuilderBase):
         self, incident_cases: DataFrame, control_cases: DataFrame
     ):
         """
-        Do not match for control and simply what's in the control cases
+        Do not match for control and simply what's in the control cases.
+
         :param incident_cases:
         :param control_cases:
         :return:

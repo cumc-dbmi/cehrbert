@@ -1,22 +1,23 @@
 import math
 from typing import Optional
+
 import torch
 from torch import nn
 from torch.nn.utils.rnn import pack_padded_sequence
-
-from transformers.models.bert.modeling_bert import (
-    BertEncoder,
-    BertPooler,
-    BertOnlyMLMHead,
-)
 from transformers import PreTrainedModel
 from transformers.activations import gelu_new
+from transformers.models.bert.modeling_bert import (
+    BertEncoder,
+    BertOnlyMLMHead,
+    BertPooler,
+)
+from transformers.utils import logging
+
 from ...models.hf_models.config import CehrBertConfig
 from ...models.hf_models.hf_modeling_outputs import (
     CehrBertModelOutput,
     CehrBertSequenceClassifierOutput,
 )
-from transformers.utils import logging
 
 logger = logging.get_logger("transformers")
 LARGE_POSITION_VALUE = 1000000
@@ -193,7 +194,8 @@ class CehrBertEmbeddings(nn.Module):
 
 class CehrBertPreTrainedModel(PreTrainedModel):
     """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained.
+
     models.
     """
 
@@ -204,7 +206,7 @@ class CehrBertPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["BertLayer"]
 
     def _init_weights(self, module):
-        """Initialize the weights"""
+        """Initialize the weights."""
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -222,7 +224,8 @@ class CehrBertPreTrainedModel(PreTrainedModel):
 
 class CehrBert(CehrBertPreTrainedModel):
     """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained.
+
     models.
     """
 

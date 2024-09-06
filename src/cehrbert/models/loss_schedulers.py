@@ -2,8 +2,8 @@ import math
 
 
 class CosineLRSchedule:
-    """
-    Cosine annealing with warm restarts, described in paper
+    """Cosine annealing with warm restarts, described in paper.
+
     "SGDR: stochastic gradient descent with warm restarts"
     https://arxiv.org/abs/1608.03983
 

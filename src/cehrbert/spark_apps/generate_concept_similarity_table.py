@@ -1,4 +1,5 @@
-"""This module provides functionality to extract patient event data from domain tables,
+"""This module provides functionality to extract patient event data from domain tables,.
+
 compute information content and semantic similarity for concepts, and calculate concept
 similarity scores.
 
@@ -7,22 +8,24 @@ Compute the information content for concepts based on frequency.
 compute_information_content_similarity: Compute the similarity between concepts based on
 information content. compute_semantic_similarity: Compute the semantic similarity between concept
 pairs. main: Main function to orchestrate the extraction, processing, and saving of concept
-similarity data."""
+similarity data.
+"""
 
-import os
 import datetime
 import logging
+import os
 from typing import List
-from pyspark.sql import SparkSession, DataFrame
+
+from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
+from ..config.output_names import CONCEPT_SIMILARITY_PATH, QUALIFIED_CONCEPT_LIST_PATH
+from ..const.common import CONCEPT, CONCEPT_ANCESTOR
 from ..utils.spark_utils import (
-    preprocess_domain_table,
     join_domain_tables,
+    preprocess_domain_table,
     validate_table_names,
 )
-from ..config.output_names import QUALIFIED_CONCEPT_LIST_PATH, CONCEPT_SIMILARITY_PATH
-from ..const.common import CONCEPT, CONCEPT_ANCESTOR
 
 
 def extract_data(spark: SparkSession, input_folder: str, domain_table_list: List[str]):
@@ -51,7 +54,7 @@ def extract_data(spark: SparkSession, input_folder: str, domain_table_list: List
 
 def compute_information_content(patient_event: DataFrame, concept_ancestor: DataFrame):
     """
-    Calculate the information content using the frequency of each concept and the graph
+    Calculate the information content using the frequency of each concept and the graph.
 
     :param patient_event:
     :param concept_ancestor:
@@ -266,11 +269,11 @@ def compute_semantic_similarity(spark, patient_event, concept, concept_ancestor)
     concept_pair = spark.sql(
         """
         WITH concept_pair AS (
-            SELECT 
+            SELECT
                 c1.standard_concept_id AS concept_id_1,
                 c2.standard_concept_id AS concept_id_2,
                 c1.domain_id
-            FROM required_concept AS c1 
+            FROM required_concept AS c1
             JOIN required_concept AS c2
                 ON c1.domain_id = c2.domain_id
             WHERE c1.standard_concept_id <> c2.standard_concept_id

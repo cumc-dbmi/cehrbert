@@ -1,7 +1,7 @@
-from ..spark_parse_args import create_spark_args
-from ..cohorts import type_two_diabietes as t2dm
 from ..cohorts import heart_failure as hf
+from ..cohorts import type_two_diabietes as t2dm
 from ..cohorts.spark_app_base import create_prediction_cohort
+from ..spark_parse_args import create_spark_args
 
 DOMAIN_TABLE_LIST = [
     "condition_occurrence",

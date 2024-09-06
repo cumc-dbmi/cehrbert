@@ -5,6 +5,7 @@ from tensorflow.keras.utils import get_custom_objects
 class TransformerCoordinateEmbedding(tf.keras.layers.Layer):
     """
     Represents trainable positional embeddings for the Transformer model:
+
     1. word position embeddings - one for each position in the sequence.
     2. depth embeddings - one for each block of the model
     Calling the layer with the Transformer's input will return a new input

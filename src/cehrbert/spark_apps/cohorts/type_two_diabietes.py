@@ -1,4 +1,4 @@
-from ..cohorts.query_builder import QueryBuilder, QuerySpec, AncestorTableSpec
+from ..cohorts.query_builder import AncestorTableSpec, QueryBuilder, QuerySpec
 
 COHORT_QUERY_TEMPLATE = """
 WITH person_ids_to_include_drug AS
@@ -9,9 +9,9 @@ WITH person_ids_to_include_drug AS
     JOIN global_temp.{drug_inclusion_concepts} AS e
         ON d.drug_concept_id = e.concept_id
 ),
-person_ids_to_exclude_observation AS 
+person_ids_to_exclude_observation AS
 (
- 
+
     SELECT DISTINCT
         o.person_id,
         o.observation_date
@@ -19,7 +19,7 @@ person_ids_to_exclude_observation AS
     JOIN global_temp.{observation_exclusion_concepts} AS oec
         ON o.observation_concept_id = oec.concept_id
 )
-SELECT 
+SELECT
     distinct
     c.person_id,
     c.index_date,
@@ -28,9 +28,9 @@ FROM
 (
     SELECT DISTINCT
         vo.person_id,
-        FIRST(DATE(vo.visit_start_date)) OVER (PARTITION BY co.person_id 
+        FIRST(DATE(vo.visit_start_date)) OVER (PARTITION BY co.person_id
             ORDER BY DATE(vo.visit_start_date), vo.visit_occurrence_id) AS index_date,
-        FIRST(vo.visit_occurrence_id) OVER (PARTITION BY co.person_id 
+        FIRST(vo.visit_occurrence_id) OVER (PARTITION BY co.person_id
             ORDER BY DATE(vo.visit_start_date), vo.visit_occurrence_id) AS visit_occurrence_id
     FROM global_temp.condition_occurrence AS co
     JOIN global_temp.{diabetes_inclusion_concepts} AS ie

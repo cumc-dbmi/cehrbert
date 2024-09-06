@@ -1,10 +1,11 @@
-import unittest
-import tempfile
-import shutil
 import os
+import shutil
+import tempfile
+import unittest
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 from pathlib import Path
+
 from cehrbert.trainers.train_cehr_bert import VanillaBertTrainer
 
 
@@ -14,11 +15,13 @@ class VanillaBertTrainerIntegrationTest(unittest.TestCase):
         root_folder = Path(os.path.abspath(__file__)).parent.parent.parent.parent
         # Create a temporary directory to store model and tokenizer
         self.temp_dir = tempfile.mkdtemp()
-        self.model_folder_path = os.path.join(self.temp_dir, 'model')
+        self.model_folder_path = os.path.join(self.temp_dir, "model")
         Path(self.model_folder_path).mkdir(parents=True, exist_ok=True)
 
-        self.tf_board_log_path = os.path.join(self.model_folder_path, 'logs')
-        self.training_data_parquet_path = os.path.join(root_folder, 'sample_data/pretrain/patient_sequence.parquet')
+        self.tf_board_log_path = os.path.join(self.model_folder_path, "logs")
+        self.training_data_parquet_path = os.path.join(
+            root_folder, "sample_data/pretrain/patient_sequence.parquet"
+        )
 
         self.embedding_size = 16
         self.context_window_size = 10
@@ -48,7 +51,7 @@ class VanillaBertTrainerIntegrationTest(unittest.TestCase):
             batch_size=self.batch_size,
             epochs=self.epochs,
             learning_rate=self.learning_rate,
-            tf_board_log_path=self.tf_board_log_path
+            tf_board_log_path=self.tf_board_log_path,
         )
 
     def tearDown(self):
@@ -60,5 +63,5 @@ class VanillaBertTrainerIntegrationTest(unittest.TestCase):
         self.trainer.train_model()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

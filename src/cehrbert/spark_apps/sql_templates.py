@@ -22,7 +22,7 @@ WITH measurement_percentile AS
 
 SELECT
     m.measurement_concept_id,
-    m.unit_concept_id, 
+    m.unit_concept_id,
     MEAN(m.value_as_number) AS value_mean,
     STDDEV(m.value_as_number) AS value_stddev,
     COUNT(*) AS measurement_freq,
@@ -32,10 +32,10 @@ FROM measurement AS m
 JOIN measurement_percentile AS mp
     ON m.measurement_concept_id = mp.measurement_concept_id
         AND m.unit_concept_id = mp.unit_concept_id
-WHERE 
+WHERE
     m.value_as_number BETWEEN mp.lower_bound AND mp.upper_bound
-    AND m.visit_occurrence_id IS NOT NULL 
-    AND m.unit_concept_id <> 0 
+    AND m.visit_occurrence_id IS NOT NULL
+    AND m.unit_concept_id <> 0
     AND m.measurement_concept_id <> 0
 GROUP BY m.measurement_concept_id, m.unit_concept_id
 HAVING COUNT(*) >= 100

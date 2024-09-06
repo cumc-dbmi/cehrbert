@@ -1,5 +1,6 @@
 """
 This module generates hierarchical BERT training data based on domain tables from OMOP EHR data.
+
 It processes patient event data, joins multiple domain tables, filters concepts based on a
 minimum number of patients, and creates hierarchical sequence data for BERT training.
 
@@ -20,28 +21,28 @@ Command-line Arguments:
     - include_incomplete_visit: Whether to include incomplete visit records in the training data.
 """
 
-import os
-import logging
 import datetime
+import logging
+import os
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 
-from ..config.output_names import PARQUET_DATA_PATH
+from ..config.output_names import PARQUET_DATA_PATH, QUALIFIED_CONCEPT_LIST_PATH
+from ..const.common import (
+    MEASUREMENT,
+    OBSERVATION_PERIOD,
+    PERSON,
+    REQUIRED_MEASUREMENT,
+    VISIT_OCCURRENCE,
+)
 from ..utils.spark_utils import (
+    create_hierarchical_sequence_data,
+    join_domain_tables,
     preprocess_domain_table,
     process_measurement,
-    join_domain_tables,
+    validate_table_names,
 )
-from ..const.common import (
-    OBSERVATION_PERIOD,
-    VISIT_OCCURRENCE,
-    PERSON,
-    MEASUREMENT,
-    REQUIRED_MEASUREMENT,
-)
-from ..config.output_names import QUALIFIED_CONCEPT_LIST_PATH
-from ..utils.spark_utils import validate_table_names, create_hierarchical_sequence_data
 
 
 def main(

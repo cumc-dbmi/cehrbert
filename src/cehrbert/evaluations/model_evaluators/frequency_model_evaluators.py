@@ -2,7 +2,6 @@ from abc import ABC
 from itertools import chain
 
 import numpy as np
-
 from scipy.sparse import csr_matrix, hstack
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import (
@@ -11,12 +10,12 @@ from sklearn.model_selection import (
     StratifiedShuffleSplit,
 )
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import normalize, StandardScaler
+from sklearn.preprocessing import StandardScaler, normalize
 from tensorflow.keras.preprocessing.text import Tokenizer
 from xgboost import XGBClassifier
 
-from ..model_evaluators.model_evaluators import AbstractModelEvaluator
 from ...utils.model_utils import compute_binary_metrics
+from ..model_evaluators.model_evaluators import AbstractModelEvaluator
 
 
 class BaselineModelEvaluator(AbstractModelEvaluator, ABC):

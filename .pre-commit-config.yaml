@@ -2,6 +2,9 @@
 # This file should be updated quarterly by a developer running `pre-commit autoupdate`
 # with changes added and committed.
 # This will run all defined formatters prior to adding a commit.
+default_language_version:
+  python: python3  # or python3.10 to set a specific default version
+
 repos:
   - repo: local
     hooks:
@@ -37,7 +40,6 @@ repos:
         # https://pre-commit.com/#top_level-default_language_version
         # Pre-commit hook info from: https://black.readthedocs.io/en/stable/integrations/source_version_control.html
         # Editor integration here:  https://black.readthedocs.io/en/stable/integrations/editors.html
-        language_version: python3.10
 
   - repo: https://github.com/adamchainz/blacken-docs
     rev: "v1.12.1"  # replace with latest tag on GitHub
@@ -79,7 +81,7 @@ repos:
     rev: 5.13.2
     hooks:
       - id: isort
-        args: ["--profile", "black"]
+        args: [ "--profile", "black" ]
 
   - repo: https://github.com/PyCQA/bandit
     rev: '1.7.7'

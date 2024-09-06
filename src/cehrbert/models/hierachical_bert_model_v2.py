@@ -1,4 +1,12 @@
-from .layers.custom_layers import *
+from .layers.custom_layers import (
+    ConceptValueTransformationLayer,
+    Encoder,
+    ReusableEmbedding,
+    SimpleDecoderLayer,
+    TemporalTransformationLayer,
+    TiedOutputEmbedding,
+    tf,
+)
 
 
 def transformer_hierarchical_bert_model(
@@ -19,7 +27,7 @@ def transformer_hierarchical_bert_model(
     visit_vocab_size: int = None,
 ):
     """
-    Create a hierarchical bert model
+    Create a hierarchical bert model.
 
     :param num_of_visits:
     :param num_of_concepts:
@@ -413,8 +421,8 @@ def transformer_hierarchical_bert_model(
 
 def create_att_concept_mask(num_of_concepts, num_of_visits, visit_mask):
     """
-
     :param num_of_concepts:
+
     :param num_of_visits:
     :param visit_mask:
     :return:

@@ -1,19 +1,44 @@
+import copy
 import inspect
 import logging
-import copy
 from collections import ChainMap
 from itertools import chain
 from typing import Set
 
 from pandas import DataFrame
-from .learning_objective import *
-from .tokenizer import ConceptTokenizer
+
 from .data_classes import RecordStatus, RowSlicer
+from .learning_objective import (
+    ABC,
+    BertFineTuningLearningObjective,
+    DemographicsLearningObjective,
+    HierarchicalArtificialTokenPredictionLearningObjective,
+    HierarchicalMaskedLanguageModelLearningObjective,
+    HierarchicalProlongedLengthStayLearningObjective,
+    HierarchicalReadmissionLearningObjective,
+    HierarchicalVisitTypePredictionLearningObjective,
+    LearningObjective,
+    List,
+    MaskedLanguageModelLearningObjective,
+    PredictNextValueLearningObjective,
+    ProlongedLengthStayLearningObjective,
+    RandomSampleCache,
+    SequenceGenerationLearningObjective,
+    TimeAttentionLearningObjective,
+    VisitPredictionLearningObjective,
+    abstractmethod,
+    islice,
+    np,
+    pd,
+    random,
+    random_slice_gpt_sequence,
+)
+from .tokenizer import ConceptTokenizer
 
 
 def create_indexes_by_time_window(dates, cursor, max_seq_len, time_window_size):
     """
-    Extract the start_index and end_index used for slicing the sequences e.g. concept_ids and dates
+    Extract the start_index and end_index used for slicing the sequences e.g. concept_ids and dates.
 
     :param dates: a list of time stamps associated with the context
     :param cursor: the current index used as the center for slicing the sequence
@@ -42,7 +67,8 @@ def create_indexes_by_time_window(dates, cursor, max_seq_len, time_window_size):
 
 def get_required_params(clazz: LearningObjective):
     """
-    Get required parameters for the learning objective class
+    Get required parameters for the learning objective class.
+
     :param clazz:
     :return:
     """
@@ -97,20 +123,22 @@ class AbstractDataGeneratorBase(ABC):
     @abstractmethod
     def _get_learning_objective_classes(self) -> List[LearningObjective]:
         """
-        Initialize a list of LearningObjectives used for generating the input and and output
+        Initialize a list of LearningObjectives used for generating the input and and output.
+
         :return:
         """
-        pass
 
     def _initialize_learning_objectives(self, **kwargs) -> List[LearningObjective]:
         """
-        Initialize a list of LearningObjectives used for generating the input and and output
+        Initialize a list of LearningObjectives used for generating the input and and output.
+
         :return:
         """
 
         def _initialize(learning_objective) -> LearningObjective:
             """
-            Initialize one LearningObjective using the provided keyword arguments
+            Initialize one LearningObjective using the provided keyword arguments.
+
             from the parent method
 
             :param learning_objective:
@@ -129,7 +157,8 @@ class AbstractDataGeneratorBase(ABC):
 
     def _validate_data_frame_columns(self):
         """
-        Validate if the training data has all required columns
+        Validate if the training data has all required columns.
+
         :return:
         """
         dataframe_columns = self._training_data.columns.tolist()
@@ -142,18 +171,19 @@ class AbstractDataGeneratorBase(ABC):
     @abstractmethod
     def _clean_dataframe(self):
         """
-        Clean the input data (_training_data) e.g. remove rows whose sequence length is less than
+        Clean the input data (_training_data) e.g. remove rows whose sequence length is less than.
+
         _minimum_num_of_concepts.
 
         Overload this method in the subclasses to overwrite the default behavior
 
         :return:
         """
-        pass
 
     def create_batch_generator(self):
         """
-        Create the batch generator for tf.dataset.from_generator to use
+        Create the batch generator for tf.dataset.from_generator to use.
+
         :return:
         """
         while True:
@@ -181,7 +211,7 @@ class AbstractDataGeneratorBase(ABC):
 
     def set_learning_objectives(self, learning_objectives: List[LearningObjective]):
         """
-        Overwrite the default learning objectives
+        Overwrite the default learning objectives.
 
         :param learning_objectives:
         :return:
@@ -199,6 +229,7 @@ class AbstractDataGeneratorBase(ABC):
     def get_steps_per_epoch(self):
         """
         Calculate the number of steps required for one epoch to complete.
+
         Floor division + 1 if there is any modulo value
         :return:
         """
@@ -213,7 +244,8 @@ class AbstractDataGeneratorBase(ABC):
 
     def _get_required_columns(self) -> Set[str]:
         """
-        Combine lists of required columns from multiple learning objectives into a unique set of
+        Combine lists of required columns from multiple learning objectives into a unique set of.
+
         required columns
 
         :return:
@@ -230,7 +262,8 @@ class AbstractDataGeneratorBase(ABC):
 
     def get_tf_dataset_schema(self):
         """
-        Combine the input and output tensorflow data schema from multiple learning objectives
+        Combine the input and output tensorflow data schema from multiple learning objectives.
+
         :return:
         """
         input_dict_schemas = []
@@ -269,7 +302,8 @@ class BertDataGenerator(AbstractDataGeneratorBase):
 
     def _create_iterator(self):
         """
-        Create an iterator that will iterate through all training data
+        Create an iterator that will iterate through all training data.
+
         :return:
         """
         for row in self._training_data.sample(frac=1).itertuples():
@@ -396,7 +430,8 @@ class GptDataGenerator(BertDataGenerator):
 
     def _create_iterator(self):
         """
-        Create an iterator that will iterate through all training data
+        Create an iterator that will iterate through all training data.
+
         :return:
         """
         if self._efficient_training:
@@ -541,7 +576,8 @@ class HierarchicalBertDataGenerator(AbstractDataGeneratorBase):
 
     def _clean_dataframe(self):
         """
-        Remove the patients that don't have enough concepts to qualify
+        Remove the patients that don't have enough concepts to qualify.
+
         :return:
         """
         min_num_of_concepts = max(
@@ -561,7 +597,8 @@ class HierarchicalBertDataGenerator(AbstractDataGeneratorBase):
 
     def _create_iterator(self):
         """
-        Create an iterator that will iterate through all training example
+        Create an iterator that will iterate through all training example.
+
         :return:
         """
         for row in self._training_data.itertuples():
@@ -647,7 +684,8 @@ class TimeAttentionDataGenerator(AbstractDataGeneratorBase):
 
     def _create_iterator(self):
         """
-        Create an iterator that will iterate forever
+        Create an iterator that will iterate forever.
+
         :return:
         """
         while True:

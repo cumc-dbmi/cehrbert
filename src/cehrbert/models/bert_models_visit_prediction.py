@@ -1,14 +1,13 @@
 import tensorflow as tf
 
 from ..keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
-
 from .layers.custom_layers import (
-    VisitEmbeddingLayer,
-    Encoder,
+    ConceptValueTransformationLayer,
     DecoderLayer,
+    Encoder,
     PositionalEncodingLayer,
     TimeEmbeddingLayer,
-    ConceptValueTransformationLayer,
+    VisitEmbeddingLayer,
 )
 
 
@@ -27,7 +26,8 @@ def transformer_bert_model_visit_prediction(
     time_embeddings_size: int = 16,
 ):
     """
-    Builds a BERT-based model (Bidirectional Encoder Representations
+    Builds a BERT-based model (Bidirectional Encoder Representations.
+
     from Transformers) following paper "BERT: Pre-training of Deep
     Bidirectional Transformers for Language Understanding"
     (https://arxiv.org/abs/1810.04805)

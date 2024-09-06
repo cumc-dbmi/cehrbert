@@ -152,7 +152,7 @@ def create_parse_args_gpt():
     from numpy import infty
 
     def valid_mask_rate(mask_rate: str) -> float:
-        """Custom argparse type for validating the mask rate given from the command line"""
+        """Custom argparse type for validating the mask rate given from the command line."""
         try:
             rate = float(mask_rate)
             if rate < 0:

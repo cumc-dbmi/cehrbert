@@ -1,15 +1,15 @@
 from tensorflow.keras.utils import pad_sequences
 
 from ...data_generators.learning_objective import post_pad_pre_truncate
-from ..model_evaluators.model_evaluators import get_metrics
-from ..model_evaluators.sequence_model_evaluators import SequenceModelEvaluator
 from ...models.evaluation_models import (
     create_hierarchical_bert_bi_lstm_model,
     create_hierarchical_bert_bi_lstm_model_with_model,
     create_hierarchical_bert_model_with_pooling,
 )
 from ...models.hierachical_bert_model_v2 import transformer_hierarchical_bert_model
-from ...utils.model_utils import *
+from ...utils.model_utils import convert_to_list_of_lists, np, pickle, tf
+from ..model_evaluators.model_evaluators import get_metrics
+from ..model_evaluators.sequence_model_evaluators import SequenceModelEvaluator
 
 
 class HierarchicalBertEvaluator(SequenceModelEvaluator):

@@ -21,7 +21,7 @@ FROM
 
     UNION
 
-    SELECT 
+    SELECT
         co.person_id,
         FIRST(visit_start_date) OVER (PARTITION BY v.person_id ORDER BY visit_start_date, v.visit_occurrence_id) AS index_date,
         FIRST(v.visit_occurrence_id) OVER (PARTITION BY v.person_id ORDER BY visit_start_date, v.visit_occurrence_id) AS visit_occurrence_id

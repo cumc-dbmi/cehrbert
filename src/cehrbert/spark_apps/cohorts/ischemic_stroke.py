@@ -1,13 +1,13 @@
-from ..cohorts.query_builder import QueryBuilder, QuerySpec, AncestorTableSpec
+from ..cohorts.query_builder import AncestorTableSpec, QueryBuilder, QuerySpec
 
 COHORT_QUERY_TEMPLATE = """
 SELECT
     co.person_id,
-    FIRST(DATE(vo.visit_start_date)) OVER (PARTITION BY co.person_id 
+    FIRST(DATE(vo.visit_start_date)) OVER (PARTITION BY co.person_id
         ORDER BY DATE(vo.visit_start_date), vo.visit_occurrence_id) AS index_date,
-    FIRST(vo.visit_occurrence_id) OVER (PARTITION BY co.person_id 
+    FIRST(vo.visit_occurrence_id) OVER (PARTITION BY co.person_id
         ORDER BY DATE(vo.visit_start_date), vo.visit_occurrence_id) AS visit_occurrence_id
-FROM global_temp.condition_occurrence AS co 
+FROM global_temp.condition_occurrence AS co
 JOIN global_temp.visit_occurrence AS vo
     ON co.visit_occurrence_id = vo.visit_occurrence_id
 JOIN global_temp.{ischemic_stroke_concepts} AS c

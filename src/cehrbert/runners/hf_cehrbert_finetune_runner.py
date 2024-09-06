@@ -1,40 +1,37 @@
-import os
 import json
-
+import os
 from typing import Tuple
 
 import numpy as np
 import pandas as pd
-from sklearn.metrics import accuracy_score, roc_auc_score, precision_recall_curve, auc
-from scipy.special import expit as sigmoid
-
-from datasets import load_from_disk, DatasetDict
-from transformers.utils import logging
-from transformers import Trainer, set_seed
-from transformers import EarlyStoppingCallback
+from datasets import DatasetDict, load_from_disk
 from peft import LoraConfig, get_peft_model
+from scipy.special import expit as sigmoid
+from sklearn.metrics import accuracy_score, auc, precision_recall_curve, roc_auc_score
+from transformers import EarlyStoppingCallback, Trainer, set_seed
+from transformers.utils import logging
 
-from ..data_generators.hf_data_generator.meds_utils import (
-    create_dataset_from_meds_reader,
-)
-from ..data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
 from ..data_generators.hf_data_generator.hf_dataset import (
     create_cehrbert_finetuning_dataset,
 )
-from ..models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
+from ..data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
+from ..data_generators.hf_data_generator.meds_utils import (
+    create_dataset_from_meds_reader,
+)
 from ..models.hf_models.config import CehrBertConfig
 from ..models.hf_models.hf_cehrbert import (
-    CehrBertPreTrainedModel,
     CehrBertForClassification,
     CehrBertLstmForClassification,
+    CehrBertPreTrainedModel,
 )
+from ..models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from .hf_runner_argument_dataclass import FineTuneModelType
 from .runner_util import (
-    get_last_hf_checkpoint,
-    load_parquet_as_dataset,
     generate_prepared_ds_path,
-    parse_runner_args,
+    get_last_hf_checkpoint,
     get_meds_extension_path,
+    load_parquet_as_dataset,
+    parse_runner_args,
 )
 
 LOG = logging.get_logger("transformers")
@@ -75,7 +72,7 @@ def load_pretrained_model_and_tokenizer(
     try:
         tokenizer_abspath = os.path.abspath(model_args.tokenizer_name_or_path)
         tokenizer = CehrBertTokenizer.from_pretrained(tokenizer_abspath)
-    except Exception as e:
+    except Exception:
         raise ValueError(
             f"Can not load the pretrained tokenizer from {model_args.tokenizer_name_or_path}"
         )

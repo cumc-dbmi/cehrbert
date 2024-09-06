@@ -1,5 +1,5 @@
-import configparser
 import argparse
+import configparser
 import os.path
 
 from pyspark.sql import SparkSession

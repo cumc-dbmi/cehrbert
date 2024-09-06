@@ -1,6 +1,7 @@
-from typing import TypedDict, List, Mapping, Any, Union, Optional
-from typing_extensions import NotRequired
 import datetime
+from typing import Any, List, Mapping, Optional, TypedDict, Union
+
+from typing_extensions import NotRequired
 
 Event = TypedDict(
     "Event",

@@ -1,6 +1,6 @@
+import logging
 from abc import ABC
 from typing import List, NamedTuple
-import logging
 
 ENTRY_COHORT = "entry_cohort"
 NEGATIVE_COHORT = "negative_cohort"
@@ -61,8 +61,8 @@ class QueryBuilder(ABC):
         ancestor_table_specs: List[AncestorTableSpec] = None,
     ):
         """
-
         :param cohort_name:
+
         :param query:
         :param dependency_queries:
         :param post_queries:
@@ -91,42 +91,48 @@ class QueryBuilder(ABC):
 
     def get_dependency_queries(self):
         """
-        Instantiate table dependencies in spark for
+        Instantiate table dependencies in spark for.
+
         :return:
         """
         return self._dependency_queries
 
     def get_entry_cohort_query(self):
         """
-        Queryspec for Instantiating the entry cohort in spark context
+        Queryspec for Instantiating the entry cohort in spark context.
+
         :return:
         """
         return self._entry_cohort_query
 
     def get_query(self):
         """
-        Create a query that can be executed by spark.sql
+        Create a query that can be executed by spark.sql.
+
         :return:
         """
         return self._query
 
     def get_negative_query(self):
         """
-        Return the negative query that can be executed by spark.sql
+        Return the negative query that can be executed by spark.sql.
+
         :return:
         """
         return self._negative_query
 
     def get_post_process_queries(self):
         """
-        Get a list of post process queries to process the cohort
+        Get a list of post process queries to process the cohort.
+
         :return:
         """
         return self._post_queries
 
     def get_dependency_list(self):
         """
-        Get a list of tables that are required for this cohort
+        Get a list of tables that are required for this cohort.
+
         :return:
         """
         return self._dependency_list
@@ -136,7 +142,8 @@ class QueryBuilder(ABC):
 
     def get_ancestor_table_specs(self):
         """
-        Create the descendant table for the provided ancestor_table_specs
+        Create the descendant table for the provided ancestor_table_specs.
+
         :return:
         """
         return self._ancestor_table_specs

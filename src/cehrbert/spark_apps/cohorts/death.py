@@ -5,20 +5,20 @@ from ..cohorts.query_builder import (
 )
 
 DEATH_COHORT_QUERY = """
-WITH max_death_date_cte AS 
+WITH max_death_date_cte AS
 (
-    SELECT 
+    SELECT
         person_id,
         MAX(death_date) AS death_date
     FROM global_temp.death
     GROUP BY person_id
 ),
-last_visit_start_date AS 
+last_visit_start_date AS
 (
     SELECT
         person_id,
         MAX(visit_start_date) AS last_visit_start_date
-    FROM global_temp.visit_occurrence 
+    FROM global_temp.visit_occurrence
     GROUP BY person_id
 )
 
