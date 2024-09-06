@@ -12,9 +12,8 @@ from cehrbert.data_generators.hf_data_generator.meds_utils import create_dataset
 from cehrbert.models.hf_models.config import CehrBertConfig
 from cehrbert.models.hf_models.hf_cehrbert import CehrBertForPreTraining
 from cehrbert.models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
-
-from .hf_runner_argument_dataclass import DataTrainingArguments, ModelArguments
-from .runner_util import (
+from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments, ModelArguments
+from cehrbert.runners.runner_util import (
     generate_prepared_ds_path,
     get_last_hf_checkpoint,
     get_meds_extension_path,
@@ -54,14 +53,13 @@ def load_and_create_tokenizer(
         tokenizer = load_and_create_tokenizer(data_args, model_args, dataset)
     """
     # Try to load the pretrained tokenizer
-    tokenizer_abspath = os.path.abspath(model_args.tokenizer_name_or_path)
     try:
-        tokenizer = CehrBertTokenizer.from_pretrained(tokenizer_abspath)
+        tokenizer = CehrBertTokenizer.from_pretrained(model_args.tokenizer_name_or_path)
     except (OSError, RuntimeError, FileNotFoundError, json.JSONDecodeError) as e:
         LOG.warning(
             "Failed to load the tokenizer from %s with the error "
             "\n%s\nTried to create the tokenizer, however the dataset is not provided.",
-            tokenizer_abspath,
+            model_args.tokenizer_name_or_path,
             e,
         )
         if dataset is None:
@@ -69,7 +67,7 @@ def load_and_create_tokenizer(
         tokenizer = CehrBertTokenizer.train_tokenizer(
             dataset, feature_names=["concept_ids"], concept_name_mapping={}, data_args=data_args
         )
-        tokenizer.save_pretrained(tokenizer_abspath)
+        tokenizer.save_pretrained(model_args.tokenizer_name_or_path)
 
     return tokenizer
 
@@ -95,8 +93,7 @@ def load_and_create_model(model_args: ModelArguments, tokenizer: CehrBertTokeniz
         model = load_and_create_model(model_args, tokenizer)
     """
     try:
-        model_abspath = os.path.abspath(model_args.model_name_or_path)
-        model_config = AutoConfig.from_pretrained(model_abspath)
+        model_config = AutoConfig.from_pretrained(model_args.model_name_or_path)
     except (OSError, ValueError, FileNotFoundError, json.JSONDecodeError) as e:
         LOG.warning(e)
         model_config = CehrBertConfig(
