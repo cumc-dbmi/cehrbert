@@ -25,7 +25,7 @@ days and 365 days, ATTs are in the form of **$M_n$** where n represents the mont
    concepts
    associated with the visit are subsumed by **VS** and **VE**.
 
-!["patient_representation"](images/tokenization_att_generation.png)
+!["patient_representation"](https://raw.githubusercontent.com/cumc-dbmi/cehr-bert/main/images/tokenization_att_generation.png)
 
 ## Model Architecture
 
@@ -36,7 +36,7 @@ connected layer. This temporal concept embedding becomes the input to BERT. We u
 Language Model as the primary learning objective and introduced an EHR specific secondary learning objective visit type
 prediction.
 
-!["cehr-bert architecture diagram"](images/cehr_bert_architecture.png)
+!["cehr-bert architecture diagram"](https://raw.githubusercontent.com/cumc-dbmi/cehr-bert/main/images/cehr_bert_architecture.png)
 
 ## Pre-requisite
 
