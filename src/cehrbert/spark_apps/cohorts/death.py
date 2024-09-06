@@ -1,8 +1,4 @@
-from ..cohorts.query_builder import (
-    QueryBuilder,
-    QuerySpec,
-    create_cohort_entry_query_spec,
-)
+from ..cohorts.query_builder import QueryBuilder, QuerySpec, create_cohort_entry_query_spec
 
 DEATH_COHORT_QUERY = """
 WITH max_death_date_cte AS
@@ -37,13 +33,9 @@ DEPENDENCY_LIST = ["person", "death", "visit_occurrence"]
 
 
 def query_builder():
-    query = QuerySpec(
-        table_name=DEFAULT_COHORT_NAME, query_template=DEATH_COHORT_QUERY, parameters={}
-    )
+    query = QuerySpec(table_name=DEFAULT_COHORT_NAME, query_template=DEATH_COHORT_QUERY, parameters={})
 
-    entry_cohort_query = create_cohort_entry_query_spec(
-        entry_query_template=DEATH_COHORT_QUERY, parameters={}
-    )
+    entry_cohort_query = create_cohort_entry_query_spec(entry_query_template=DEATH_COHORT_QUERY, parameters={})
 
     return QueryBuilder(
         cohort_name=DEFAULT_COHORT_NAME,

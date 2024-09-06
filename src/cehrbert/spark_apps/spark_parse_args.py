@@ -81,9 +81,7 @@ def create_spark_args():
         --use_age_group: Whether to represent age using age groups in patient sequences.
         --single_contribution: Whether patients should contribute only once to the training data.
     """
-    parser = argparse.ArgumentParser(
-        description="Arguments for spark applications for generating cohort definitions"
-    )
+    parser = argparse.ArgumentParser(description="Arguments for spark applications for generating cohort definitions")
     parser.add_argument(
         "-c",
         "--cohort_name",
@@ -259,23 +257,20 @@ def create_spark_args():
         "--is_new_patient_representation",
         dest="is_new_patient_representation",
         action="store_true",
-        help="Specify whether to generate the sequence of "
-        "EHR records using the new patient representation",
+        help="Specify whether to generate the sequence of " "EHR records using the new patient representation",
     )
     parser.add_argument(
         "--gpt_patient_sequence",
         dest="gpt_patient_sequence",
         action="store_true",
-        help="Specify whether to generate the GPT sequence of "
-        "EHR records using the new patient representation",
+        help="Specify whether to generate the GPT sequence of " "EHR records using the new patient representation",
     )
     parser.add_argument(
         "-ih",
         "--is_hierarchical_bert",
         dest="is_hierarchical_bert",
         action="store_true",
-        help="Specify whether to generate the sequence of "
-        "EHR records using the hierarchical patient representation",
+        help="Specify whether to generate the sequence of " "EHR records using the hierarchical patient representation",
     )
     parser.add_argument(
         "-cbs",
@@ -344,8 +339,7 @@ def create_spark_args():
         "--use_age_group",
         dest="use_age_group",
         action="store_true",
-        help="Indicate whether we should age group to represent the age at the first event in the "
-        "patient sequence",
+        help="Indicate whether we should age group to represent the age at the first event in the " "patient sequence",
     )
     parser.add_argument(
         "--single_contribution",

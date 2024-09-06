@@ -3,27 +3,14 @@ from abc import ABC, abstractmethod
 from itertools import product
 
 from scipy import stats
-from sklearn.model_selection import (
-    StratifiedKFold,
-    StratifiedShuffleSplit,
-    train_test_split,
-)
+from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit, train_test_split
 from tensorflow.python.keras.utils.generic_utils import get_custom_objects
 
 from ...config.grid_search_config import GridSearchConfig
 from ...data_generators.learning_objective import post_pad_pre_truncate
 from ...models.evaluation_models import create_bi_lstm_model
 from ...models.loss_schedulers import CosineLRSchedule
-from ...utils.model_utils import (
-    compute_binary_metrics,
-    multimode,
-    np,
-    os,
-    pd,
-    pickle,
-    save_training_history,
-    tf,
-)
+from ...utils.model_utils import compute_binary_metrics, multimode, np, os, pd, pickle, save_training_history, tf
 from .model_evaluators import AbstractModelEvaluator, get_metrics
 
 # Define a list of learning rates to fine-tune the model with
@@ -68,9 +55,7 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             self._grid_search_config = grid_search_config
         else:
             self._grid_search_config = GridSearchConfig()
-            self.get_logger().info(
-                f"grid_search_config is None and initializing default " f"GridSearchConfig"
-            )
+            self.get_logger().info(f"grid_search_config is None and initializing default " f"GridSearchConfig")
 
         # Set the GPU to memory growth to true to prevent the entire GPU memory from being
         # allocated
@@ -150,17 +135,11 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             training_val_test_set_idx = np.asarray(range(training_stop))
             held_out_set_idx = np.asarray(range(training_stop, len(self._dataset)))
         else:
-            stratified_splitter = StratifiedShuffleSplit(
-                n_splits=1, test_size=0.15, random_state=10
-            )
-            training_val_test_set_idx, held_out_set_idx = next(
-                stratified_splitter.split(X=labels, y=labels)
-            )
+            stratified_splitter = StratifiedShuffleSplit(n_splits=1, test_size=0.15, random_state=10)
+            training_val_test_set_idx, held_out_set_idx = next(stratified_splitter.split(X=labels, y=labels))
 
         # Use the remaining 85% of the training data for optimizing
-        training_val_test_set_inputs = {
-            k: v[training_val_test_set_idx] for k, v in features.items()
-        }
+        training_val_test_set_inputs = {k: v[training_val_test_set_idx] for k, v in features.items()}
         training_val_test_set_labels = labels[training_val_test_set_idx]
 
         # Conduct a grid search to find the best combination of hyperparameters
@@ -171,9 +150,7 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         # Now that we know the most optimal configurations. Let's retrain the model with the full
         # set using the most frequent number of epochs in k-fold validation. In case of multiple
         # modes, we always take the smallest mode
-        optimal_hyperparam_combination = all_param_configs_pd.sort_values(
-            "roc_auc", ascending=False
-        ).iloc[0]
+        optimal_hyperparam_combination = all_param_configs_pd.sort_values("roc_auc", ascending=False).iloc[0]
 
         self._epochs = optimal_hyperparam_combination.epoch
         self._learning_rate = optimal_hyperparam_combination.learning_rate
@@ -181,9 +158,7 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         with tf.device("/CPU:0"):
             # Train using the full training set
             full_training_set = (
-                tf.data.Dataset.from_tensor_slices(
-                    (training_val_test_set_inputs, training_val_test_set_labels)
-                )
+                tf.data.Dataset.from_tensor_slices((training_val_test_set_inputs, training_val_test_set_labels))
                 .cache()
                 .batch(self._batch_size)
             )
@@ -270,12 +245,8 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             # Run the k-fold 10 times until we discover a single mode
             max_iter = 10
             while max_iter > 0:
-                for i, (train, val, test) in enumerate(
-                    self.k_fold(features=features, labels=labels)
-                ):
-                    self._model = self._create_model(
-                        is_bi_directional=is_bi_directional, lstm_unit=lstm_unit
-                    )
+                for i, (train, val, test) in enumerate(self.k_fold(features=features, labels=labels)):
+                    self._model = self._create_model(is_bi_directional=is_bi_directional, lstm_unit=lstm_unit)
                     history = self.train_model(
                         training_data=train,
                         val_data=val,
@@ -339,16 +310,12 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
         if self._k_fold_test:
             stratified_splitter = StratifiedKFold(n_splits=self._num_of_folds, random_state=10)
         else:
-            stratified_splitter = StratifiedShuffleSplit(
-                n_splits=self._num_of_folds, test_size=0.15, random_state=10
-            )
+            stratified_splitter = StratifiedShuffleSplit(n_splits=self._num_of_folds, test_size=0.15, random_state=10)
 
         for train, val_test in stratified_splitter.split(X=labels, y=labels):
             if self._k_fold_test:
                 # further split val_test using a 1:1 ratio between val and test
-                val, test = train_test_split(
-                    val_test, test_size=0.5, random_state=10, stratify=labels[val_test]
-                )
+                val, test = train_test_split(val_test, test_size=0.5, random_state=10, stratify=labels[val_test])
             else:
                 test = val_test
                 val = val_test
@@ -367,19 +334,11 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
 
             with tf.device("/CPU:0"):
                 training_set = (
-                    tf.data.Dataset.from_tensor_slices((training_input, labels[train]))
-                    .cache()
-                    .batch(self._batch_size)
+                    tf.data.Dataset.from_tensor_slices((training_input, labels[train])).cache().batch(self._batch_size)
                 )
-                val_set = (
-                    tf.data.Dataset.from_tensor_slices((val_input, labels[val]))
-                    .cache()
-                    .batch(self._batch_size)
-                )
+                val_set = tf.data.Dataset.from_tensor_slices((val_input, labels[val])).cache().batch(self._batch_size)
                 test_set = (
-                    tf.data.Dataset.from_tensor_slices((test_input, labels[test]))
-                    .cache()
-                    .batch(self._batch_size)
+                    tf.data.Dataset.from_tensor_slices((test_input, labels[test])).cache().batch(self._batch_size)
                 )
 
             yield training_set, val_set, test_set
@@ -398,9 +357,7 @@ class SequenceModelEvaluator(AbstractModelEvaluator, ABC):
             verbose=1,
         )
 
-        early_stopping = tf.keras.callbacks.EarlyStopping(
-            monitor="val_loss", patience=1, restore_best_weights=True
-        )
+        early_stopping = tf.keras.callbacks.EarlyStopping(monitor="val_loss", patience=1, restore_best_weights=True)
         model_checkpoint = tf.keras.callbacks.ModelCheckpoint(
             filepath=self.get_model_path(),
             monitor="val_loss",
@@ -453,9 +410,7 @@ class BiLstmModelEvaluator(SequenceModelEvaluator):
 
                 return embedding_layer.get_weights()[0]
             except (IOError, ImportError) as e:
-                self.get_logger().info(
-                    f"Cannot load the time attention model, return None. Error: {e}"
-                )
+                self.get_logger().info(f"Cannot load the time attention model, return None. Error: {e}")
                 return None
 
         embeddings = get_concept_embeddings()
@@ -477,9 +432,7 @@ class BiLstmModelEvaluator(SequenceModelEvaluator):
             return model
 
     def extract_model_inputs(self):
-        token_ids = self._tokenizer.encode(
-            self._dataset.concept_ids.apply(lambda concept_ids: concept_ids.tolist())
-        )
+        token_ids = self._tokenizer.encode(self._dataset.concept_ids.apply(lambda concept_ids: concept_ids.tolist()))
         labels = self._dataset.label.to_numpy()
         padded_token_ides = post_pad_pre_truncate(
             token_ids, self._tokenizer.get_unused_token_id(), self._max_seq_length

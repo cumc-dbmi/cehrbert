@@ -87,12 +87,8 @@ def tokenize_one_field(
 
     :return:
     """
-    tokenize_fields_info = [
-        TokenizeFieldInfo(column_name=column_name, tokenized_column_name=tokenized_column_name)
-    ]
-    return tokenize_multiple_fields(
-        training_data, tokenize_fields_info, tokenizer_path, oov_token, encode, recreate
-    )
+    tokenize_fields_info = [TokenizeFieldInfo(column_name=column_name, tokenized_column_name=tokenized_column_name)]
+    return tokenize_multiple_fields(training_data, tokenize_fields_info, tokenizer_path, oov_token, encode, recreate)
 
 
 @log_function_decorator
@@ -134,9 +130,9 @@ def tokenize_multiple_fields(
                 meta="iterable",
             )
         else:
-            training_data[_tokenize_field_info.column_name] = training_data[
-                _tokenize_field_info.column_name
-            ].apply(list)
+            training_data[_tokenize_field_info.column_name] = training_data[_tokenize_field_info.column_name].apply(
+                list
+            )
             training_data[_tokenize_field_info.tokenized_column_name] = tokenizer.encode(
                 training_data[_tokenize_field_info.column_name]
             )
@@ -255,9 +251,7 @@ def compute_binary_metrics(
     f1_score = metrics.f1_score(labels, predictions, average="binary")
 
     # Calculate precision-recall auc
-    precisions, recalls, pr_auc_thresholds = metrics.precision_recall_curve(
-        labels, np.asarray(probabilities)
-    )
+    precisions, recalls, pr_auc_thresholds = metrics.precision_recall_curve(labels, np.asarray(probabilities))
     pr_auc = metrics.auc(recalls, precisions)
 
     # Calculate the best threshold for pr auc
@@ -349,9 +343,7 @@ def validate_folder(folder):
 
 def create_concept_mask(mask, max_seq_length):
     # mask the third dimension
-    concept_mask_1 = tf.tile(
-        tf.expand_dims(tf.expand_dims(mask, axis=1), axis=-1), [1, 1, 1, max_seq_length]
-    )
+    concept_mask_1 = tf.tile(tf.expand_dims(tf.expand_dims(mask, axis=1), axis=-1), [1, 1, 1, max_seq_length])
     # mask the fourth dimension
     concept_mask_2 = tf.expand_dims(tf.expand_dims(mask, axis=1), axis=1)
     concept_mask = tf.cast(

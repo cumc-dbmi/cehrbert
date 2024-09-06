@@ -80,13 +80,9 @@ class TestCehrBert(unittest.TestCase):
         self.assertTrue(hasattr(output, "prediction_logits"))
         self.assertTrue(hasattr(output, "pooler_output"))
 
-        self.assertEqual(
-            output.prediction_logits.shape, torch.Size([1, 10, self.config.vocab_size])
-        )
+        self.assertEqual(output.prediction_logits.shape, torch.Size([1, 10, self.config.vocab_size]))
         self.assertEqual(output.pooler_output.shape, torch.Size([1, 128]))
-        self.assertEqual(
-            output.last_hidden_state.shape, torch.Size([1, 10, self.config.hidden_size])
-        )
+        self.assertEqual(output.last_hidden_state.shape, torch.Size([1, 10, self.config.hidden_size]))
         self.assertEqual(len(output.attentions), self.config.num_hidden_layers)
         self.assertEqual(
             output.attentions[0].shape,

@@ -13,11 +13,7 @@ from tokenizers.pre_tokenizers import WhitespaceSplit
 from tokenizers.trainers import WordLevelTrainer
 from transformers.tokenization_utils_base import PushToHubMixin
 
-from cehrbert.models.hf_models.tokenization_utils import (
-    agg_helper,
-    agg_statistics,
-    map_statistics,
-)
+from cehrbert.models.hf_models.tokenization_utils import agg_helper, agg_statistics, map_statistics
 from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments
 
 PAD_TOKEN = "[PAD]"
@@ -112,9 +108,7 @@ class CehrBertTokenizer(PushToHubMixin):
             UNUSED_TOKEN,
             OUT_OF_VOCABULARY_TOKEN,
         ]
-        return self.encode(
-            [_["concept_id"] for _ in self._lab_stats if _["concept_id"] not in reserved_tokens]
-        )
+        return self.encode([_["concept_id"] for _ in self._lab_stats if _["concept_id"] not in reserved_tokens])
 
     def encode(self, concept_ids: Sequence[str]) -> Sequence[int]:
         encoded = self._tokenizer.encode(concept_ids, is_pretokenized=True)
@@ -159,9 +153,7 @@ class CehrBertTokenizer(PushToHubMixin):
             kwargs (`Dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`PushToHubMixin.push_to_hub`] method.
         """
-        assert not os.path.isfile(
-            save_directory
-        ), f"Provided path ({save_directory}) should be a directory, not a file"
+        assert not os.path.isfile(save_directory), f"Provided path ({save_directory}) should be a directory, not a file"
 
         os.makedirs(save_directory, exist_ok=True)
 
@@ -230,9 +222,7 @@ class CehrBertTokenizer(PushToHubMixin):
             pretrained_model_name_or_path, CONCEPT_MAPPING_FILE_NAME, **kwargs
         )
         if not concept_name_mapping_file:
-            raise RuntimeError(
-                f"concept_name_mapping_file does not exist: {concept_name_mapping_file}"
-            )
+            raise RuntimeError(f"concept_name_mapping_file does not exist: {concept_name_mapping_file}")
 
         lab_stats = load_json_file(lab_stats_file)
 
@@ -275,9 +265,7 @@ class CehrBertTokenizer(PushToHubMixin):
             show_progress=True,
         )
         for feature_name in feature_names:
-            batch_concat_concepts_partial_func = partial(
-                cls.batch_concat_concepts, feature_name=feature_name
-            )
+            batch_concat_concepts_partial_func = partial(cls.batch_concat_concepts, feature_name=feature_name)
             if data_args.streaming:
                 concatenated_features = dataset.map(
                     batch_concat_concepts_partial_func,

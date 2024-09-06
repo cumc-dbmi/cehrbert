@@ -5,9 +5,7 @@ import tensorflow as tf
 
 from cehrbert.data_generators.learning_objective import post_pad_pre_truncate
 from cehrbert.evaluations.model_evaluators.model_evaluators import get_metrics
-from cehrbert.evaluations.model_evaluators.sequence_model_evaluators import (
-    SequenceModelEvaluator,
-)
+from cehrbert.evaluations.model_evaluators.sequence_model_evaluators import SequenceModelEvaluator
 from cehrbert.models.evaluation_models import (
     create_probabilistic_bert_bi_lstm_model,
     create_random_vanilla_bert_bi_lstm_model,
@@ -48,9 +46,7 @@ class BertLstmModelEvaluator(SequenceModelEvaluator):
         self.get_logger().info("Number of devices: {}".format(strategy.num_replicas_in_sync))
         with strategy.scope():
             create_model_fn = (
-                create_temporal_bert_bi_lstm_model
-                if self._is_temporal
-                else create_vanilla_bert_bi_lstm_model
+                create_temporal_bert_bi_lstm_model if self._is_temporal else create_vanilla_bert_bi_lstm_model
             )
             try:
                 model = create_model_fn(self._max_seq_length, self._bert_model_path, **kwargs)
@@ -66,9 +62,7 @@ class BertLstmModelEvaluator(SequenceModelEvaluator):
             return model
 
     def extract_model_inputs(self):
-        token_ids = self._tokenizer.encode(
-            self._dataset.concept_ids.apply(lambda concept_ids: concept_ids.tolist())
-        )
+        token_ids = self._tokenizer.encode(self._dataset.concept_ids.apply(lambda concept_ids: concept_ids.tolist()))
         visit_segments = self._dataset.visit_segments
         time_stamps = self._dataset.dates
         ages = self._dataset.ages
@@ -94,9 +88,7 @@ class BertLstmModelEvaluator(SequenceModelEvaluator):
             self._dataset.concept_values, -1.0, self._max_seq_length, d_type="float32"
         )
 
-        padded_concept_value_masks = post_pad_pre_truncate(
-            self._dataset.concept_value_masks, 0, self._max_seq_length
-        )
+        padded_concept_value_masks = post_pad_pre_truncate(self._dataset.concept_value_masks, 0, self._max_seq_length)
 
         inputs = {
             "age": np.expand_dims(self._dataset.age, axis=-1),
@@ -123,14 +115,10 @@ class ProbabilisticBertModelEvaluator(BertLstmModelEvaluator):
         self.get_logger().info("Number of devices: {}".format(strategy.num_replicas_in_sync))
         with strategy.scope():
             try:
-                model = create_probabilistic_bert_bi_lstm_model(
-                    self._max_seq_length, self._bert_model_path
-                )
+                model = create_probabilistic_bert_bi_lstm_model(self._max_seq_length, self._bert_model_path)
             except ValueError as e:
                 self.get_logger().exception(e)
-                model = create_probabilistic_bert_bi_lstm_model(
-                    self._max_seq_length, self._bert_model_path
-                )
+                model = create_probabilistic_bert_bi_lstm_model(self._max_seq_length, self._bert_model_path)
             model.compile(
                 loss="binary_crossentropy",
                 optimizer=tf.keras.optimizers.Adam(1e-4),

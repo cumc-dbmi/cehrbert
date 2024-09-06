@@ -2,9 +2,7 @@ import random
 import unittest
 from unittest.mock import MagicMock
 
-from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import (
-    HFTokenizationMapping,
-)
+from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import HFTokenizationMapping
 
 
 class TestHFMaskedLanguageModellingMapping(unittest.TestCase):

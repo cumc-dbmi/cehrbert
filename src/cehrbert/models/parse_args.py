@@ -122,17 +122,13 @@ def create_parse_args_base_bert():
         default=8,
         required=False,
     )
-    parser.add_argument(
-        "-iv", "--include_visit", dest="include_visit_prediction", action="store_true"
-    )
+    parser.add_argument("-iv", "--include_visit", dest="include_visit_prediction", action="store_true")
     parser.add_argument(
         "--include_prolonged_length_stay",
         dest="include_prolonged_length_stay",
         action="store_true",
     )
-    parser.add_argument(
-        "-ut", "--use_time_embedding", dest="use_time_embedding", action="store_true"
-    )
+    parser.add_argument("-ut", "--use_time_embedding", dest="use_time_embedding", action="store_true")
     parser.add_argument("--use_behrt", dest="use_behrt", action="store_true")
     parser.add_argument("--use_dask", dest="use_dask", action="store_true")
     parser.add_argument(
@@ -260,12 +256,8 @@ def create_parse_args_gpt():
         default=1000,
         required=False,
     )
-    parser.add_argument(
-        "--total", dest="total", action="store", type=int, default=infty, required=False
-    )
-    parser.add_argument(
-        "--including_long_sequence", dest="including_long_sequence", action="store_true"
-    )
+    parser.add_argument("--total", dest="total", action="store", type=int, default=infty, required=False)
+    parser.add_argument("--including_long_sequence", dest="including_long_sequence", action="store_true")
     parser.add_argument("--save_checkpoint", dest="save_checkpoint", action="store_true")
     parser.add_argument(
         "--save_freq",
@@ -286,9 +278,7 @@ def create_parse_args_gpt():
         action="store_true",
     )
     parser.add_argument("--efficient_training", dest="efficient_training", action="store_true")
-    parser.add_argument(
-        "--include_numeric_value", dest="include_numeric_value", action="store_true"
-    )
+    parser.add_argument("--include_numeric_value", dest="include_numeric_value", action="store_true")
     parser.add_argument("--shuffle_records", dest="shuffle_records", action="store_true")
     parser.add_argument(
         "--val_data_parquet_path",
@@ -320,9 +310,7 @@ def create_parse_args_gpt():
         dest="include_positional_encoding",
         action="store_true",
     )
-    parser.add_argument(
-        "--sort_sequence_by_length", dest="sort_sequence_by_length", action="store_true"
-    )
+    parser.add_argument("--sort_sequence_by_length", dest="sort_sequence_by_length", action="store_true")
     return parser
 
 
@@ -371,9 +359,7 @@ def create_parse_args_hierarchical_bert():
         default=1,
         required=False,
     )
-    parser.add_argument(
-        "--include_att_prediction", dest="include_att_prediction", action="store_true"
-    )
+    parser.add_argument("--include_att_prediction", dest="include_att_prediction", action="store_true")
     parser.add_argument("--include_readmission", dest="include_readmission", action="store_true")
     parser.add_argument(
         "--random_mask_prob",
@@ -428,8 +414,7 @@ def create_parse_args_hierarchical_bert_phenotype():
         dest="num_of_phenotype_neighbors",
         action="store",
         type=int,
-        help="Num of phenotype neighbors to consider when driving the phenotypes apart from each "
-        "other",
+        help="Num of phenotype neighbors to consider when driving the phenotypes apart from each " "other",
         default=3,
         required=False,
     )

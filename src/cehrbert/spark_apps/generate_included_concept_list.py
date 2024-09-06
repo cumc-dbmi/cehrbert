@@ -72,17 +72,13 @@ def main(input_folder, output_folder, min_num_of_patients, with_drug_rollup: boo
         .where(F.col("freq") >= min_num_of_patients)
     )
 
-    qualified_concepts.write.mode("overwrite").parquet(
-        os.path.join(output_folder, QUALIFIED_CONCEPT_LIST_PATH)
-    )
+    qualified_concepts.write.mode("overwrite").parquet(os.path.join(output_folder, QUALIFIED_CONCEPT_LIST_PATH))
 
 
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Arguments for generate concept list to be included"
-    )
+    parser = argparse.ArgumentParser(description="Arguments for generate concept list to be included")
     parser.add_argument(
         "-i",
         "--input_folder",

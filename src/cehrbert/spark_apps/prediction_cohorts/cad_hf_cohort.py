@@ -15,6 +15,4 @@ if __name__ == "__main__":
 
     ehr_table_list = spark_args.ehr_table_list if spark_args.ehr_table_list else DOMAIN_TABLE_LIST
 
-    create_prediction_cohort(
-        spark_args, cad.query_builder(spark_args), hf.query_builder(), ehr_table_list
-    )
+    create_prediction_cohort(spark_args, cad.query_builder(spark_args), hf.query_builder(), ehr_table_list)

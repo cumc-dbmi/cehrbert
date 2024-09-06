@@ -3,6 +3,9 @@ import logging
 import os
 
 import pandas as pd
+import tensorflow as tf
+
+tf.keras.utils.set_random_seed(0)
 
 from cehrbert.config import output_names as p
 from cehrbert.config.grid_search_config import LEARNING_RATE, LSTM_DIRECTION, LSTM_UNIT
@@ -35,14 +38,8 @@ from cehrbert.evaluations.model_evaluators.hierarchical_bert_evaluators import (
     HierarchicalBertPoolingEvaluator,
     RandomHierarchicalBertEvaluator,
 )
-from cehrbert.evaluations.model_evaluators.sequence_model_evaluators import (
-    BiLstmModelEvaluator,
-    GridSearchConfig,
-)
-from cehrbert.utils.checkpoint_utils import (
-    find_tokenizer_path,
-    find_visit_tokenizer_path,
-)
+from cehrbert.evaluations.model_evaluators.sequence_model_evaluators import BiLstmModelEvaluator, GridSearchConfig
+from cehrbert.utils.checkpoint_utils import find_tokenizer_path, find_visit_tokenizer_path
 from cehrbert.utils.model_utils import validate_folder
 
 
@@ -87,9 +84,7 @@ def evaluate_sequence_models(args):
     if LSTM in args.model_evaluators:
         validate_folder(args.time_attention_model_folder)
         time_attention_tokenizer_path = find_tokenizer_path(args.time_attention_model_folder)
-        time_aware_model_path = os.path.join(
-            args.time_attention_model_folder, p.TIME_ATTENTION_MODEL_PATH
-        )
+        time_aware_model_path = os.path.join(args.time_attention_model_folder, p.TIME_ATTENTION_MODEL_PATH)
         BiLstmModelEvaluator(
             dataset=dataset,
             evaluation_folder=args.evaluation_folder,
@@ -348,8 +343,6 @@ def evaluate_baseline_models(args):
 
 
 def main(args):
-    tf.keras.utils.set_random_seed(0)
-
     if args.action == BASELINE_MODEL or args.action == FULL:
         evaluate_baseline_models(args)
 

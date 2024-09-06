@@ -30,14 +30,10 @@ class TestConceptValuePredictionLayer(unittest.TestCase):
         context_window = 3
         original_concept_embeddings = tf.random.normal((batch_size, context_window, embedding_size))
         concept_val_embeddings = tf.random.normal((batch_size, context_window, embedding_size))
-        concept_value_masks = tf.random.uniform(
-            (batch_size, context_window), minval=0, maxval=2, dtype=tf.int32
-        )
+        concept_value_masks = tf.random.uniform((batch_size, context_window), minval=0, maxval=2, dtype=tf.int32)
 
         # Test the call method
-        concept_vals = layer(
-            original_concept_embeddings, concept_val_embeddings, concept_value_masks
-        )
+        concept_vals = layer(original_concept_embeddings, concept_val_embeddings, concept_value_masks)
 
         # Check the shape of the output
         self.assertEqual(concept_vals.shape, (batch_size, context_window, 1))

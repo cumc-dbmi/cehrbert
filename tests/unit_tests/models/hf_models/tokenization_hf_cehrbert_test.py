@@ -32,9 +32,7 @@ class TestCehrBertTokenizer(unittest.TestCase):
         tokenizer.pre_tokenizer = Whitespace()
 
         concept_mapping = {"hello": "Hello", "world": "World"}
-        cls.tokenizer = CehrBertTokenizer(
-            tokenizer, lab_stats=[], concept_name_mapping=concept_mapping
-        )
+        cls.tokenizer = CehrBertTokenizer(tokenizer, lab_stats=[], concept_name_mapping=concept_mapping)
 
     def test_vocab_size(self):
         # Test the vocabulary size

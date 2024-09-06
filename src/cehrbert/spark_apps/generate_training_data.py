@@ -94,9 +94,7 @@ def main(
         "discharged_to_concept_id",
     )
     person = preprocess_domain_table(spark, input_folder, PERSON)
-    birth_datetime_udf = F.coalesce(
-        "birth_datetime", F.concat("year_of_birth", F.lit("-01-01")).cast("timestamp")
-    )
+    birth_datetime_udf = F.coalesce("birth_datetime", F.concat("year_of_birth", F.lit("-01-01")).cast("timestamp"))
     person = person.select(
         "person_id",
         birth_datetime_udf.alias("birth_datetime"),
@@ -117,13 +115,11 @@ def main(
     if include_concept_list and patient_events:
         column_names = patient_events.schema.fieldNames()
         # Filter out concepts
-        qualified_concepts = preprocess_domain_table(
-            spark, input_folder, "qualified_concept_list"
-        ).select("standard_concept_id")
-
-        patient_events = patient_events.join(qualified_concepts, "standard_concept_id").select(
-            column_names
+        qualified_concepts = preprocess_domain_table(spark, input_folder, "qualified_concept_list").select(
+            "standard_concept_id"
         )
+
+        patient_events = patient_events.join(qualified_concepts, "standard_concept_id").select(column_names)
 
     # Process the measurement table if exists
     if MEASUREMENT in domain_table_list:
@@ -131,9 +127,7 @@ def main(
         required_measurement = preprocess_domain_table(spark, input_folder, REQUIRED_MEASUREMENT)
         # The select is necessary to make sure the order of the columns is the same as the
         # original dataframe, otherwise the union might use the wrong columns
-        scaled_measurement = process_measurement(
-            spark, measurement, required_measurement, output_folder
-        )
+        scaled_measurement = process_measurement(spark, measurement, required_measurement, output_folder)
 
         if patient_events:
             # Union all measurement records together with other domain records
@@ -156,9 +150,7 @@ def main(
         patient_events = patient_events.where(F.col("age") < 90)
 
     if not continue_from_events:
-        patient_events.write.mode("overwrite").parquet(
-            os.path.join(output_folder, "all_patient_events")
-        )
+        patient_events.write.mode("overwrite").parquet(os.path.join(output_folder, "all_patient_events"))
 
     patient_events = spark.read.parquet(os.path.join(output_folder, "all_patient_events"))
 
@@ -205,9 +197,7 @@ def main(
         sequence_data = sequence_data.join(visit_occurrence, "person_id")
 
     if include_sequence_information_content:
-        concept_df = patient_events.select(
-            "person_id", F.col("standard_concept_id").alias("concept_id")
-        )
+        concept_df = patient_events.select("person_id", F.col("standard_concept_id").alias("concept_id"))
         concept_freq = (
             concept_df.groupBy("concept_id")
             .count()
@@ -215,11 +205,7 @@ def main(
             .withColumn("ic", -F.log("prob"))
         )
 
-        patient_ic_df = (
-            concept_df.join(concept_freq, "concept_id")
-            .groupby("person_id")
-            .agg(F.mean("ic").alias("ic"))
-        )
+        patient_ic_df = concept_df.join(concept_freq, "concept_id").groupby("person_id").agg(F.mean("ic").alias("ic"))
 
         sequence_data = sequence_data.join(patient_ic_df, "person_id")
 
@@ -238,9 +224,7 @@ def main(
         )
         shutil.rmtree(os.path.join(output_folder, "patient_sequence", "temp"))
     else:
-        sequence_data.write.mode("overwrite").parquet(
-            os.path.join(output_folder, "patient_sequence")
-        )
+        sequence_data.write.mode("overwrite").parquet(os.path.join(output_folder, "patient_sequence"))
 
 
 if __name__ == "__main__":
@@ -292,16 +276,14 @@ if __name__ == "__main__":
         "--is_new_patient_representation",
         dest="is_new_patient_representation",
         action="store_true",
-        help="Specify whether to generate the sequence of EHR records using the new patient "
-        "representation",
+        help="Specify whether to generate the sequence of EHR records using the new patient " "representation",
     )
     parser.add_argument(
         "-ib",
         "--is_classic_bert_sequence",
         dest="is_classic_bert_sequence",
         action="store_true",
-        help="Specify whether to generate the sequence of EHR records using the classic BERT "
-        "sequence",
+        help="Specify whether to generate the sequence of EHR records using the classic BERT " "sequence",
     )
     parser.add_argument(
         "-ev",
@@ -314,8 +296,7 @@ if __name__ == "__main__":
         "--include_prolonged_length_stay",
         dest="include_prolonged_stay",
         action="store_true",
-        help="Specify whether or not to include the data for the second learning objective for "
-        "Med-BERT",
+        help="Specify whether or not to include the data for the second learning objective for " "Med-BERT",
     )
     parser.add_argument("--include_concept_list", dest="include_concept_list", action="store_true")
     parser.add_argument("--gpt_patient_sequence", dest="gpt_patient_sequence", action="store_true")

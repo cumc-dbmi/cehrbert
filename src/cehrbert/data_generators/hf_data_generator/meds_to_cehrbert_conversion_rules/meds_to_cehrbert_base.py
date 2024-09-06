@@ -67,9 +67,7 @@ class MedsToCehrBertConversion(ABC):
         self._ed_admission_matching_rules = self._create_ed_admission_matching_rules()
         self._admission_matching_rules = self._create_admission_matching_rules()
         self._discharge_matching_rules = self._create_discharge_matching_rules()
-        self._text_event_numeric_event_map = {
-            r.code: r for r in self._create_text_event_to_numeric_event_rules()
-        }
+        self._text_event_numeric_event_map = {r.code: r for r in self._create_text_event_to_numeric_event_rules()}
 
     @abstractmethod
     def _create_ed_admission_matching_rules(self) -> List[str]:
@@ -82,9 +80,7 @@ class MedsToCehrBertConversion(ABC):
         Raises:
             NotImplementedError: Must be implemented in a subclass.
         """
-        raise NotImplementedError(
-            "Must implement the matching rules for identifying the ED admission"
-        )
+        raise NotImplementedError("Must implement the matching rules for identifying the ED admission")
 
     @abstractmethod
     def _create_admission_matching_rules(self) -> List[str]:
@@ -124,9 +120,7 @@ class MedsToCehrBertConversion(ABC):
         Raises:
             NotImplementedError: Must be implemented in a subclass.
         """
-        raise NotImplementedError(
-            "Must implement the event mapping rules for converting text events to numeric events"
-        )
+        raise NotImplementedError("Must implement the event mapping rules for converting text events to numeric events")
 
     def get_ed_admission_matching_rules(self) -> List[str]:
         return self._ed_admission_matching_rules

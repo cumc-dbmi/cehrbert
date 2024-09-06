@@ -6,15 +6,9 @@ from datasets import Dataset, DatasetDict, IterableDatasetDict, load_from_disk
 from transformers import AutoConfig, Trainer, set_seed
 from transformers.utils import logging
 
-from cehrbert.data_generators.hf_data_generator.hf_dataset import (
-    create_cehrbert_pretraining_dataset,
-)
-from cehrbert.data_generators.hf_data_generator.hf_dataset_collator import (
-    CehrBertDataCollator,
-)
-from cehrbert.data_generators.hf_data_generator.meds_utils import (
-    create_dataset_from_meds_reader,
-)
+from cehrbert.data_generators.hf_data_generator.hf_dataset import create_cehrbert_pretraining_dataset
+from cehrbert.data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
+from cehrbert.data_generators.hf_data_generator.meds_utils import create_dataset_from_meds_reader
 from cehrbert.models.hf_models.config import CehrBertConfig
 from cehrbert.models.hf_models.hf_cehrbert import CehrBertForPreTraining
 from cehrbert.models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
@@ -80,9 +74,7 @@ def load_and_create_tokenizer(
     return tokenizer
 
 
-def load_and_create_model(
-    model_args: ModelArguments, tokenizer: CehrBertTokenizer
-) -> CehrBertForPreTraining:
+def load_and_create_model(model_args: ModelArguments, tokenizer: CehrBertTokenizer) -> CehrBertForPreTraining:
     """
     Loads a pretrained model or creates a new model configuration if the pretrained model cannot be loaded.
 
@@ -170,15 +162,11 @@ def main():
         LOG.info("Loading prepared dataset from disk at %s...", prepared_ds_path)
         processed_dataset = load_from_disk(str(prepared_ds_path))
         if data_args.streaming:
-            processed_dataset = processed_dataset.to_iterable_dataset(
-                num_shards=training_args.dataloader_num_workers
-            )
+            processed_dataset = processed_dataset.to_iterable_dataset(num_shards=training_args.dataloader_num_workers)
         LOG.info("Prepared dataset loaded from disk...")
         # If the data has been processed in the past, it's assume the tokenizer has been created
         # before. We load the CEHR-BERT tokenizer from the output folder.
-        tokenizer = load_and_create_tokenizer(
-            data_args=data_args, model_args=model_args, dataset=processed_dataset
-        )
+        tokenizer = load_and_create_tokenizer(data_args=data_args, model_args=model_args, dataset=processed_dataset)
     else:
         # If the data is in the MEDS format, we need to convert it to the CEHR-BERT format
         if data_args.is_data_in_med:
@@ -193,9 +181,7 @@ def main():
                 )
                 dataset = load_from_disk(meds_extension_path)
                 if data_args.streaming:
-                    dataset = dataset.to_iterable_dataset(
-                        num_shards=training_args.dataloader_num_workers
-                    )
+                    dataset = dataset.to_iterable_dataset(num_shards=training_args.dataloader_num_workers)
             except RuntimeError as e:
                 LOG.exception(e)
                 dataset = create_dataset_from_meds_reader(data_args, is_pretraining=True)
@@ -203,9 +189,7 @@ def main():
                     dataset.save_to_disk(meds_extension_path)
         else:
             # Load the dataset from the parquet files
-            dataset = load_parquet_as_dataset(
-                data_args.data_folder, split="train", streaming=data_args.streaming
-            )
+            dataset = load_parquet_as_dataset(data_args.data_folder, split="train", streaming=data_args.streaming)
             # If streaming is enabled, we need to manually split the data into train/val
             if data_args.streaming and data_args.validation_split_num:
                 dataset = dataset.shuffle(buffer_size=10_000, seed=training_args.seed)
@@ -228,9 +212,7 @@ def main():
                 )
 
         # Create the CEHR-BERT tokenizer if it's not available in the output folder
-        tokenizer = load_and_create_tokenizer(
-            data_args=data_args, model_args=model_args, dataset=dataset
-        )
+        tokenizer = load_and_create_tokenizer(data_args=data_args, model_args=model_args, dataset=dataset)
         # sort the patient features chronologically and tokenize the data
         processed_dataset = create_cehrbert_pretraining_dataset(
             dataset=dataset, concept_tokenizer=tokenizer, data_args=data_args
@@ -258,9 +240,7 @@ def main():
         processed_dataset.set_format("pt")
 
     eval_dataset = None
-    if isinstance(processed_dataset, DatasetDict) or isinstance(
-        processed_dataset, IterableDatasetDict
-    ):
+    if isinstance(processed_dataset, DatasetDict) or isinstance(processed_dataset, IterableDatasetDict):
         train_dataset = processed_dataset["train"]
         if "validation" in processed_dataset:
             eval_dataset = processed_dataset["validation"]

@@ -6,18 +6,11 @@ from torch import nn
 from torch.nn.utils.rnn import pack_padded_sequence
 from transformers import PreTrainedModel
 from transformers.activations import gelu_new
-from transformers.models.bert.modeling_bert import (
-    BertEncoder,
-    BertOnlyMLMHead,
-    BertPooler,
-)
+from transformers.models.bert.modeling_bert import BertEncoder, BertOnlyMLMHead, BertPooler
 from transformers.utils import logging
 
 from cehrbert.models.hf_models.config import CehrBertConfig
-from cehrbert.models.hf_models.hf_modeling_outputs import (
-    CehrBertModelOutput,
-    CehrBertSequenceClassifierOutput,
-)
+from cehrbert.models.hf_models.hf_modeling_outputs import CehrBertModelOutput, CehrBertSequenceClassifierOutput
 
 logger = logging.get_logger("transformers")
 LARGE_POSITION_VALUE = 1000000
@@ -29,9 +22,7 @@ class PositionalEncodingLayer(nn.Module):
 
         self.max_sequence_length = max_sequence_length
         position = torch.arange(max_sequence_length).unsqueeze(1)
-        div_term = torch.exp(
-            torch.arange(0, embedding_size, 2) * (-math.log(10000.0) / embedding_size)
-        )
+        div_term = torch.exp(torch.arange(0, embedding_size, 2) * (-math.log(10000.0) / embedding_size))
         pe = torch.zeros(max_sequence_length, embedding_size)
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
@@ -46,12 +37,8 @@ class PositionalEncodingLayer(nn.Module):
         )
         first_vals = torch.min(masked_visit_concept_orders, dim=1).values.unsqueeze(dim=-1)
         visit_concept_orders = visit_concept_orders - first_vals
-        visit_concept_orders = torch.maximum(
-            visit_concept_orders, torch.zeros_like(visit_concept_orders)
-        )
-        visit_concept_orders = torch.minimum(
-            visit_concept_orders, torch.tensor(self.max_sequence_length) - 1
-        )
+        visit_concept_orders = torch.maximum(visit_concept_orders, torch.zeros_like(visit_concept_orders))
+        visit_concept_orders = torch.minimum(visit_concept_orders, torch.tensor(self.max_sequence_length) - 1)
         # Get the same positional encodings for the concepts with the same visit_order
         positional_embeddings = self.pe[visit_concept_orders]
         return positional_embeddings
@@ -105,9 +92,7 @@ class ConceptValueTransformationLayer(nn.Module):
         # (batch_size, seq_length, 1 + embedding_size)
         concept_embeddings_with_val = torch.cat([concept_embeddings, concept_values], dim=-1)
         # Run through a dense layer to bring the dimension back to embedding_size
-        concept_embeddings_with_val = self.merge_value_transformation_layer(
-            concept_embeddings_with_val
-        )
+        concept_embeddings_with_val = self.merge_value_transformation_layer(concept_embeddings_with_val)
 
         merged = torch.where(
             concept_value_masks.to(torch.bool),
@@ -145,15 +130,9 @@ class CehrBertEmbeddings(nn.Module):
         self.age_embedding_layer = TimeEmbeddingLayer(
             config.n_time_embd, scaling_factor=config.age_embedding_scaling_factor
         )
-        self.positional_embedding_layer = PositionalEncodingLayer(
-            config.n_time_embd, config.max_position_embeddings
-        )
-        self.concept_value_transformation_layer = ConceptValueTransformationLayer(
-            config.hidden_size
-        )
-        self.linear_proj = nn.Linear(
-            config.hidden_size + 3 * config.n_time_embd, config.hidden_size
-        )
+        self.positional_embedding_layer = PositionalEncodingLayer(config.n_time_embd, config.max_position_embeddings)
+        self.concept_value_transformation_layer = ConceptValueTransformationLayer(config.hidden_size)
+        self.linear_proj = nn.Linear(config.hidden_size + 3 * config.n_time_embd, config.hidden_size)
 
     def forward(
         self,
@@ -172,9 +151,7 @@ class CehrBertEmbeddings(nn.Module):
         age_embeddings = self.age_embedding_layer(ages)
         time_embeddings = self.age_embedding_layer(dates)
         positional_embeddings = self.positional_embedding_layer(visit_concept_orders)
-        x = self.linear_proj(
-            torch.cat([x, time_embeddings, age_embeddings, positional_embeddings], dim=-1)
-        )
+        x = self.linear_proj(torch.cat([x, time_embeddings, age_embeddings, positional_embeddings], dim=-1))
         x = gelu_new(x)
         x += self.visit_segment_embeddings(visit_segments)
         return x
@@ -235,13 +212,9 @@ class CehrBert(CehrBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> CehrBertModelOutput:
-        output_attentions = (
-            output_attentions if output_attentions is not None else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
         self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
@@ -250,9 +223,7 @@ class CehrBert(CehrBertPreTrainedModel):
         # We can provide a self-attention mask of dimensions
         # [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-            attention_mask, input_shape
-        )
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
 
         embedding_output = self.cehr_bert_embeddings(
             input_ids=input_ids,
@@ -342,22 +313,16 @@ class CehrBertForPreTraining(CehrBertPreTrainedModel):
             if not self.config.include_value_prediction:
                 labels = torch.where(mlm_skip_values, -100, labels)
             loss_fct = nn.CrossEntropyLoss()
-            masked_lm_loss = loss_fct(
-                prediction_scores.view(-1, self.config.vocab_size), labels.view(-1)
-            )
+            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
             total_loss = masked_lm_loss
 
             # In addition to MLM, we also predict the values associated with the masked concepts
             if self.config.include_value_prediction:
                 mlm_masks = labels != -100
-                predicted_values = self.concept_value_decoder_layer(
-                    cehrbert_output.last_hidden_state
-                )
+                predicted_values = self.concept_value_decoder_layer(cehrbert_output.last_hidden_state)
                 num_items = torch.sum(concept_value_masks.to(torch.float32), dim=-1) + 1e-6
                 values_ = (predicted_values.squeeze(-1) - concept_values) ** 2
-                masked_mse = (
-                    torch.sum(values_ * concept_value_masks * mlm_masks, dim=-1) / num_items
-                )
+                masked_mse = torch.sum(values_ * concept_value_masks * mlm_masks, dim=-1) / num_items
                 total_loss += torch.mean(masked_mse)
 
         return CehrBertModelOutput(
@@ -378,9 +343,7 @@ class CehrBertForClassification(CehrBertPreTrainedModel):
         self.age_batch_norm = torch.nn.BatchNorm1d(1)
 
         classifier_dropout = (
-            config.classifier_dropout
-            if config.classifier_dropout is not None
-            else config.hidden_dropout_prob
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
         self.dropout = nn.Dropout(classifier_dropout)
         self.dense_layer = nn.Linear(config.hidden_size + 1, config.hidden_size // 2)
@@ -456,14 +419,10 @@ class CehrBertLstmForClassification(CehrBertPreTrainedModel):
         )
 
         classifier_dropout = (
-            config.classifier_dropout
-            if config.classifier_dropout is not None
-            else config.hidden_dropout_prob
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
         self.dropout = nn.Dropout(classifier_dropout)
-        self.dense_layer = nn.Linear(
-            config.hidden_size * (1 + config.bidirectional) + 1, config.hidden_size // 2
-        )
+        self.dense_layer = nn.Linear(config.hidden_size * (1 + config.bidirectional) + 1, config.hidden_size // 2)
         self.dense_dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size // 2, 1)
 

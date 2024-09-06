@@ -172,9 +172,7 @@ def find_tokenizer_path(model_folder: str):
             if "visit_tokenizer.pickle" not in candidate_name:
                 return os.path.join(model_folder, candidate_name)
 
-    raise RuntimeError(
-        f"Could not discover any tokenizer in {model_folder} matching the pattern *tokenizer.pickle"
-    )
+    raise RuntimeError(f"Could not discover any tokenizer in {model_folder} matching the pattern *tokenizer.pickle")
 
 
 def find_visit_tokenizer_path(model_folder: str):

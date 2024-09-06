@@ -4,9 +4,7 @@ import numpy as np
 import pandas as pd
 
 from cehrbert.data_generators.data_classes import RowSlicer
-from cehrbert.data_generators.learning_objective import (
-    MaskedLanguageModelLearningObjective,
-)
+from cehrbert.data_generators.learning_objective import MaskedLanguageModelLearningObjective
 from cehrbert.data_generators.tokenizer import ConceptTokenizer
 
 

@@ -97,9 +97,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
     def __init__(self, data_args: DataTrainingArguments, is_pretraining: bool = True):
         self._time_token_function = get_att_function(data_args.att_function_type)
         self._include_auxiliary_token = data_args.include_auxiliary_token
-        self._inpatient_time_token_function = get_att_function(
-            data_args.inpatient_att_function_type
-        )
+        self._inpatient_time_token_function = get_att_function(data_args.inpatient_att_function_type)
         self._include_demographic_prompt = data_args.include_demographic_prompt
         self._is_pretraining = is_pretraining
 
@@ -191,9 +189,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
         date_cursor = None
 
         # Loop through all the visits excluding the first event containing the demographics
-        for i, visit in enumerate(
-            sorted(record["visits"], key=lambda e: e["visit_start_datetime"])
-        ):
+        for i, visit in enumerate(sorted(record["visits"], key=lambda e: e["visit_start_datetime"])):
 
             events = visit["events"]
 
@@ -207,9 +203,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
 
             # We assume the first measurement to be the visit type of the current visit
             visit_type = visit["visit_type"]
-            is_inpatient = (
-                visit_type in INPATIENT_VISIT_TYPES or visit_type in INPATIENT_VISIT_TYPE_CODES
-            )
+            is_inpatient = visit_type in INPATIENT_VISIT_TYPES or visit_type in INPATIENT_VISIT_TYPE_CODES
 
             # Add artificial time tokens to the patient timeline if timedelta exists
             if time_delta:
@@ -223,9 +217,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
             # Add the VS token to the patient timeline to mark the start of a visit
             age = relativedelta(visit["visit_start_datetime"], birth_datetime).years
             # Calculate the week number since the epoch time
-            date = (
-                visit["visit_start_datetime"] - datetime.datetime(year=1970, month=1, day=1)
-            ).days // 7
+            date = (visit["visit_start_datetime"] - datetime.datetime(year=1970, month=1, day=1)).days // 7
             visit_segment = int(visit_segment_indicator) + 1
 
             self._update_cehrbert_record(
@@ -397,9 +389,7 @@ class SortPatientSequenceMapping(DatasetMapping):
                 column_names.append(k)
                 column_values.append(v)
 
-        sorted_list = sorted(
-            zip(sorting_columns, *column_values), key=lambda tup2: (tup2[0], tup2[1])
-        )
+        sorted_list = sorted(zip(sorting_columns, *column_values), key=lambda tup2: (tup2[0], tup2[1]))
 
         # uses a combination of zip() and unpacking (*) to transpose the list of tuples. This means converting rows
         # into columns: the first tuple formed from all the first elements of the sorted tuples, the second tuple
@@ -446,9 +436,7 @@ class HFTokenizationMapping(DatasetMapping):
                 )
             ):
                 if token_id in self._lab_token_ids:
-                    normalized_concept_value = self._concept_tokenizer.normalize(
-                        concept_id, concept_value
-                    )
+                    normalized_concept_value = self._concept_tokenizer.normalize(concept_id, concept_value)
                     normalized_concept_values[i] = normalized_concept_value
             record["concept_values"] = normalized_concept_values
 

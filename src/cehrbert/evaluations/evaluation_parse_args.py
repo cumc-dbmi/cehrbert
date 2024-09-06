@@ -65,9 +65,7 @@ def create_evaluation_args():
         type=int,
         default=4,
     )
-    main_parser.add_argument(
-        "--is_transfer_learning", dest="is_transfer_learning", action="store_true"
-    )
+    main_parser.add_argument("--is_transfer_learning", dest="is_transfer_learning", action="store_true")
     main_parser.add_argument(
         "--training_percentage",
         dest="training_percentage",

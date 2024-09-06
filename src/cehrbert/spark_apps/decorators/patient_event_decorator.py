@@ -93,9 +93,7 @@ class PatientEventBaseDecorator(PatientEventDecorator):
 
         # todo: create an assertion the dataframe contains the above columns
 
-        valid_visit_ids = patient_events.select(
-            "visit_occurrence_id", "cohort_member_id"
-        ).distinct()
+        valid_visit_ids = patient_events.select("visit_occurrence_id", "cohort_member_id").distinct()
 
         # Add visit_start_date to the patient_events dataframe and create the visit rank
         visit_rank_udf = F.row_number().over(
@@ -116,11 +114,7 @@ class PatientEventBaseDecorator(PatientEventDecorator):
                 "visit_end_date",
                 F.col("visit_start_date").cast(T.DateType()).alias("visit_start_date"),
                 F.to_timestamp("visit_start_datetime").alias("visit_start_datetime"),
-                F.col("visit_concept_id")
-                .cast("int")
-                .isin([9201, 262, 8971, 8920])
-                .cast("int")
-                .alias("is_inpatient"),
+                F.col("visit_concept_id").cast("int").isin([9201, 262, 8971, 8920]).cast("int").alias("is_inpatient"),
                 F.when(F.col("discharged_to_concept_id").cast("int") == 4216643, F.lit(1))
                 .otherwise(F.lit(0))
                 .alias("expired"),
@@ -136,18 +130,14 @@ class PatientEventBaseDecorator(PatientEventDecorator):
         # in multiple cohort's histories of the same patient
         concept_order_udf = F.when(
             F.col("is_inpatient") == 1,
-            F.dense_rank().over(
-                W.partitionBy("cohort_member_id", "visit_occurrence_id").orderBy("datetime")
-            ),
+            F.dense_rank().over(W.partitionBy("cohort_member_id", "visit_occurrence_id").orderBy("datetime")),
         ).otherwise(F.lit(1))
 
         # Determine the global visit concept order for each patient, this takes both visit_rank_order and concept_order
         # into account when assigning this new order.
         # e.g. visit_rank_order = [1, 1, 2, 2], concept_order = [1, 1, 1, 2] -> visit_concept_order = [1, 1, 2, 3]
         visit_concept_order_udf = F.dense_rank().over(
-            W.partitionBy("person_id", "cohort_member_id").orderBy(
-                "visit_rank_order", "concept_order"
-            )
+            W.partitionBy("person_id", "cohort_member_id").orderBy("visit_rank_order", "concept_order")
         )
 
         # We need to set the visit_end_date as the visit_start_date for outpatient visits
@@ -164,11 +154,7 @@ class PatientEventBaseDecorator(PatientEventDecorator):
         # We need to bound the medical event dates between visit_start_date and visit_end_date
         bound_medical_event_date = F.when(
             F.col("date") < F.col("visit_start_date"), F.col("visit_start_date")
-        ).otherwise(
-            F.when(F.col("date") > F.col("visit_end_date"), F.col("visit_end_date")).otherwise(
-                F.col("date")
-            )
-        )
+        ).otherwise(F.when(F.col("date") > F.col("visit_end_date"), F.col("visit_end_date")).otherwise(F.col("date")))
 
         # We need to bound the medical event dates between visit_start_date and visit_end_date
         bound_medical_event_datetime = F.when(
@@ -240,9 +226,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
 
         # visits should the following columns (person_id,
         # visit_concept_id, visit_start_date, visit_occurrence_id, domain, concept_value)
-        cohort_member_person_pair = patient_events.select(
-            "person_id", "cohort_member_id"
-        ).distinct()
+        cohort_member_person_pair = patient_events.select("person_id", "cohort_member_id").distinct()
         valid_visit_ids = patient_events.groupby(
             "cohort_member_id",
             "visit_occurrence_id",
@@ -261,9 +245,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
                 F.col("visit_start_date").cast(T.DateType()).alias("date"),
                 F.col("visit_start_date").cast(T.DateType()).alias("visit_start_date"),
                 F.col("visit_start_datetime").cast(T.TimestampType()).alias("visit_start_datetime"),
-                F.coalesce("visit_end_date", "visit_start_date")
-                .cast(T.DateType())
-                .alias("visit_end_date"),
+                F.coalesce("visit_end_date", "visit_start_date").cast(T.DateType()).alias("visit_end_date"),
                 "visit_concept_id",
                 "visit_occurrence_id",
                 F.lit("visit").alias("domain"),
@@ -367,9 +349,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
         if self._exclude_visit_tokens:
             artificial_tokens = att_tokens
         else:
-            artificial_tokens = visit_start_events.unionByName(att_tokens).unionByName(
-                visit_end_events
-            )
+            artificial_tokens = visit_start_events.unionByName(att_tokens).unionByName(visit_end_events)
 
         if self._include_visit_type:
             # insert visit type after the VS token
@@ -388,12 +368,10 @@ class PatientEventAttDecorator(PatientEventDecorator):
         artificial_tokens = artificial_tokens.drop("visit_end_date")
 
         # Retrieving the events that are ONLY linked to inpatient visits
-        inpatient_visits = visit_occurrence.where(
-            F.col("visit_concept_id").isin([9201, 262, 8971, 8920])
-        ).select("visit_occurrence_id", "visit_end_date", "cohort_member_id")
-        inpatient_events = patient_events.join(
-            inpatient_visits, ["visit_occurrence_id", "cohort_member_id"]
+        inpatient_visits = visit_occurrence.where(F.col("visit_concept_id").isin([9201, 262, 8971, 8920])).select(
+            "visit_occurrence_id", "visit_end_date", "cohort_member_id"
         )
+        inpatient_events = patient_events.join(inpatient_visits, ["visit_occurrence_id", "cohort_member_id"])
 
         # Fill in the visit_end_date if null (because some visits are still ongoing at the time of data extraction)
         # Bound the event dates within visit_start_date and visit_end_date
@@ -409,12 +387,8 @@ class PatientEventAttDecorator(PatientEventDecorator):
             )
             .withColumn(
                 "date",
-                F.when(
-                    F.col("date") < F.col("visit_start_date"), F.col("visit_start_date")
-                ).otherwise(
-                    F.when(
-                        F.col("date") > F.col("visit_end_date"), F.col("visit_end_date")
-                    ).otherwise(F.col("date"))
+                F.when(F.col("date") < F.col("visit_start_date"), F.col("visit_start_date")).otherwise(
+                    F.when(F.col("date") > F.col("visit_end_date"), F.col("visit_end_date")).otherwise(F.col("date"))
                 ),
             )
             .withColumn("priority", F.col("priority") + F.col("concept_order") * 0.1)
@@ -447,9 +421,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
         )
 
         # Compute the time difference between the current record and the previous record
-        inpatient_time_delta_udf = F.when(F.col("prev_date").isNull(), 0).otherwise(
-            F.datediff("date", "prev_date")
-        )
+        inpatient_time_delta_udf = F.when(F.col("prev_date").isNull(), 0).otherwise(F.datediff("date", "prev_date"))
 
         if self._include_inpatient_hour_token:
             # Create ATT tokens within the inpatient visits
@@ -468,9 +440,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
                 inpatient_events.withColumn(
                     "is_span_boundary",
                     F.row_number().over(
-                        W.partitionBy(
-                            "cohort_member_id", "visit_occurrence_id", "concept_order"
-                        ).orderBy("priority")
+                        W.partitionBy("cohort_member_id", "visit_occurrence_id", "concept_order").orderBy("priority")
                     ),
                 )
                 .where(F.col("is_span_boundary") == 1)
@@ -494,9 +464,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
                 inpatient_events.withColumn(
                     "is_span_boundary",
                     F.row_number().over(
-                        W.partitionBy(
-                            "cohort_member_id", "visit_occurrence_id", "concept_order"
-                        ).orderBy("priority")
+                        W.partitionBy("cohort_member_id", "visit_occurrence_id", "concept_order").orderBy("priority")
                     ),
                 )
                 .where(F.col("is_span_boundary") == 1)
@@ -525,9 +493,7 @@ class PatientEventAttDecorator(PatientEventDecorator):
             how="left_anti",
         )
 
-        patient_events = inpatient_events.unionByName(inpatient_att_events).unionByName(
-            other_events
-        )
+        patient_events = inpatient_events.unionByName(inpatient_att_events).unionByName(other_events)
 
         self.validate(patient_events)
         self.validate(artificial_tokens)
@@ -600,9 +566,7 @@ class DemographicPromptDecorator(PatientEventDecorator):
             calculate_age_at_first_visit_udf = F.ceil(
                 F.months_between(F.col("date"), F.col("birth_datetime")) / F.lit(12)
             )
-            age_at_first_visit_udf = F.concat(
-                F.lit("age:"), calculate_age_at_first_visit_udf.cast(T.StringType())
-            )
+            age_at_first_visit_udf = F.concat(F.lit("age:"), calculate_age_at_first_visit_udf.cast(T.StringType()))
 
         sequence_age_token = (
             self._patient_demographic.select(F.col("person_id"), F.col("birth_datetime"))
@@ -645,21 +609,15 @@ class DeathEventDecorator(PatientEventDecorator):
         if self._death is None:
             return patient_events
 
-        death_records = patient_events.join(
-            self._death.select("person_id", "death_date"), "person_id"
-        )
+        death_records = patient_events.join(self._death.select("person_id", "death_date"), "person_id")
 
-        max_visit_occurrence_id = death_records.select(
-            F.max("visit_occurrence_id").alias("max_visit_occurrence_id")
-        )
+        max_visit_occurrence_id = death_records.select(F.max("visit_occurrence_id").alias("max_visit_occurrence_id"))
 
         last_ve_record = (
             death_records.where(F.col("standard_concept_id") == "VE")
             .withColumn(
                 "record_rank",
-                F.row_number().over(
-                    W.partitionBy("person_id", "cohort_member_id").orderBy(F.desc("date"))
-                ),
+                F.row_number().over(W.partitionBy("person_id", "cohort_member_id").orderBy(F.desc("date"))),
             )
             .where(F.col("record_rank") == 1)
             .drop("record_rank")
@@ -685,13 +643,9 @@ class DeathEventDecorator(PatientEventDecorator):
             .drop("max_visit_occurrence_id")
         )
 
-        vs_records = death_records.withColumn("standard_concept_id", F.lit("VS")).withColumn(
-            "priority", F.lit(15)
-        )
+        vs_records = death_records.withColumn("standard_concept_id", F.lit("VS")).withColumn("priority", F.lit(15))
 
-        ve_records = death_records.withColumn("standard_concept_id", F.lit("VE")).withColumn(
-            "priority", F.lit(30)
-        )
+        ve_records = death_records.withColumn("standard_concept_id", F.lit("VE")).withColumn("priority", F.lit(30))
 
         # Udf for calculating the time token
         if self._att_type == AttType.DAY:
@@ -709,9 +663,7 @@ class DeathEventDecorator(PatientEventDecorator):
 
         att_records = death_records.withColumn(
             "death_date",
-            F.when(F.col("death_date") < F.col("date"), F.col("date")).otherwise(
-                F.col("death_date")
-            ),
+            F.when(F.col("death_date") < F.col("date"), F.col("date")).otherwise(F.col("death_date")),
         )
         att_records = (
             att_records.withColumn("time_delta", F.datediff("death_date", "date"))
@@ -720,9 +672,7 @@ class DeathEventDecorator(PatientEventDecorator):
             .drop("time_delta")
         )
 
-        new_tokens = (
-            att_records.unionByName(vs_records).unionByName(death_records).unionByName(ve_records)
-        )
+        new_tokens = att_records.unionByName(vs_records).unionByName(death_records).unionByName(ve_records)
         new_tokens = new_tokens.drop("death_date")
         self.validate(new_tokens)
 

@@ -55,21 +55,15 @@ class DataTrainingArguments:
     )
     validation_split_percentage: Optional[float] = dataclasses.field(
         default=0.05,
-        metadata={
-            "help": "The percentage of the train set used as validation set in case there's no validation split"
-        },
+        metadata={"help": "The percentage of the train set used as validation set in case there's no validation split"},
     )
     validation_split_num: Optional[int] = dataclasses.field(
         default=1000,
-        metadata={
-            "help": "The number of the train set used as validation set in case there's no validation split"
-        },
+        metadata={"help": "The number of the train set used as validation set in case there's no validation split"},
     )
     test_eval_ratio: Optional[float] = dataclasses.field(
         default=0.5,
-        metadata={
-            "help": "The percentage of the train set used as validation set in case there's no validation split"
-        },
+        metadata={"help": "The percentage of the train set used as validation set in case there's no validation split"},
     )
     preprocessing_num_workers: Optional[int] = dataclasses.field(
         default=4,
@@ -96,9 +90,7 @@ class DataTrainingArguments:
     )
     is_data_in_med: Optional[bool] = dataclasses.field(
         default=False,
-        metadata={
-            "help": "The boolean indicator to indicate whether the data is in the MED format"
-        },
+        metadata={"help": "The boolean indicator to indicate whether the data is in the MED format"},
     )
     inpatient_att_function_type: Literal[
         AttType.CEHR_BERT.value,
@@ -155,15 +147,11 @@ class DataTrainingArguments:
     )
     min_num_tokens: Optional[int] = dataclasses.field(
         default=20,
-        metadata={
-            "help": "The minimum num of tokens required in a sequences to be included for training"
-        },
+        metadata={"help": "The minimum num of tokens required in a sequences to be included for training"},
     )
     shuffle_records: Optional[bool] = dataclasses.field(
         default=False,
-        metadata={
-            "help": "Indicates whether to randomly shuffle the records that have the same rank"
-        },
+        metadata={"help": "Indicates whether to randomly shuffle the records that have the same rank"},
     )
 
 
@@ -188,16 +176,12 @@ class ModelArguments:
     early_stopping_patience: Optional[int] = dataclasses.field(
         default=1,
         metadata={
-            "help": "stop training when the specified metric worsens "
-            "for `early_stopping_patience` evaluation calls."
+            "help": "stop training when the specified metric worsens " "for `early_stopping_patience` evaluation calls."
         },
     )
     cache_dir: Optional[str] = dataclasses.field(
         default=None,
-        metadata={
-            "help": "Where do you want to store the pretrained models downloaded "
-            "from huggingface.co"
-        },
+        metadata={"help": "Where do you want to store the pretrained models downloaded " "from huggingface.co"},
     )
     use_auth_token: bool = dataclasses.field(
         default=None,
@@ -241,20 +225,16 @@ class ModelArguments:
         default=512,
         metadata={"help": "The maximum length of the sequence allowed for the transformer model"},
     )
-    finetune_model_type: Literal[FineTuneModelType.POOLING.value, FineTuneModelType.LSTM.value] = (
-        dataclasses.field(
-            default=FineTuneModelType.POOLING.value,
-            metadata={
-                "help": "The finetune model type to choose from",
-                "choices": f"choices={[e.value for e in FineTuneModelType]}",
-            },
-        )
+    finetune_model_type: Literal[FineTuneModelType.POOLING.value, FineTuneModelType.LSTM.value] = dataclasses.field(
+        default=FineTuneModelType.POOLING.value,
+        metadata={
+            "help": "The finetune model type to choose from",
+            "choices": f"choices={[e.value for e in FineTuneModelType]}",
+        },
     )
     use_lora: Optional[bool] = dataclasses.field(
         default=False,
-        metadata={
-            "help": "The flag to indicate whether or not to use the Lora adapter for finetuning"
-        },
+        metadata={"help": "The flag to indicate whether or not to use the Lora adapter for finetuning"},
     )
     lora_rank: Optional[int] = dataclasses.field(
         default=16, metadata={"help": "Lora attention dimension (the “rank”)."}

@@ -19,9 +19,7 @@ class VanillaBertTrainerIntegrationTest(unittest.TestCase):
         Path(self.model_folder_path).mkdir(parents=True, exist_ok=True)
 
         self.tf_board_log_path = os.path.join(self.model_folder_path, "logs")
-        self.training_data_parquet_path = os.path.join(
-            root_folder, "sample_data/pretrain/patient_sequence.parquet"
-        )
+        self.training_data_parquet_path = os.path.join(root_folder, "sample_data/pretrain/patient_sequence.parquet")
 
         self.embedding_size = 16
         self.context_window_size = 10

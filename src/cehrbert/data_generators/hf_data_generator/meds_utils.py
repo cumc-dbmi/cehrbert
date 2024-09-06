@@ -10,21 +10,13 @@ import numpy as np
 import pandas as pd
 from datasets import Dataset, DatasetDict, Split
 
-from ...data_generators.hf_data_generator.hf_dataset import (
-    apply_cehrbert_dataset_mapping,
-)
-from ...data_generators.hf_data_generator.hf_dataset_mapping import (
-    MedToCehrBertDatasetMapping,
-    birth_codes,
-)
+from ...data_generators.hf_data_generator.hf_dataset import apply_cehrbert_dataset_mapping
+from ...data_generators.hf_data_generator.hf_dataset_mapping import MedToCehrBertDatasetMapping, birth_codes
 from ...data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules.meds_to_cehrbert_base import (
     MedsToCehrBertConversion,
 )
 from ...med_extension.schema_extension import CehrBertPatient, Event, Visit
-from ...runners.hf_runner_argument_dataclass import (
-    DataTrainingArguments,
-    MedsToCehrBertConversionType,
-)
+from ...runners.hf_runner_argument_dataclass import DataTrainingArguments, MedsToCehrBertConversionType
 
 UNKNOWN_VALUE = "Unknown"
 DEFAULT_ED_CONCEPT_ID = "9203"
@@ -44,19 +36,12 @@ def get_meds_to_cehrbert_conversion_cls(
     for cls in MedsToCehrBertConversion.__subclasses__():
         if meds_to_cehrbert_conversion_type.name == cls.__name__:
             return cls()
-    raise RuntimeError(
-        f"{meds_to_cehrbert_conversion_type} is not a valid MedsToCehrBertConversionType"
-    )
+    raise RuntimeError(f"{meds_to_cehrbert_conversion_type} is not a valid MedsToCehrBertConversionType")
 
 
 def get_patient_split(meds_reader_db_path: str) -> Dict[str, List[int]]:
-    patient_split = pd.read_parquet(
-        os.path.join(meds_reader_db_path, "metadata/patient_splits.parquet")
-    )
-    result = {
-        str(group): records["patient_id"].tolist()
-        for group, records in patient_split.groupby("split")
-    }
+    patient_split = pd.read_parquet(os.path.join(meds_reader_db_path, "metadata/patient_splits.parquet"))
+    result = {str(group): records["patient_id"].tolist() for group, records in patient_split.groupby("split")}
     return result
 
 
@@ -139,9 +124,7 @@ class PatientBlock:
                                 numeric_value=float(value),
                                 properties={"visit_id": self.visit_id, "table": "meds"},
                             )
-                            for label, value in zip(
-                                conversion_rule.mapped_event_labels, match.groups()
-                            )
+                            for label, value in zip(conversion_rule.mapped_event_labels, match.groups())
                             if value.isnumeric()
                         ]
                         return events
@@ -230,9 +213,7 @@ def convert_one_patient(
             # the ED event and the subsequent hospital admission
             if active_ed_index is not None:
 
-                hour_diff = (
-                    patient_block.min_time - patient_blocks[active_ed_index].max_time
-                ).total_seconds() / 3600
+                hour_diff = (patient_block.min_time - patient_blocks[active_ed_index].max_time).total_seconds() / 3600
                 # If the time difference between the ed and admission is leq 24 hours,
                 # we consider ED to be part of the visits
                 if hour_diff <= 24 or active_ed_index == i:
@@ -315,9 +296,7 @@ def convert_one_patient(
             age_at_index -= 1
 
     # birth_datetime can not be None
-    assert (
-        birth_datetime is not None
-    ), f"patient_id: {patient.patient_id} does not have a valid birth_datetime"
+    assert birth_datetime is not None, f"patient_id: {patient.patient_id} does not have a valid birth_datetime"
 
     return CehrBertPatient(
         patient_id=patient.patient_id,
@@ -356,9 +335,7 @@ def create_dataset_from_meds_reader(
         is_pretraining=is_pretraining,
     )
 
-    return DatasetDict(
-        {"train": train_dataset, "validation": tuning_dataset, "test": held_out_dataset}
-    )
+    return DatasetDict({"train": train_dataset, "validation": tuning_dataset, "test": held_out_dataset})
 
 
 def _meds_to_cehrbert_generator(
@@ -372,9 +349,7 @@ def _meds_to_cehrbert_generator(
         with meds_reader.PatientDatabase(path_to_db) as patient_database:
             for patient_id, prediction_time, label in shard:
                 patient = patient_database[patient_id]
-                yield convert_one_patient(
-                    patient, conversion, default_visit_id, prediction_time, label
-                )
+                yield convert_one_patient(patient, conversion, default_visit_id, prediction_time, label)
 
 
 def _create_cehrbert_data_from_meds(

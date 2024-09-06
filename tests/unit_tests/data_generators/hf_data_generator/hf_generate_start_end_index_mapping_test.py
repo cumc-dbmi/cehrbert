@@ -2,9 +2,7 @@ import random
 import unittest
 from unittest.mock import MagicMock
 
-from cehrbert.data_generators.hf_data_generator.hf_dataset_collator import (
-    CehrBertDataCollator,
-)
+from cehrbert.data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
 
 # Seed the random number generator for reproducibility in tests
 random.seed(42)
@@ -44,9 +42,7 @@ class TestGenerateStartEndIndexMapping(unittest.TestCase):
         self.assertListEqual(result["input_ids"], list(range(9)))
 
     def test_tail_case_sequence_length_equal_to_max(self):
-        from cehrbert.data_generators.hf_data_generator.hf_dataset_collator import (
-            TruncationType,
-        )
+        from cehrbert.data_generators.hf_data_generator.hf_dataset_collator import TruncationType
 
         # Test with a sequence exactly equal to max_sequence_length
         default_val = self.data_collator.truncate_type

@@ -18,9 +18,7 @@ from .hf_runner_argument_dataclass import DataTrainingArguments, ModelArguments
 LOG = logging.get_logger("transformers")
 
 
-def load_parquet_as_dataset(
-    data_folder, split="train", streaming=False
-) -> Union[Dataset, IterableDataset]:
+def load_parquet_as_dataset(data_folder, split="train", streaming=False) -> Union[Dataset, IterableDataset]:
     """
     Loads a dataset from Parquet files located within a specified folder into a Hugging Face `datasets.Dataset`.
 
@@ -100,16 +98,9 @@ def get_last_hf_checkpoint(training_args):
     """
     last_checkpoint = None
     output_dir_abspath = os.path.abspath(training_args.output_dir)
-    if (
-        os.path.isdir(output_dir_abspath)
-        and training_args.do_train
-        and not training_args.overwrite_output_dir
-    ):
+    if os.path.isdir(output_dir_abspath) and training_args.do_train and not training_args.overwrite_output_dir:
         last_checkpoint = get_last_checkpoint(output_dir_abspath)
-        if (
-            last_checkpoint is None
-            and len([_ for _ in os.listdir(output_dir_abspath) if os.path.isdir(_)]) > 0
-        ):
+        if last_checkpoint is None and len([_ for _ in os.listdir(output_dir_abspath) if os.path.isdir(_)]) > 0:
             raise ValueError(
                 f"Output directory ({output_dir_abspath}) already exists and is not empty. "
                 "Use --overwrite_output_dir to overcome."
@@ -202,11 +193,7 @@ def generate_prepared_ds_path(data_args, model_args, data_folder=None) -> Path:
         + "|"
         + os.path.abspath(model_args.tokenizer_name_or_path)
         + "|"
-        + (
-            str(data_args.validation_split_percentage)
-            if data_args.validation_split_percentage
-            else ""
-        )
+        + (str(data_args.validation_split_percentage) if data_args.validation_split_percentage else "")
         + "|"
         + f"test_eval_ratio={str(data_args.test_eval_ratio)}"
         + "|"
@@ -265,13 +252,9 @@ def parse_runner_args() -> Tuple[DataTrainingArguments, ModelArguments, Training
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(
-            json_file=os.path.abspath(sys.argv[1])
-        )
+        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     elif len(sys.argv) == 2 and sys.argv[1].endswith(".yaml"):
-        model_args, data_args, training_args = parser.parse_yaml_file(
-            yaml_file=os.path.abspath(sys.argv[1])
-        )
+        model_args, data_args, training_args = parser.parse_yaml_file(yaml_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
     return data_args, model_args, training_args

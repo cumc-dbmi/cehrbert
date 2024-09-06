@@ -29,13 +29,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 
 from ..config.output_names import PARQUET_DATA_PATH, QUALIFIED_CONCEPT_LIST_PATH
-from ..const.common import (
-    MEASUREMENT,
-    OBSERVATION_PERIOD,
-    PERSON,
-    REQUIRED_MEASUREMENT,
-    VISIT_OCCURRENCE,
-)
+from ..const.common import MEASUREMENT, OBSERVATION_PERIOD, PERSON, REQUIRED_MEASUREMENT, VISIT_OCCURRENCE
 from ..utils.spark_utils import (
     create_hierarchical_sequence_data,
     join_domain_tables,
@@ -123,9 +117,7 @@ def main(
     person = preprocess_domain_table(spark, input_folder, PERSON)
 
     # Filter for the persons that have enough observation period
-    person = person.join(observation_period, "person_id").select(
-        [person[f] for f in person.schema.fieldNames()]
-    )
+    person = person.join(observation_period, "person_id").select([person[f] for f in person.schema.fieldNames()])
 
     # Union all domain table records
     patient_events = join_domain_tables(domain_tables)
@@ -134,14 +126,10 @@ def main(
 
     if include_concept_list and patient_events:
         # Filter out concepts
-        qualified_concepts = F.broadcast(
-            preprocess_domain_table(spark, input_folder, QUALIFIED_CONCEPT_LIST_PATH)
-        )
+        qualified_concepts = F.broadcast(preprocess_domain_table(spark, input_folder, QUALIFIED_CONCEPT_LIST_PATH))
         # The select is necessary to make sure the order of the columns is the same as the
         # original dataframe
-        patient_events = patient_events.join(qualified_concepts, "standard_concept_id").select(
-            column_names
-        )
+        patient_events = patient_events.join(qualified_concepts, "standard_concept_id").select(column_names)
 
     # Process the measurement table if exists
     if MEASUREMENT in domain_table_list:
@@ -149,9 +137,7 @@ def main(
         required_measurement = preprocess_domain_table(spark, input_folder, REQUIRED_MEASUREMENT)
         # The select is necessary to make sure the order of the columns is the same as the
         # original dataframe, otherwise the union might use the wrong columns
-        scaled_measurement = process_measurement(spark, measurement, required_measurement).select(
-            column_names
-        )
+        scaled_measurement = process_measurement(spark, measurement, required_measurement).select(column_names)
 
         if patient_events:
             # Union all measurement records together with other domain records
@@ -177,9 +163,7 @@ def main(
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Arguments for generate training data for Hierarchical Bert"
-    )
+    parser = argparse.ArgumentParser(description="Arguments for generate training data for Hierarchical Bert")
     parser.add_argument(
         "-i",
         "--input_folder",

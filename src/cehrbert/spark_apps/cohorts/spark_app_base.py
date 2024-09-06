@@ -131,9 +131,7 @@ class BaseCohortBuilder(ABC):
         # Validate if the data folders exist
         validate_date_folder(self._input_folder, self._query_builder.get_dependency_list())
 
-        self.spark = SparkSession.builder.appName(
-            f"Generate {self._query_builder.get_cohort_name()}"
-        ).getOrCreate()
+        self.spark = SparkSession.builder.appName(f"Generate {self._query_builder.get_cohort_name()}").getOrCreate()
 
         self._dependency_dict = instantiate_dependencies(
             self.spark, self._input_folder, self._query_builder.get_dependency_list()
@@ -150,11 +148,7 @@ class BaseCohortBuilder(ABC):
         # available
         if self._query_builder.get_ancestor_table_specs():
             for ancestor_table_spec in self._query_builder.get_ancestor_table_specs():
-                func = (
-                    get_descendant_concept_ids
-                    if ancestor_table_spec.is_standard
-                    else build_ancestry_table_for
-                )
+                func = get_descendant_concept_ids if ancestor_table_spec.is_standard else build_ancestry_table_for
                 ancestor_table = func(self.spark, ancestor_table_spec.ancestor_concept_ids)
                 ancestor_table.createOrReplaceGlobalTempView(ancestor_table_spec.table_name)
 
@@ -199,12 +193,8 @@ class BaseCohortBuilder(ABC):
 
         cohort = self._add_demographics(cohort)
 
-        cohort = cohort.where(
-            F.col("age").between(self._age_lower_bound, self._age_upper_bound)
-        ).where(
-            F.col("index_date").between(
-                to_datetime(self._date_lower_bound), to_datetime(self._date_upper_bound)
-            )
+        cohort = cohort.where(F.col("age").between(self._age_lower_bound, self._age_upper_bound)).where(
+            F.col("index_date").between(to_datetime(self._date_lower_bound), to_datetime(self._date_upper_bound))
         )
 
         cohort.write.mode("overwrite").parquet(self._output_data_folder)
@@ -374,9 +364,7 @@ class NestedCohortBuilder:
         )
 
         self.spark = SparkSession.builder.appName(f"Generate {self._cohort_name}").getOrCreate()
-        self._dependency_dict = instantiate_dependencies(
-            self.spark, self._input_folder, DEFAULT_DEPENDENCY
-        )
+        self._dependency_dict = instantiate_dependencies(self.spark, self._input_folder, DEFAULT_DEPENDENCY)
 
         # Validate the input and output folders
         validate_folder(self._input_folder)
@@ -474,9 +462,7 @@ class NestedCohortBuilder:
             WHERE op.person_id IS NOT NULL OR o.person_id IS NOT NULL
             """
 
-        cohort_member_id_udf = F.dense_rank().over(
-            W.orderBy("person_id", "index_date", "visit_occurrence_id")
-        )
+        cohort_member_id_udf = F.dense_rank().over(W.orderBy("person_id", "index_date", "visit_occurrence_id"))
         cohort = self.spark.sql(
             query_template.format(
                 prediction_start_days=prediction_start_days,
@@ -487,9 +473,7 @@ class NestedCohortBuilder:
         # Keep one record in case that there are multiple samples generated for the same index_date.
         # This should not happen in theory, this is really just a safeguard
         row_rank = F.row_number().over(
-            Window.partitionBy("person_id", "cohort_member_id", "index_date").orderBy(
-                F.desc("label")
-            )
+            Window.partitionBy("person_id", "cohort_member_id", "index_date").orderBy(F.desc("label"))
         )
         cohort = cohort.withColumn("row_rank", row_rank).where("row_rank == 1").drop("row_rank")
 
@@ -500,11 +484,7 @@ class NestedCohortBuilder:
             record_rank = F.row_number().over(
                 Window.partitionBy("person_id").orderBy(F.desc("label"), F.desc("index_date"))
             )
-            cohort = (
-                cohort.withColumn("record_rank", record_rank)
-                .where("record_rank == 1")
-                .drop("record_rank")
-            )
+            cohort = cohort.withColumn("record_rank", record_rank).where("record_rank == 1").drop("record_rank")
 
         ehr_records_for_cohorts = self.extract_ehr_records_for_cohort(cohort)
         # ehr_records_for_cohorts.show()
@@ -517,22 +497,18 @@ class NestedCohortBuilder:
         # if patient_splits is provided, we will
         if self._patient_splits_folder:
             patient_splits = self.spark.read.parquet(self._patient_splits_folder)
-            cohort.join(patient_splits, "person_id").orderBy(
-                "person_id", "cohort_member_id"
-            ).write.mode("overwrite").parquet(os.path.join(self._output_data_folder, "temp"))
+            cohort.join(patient_splits, "person_id").orderBy("person_id", "cohort_member_id").write.mode(
+                "overwrite"
+            ).parquet(os.path.join(self._output_data_folder, "temp"))
             # Reload the data from the disk
             cohort = self.spark.read.parquet(os.path.join(self._output_data_folder, "temp"))
             cohort.where('split="train"').write.mode("overwrite").parquet(
                 os.path.join(self._output_data_folder, "train")
             )
-            cohort.where('split="test"').write.mode("overwrite").parquet(
-                os.path.join(self._output_data_folder, "test")
-            )
+            cohort.where('split="test"').write.mode("overwrite").parquet(os.path.join(self._output_data_folder, "test"))
             shutil.rmtree(os.path.join(self._output_data_folder, "temp"))
         else:
-            cohort.orderBy("person_id", "cohort_member_id").write.mode("overwrite").parquet(
-                self._output_data_folder
-            )
+            cohort.orderBy("person_id", "cohort_member_id").write.mode("overwrite").parquet(self._output_data_folder)
 
     def extract_ehr_records_for_cohort(self, cohort: DataFrame):
         """
@@ -553,8 +529,7 @@ class NestedCohortBuilder:
 
         # Duplicate the records for cohorts that allow multiple entries
         ehr_records = ehr_records.join(cohort, "person_id").select(
-            [ehr_records[field_name] for field_name in ehr_records.schema.fieldNames()]
-            + ["cohort_member_id"]
+            [ehr_records[field_name] for field_name in ehr_records.schema.fieldNames()] + ["cohort_member_id"]
         )
 
         # Only allow the data records that occurred between the index date and the prediction window
@@ -562,9 +537,7 @@ class NestedCohortBuilder:
             if self._is_prediction_window_unbounded:
                 record_window_filter = ehr_records["date"] <= F.current_date()
             else:
-                record_window_filter = ehr_records["date"] <= F.date_add(
-                    cohort["index_date"], self._prediction_window
-                )
+                record_window_filter = ehr_records["date"] <= F.date_add(cohort["index_date"], self._prediction_window)
         else:
             # For patient level prediction, we remove all records post index date
             if self._is_observation_post_index:
@@ -589,8 +562,7 @@ class NestedCohortBuilder:
         cohort_ehr_records = (
             ehr_records.join(
                 cohort,
-                (ehr_records.person_id == cohort.person_id)
-                & (ehr_records.cohort_member_id == cohort.cohort_member_id),
+                (ehr_records.person_id == cohort.person_id) & (ehr_records.cohort_member_id == cohort.cohort_member_id),
             )
             .where(record_window_filter)
             .select([ehr_records[field_name] for field_name in ehr_records.schema.fieldNames()])
@@ -619,9 +591,7 @@ class NestedCohortBuilder:
                 "gender_concept_id",
             )
 
-            age_udf = F.ceil(
-                F.months_between(F.col("visit_start_date"), F.col("birth_datetime")) / F.lit(12)
-            )
+            age_udf = F.ceil(F.months_between(F.col("visit_start_date"), F.col("birth_datetime")) / F.lit(12))
             visit_occurrence_person = (
                 self._dependency_dict[VISIT_OCCURRENCE]
                 .join(patient_demographic, "person_id")

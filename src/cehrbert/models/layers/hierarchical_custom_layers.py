@@ -73,9 +73,9 @@ class HierarchicalBertLayer(tf.keras.layers.Layer):
             tf.newaxis, tf.newaxis, :, tf.newaxis
         ]
 
-        self.merge_matrix_inverse = tf.constant(
-            [0] + [1] * (self.num_of_concepts - 1), dtype=tf.float32
-        )[tf.newaxis, tf.newaxis, :, tf.newaxis]
+        self.merge_matrix_inverse = tf.constant([0] + [1] * (self.num_of_concepts - 1), dtype=tf.float32)[
+            tf.newaxis, tf.newaxis, :, tf.newaxis
+        ]
 
         self.global_embedding_dropout_layer = tf.keras.layers.Dropout(dropout_rate)
         self.global_concept_embeddings_normalization = tf.keras.layers.LayerNormalization(
@@ -155,9 +155,7 @@ class HierarchicalBertLayer(tf.keras.layers.Layer):
 
             # Step 3 encoder applied to patient level
             # Feed augmented visit embeddings into encoders to get contextualized visit embeddings
-            visit_embeddings, _ = self.visit_encoder_layer(
-                augmented_visit_embeddings, visit_concept_mask, **kwargs
-            )
+            visit_embeddings, _ = self.visit_encoder_layer(augmented_visit_embeddings, visit_concept_mask, **kwargs)
             # v, k, q
             global_concept_embeddings = self.mha_layer(
                 value=visit_embeddings,
@@ -167,9 +165,7 @@ class HierarchicalBertLayer(tf.keras.layers.Layer):
                 return_attention_scores=False,
             )
 
-            global_concept_embeddings = self.global_embedding_dropout_layer(
-                global_concept_embeddings
-            )
+            global_concept_embeddings = self.global_embedding_dropout_layer(global_concept_embeddings)
 
             global_concept_embeddings = self.global_concept_embeddings_normalization(
                 global_concept_embeddings + contextualized_concept_embeddings

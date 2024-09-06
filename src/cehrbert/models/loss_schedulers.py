@@ -45,9 +45,7 @@ class CosineLRSchedule:
         result = lr_max
         for i in range(epoch + 1):
             if i == epoch:  # last iteration
-                result = self._lr_low + 0.5 * (lr_max - self._lr_low) * (
-                    1 + math.cos(math.pi * t_cur / period)
-                )
+                result = self._lr_low + 0.5 * (lr_max - self._lr_low) * (1 + math.cos(math.pi * t_cur / period))
             else:
                 if t_cur == period:
                     period *= self._period_mult

@@ -26,11 +26,7 @@ from pyspark.sql import functions as F
 
 from ..config.output_names import INFORMATION_CONTENT_DATA_PATH
 from ..const.common import CONCEPT_ANCESTOR
-from ..utils.spark_utils import (
-    join_domain_tables,
-    preprocess_domain_table,
-    validate_table_names,
-)
+from ..utils.spark_utils import join_domain_tables, preprocess_domain_table, validate_table_names
 
 
 def main(input_folder, output_folder, domain_table_list, date_filter):
@@ -83,13 +79,11 @@ def main(input_folder, output_folder, domain_table_list, date_filter):
     )
 
     # Calculate information content for each concept
-    information_content = freq_df.withColumn(
-        "information_content", (-F.log(F.col("count") / total_count))
-    ).withColumn("probability", F.col("count") / total_count)
-
-    information_content.write.mode("overwrite").parquet(
-        os.path.join(output_folder, INFORMATION_CONTENT_DATA_PATH)
+    information_content = freq_df.withColumn("information_content", (-F.log(F.col("count") / total_count))).withColumn(
+        "probability", F.col("count") / total_count
     )
+
+    information_content.write.mode("overwrite").parquet(os.path.join(output_folder, INFORMATION_CONTENT_DATA_PATH))
 
 
 if __name__ == "__main__":

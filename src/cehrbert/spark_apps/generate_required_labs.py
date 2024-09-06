@@ -63,9 +63,7 @@ def main(input_folder, output_folder, num_of_numeric_labs, num_of_categorical_la
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Arguments for generate " "required labs to be included"
-    )
+    parser = argparse.ArgumentParser(description="Arguments for generate " "required labs to be included")
     parser.add_argument(
         "-i",
         "--input_folder",

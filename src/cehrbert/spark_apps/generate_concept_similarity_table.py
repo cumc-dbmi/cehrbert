@@ -21,11 +21,7 @@ from pyspark.sql import functions as F
 
 from ..config.output_names import CONCEPT_SIMILARITY_PATH, QUALIFIED_CONCEPT_LIST_PATH
 from ..const.common import CONCEPT, CONCEPT_ANCESTOR
-from ..utils.spark_utils import (
-    join_domain_tables,
-    preprocess_domain_table,
-    validate_table_names,
-)
+from ..utils.spark_utils import join_domain_tables, preprocess_domain_table, validate_table_names
 
 
 def extract_data(spark: SparkSession, input_folder: str, domain_table_list: List[str]):
@@ -74,9 +70,9 @@ def compute_information_content(patient_event: DataFrame, concept_ancestor: Data
         .withColumnRenamed("sum(count)", "count")
     )
     # Calculate information content for each concept
-    information_content = freq_df.withColumn(
-        "information_content", (-F.log(F.col("count") / total_count))
-    ).withColumn("probability", F.col("count") / total_count)
+    information_content = freq_df.withColumn("information_content", (-F.log(F.col("count") / total_count))).withColumn(
+        "probability", F.col("count") / total_count
+    )
 
     return information_content
 
@@ -166,30 +162,20 @@ def compute_information_content_similarity(
         & (information_content_concept_pair["concept_id_2"] == mica_ancestor["concept_id_2"]),
         "left_outer",
     ).select(
-        [
-            information_content_concept_pair[f]
-            for f in information_content_concept_pair.schema.fieldNames()
-        ]
+        [information_content_concept_pair[f] for f in information_content_concept_pair.schema.fieldNames()]
         + [F.col("mica_information_content"), F.col("mica_probability")]
     )
 
     # Compute the lin measure
     features = features.withColumn(
         "lin_measure",
-        2
-        * F.col("mica_information_content")
-        / (F.col("information_content_1") * F.col("information_content_2")),
+        2 * F.col("mica_information_content") / (F.col("information_content_1") * F.col("information_content_2")),
     )
 
     # Compute the jiang measure
     features = features.withColumn(
         "jiang_measure",
-        1
-        - (
-            F.col("information_content_1")
-            + F.col("information_content_2")
-            - 2 * F.col("mica_information_content")
-        ),
+        1 - (F.col("information_content_1") + F.col("information_content_2") - 2 * F.col("mica_information_content")),
     )
 
     # Compute the information coefficient
@@ -199,9 +185,7 @@ def compute_information_content_similarity(
     )
 
     # Compute the relevance_measure
-    features = features.withColumn(
-        "relevance_measure", F.col("lin_measure") * (1 - F.col("mica_probability"))
-    )
+    features = features.withColumn("relevance_measure", F.col("lin_measure") * (1 - F.col("mica_probability")))
 
     # Join to get the summed information content of the common ancestors of concept_id_1 and
     # concept_id_2
@@ -210,9 +194,7 @@ def compute_information_content_similarity(
         (features["concept_id_1"] == intersection_sum["concept_id_1"])
         & (features["concept_id_2"] == intersection_sum["concept_id_2"]),
         "left_outer",
-    ).select(
-        [features[f] for f in features.schema.fieldNames()] + [F.col("ancestor_intersection_ic")]
-    )
+    ).select([features[f] for f in features.schema.fieldNames()] + [F.col("ancestor_intersection_ic")])
 
     # Join to get the summed information content of the common ancestors of concept_id_1 and
     # concept_id_2
@@ -311,9 +293,7 @@ def compute_semantic_similarity(spark, patient_event, concept, concept_ancestor)
     # Compute the semantic similarity
     concept_pair_similarity = concept_pair.withColumn(
         "semantic_similarity",
-        2
-        * F.col("root_distance")
-        / (2 * F.col("root_distance") + F.col("distance_1") + F.col("distance_2")),
+        2 * F.col("root_distance") / (2 * F.col("root_distance") + F.col("distance_1") + F.col("distance_2")),
     )
     # Find the maximum semantic similarity
     concept_pair_similarity = concept_pair_similarity.groupBy("concept_id_1", "concept_id_2").agg(
@@ -345,8 +325,7 @@ def main(
 
     logger = logging.getLogger(__name__)
     logger.info(
-        "input_folder: %s\noutput_folder: %s\ndomain_table_list: %s\ndate_filter: "
-        "%s\ninclude_concept_list: %s",
+        "input_folder: %s\noutput_folder: %s\ndomain_table_list: %s\ndate_filter: " "%s\ninclude_concept_list: %s",
         input_folder,
         output_folder,
         domain_table_list,
@@ -366,26 +345,18 @@ def main(
     # Filter out concepts that are not required in the required concept_list
     if include_concept_list and patient_event:
         # Filter out concepts
-        qualified_concepts = F.broadcast(
-            preprocess_domain_table(spark, input_folder, QUALIFIED_CONCEPT_LIST_PATH)
-        )
+        qualified_concepts = F.broadcast(preprocess_domain_table(spark, input_folder, QUALIFIED_CONCEPT_LIST_PATH))
 
-        patient_event = patient_event.join(qualified_concepts, "standard_concept_id").select(
-            "standard_concept_id"
-        )
+        patient_event = patient_event.join(qualified_concepts, "standard_concept_id").select("standard_concept_id")
 
-    concept_pair_similarity = compute_semantic_similarity(
-        spark, patient_event, concept, concept_ancestor
-    )
+    concept_pair_similarity = compute_semantic_similarity(spark, patient_event, concept, concept_ancestor)
 
     # Compute the information content based similarity scores
     concept_pair_ic_similarity = compute_information_content_similarity(
         concept_pair_similarity, information_content, concept_ancestor
     )
 
-    concept_pair_similarity_columns = [
-        concept_pair_similarity[f] for f in concept_pair_similarity.schema.fieldNames()
-    ]
+    concept_pair_similarity_columns = [concept_pair_similarity[f] for f in concept_pair_similarity.schema.fieldNames()]
     concept_pair_ic_similarity_columns = [
         f for f in concept_pair_ic_similarity.schema.fieldNames() if "concept_id" not in f
     ]
@@ -397,9 +368,7 @@ def main(
         & (concept_pair_similarity["concept_id_2"] == concept_pair_ic_similarity["concept_id_2"]),
     ).select(concept_pair_similarity_columns + concept_pair_ic_similarity_columns)
 
-    concept_pair_similarity.write.mode("overwrite").parquet(
-        os.path.join(output_folder, CONCEPT_SIMILARITY_PATH)
-    )
+    concept_pair_similarity.write.mode("overwrite").parquet(os.path.join(output_folder, CONCEPT_SIMILARITY_PATH))
 
 
 if __name__ == "__main__":

@@ -46,9 +46,7 @@ def create_indexes_by_time_window(dates, cursor, max_seq_len, time_window_size):
     context_dates = dates[start_index:end_index]
     time_deltas = context_dates - dates[cursor]
     context_indexes = np.squeeze(
-        np.argwhere(
-            (time_deltas >= -half_time_window_size) & (time_deltas <= half_time_window_size)
-        ),
+        np.argwhere((time_deltas >= -half_time_window_size) & (time_deltas <= half_time_window_size)),
         axis=-1,
     )
 
@@ -63,10 +61,7 @@ def get_required_params(clazz: LearningObjective):
     :return:
     """
     params = inspect.signature(clazz).parameters
-    return [
-        dict(name=name, required=param.default is inspect.Parameter.empty)
-        for name, param in params.items()
-    ]
+    return [dict(name=name, required=param.default is inspect.Parameter.empty) for name, param in params.items()]
 
 
 class AbstractDataGeneratorBase(ABC):
@@ -152,9 +147,7 @@ class AbstractDataGeneratorBase(ABC):
         dataframe_columns = self._training_data.columns.tolist()
         for required_column in self._get_required_columns():
             if not required_column in dataframe_columns:
-                raise ValueError(
-                    f"The required column {required_column} does not exist in the training data"
-                )
+                raise ValueError(f"The required column {required_column} does not exist in the training data")
 
     @abstractmethod
     def _clean_dataframe(self):
@@ -219,9 +212,7 @@ class AbstractDataGeneratorBase(ABC):
         Floor division + 1 if there is any modulo value
         :return:
         """
-        num_of_steps = self.get_data_size() // self._batch_size + bool(
-            self.get_data_size() % self._batch_size
-        )
+        num_of_steps = self.get_data_size() // self._batch_size + bool(self.get_data_size() % self._batch_size)
 
         if self._num_steps:
             return min(self._num_steps, num_of_steps)
@@ -237,12 +228,7 @@ class AbstractDataGeneratorBase(ABC):
         :return:
         """
         learning_objective_required_columns = list(
-            chain(
-                *[
-                    learning_objective.get_required_columns()
-                    for learning_objective in self._learning_objectives
-                ]
-            )
+            chain(*[learning_objective.get_required_columns() for learning_objective in self._learning_objectives])
         )
         return set(learning_objective_required_columns + [self.default_required_column])
 
@@ -268,9 +254,7 @@ class AbstractDataGeneratorBase(ABC):
 class BertDataGenerator(AbstractDataGeneratorBase):
 
     def __init__(self, concept_tokenizer: ConceptTokenizer, *args, **kwargs):
-        super(BertDataGenerator, self).__init__(
-            concept_tokenizer=concept_tokenizer, *args, **kwargs
-        )
+        super(BertDataGenerator, self).__init__(concept_tokenizer=concept_tokenizer, *args, **kwargs)
         self._concept_tokenizer = concept_tokenizer
 
     def _clean_dataframe(self):
@@ -463,9 +447,7 @@ class TimeAttentionDataGenerator(AbstractDataGeneratorBase):
         """
         while True:
             for row in self._training_data.itertuples():
-                concept_ids, dates = zip(
-                    *sorted(zip(row.token_ids, row.dates), key=lambda tup2: tup2[1])
-                )
+                concept_ids, dates = zip(*sorted(zip(row.token_ids, row.dates), key=lambda tup2: tup2[1]))
                 for i in range(len(concept_ids)):
                     # Only include the concepts whose time stamps are within -half_time_window and
                     # half_time_window from the target time stamp

@@ -116,13 +116,9 @@ def apply_cehrbert_dataset_mapping(
                     batch_size=batch_size,
                 )
                 if mapping_function.remove_columns():
-                    dataset[dataset_name] = dataset[dataset_name].remove_columns(
-                        mapping_function.remove_columns()
-                    )
+                    dataset[dataset_name] = dataset[dataset_name].remove_columns(mapping_function.remove_columns())
         else:
-            dataset = dataset.map(
-                mapping_function.batch_transform, batched=True, batch_size=batch_size
-            )
+            dataset = dataset.map(mapping_function.batch_transform, batched=True, batch_size=batch_size)
             if mapping_function.remove_columns():
                 dataset = dataset.remove_columns(mapping_function.remove_columns())
     else:

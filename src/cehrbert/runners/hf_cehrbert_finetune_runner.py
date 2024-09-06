@@ -11,15 +11,9 @@ from sklearn.metrics import accuracy_score, auc, precision_recall_curve, roc_auc
 from transformers import EarlyStoppingCallback, Trainer, set_seed
 from transformers.utils import logging
 
-from cehrbert.data_generators.hf_data_generator.hf_dataset import (
-    create_cehrbert_finetuning_dataset,
-)
-from cehrbert.data_generators.hf_data_generator.hf_dataset_collator import (
-    CehrBertDataCollator,
-)
-from cehrbert.data_generators.hf_data_generator.meds_utils import (
-    create_dataset_from_meds_reader,
-)
+from cehrbert.data_generators.hf_data_generator.hf_dataset import create_cehrbert_finetuning_dataset
+from cehrbert.data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
+from cehrbert.data_generators.hf_data_generator.meds_utils import create_dataset_from_meds_reader
 from cehrbert.models.hf_models.config import CehrBertConfig
 from cehrbert.models.hf_models.hf_cehrbert import (
     CehrBertForClassification,
@@ -75,9 +69,7 @@ def load_pretrained_model_and_tokenizer(
         tokenizer_abspath = os.path.abspath(model_args.tokenizer_name_or_path)
         tokenizer = CehrBertTokenizer.from_pretrained(tokenizer_abspath)
     except Exception:
-        raise ValueError(
-            f"Can not load the pretrained tokenizer from {model_args.tokenizer_name_or_path}"
-        )
+        raise ValueError(f"Can not load the pretrained tokenizer from {model_args.tokenizer_name_or_path}")
 
     if model_args.finetune_model_type == FineTuneModelType.POOLING.value:
         finetune_model_cls = CehrBertForClassification
@@ -109,9 +101,7 @@ def main():
 
     model, tokenizer = load_pretrained_model_and_tokenizer(model_args)
 
-    prepared_ds_path = generate_prepared_ds_path(
-        data_args, model_args, data_folder=data_args.cohort_folder
-    )
+    prepared_ds_path = generate_prepared_ds_path(data_args, model_args, data_folder=data_args.cohort_folder)
 
     # If lora is enabled, we add LORA adapters to the model
     if model_args.use_lora:
@@ -134,17 +124,13 @@ def main():
             )
             model = get_peft_model(model, config)
         else:
-            raise ValueError(
-                f"The LORA adapter is not supported for {model_args.finetune_model_type}"
-            )
+            raise ValueError(f"The LORA adapter is not supported for {model_args.finetune_model_type}")
 
     if any(prepared_ds_path.glob("*")):
         LOG.info(f"Loading prepared dataset from disk at {prepared_ds_path}...")
         processed_dataset = load_from_disk(str(prepared_ds_path))
         if data_args.streaming:
-            processed_dataset = processed_dataset.to_iterable_dataset(
-                num_shards=training_args.dataloader_num_workers
-            )
+            processed_dataset = processed_dataset.to_iterable_dataset(num_shards=training_args.dataloader_num_workers)
         LOG.info("Prepared dataset loaded from disk...")
     else:
         # If the data is in the MEDS format, we need to convert it to the CEHR-BERT format
@@ -157,9 +143,7 @@ def main():
                 LOG.info(f"Trying to load the MEDS extension from disk at {meds_extension_path}...")
                 dataset = load_from_disk(meds_extension_path)
                 if data_args.streaming:
-                    dataset = dataset.to_iterable_dataset(
-                        num_shards=training_args.dataloader_num_workers
-                    )
+                    dataset = dataset.to_iterable_dataset(num_shards=training_args.dataloader_num_workers)
             except Exception as e:
                 LOG.exception(e)
                 dataset = create_dataset_from_meds_reader(data_args, is_pretraining=False)
@@ -197,18 +181,12 @@ def main():
                 np.random.seed(training_args.seed)
                 np.random.shuffle(unique_patient_ids)
 
-                train_end = int(
-                    len(unique_patient_ids) * (1 - data_args.validation_split_percentage)
-                )
+                train_end = int(len(unique_patient_ids) * (1 - data_args.validation_split_percentage))
                 train_patient_ids = set(unique_patient_ids[:train_end])
                 if not test_set:
                     # Calculate split indices
                     validation_end = (
-                        int(
-                            len(unique_patient_ids)
-                            * data_args.validation_split_percentage
-                            * data_args.test_eval_ratio
-                        )
+                        int(len(unique_patient_ids) * data_args.validation_split_percentage * data_args.test_eval_ratio)
                         + train_end
                     )
 
@@ -286,9 +264,7 @@ def main():
                     test_set = test_valid["test"]
 
         # Organize them into a single DatasetDict
-        final_splits = DatasetDict(
-            {"train": train_set, "validation": validation_set, "test": test_set}
-        )
+        final_splits = DatasetDict({"train": train_set, "validation": validation_set, "test": test_set})
 
         processed_dataset = create_cehrbert_finetuning_dataset(
             dataset=final_splits, concept_tokenizer=tokenizer, data_args=data_args
@@ -297,9 +273,7 @@ def main():
         if not data_args.streaming:
             processed_dataset.save_to_disk(prepared_ds_path)
 
-    collator = CehrBertDataCollator(
-        tokenizer, model_args.max_position_embeddings, is_pretraining=False
-    )
+    collator = CehrBertDataCollator(tokenizer, model_args.max_position_embeddings, is_pretraining=False)
 
     # Set seed before initializing model.
     set_seed(training_args.seed)
@@ -313,9 +287,7 @@ def main():
         train_dataset=processed_dataset["train"],
         eval_dataset=processed_dataset["validation"],
         compute_metrics=compute_metrics,
-        callbacks=[
-            EarlyStoppingCallback(early_stopping_patience=model_args.early_stopping_patience)
-        ],
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=model_args.early_stopping_patience)],
         args=training_args,
     )
 
@@ -357,12 +329,8 @@ def main():
         else:
             labels = np.squeeze(test_results.label_ids[0]).tolist()
 
-        prediction_pd = pd.DataFrame(
-            {"person_id ": person_ids, "prediction": predictions, "label": labels}
-        )
-        prediction_pd.to_csv(
-            os.path.join(training_args.output_dir, "test_predictions.csv"), index=False
-        )
+        prediction_pd = pd.DataFrame({"person_id ": person_ids, "prediction": predictions, "label": labels})
+        prediction_pd.to_csv(os.path.join(training_args.output_dir, "test_predictions.csv"), index=False)
 
 
 if __name__ == "__main__":

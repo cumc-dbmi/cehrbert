@@ -48,9 +48,7 @@ def transformer_hierarchical_bert_model(
     """
     # If the second tiered learning objectives are enabled, visit_vocab_size needs to be provided
     if include_visit_type_prediction and not visit_vocab_size:
-        raise RuntimeError(
-            f"visit_vocab_size can not be null " f"when the second learning objectives are enabled"
-        )
+        raise RuntimeError(f"visit_vocab_size can not be null " f"when the second learning objectives are enabled")
 
     pat_seq = tf.keras.layers.Input(
         shape=(
@@ -103,17 +101,11 @@ def transformer_hierarchical_bert_model(
 
     visit_mask = tf.keras.layers.Input(shape=(num_of_visits,), dtype="int32", name="visit_mask")
 
-    visit_time_delta_att = tf.keras.layers.Input(
-        shape=(num_of_visits - 1,), dtype="int32", name="visit_time_delta_att"
-    )
+    visit_time_delta_att = tf.keras.layers.Input(shape=(num_of_visits - 1,), dtype="int32", name="visit_time_delta_att")
 
-    visit_rank_order = tf.keras.layers.Input(
-        shape=(num_of_visits,), dtype="int32", name="visit_rank_order"
-    )
+    visit_rank_order = tf.keras.layers.Input(shape=(num_of_visits,), dtype="int32", name="visit_rank_order")
 
-    visit_visit_type = tf.keras.layers.Input(
-        shape=(num_of_visits,), dtype="int32", name="masked_visit_type"
-    )
+    visit_visit_type = tf.keras.layers.Input(shape=(num_of_visits,), dtype="int32", name="masked_visit_type")
 
     # Create a list of inputs so the model could reference these later
     default_inputs = [
@@ -130,9 +122,7 @@ def transformer_hierarchical_bert_model(
     ]
 
     # Expand dimensions for masking MultiHeadAttention in Concept Encoder
-    pat_concept_mask = tf.reshape(pat_mask, shape=(-1, num_of_concepts))[
-        :, tf.newaxis, tf.newaxis, :
-    ]
+    pat_concept_mask = tf.reshape(pat_mask, shape=(-1, num_of_concepts))[:, tf.newaxis, tf.newaxis, :]
 
     # output the embedding_matrix:
     l2_regularizer = tf.keras.regularizers.l2(l2_reg_penalty) if l2_reg_penalty else None
@@ -178,9 +168,7 @@ def transformer_hierarchical_bert_model(
     )
 
     # (batch, num_of_visits, num_of_concepts, embedding_size)
-    concept_embeddings = temporal_transformation_layer(
-        concept_embeddings, pat_seq_age, pat_seq_time, visit_rank_order
-    )
+    concept_embeddings = temporal_transformation_layer(concept_embeddings, pat_seq_age, pat_seq_time, visit_rank_order)
 
     # (batch, num_of_visits, embedding_size)
     # The first bert applied at the visit level
@@ -194,33 +182,23 @@ def transformer_hierarchical_bert_model(
 
     concept_embeddings = tf.reshape(concept_embeddings, shape=(-1, num_of_concepts, embedding_size))
 
-    concept_embeddings, _ = concept_encoder(
-        concept_embeddings, pat_concept_mask  # be reused  # not change
-    )
+    concept_embeddings, _ = concept_encoder(concept_embeddings, pat_concept_mask)  # be reused  # not change
 
     # (batch_size, num_of_visits, num_of_concepts, embedding_size)
-    concept_embeddings = tf.reshape(
-        concept_embeddings, shape=(-1, num_of_visits, num_of_concepts, embedding_size)
-    )
+    concept_embeddings = tf.reshape(concept_embeddings, shape=(-1, num_of_visits, num_of_concepts, embedding_size))
 
     # Step 2 generate visit embeddings
     # Slice out the first contextualized embedding of each visit
     # (batch_size, num_of_visits, embedding_size)
     visit_embeddings = concept_embeddings[:, :, 0]
 
-    visit_type_embedding_dense_layer = tf.keras.layers.Dense(
-        embedding_size, name="visit_type_embedding_dense_layer"
-    )
+    visit_type_embedding_dense_layer = tf.keras.layers.Dense(embedding_size, name="visit_type_embedding_dense_layer")
 
     # (batch_size, num_of_visits, embedding_size)
-    visit_type_embeddings, visit_type_embedding_matrix = visit_type_embedding_layer(
-        visit_visit_type
-    )
+    visit_type_embeddings, visit_type_embedding_matrix = visit_type_embedding_layer(visit_visit_type)
 
     # Combine visit_type_embeddings with visit_embeddings
-    visit_embeddings = visit_type_embedding_dense_layer(
-        tf.concat([visit_embeddings, visit_type_embeddings], axis=-1)
-    )
+    visit_embeddings = visit_type_embedding_dense_layer(tf.concat([visit_embeddings, visit_type_embeddings], axis=-1))
 
     # (batch_size, num_of_visits, embedding_size)
     expanded_att_embeddings = tf.concat([att_embeddings, att_embeddings[:, 0:1, :]], axis=1)
@@ -233,9 +211,9 @@ def transformer_hierarchical_bert_model(
     )[:, :-1, :]
 
     # Expand dimension for masking MultiHeadAttention in Visit Encoder
-    visit_mask_with_att = tf.reshape(
-        tf.tile(visit_mask[:, :, tf.newaxis], [1, 1, 3]), (-1, num_of_visits * 3)
-    )[:, tf.newaxis, tf.newaxis, 1:]
+    visit_mask_with_att = tf.reshape(tf.tile(visit_mask[:, :, tf.newaxis], [1, 1, 3]), (-1, num_of_visits * 3))[
+        :, tf.newaxis, tf.newaxis, 1:
+    ]
 
     # (num_of_visits_with_att, num_of_visits_with_att)
     look_ahead_mask_base = tf.cast(
@@ -259,9 +237,7 @@ def transformer_hierarchical_bert_model(
     look_ahead_visit_mask_with_att = tf.maximum(visit_mask_with_att, look_ahead_visit_mask_with_att)
 
     # (batch_size, 1, num_of_visits * num_of_concepts, num_of_visits)
-    look_ahead_concept_mask = tf.maximum(
-        visit_mask[:, tf.newaxis, tf.newaxis, :], look_ahead_concept_mask
-    )
+    look_ahead_concept_mask = tf.maximum(visit_mask[:, tf.newaxis, tf.newaxis, :], look_ahead_concept_mask)
 
     # Second bert applied at the patient level to the visit embeddings
     visit_encoder = Encoder(
@@ -273,9 +249,7 @@ def transformer_hierarchical_bert_model(
     )
 
     # Feed augmented visit embeddings into encoders to get contextualized visit embeddings
-    contextualized_visit_embeddings, _ = visit_encoder(
-        contextualized_visit_embeddings, look_ahead_visit_mask_with_att
-    )
+    contextualized_visit_embeddings, _ = visit_encoder(contextualized_visit_embeddings, look_ahead_visit_mask_with_att)
 
     # Pad contextualized_visit_embeddings on axis 1 with one extra visit so we can extract the
     # visit embeddings using the reshape trick
@@ -293,9 +267,7 @@ def transformer_hierarchical_bert_model(
     # # Step 3 decoder applied to patient level
     # Reshape the data in visit view back to patient view:
     # (batch, num_of_visits * num_of_concepts, embedding_size)
-    concept_embeddings = tf.reshape(
-        concept_embeddings, shape=(-1, num_of_visits * num_of_concepts, embedding_size)
-    )
+    concept_embeddings = tf.reshape(concept_embeddings, shape=(-1, num_of_visits * num_of_concepts, embedding_size))
 
     # Let local concept embeddings access the global representatives of each visit
     global_concept_embeddings_layer = SimpleDecoderLayer(
@@ -318,9 +290,7 @@ def transformer_hierarchical_bert_model(
 
     concept_softmax_layer = tf.keras.layers.Softmax(name="concept_predictions")
 
-    concept_predictions = concept_softmax_layer(
-        concept_output_layer([global_concept_embeddings, embedding_matrix])
-    )
+    concept_predictions = concept_softmax_layer(concept_output_layer([global_concept_embeddings, embedding_matrix]))
 
     outputs = [concept_predictions]
 
@@ -353,9 +323,7 @@ def transformer_hierarchical_bert_model(
             name="att_predictions",
         )
 
-        att_predictions = att_prediction_layer(
-            concept_output_layer([contextualized_att_embeddings, embedding_matrix])
-        )
+        att_predictions = att_prediction_layer(concept_output_layer([contextualized_att_embeddings, embedding_matrix]))
         outputs.append(att_predictions)
 
     if include_visit_type_prediction:
@@ -370,9 +338,7 @@ def transformer_hierarchical_bert_model(
         visit_softmax_layer = tf.keras.layers.Softmax(name="visit_predictions")
 
         visit_predictions = visit_softmax_layer(
-            visit_type_prediction_output_layer(
-                [visit_embeddings_without_att, visit_type_embedding_matrix]
-            )
+            visit_type_prediction_output_layer([visit_embeddings_without_att, visit_type_embedding_matrix])
         )
 
         outputs.append(visit_predictions)
@@ -385,9 +351,7 @@ def transformer_hierarchical_bert_model(
         outputs.append(is_readmission_output)
 
     if include_prolonged_length_stay:
-        visit_prolonged_stay_layer = tf.keras.layers.Dense(
-            1, activation="sigmoid", name="visit_prolonged_stay"
-        )
+        visit_prolonged_stay_layer = tf.keras.layers.Dense(1, activation="sigmoid", name="visit_prolonged_stay")
 
         visit_prolonged_stay_output = visit_prolonged_stay_layer(visit_embeddings_without_att)
 
@@ -407,9 +371,7 @@ def create_att_concept_mask(num_of_concepts, num_of_visits, visit_mask):
     :return:
     """
     att_concept_mask = tf.eye(num_of_visits - 1, num_of_visits, dtype=tf.int32)
-    att_concept_mask = (
-        1 - att_concept_mask - tf.roll(att_concept_mask, axis=-1, shift=1)[tf.newaxis, :, :]
-    )
+    att_concept_mask = 1 - att_concept_mask - tf.roll(att_concept_mask, axis=-1, shift=1)[tf.newaxis, :, :]
     att_concept_mask = tf.maximum(att_concept_mask, visit_mask[:, 1:, tf.newaxis])
     att_concept_mask = tf.reshape(
         tf.tile(att_concept_mask[:, :, :, tf.newaxis], [1, 1, 1, num_of_concepts]),

@@ -47,9 +47,7 @@ class MaskedMeanSquaredError(object):
         mask = K.cast(y_true[:, :, 1], dtype="float32")
 
         num_items_masked = tf.reduce_sum(mask, axis=-1) + 1e-6
-        masked_mse = (
-            tf.reduce_sum(tf.square(y_true_val - y_pred) * mask, axis=-1) / num_items_masked
-        )
+        masked_mse = tf.reduce_sum(tf.square(y_true_val - y_pred) * mask, axis=-1) / num_items_masked
 
         return masked_mse
 
@@ -81,12 +79,9 @@ class MaskedPenalizedSparseCategoricalCrossentropy(object):
         # masked per-sample means of each loss
         num_items_masked = K.sum(mask, axis=-1) + 1e-6
         masked_cross_entropy = (
-            K.sum(mask * K.sparse_categorical_crossentropy(y_true_val, y_pred), axis=-1)
-            / num_items_masked
+            K.sum(mask * K.sparse_categorical_crossentropy(y_true_val, y_pred), axis=-1) / num_items_masked
         )
-        masked_entropy = (
-            K.sum(mask * -K.sum(y_pred * K.log(y_pred), axis=-1), axis=-1) / num_items_masked
-        )
+        masked_entropy = K.sum(mask * -K.sum(y_pred * K.log(y_pred), axis=-1), axis=-1) / num_items_masked
         return masked_cross_entropy - self.penalty_weight * masked_entropy
 
     def get_config(self):

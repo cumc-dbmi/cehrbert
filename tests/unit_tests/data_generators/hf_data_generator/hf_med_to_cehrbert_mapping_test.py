@@ -1,9 +1,7 @@
 import unittest
 from datetime import datetime
 
-from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import (
-    MedToCehrBertDatasetMapping,
-)
+from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import MedToCehrBertDatasetMapping
 from cehrbert.med_extension.schema_extension import CehrBertPatient, Event, Visit
 from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments
 from cehrbert.spark_apps.decorators.patient_event_decorator import AttType
@@ -75,9 +73,7 @@ class TestMedToCehrBertDatasetMapping(unittest.TestCase):
         )
 
         # Test ages, age=-1 used for the ATT tokens
-        self.assertListEqual(
-            transformed_record["ages"], [44, 44, 44, 44, -1, 44, 44, 44, 44, 44, 44]
-        )
+        self.assertListEqual(transformed_record["ages"], [44, 44, 44, 44, -1, 44, 44, 44, 44, 44, 44])
 
         # Test dates, dates=0 used for the ATT tokens
         self.assertListEqual(
@@ -86,9 +82,7 @@ class TestMedToCehrBertDatasetMapping(unittest.TestCase):
         )
 
         # Test visit_segments, visit_segment=0 used for the ATT tokens
-        self.assertListEqual(
-            transformed_record["visit_segments"], [1, 1, 1, 1, 0, 2, 2, 2, 2, 2, 2]
-        )
+        self.assertListEqual(transformed_record["visit_segments"], [1, 1, 1, 1, 0, 2, 2, 2, 2, 2, 2])
 
         # Test visit_concept_orders, we visit_concept_order to be same as next visit for the ATT tokens
         self.assertListEqual(
@@ -97,9 +91,7 @@ class TestMedToCehrBertDatasetMapping(unittest.TestCase):
         )
 
         # Test concept_value_masks
-        self.assertListEqual(
-            transformed_record["concept_value_masks"], [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0]
-        )
+        self.assertListEqual(transformed_record["concept_value_masks"], [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0])
 
         # Test concept_values, concept_value=-1 is a default value associated with non-numeric measurements
         self.assertListEqual(
@@ -108,9 +100,7 @@ class TestMedToCehrBertDatasetMapping(unittest.TestCase):
         )
 
         # Test mlm_skip_values
-        self.assertListEqual(
-            transformed_record["mlm_skip_values"], [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0]
-        )
+        self.assertListEqual(transformed_record["mlm_skip_values"], [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0])
 
     def test_transform_basic(self):
         data_args = DataTrainingArguments(
@@ -137,9 +127,7 @@ class TestMedToCehrBertDatasetMapping(unittest.TestCase):
         self.assertListEqual(transformed_record["ages"], [44, 44, 44, -1, 44, 44, 44, 44])
 
         # Test dates, dates=0 used for the ATT tokens
-        self.assertListEqual(
-            transformed_record["dates"], [2832, 2832, 2832, 0, 2833, 2833, 2833, 2833]
-        )
+        self.assertListEqual(transformed_record["dates"], [2832, 2832, 2832, 0, 2833, 2833, 2833, 2833])
 
         # Test visit_segments, visit_segment=0 used for the ATT tokens
         self.assertListEqual(transformed_record["visit_segments"], [1, 1, 1, 0, 2, 2, 2, 2])
@@ -151,9 +139,7 @@ class TestMedToCehrBertDatasetMapping(unittest.TestCase):
         self.assertListEqual(transformed_record["concept_value_masks"], [0, 0, 0, 0, 0, 0, 1, 0])
 
         # Test concept_values, concept_value=-1 is a default value associated with non-numeric measurements
-        self.assertListEqual(
-            transformed_record["concept_values"], [-1, -1, -1, -1, -1, -1, 0.5, -1]
-        )
+        self.assertListEqual(transformed_record["concept_values"], [-1, -1, -1, -1, -1, -1, 0.5, -1])
 
         # Test mlm_skip_values
         self.assertListEqual(transformed_record["mlm_skip_values"], [0, 0, 0, 0, 0, 0, 1, 0])
@@ -290,9 +276,7 @@ class TestMedToCehrBertDatasetMapping(unittest.TestCase):
         )
 
         # Test ages, age=-1 used for the ATT tokens
-        self.assertListEqual(
-            transformed_record["ages"], [44, 44, 44, 44, -1, 44, 44, 44, -1, 44, 44, 44]
-        )
+        self.assertListEqual(transformed_record["ages"], [44, 44, 44, 44, -1, 44, 44, 44, -1, 44, 44, 44])
 
         # Test dates, dates=0 used for the ATT tokens
         self.assertListEqual(
@@ -301,9 +285,7 @@ class TestMedToCehrBertDatasetMapping(unittest.TestCase):
         )
 
         # Test visit_segments, visit_segment=0 used for the ATT tokens
-        self.assertListEqual(
-            transformed_record["visit_segments"], [1, 1, 1, 1, 0, 2, 2, 2, 2, 2, 2, 2]
-        )
+        self.assertListEqual(transformed_record["visit_segments"], [1, 1, 1, 1, 0, 2, 2, 2, 2, 2, 2, 2])
 
         # Test visit_concept_orders, we visit_concept_order to be same as next visit for the ATT tokens
         self.assertListEqual(
@@ -324,9 +306,7 @@ class TestMedToCehrBertDatasetMapping(unittest.TestCase):
         )
 
         # Test mlm_skip_values
-        self.assertListEqual(
-            transformed_record["mlm_skip_values"], [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0]
-        )
+        self.assertListEqual(transformed_record["mlm_skip_values"], [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0])
 
 
 if __name__ == "__main__":

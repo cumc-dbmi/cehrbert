@@ -213,16 +213,12 @@ class VisitPredictionLearningObjective(LearningObjective):
     @validate_columns_decorator
     def process_batch(self, rows: List[RowSlicer]):
 
-        (output_mask, masked_visit_concepts, visit_concepts) = zip(
-            *list(map(self._make_record, rows))
-        )
+        (output_mask, masked_visit_concepts, visit_concepts) = zip(*list(map(self._make_record, rows)))
 
         unused_token_id = self._visit_tokenizer.get_unused_token_id()
 
         visit_concepts = post_pad_pre_truncate(visit_concepts, unused_token_id, self._max_seq_len)
-        masked_visit_concepts = post_pad_pre_truncate(
-            masked_visit_concepts, unused_token_id, self._max_seq_len
-        )
+        masked_visit_concepts = post_pad_pre_truncate(masked_visit_concepts, unused_token_id, self._max_seq_len)
 
         # 1 indicates attention and 0 indicates mask
         visit_mask = (visit_concepts != unused_token_id).astype(int)
@@ -251,9 +247,7 @@ class VisitPredictionLearningObjective(LearningObjective):
         row, left_index, right_index, *_ = row_slicer
 
         iterator = zip(row.visit_concept_orders, row.visit_token_ids)
-        (dates, visit_concept_ids) = zip(
-            *islice(sorted(iterator, key=lambda tup2: tup2[0]), left_index, right_index)
-        )
+        (dates, visit_concept_ids) = zip(*islice(sorted(iterator, key=lambda tup2: tup2[0]), left_index, right_index))
 
         masked_visit_concepts, output_mask = self._mask_visit_concepts(visit_concept_ids)
 
@@ -333,9 +327,7 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
         masked_concepts = post_pad_pre_truncate(masked_concepts, unused_token_id, self._max_seq_len)
         concepts = post_pad_pre_truncate(concepts, unused_token_id, self._max_seq_len)
         concept_value_masks = post_pad_pre_truncate(concept_value_masks, 0, self._max_seq_len)
-        concept_values = post_pad_pre_truncate(
-            concept_values, -1.0, self._max_seq_len, d_type="float32"
-        )
+        concept_values = post_pad_pre_truncate(concept_values, -1.0, self._max_seq_len, d_type="float32")
 
         # 1 indicates attention and 0 indicates mask
         mask = (concepts != unused_token_id).astype(int)
@@ -344,9 +336,7 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
         visit_segments = post_pad_pre_truncate(visit_segments, 0, self._max_seq_len)
         time_stamps = post_pad_pre_truncate(time_stamps, 0, self._max_seq_len)
         ages = post_pad_pre_truncate(ages, 0, self._max_seq_len)
-        visit_concept_orders = post_pad_pre_truncate(
-            visit_concept_orders, self._max_seq_len, self._max_seq_len
-        )
+        visit_concept_orders = post_pad_pre_truncate(visit_concept_orders, self._max_seq_len, self._max_seq_len)
 
         input_dict = {
             "masked_concept_ids": masked_concepts,
@@ -565,9 +555,7 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
             visit_rank_orders, pad_value=0, max_seq_len=self._max_num_of_visits
         )
         # Process visit_masks
-        padded_visit_masks = post_pad_pre_truncate(
-            visit_masks, pad_value=1, max_seq_len=self._max_num_of_visits
-        )
+        padded_visit_masks = post_pad_pre_truncate(visit_masks, pad_value=1, max_seq_len=self._max_num_of_visits)
         # 1 indicates attention and 0 indicates mask, therefore we need to flip it.
         padded_visit_masks = 1 - padded_visit_masks
 
@@ -595,11 +583,7 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
         concept_value_masks = (
             pd.Series(concept_value_masks)
             .apply(convert_to_list_of_lists)
-            .apply(
-                lambda time_stamps: self._pad(
-                    time_stamps, padded_token=0, maxlen=self._max_num_of_concepts
-                )
-            )
+            .apply(lambda time_stamps: self._pad(time_stamps, padded_token=0, maxlen=self._max_num_of_concepts))
         )
 
         padded_concept_value_masks = np.reshape(
@@ -611,11 +595,7 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
         dates = (
             pd.Series(dates)
             .apply(convert_to_list_of_lists)
-            .apply(
-                lambda time_stamps: self._pad(
-                    time_stamps, padded_token=0, maxlen=self._max_num_of_concepts
-                )
-            )
+            .apply(lambda time_stamps: self._pad(time_stamps, padded_token=0, maxlen=self._max_num_of_concepts))
         )
 
         padded_dates = np.reshape(
@@ -626,11 +606,7 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
         ages = (
             pd.Series(ages)
             .apply(convert_to_list_of_lists)
-            .apply(
-                lambda time_stamps: self._pad(
-                    time_stamps, padded_token=0, maxlen=self._max_num_of_concepts
-                )
-            )
+            .apply(lambda time_stamps: self._pad(time_stamps, padded_token=0, maxlen=self._max_num_of_concepts))
         )
 
         padded_ages = np.reshape(
@@ -665,9 +641,7 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
         )
 
         # Reshape this into 1-D for the MLM prediction
-        padded_concepts = post_pad_pre_truncate(
-            concepts.apply(lambda d: d.flatten()), unused_token_id, max_seq_len
-        )
+        padded_concepts = post_pad_pre_truncate(concepts.apply(lambda d: d.flatten()), unused_token_id, max_seq_len)
 
         output_concept_masks = (
             pd.Series(output_concept_masks)
@@ -682,9 +656,7 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
             max_seq_len=max_seq_len,
         )
 
-        output_dict = {
-            "concept_predictions": np.stack([padded_concepts, padded_output_concept_masks], axis=-1)
-        }
+        output_dict = {"concept_predictions": np.stack([padded_concepts, padded_output_concept_masks], axis=-1)}
 
         return input_dict, output_dict
 
@@ -718,9 +690,7 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
         visit_masks = row.visit_masks[start_index:end_index]
         visit_rank_orders = row.visit_rank_orders[start_index:end_index]
 
-        masked_concepts, output_concept_masks = zip(
-            *list(map(self._mask_concepts, zip(concepts, mlm_skip_values)))
-        )
+        masked_concepts, output_concept_masks = zip(*list(map(self._mask_concepts, zip(concepts, mlm_skip_values))))
 
         return (
             output_concept_masks,
@@ -772,16 +742,12 @@ class HierarchicalMaskedLanguageModelLearningObjective(LearningObjective):
 
                 elif random.random() < 0.15:
                     # the concept will be replaced by the neighbor concept in the graph
-                    masked_concepts[word_pos] = self._graph_sampler.sample_graph(
-                        masked_concepts[word_pos]
-                    )
+                    masked_concepts[word_pos] = self._graph_sampler.sample_graph(masked_concepts[word_pos])
 
         return masked_concepts, output_mask
 
 
-class HierarchicalVisitTypePredictionLearningObjective(
-    HierarchicalMaskedLanguageModelLearningObjective
-):
+class HierarchicalVisitTypePredictionLearningObjective(HierarchicalMaskedLanguageModelLearningObjective):
     required_columns = ["visit_token_ids"]
 
     def __init__(
@@ -814,9 +780,7 @@ class HierarchicalVisitTypePredictionLearningObjective(
         :param rows:
         :return:
         """
-        (masked_visit_token_ids, output_mask, visit_token_ids) = zip(
-            *list(map(self._make_record, rows))
-        )
+        (masked_visit_token_ids, output_mask, visit_token_ids) = zip(*list(map(self._make_record, rows)))
 
         padded_masked_visit_token_ids = self._pad(
             masked_visit_token_ids,
@@ -834,17 +798,13 @@ class HierarchicalVisitTypePredictionLearningObjective(
                 maxlen=self._max_num_of_visits,
             )
 
-            padded_output_masks = self._pad(
-                output_mask, padded_token=0, maxlen=self._max_num_of_visits
-            )
+            padded_output_masks = self._pad(output_mask, padded_token=0, maxlen=self._max_num_of_visits)
 
             if self._counter < self._warmup_step:
                 self._counter += 1
                 padded_output_masks = np.zeros_like(padded_output_masks)
 
-            output_dict["visit_predictions"] = np.stack(
-                [padded_visit_token_ids, padded_output_masks], axis=-1
-            )
+            output_dict["visit_predictions"] = np.stack([padded_visit_token_ids, padded_output_masks], axis=-1)
 
         return input_dict, output_dict
 
@@ -922,13 +882,9 @@ class HierarchicalReadmissionLearningObjective(HierarchicalVisitTypePredictionLe
         """
         is_readmissions, is_inpatients = zip(*list(map(self._make_record, rows)))
 
-        padded_is_readmissions = self._pad(
-            is_readmissions, padded_token=0, maxlen=self._max_num_of_visits
-        )
+        padded_is_readmissions = self._pad(is_readmissions, padded_token=0, maxlen=self._max_num_of_visits)
 
-        padded_is_inpatients = self._pad(
-            is_inpatients, padded_token=0, maxlen=self._max_num_of_visits
-        )
+        padded_is_inpatients = self._pad(is_inpatients, padded_token=0, maxlen=self._max_num_of_visits)
 
         # if _random_mask_prob=0.2, there is 20% chance of being masked
         random_mask = np.random.rand(*padded_is_inpatients.shape) < self._random_mask_prob
@@ -960,9 +916,7 @@ class HierarchicalReadmissionLearningObjective(HierarchicalVisitTypePredictionLe
         return (is_readmissions, is_inpatients)
 
 
-class HierarchicalProlongedLengthStayLearningObjective(
-    HierarchicalVisitTypePredictionLearningObjective
-):
+class HierarchicalProlongedLengthStayLearningObjective(HierarchicalVisitTypePredictionLearningObjective):
     required_columns = ["visit_prolonged_stays", "is_inpatients"]
 
     def __init__(
@@ -992,13 +946,9 @@ class HierarchicalProlongedLengthStayLearningObjective(
         """
         visit_prolonged_stays, is_inpatients = zip(*list(map(self._make_record, rows)))
 
-        padded_visit_prolonged_stays = self._pad(
-            visit_prolonged_stays, padded_token=0, maxlen=self._max_num_of_visits
-        )
+        padded_visit_prolonged_stays = self._pad(visit_prolonged_stays, padded_token=0, maxlen=self._max_num_of_visits)
 
-        padded_is_inpatients = self._pad(
-            is_inpatients, padded_token=0, maxlen=self._max_num_of_visits
-        )
+        padded_is_inpatients = self._pad(is_inpatients, padded_token=0, maxlen=self._max_num_of_visits)
 
         # if _random_mask_prob=0.2, there is 20% chance of being masked
         random_mask = np.random.rand(*padded_is_inpatients.shape) < self._random_mask_prob
@@ -1008,9 +958,7 @@ class HierarchicalProlongedLengthStayLearningObjective(
             self._counter += 1
             mask = np.zeros_like(mask)
 
-        output_dict = {
-            "visit_prolonged_stay": np.stack([padded_visit_prolonged_stays, mask], axis=-1)
-        }
+        output_dict = {"visit_prolonged_stay": np.stack([padded_visit_prolonged_stays, mask], axis=-1)}
 
         return {}, output_dict
 
@@ -1032,9 +980,7 @@ class HierarchicalProlongedLengthStayLearningObjective(
         return (visit_prolonged_stays, is_inpatients)
 
 
-class HierarchicalArtificialTokenPredictionLearningObjective(
-    HierarchicalMaskedLanguageModelLearningObjective
-):
+class HierarchicalArtificialTokenPredictionLearningObjective(HierarchicalMaskedLanguageModelLearningObjective):
     required_columns = ["time_interval_atts"]
 
     def __init__(
@@ -1070,9 +1016,7 @@ class HierarchicalArtificialTokenPredictionLearningObjective(
         )
 
         masked_time_interval_att_tokens = np.asarray(
-            self._concept_tokenizer.encode(
-                pd.Series(masked_time_interval_att_tokens).apply(lambda t: t.tolist())
-            )
+            self._concept_tokenizer.encode(pd.Series(masked_time_interval_att_tokens).apply(lambda t: t.tolist()))
         )
         padded_masked_time_interval_att_tokens = post_pad_pre_truncate(
             masked_time_interval_att_tokens,
@@ -1086,9 +1030,7 @@ class HierarchicalArtificialTokenPredictionLearningObjective(
 
         if self._include_att_prediction:
             time_interval_att_tokens = np.asarray(
-                self._concept_tokenizer.encode(
-                    pd.Series(time_interval_att_tokens).apply(lambda t: t.tolist())
-                )
+                self._concept_tokenizer.encode(pd.Series(time_interval_att_tokens).apply(lambda t: t.tolist()))
             )
             padded_time_interval_att_tokens = post_pad_pre_truncate(
                 time_interval_att_tokens,
@@ -1096,16 +1038,10 @@ class HierarchicalArtificialTokenPredictionLearningObjective(
                 self._max_num_of_visits,
             )[:, 1:]
 
-            padded_output_mask = post_pad_pre_truncate(output_mask, 0, self._max_num_of_visits)[
-                :, 1:
-            ]
+            padded_output_mask = post_pad_pre_truncate(output_mask, 0, self._max_num_of_visits)[:, 1:]
 
             output_dict.update(
-                {
-                    "att_predictions": np.stack(
-                        [padded_time_interval_att_tokens, padded_output_mask], axis=-1
-                    )
-                }
+                {"att_predictions": np.stack([padded_time_interval_att_tokens, padded_output_mask], axis=-1)}
             )
 
         return input_dict, output_dict
@@ -1123,9 +1059,7 @@ class HierarchicalArtificialTokenPredictionLearningObjective(
         row, start_index, end_index, *_ = row_slicer
         time_interval_att_tokens = row.time_interval_atts[start_index:end_index]
 
-        masked_time_interval_att_tokens, output_mask = self._mask_visit_concepts(
-            time_interval_att_tokens
-        )
+        masked_time_interval_att_tokens, output_mask = self._mask_visit_concepts(time_interval_att_tokens)
         return output_mask, masked_time_interval_att_tokens, time_interval_att_tokens
 
     def _mask_visit_concepts(self, time_interval_att_tokens):
@@ -1152,9 +1086,7 @@ class HierarchicalArtificialTokenPredictionLearningObjective(
 
                 if random.random() < 0.15:
                     output_mask[word_pos] = 1
-                    masked_time_interval_att_tokens[word_pos] = (
-                        self._concept_tokenizer.get_att_mask_token_id()
-                    )
+                    masked_time_interval_att_tokens[word_pos] = self._concept_tokenizer.get_att_mask_token_id()
 
         return masked_time_interval_att_tokens, output_mask
 

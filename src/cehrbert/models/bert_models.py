@@ -37,26 +37,16 @@ def transformer_bert_model(
     or a vanilla Transformer (2017) to do the job (the original paper uses
     vanilla Transformer).
     """
-    masked_concept_ids = tf.keras.layers.Input(
-        shape=(max_seq_length,), dtype="int32", name="masked_concept_ids"
-    )
+    masked_concept_ids = tf.keras.layers.Input(shape=(max_seq_length,), dtype="int32", name="masked_concept_ids")
 
-    visit_segments = tf.keras.layers.Input(
-        shape=(max_seq_length,), dtype="int32", name="visit_segments"
-    )
+    visit_segments = tf.keras.layers.Input(shape=(max_seq_length,), dtype="int32", name="visit_segments")
 
-    visit_concept_orders = tf.keras.layers.Input(
-        shape=(max_seq_length,), dtype="int32", name="visit_concept_orders"
-    )
+    visit_concept_orders = tf.keras.layers.Input(shape=(max_seq_length,), dtype="int32", name="visit_concept_orders")
 
     mask = tf.keras.layers.Input(shape=(max_seq_length,), dtype="int32", name="mask")
 
-    concept_value_masks = tf.keras.layers.Input(
-        shape=(max_seq_length,), dtype="int32", name="concept_value_masks"
-    )
-    concept_values = tf.keras.layers.Input(
-        shape=(max_seq_length,), dtype="float32", name="concept_values"
-    )
+    concept_value_masks = tf.keras.layers.Input(shape=(max_seq_length,), dtype="int32", name="concept_value_masks")
+    concept_values = tf.keras.layers.Input(shape=(max_seq_length,), dtype="float32", name="concept_values")
 
     concept_mask = create_concept_mask(mask, max_seq_length)
 
@@ -79,9 +69,7 @@ def transformer_bert_model(
         embeddings_regularizer=l2_regularizer,
     )
 
-    visit_segment_layer = VisitEmbeddingLayer(
-        visit_order_size=3, embedding_size=embedding_size, name="visit_segment"
-    )
+    visit_segment_layer = VisitEmbeddingLayer(visit_order_size=3, embedding_size=embedding_size, name="visit_segment")
 
     concept_value_transformation_layer = ConceptValueTransformationLayer(
         embedding_size=embedding_size, name="concept_value_transformation_layer"
@@ -123,26 +111,18 @@ def transformer_bert_model(
         next_step_input += positional_encoding_layer(visit_concept_orders)
 
     elif use_time_embedding:
-        time_stamps = tf.keras.layers.Input(
-            shape=(max_seq_length,), dtype="int32", name="time_stamps"
-        )
+        time_stamps = tf.keras.layers.Input(shape=(max_seq_length,), dtype="int32", name="time_stamps")
         ages = tf.keras.layers.Input(shape=(max_seq_length,), dtype="int32", name="ages")
         default_inputs.extend([time_stamps, ages])
         # # define the time embedding layer for absolute time stamps (since 1970)
-        time_embedding_layer = TimeEmbeddingLayer(
-            embedding_size=time_embeddings_size, name="time_embedding_layer"
-        )
+        time_embedding_layer = TimeEmbeddingLayer(embedding_size=time_embeddings_size, name="time_embedding_layer")
         # define the age embedding layer for the age w.r.t the medical record
-        age_embedding_layer = TimeEmbeddingLayer(
-            embedding_size=time_embeddings_size, name="age_embedding_layer"
-        )
+        age_embedding_layer = TimeEmbeddingLayer(embedding_size=time_embeddings_size, name="age_embedding_layer")
         positional_encoding_layer = PositionalEncodingLayer(
             embedding_size=time_embeddings_size, name="positional_encoding_layer"
         )
 
-        scale_back_concat_layer = tf.keras.layers.Dense(
-            embedding_size, activation="tanh", name="scale_pat_seq_layer"
-        )
+        scale_back_concat_layer = tf.keras.layers.Dense(embedding_size, activation="tanh", name="scale_pat_seq_layer")
         time_embeddings = time_embedding_layer(time_stamps)
         age_embeddings = age_embedding_layer(ages)
         positional_encodings = positional_encoding_layer(visit_concept_orders)
@@ -178,13 +158,9 @@ def transformer_bert_model(
             name="bert_tile_prolonged",
         )
         mask_embeddings = tf.cast(mask_embeddings, dtype=tf.float32, name="bert_cast_prolonged")
-        contextualized_embeddings = tf.math.multiply(
-            next_step_input, mask_embeddings, name="bert_multiply_prolonged"
-        )
+        contextualized_embeddings = tf.math.multiply(next_step_input, mask_embeddings, name="bert_multiply_prolonged")
         summed_contextualized_embeddings = tf.reduce_sum(contextualized_embeddings, axis=-1)
-        prolonged_length_stay_prediction = tf.keras.layers.Dense(
-            1, name="prolonged_length_stay", activation="sigmoid"
-        )
+        prolonged_length_stay_prediction = tf.keras.layers.Dense(1, name="prolonged_length_stay", activation="sigmoid")
 
         outputs.append(prolonged_length_stay_prediction(summed_contextualized_embeddings))
 

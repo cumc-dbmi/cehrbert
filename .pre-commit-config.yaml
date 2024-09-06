@@ -6,20 +6,12 @@ default_language_version:
   python: python3  # or python3.10 to set a specific default version
 
 repos:
-  - repo: local
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
     hooks:
-      - id: pylint
-        name: pylint
-        entry: pylint
-        language: system
-        types: [ python ]
-        args:
-          [
-            "-rn", # Only display messages
-            "-sn", # Don't display the score
-            "--disable=pointless-statement,duplicate-code,line-too-long,missing-module-docstring,missing-class-docstring,import-error,missing-function-docstring"
-            # do not warn on bit operator statements
-          ]
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
 
   - repo: https://github.com/DanielNoord/pydocstringformatter
     rev: 'v0.7.3'

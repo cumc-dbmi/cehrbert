@@ -51,10 +51,7 @@ class GraphSampler(ABC):
             for source in graph.nodes():
                 # Convert target and source to str types because tokenizer expects string type
                 concept_list, similarity_list = zip(
-                    *[
-                        (str(target), val[concept_similarity_type])
-                        for _, target, val in graph.edges(source, data=True)
-                    ]
+                    *[(str(target), val[concept_similarity_type]) for _, target, val in graph.edges(source, data=True)]
                 )
                 # Convert all concept_ids to string type
                 concept_dict[str(source)] = list(map(str, concept_list))

@@ -2,17 +2,13 @@ from tensorflow.keras.utils import pad_sequences
 
 from cehrbert.data_generators.learning_objective import post_pad_pre_truncate
 from cehrbert.evaluations.model_evaluators.model_evaluators import get_metrics
-from cehrbert.evaluations.model_evaluators.sequence_model_evaluators import (
-    SequenceModelEvaluator,
-)
+from cehrbert.evaluations.model_evaluators.sequence_model_evaluators import SequenceModelEvaluator
 from cehrbert.models.evaluation_models import (
     create_hierarchical_bert_bi_lstm_model,
     create_hierarchical_bert_bi_lstm_model_with_model,
     create_hierarchical_bert_model_with_pooling,
 )
-from cehrbert.models.hierachical_bert_model_v2 import (
-    transformer_hierarchical_bert_model,
-)
+from cehrbert.models.hierachical_bert_model_v2 import transformer_hierarchical_bert_model
 from cehrbert.utils.model_utils import convert_to_list_of_lists, np, pickle, tf
 
 
@@ -104,9 +100,7 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
         )
 
         padded_token_ids = np.reshape(
-            post_pad_pre_truncate(
-                token_ids.apply(lambda d: d.flatten()), unused_token_id, max_seq_len
-            ),
+            post_pad_pre_truncate(token_ids.apply(lambda d: d.flatten()), unused_token_id, max_seq_len),
             (-1, self._max_num_of_visits, self._max_num_of_concepts),
         )
 
@@ -142,21 +136,17 @@ class HierarchicalBertEvaluator(SequenceModelEvaluator):
             (-1, self._max_num_of_visits, self._max_num_of_concepts),
         )
 
-        concept_value_masks = self._dataset.concept_value_masks.apply(
-            convert_to_list_of_lists
-        ).apply(lambda tokens: self._pad(tokens, padded_token=0))
+        concept_value_masks = self._dataset.concept_value_masks.apply(convert_to_list_of_lists).apply(
+            lambda tokens: self._pad(tokens, padded_token=0)
+        )
         padded_concept_value_masks = np.reshape(
             post_pad_pre_truncate(concept_value_masks.apply(lambda d: d.flatten()), 0, max_seq_len),
             (-1, self._max_num_of_visits, self._max_num_of_concepts),
         )
 
         # Process att tokens
-        att_tokens = self._tokenizer.encode(
-            self._dataset.time_interval_atts.apply(lambda t: t.tolist()).tolist()
-        )
-        padded_att_tokens = post_pad_pre_truncate(
-            att_tokens, unused_token_id, self._max_num_of_visits
-        )[:, 1:]
+        att_tokens = self._tokenizer.encode(self._dataset.time_interval_atts.apply(lambda t: t.tolist()).tolist())
+        padded_att_tokens = post_pad_pre_truncate(att_tokens, unused_token_id, self._max_num_of_visits)[:, 1:]
 
         # Process visit segments
         padded_visit_segments = post_pad_pre_truncate(

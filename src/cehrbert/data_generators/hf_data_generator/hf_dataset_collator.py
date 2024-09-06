@@ -52,23 +52,14 @@ class CehrBertDataCollator:
         # Assume that each example in the batch is a dictionary with 'input_ids' and 'attention_mask'
         batch_input_ids = [self._convert_to_tensor(example["input_ids"]) for example in examples]
         batch_attention_mask = [
-            torch.ones_like(self._convert_to_tensor(example["input_ids"]), dtype=torch.float)
-            for example in examples
+            torch.ones_like(self._convert_to_tensor(example["input_ids"]), dtype=torch.float) for example in examples
         ]
         batch_ages = [self._convert_to_tensor(example["ages"]) for example in examples]
         batch_dates = [self._convert_to_tensor(example["dates"]) for example in examples]
-        batch_visit_concept_orders = [
-            self._convert_to_tensor(example["visit_concept_orders"]) for example in examples
-        ]
-        batch_concept_values = [
-            self._convert_to_tensor(example["concept_values"]) for example in examples
-        ]
-        batch_concept_value_masks = [
-            self._convert_to_tensor(example["concept_value_masks"]) for example in examples
-        ]
-        batch_visit_segments = [
-            self._convert_to_tensor(example["visit_segments"]) for example in examples
-        ]
+        batch_visit_concept_orders = [self._convert_to_tensor(example["visit_concept_orders"]) for example in examples]
+        batch_concept_values = [self._convert_to_tensor(example["concept_values"]) for example in examples]
+        batch_concept_value_masks = [self._convert_to_tensor(example["concept_value_masks"]) for example in examples]
+        batch_visit_segments = [self._convert_to_tensor(example["visit_segments"]) for example in examples]
 
         # Pad sequences to the max length in the batch
         batch["input_ids"] = pad_sequence(
@@ -76,9 +67,7 @@ class CehrBertDataCollator:
             batch_first=True,
             padding_value=self.tokenizer.pad_token_index,
         )
-        batch["attention_mask"] = pad_sequence(
-            batch_attention_mask, batch_first=True, padding_value=0.0
-        )
+        batch["attention_mask"] = pad_sequence(batch_attention_mask, batch_first=True, padding_value=0.0)
         batch["ages"] = pad_sequence(batch_ages, batch_first=True, padding_value=0)
         batch["dates"] = pad_sequence(batch_dates, batch_first=True, padding_value=0)
         batch["visit_concept_orders"] = pad_sequence(
@@ -86,15 +75,9 @@ class CehrBertDataCollator:
             batch_first=True,
             padding_value=self.max_length - 1,
         )
-        batch["concept_values"] = pad_sequence(
-            batch_concept_values, batch_first=True, padding_value=0.0
-        )
-        batch["concept_value_masks"] = pad_sequence(
-            batch_concept_value_masks, batch_first=True, padding_value=0.0
-        )
-        batch["visit_segments"] = pad_sequence(
-            batch_visit_segments, batch_first=True, padding_value=0
-        )
+        batch["concept_values"] = pad_sequence(batch_concept_values, batch_first=True, padding_value=0.0)
+        batch["concept_value_masks"] = pad_sequence(batch_concept_value_masks, batch_first=True, padding_value=0.0)
+        batch["visit_segments"] = pad_sequence(batch_visit_segments, batch_first=True, padding_value=0)
 
         # Prepend the CLS token and their associated values to the corresponding time series features
         batch["input_ids"] = torch.cat(
@@ -105,9 +88,7 @@ class CehrBertDataCollator:
             dim=1,
         )
         # The attention_mask is set to 1 to enable attention for the CLS token
-        batch["attention_mask"] = torch.cat(
-            [torch.full((batch_size, 1), 1.0), batch["attention_mask"]], dim=1
-        )
+        batch["attention_mask"] = torch.cat([torch.full((batch_size, 1), 1.0), batch["attention_mask"]], dim=1)
         # Set the age of the CLS token to the starting age
         batch["ages"] = torch.cat([batch["ages"][:, 0:1], batch["ages"]], dim=1)
         # Set the age of the CLS token to the starting date
@@ -117,37 +98,26 @@ class CehrBertDataCollator:
         visit_concept_orders_first = torch.maximum(
             visit_concept_orders_first, torch.zeros_like(visit_concept_orders_first)
         )
-        batch["visit_concept_orders"] = torch.cat(
-            [visit_concept_orders_first, batch["visit_concept_orders"]], dim=1
-        )
+        batch["visit_concept_orders"] = torch.cat([visit_concept_orders_first, batch["visit_concept_orders"]], dim=1)
         # Set the concept_value of the CLS token to a default value -1.0.
-        batch["concept_values"] = torch.cat(
-            [torch.full((batch_size, 1), -1.0), batch["concept_values"]], dim=1
-        )
+        batch["concept_values"] = torch.cat([torch.full((batch_size, 1), -1.0), batch["concept_values"]], dim=1)
         # Set the concept_value of the CLS token to a default value 0.0 indicating that
         # there is no value associated with this token
         batch["concept_value_masks"] = torch.cat(
             [torch.full((batch_size, 1), 0.0), batch["concept_value_masks"]], dim=1
         )
         # Set the visit_segments of the CLS token to a default value 0 because this doesn't belong to a visit
-        batch["visit_segments"] = torch.cat(
-            [torch.full((batch_size, 1), 0), batch["visit_segments"]], dim=1
-        )
+        batch["visit_segments"] = torch.cat([torch.full((batch_size, 1), 0), batch["visit_segments"]], dim=1)
 
         # This is the most crucial logic for generating the training labels
         if self.is_pretraining:
 
             batch_mlm_skip_values = [
-                self._convert_to_tensor(example["mlm_skip_values"]).to(torch.bool)
-                for example in examples
+                self._convert_to_tensor(example["mlm_skip_values"]).to(torch.bool) for example in examples
             ]
-            batch["mlm_skip_values"] = pad_sequence(
-                batch_mlm_skip_values, batch_first=True, padding_value=False
-            )
+            batch["mlm_skip_values"] = pad_sequence(batch_mlm_skip_values, batch_first=True, padding_value=False)
             # Set the mlm_skip_values of the CLS token to a default value False
-            batch["mlm_skip_values"] = torch.cat(
-                [torch.full((batch_size, 1), False), batch["mlm_skip_values"]], dim=1
-            )
+            batch["mlm_skip_values"] = torch.cat([torch.full((batch_size, 1), False), batch["mlm_skip_values"]], dim=1)
 
             # If the labels field is already provided, we will build the MLM labels off of that.
             # The labels value indicates the positions that are not allowed for MLM.
@@ -157,33 +127,23 @@ class CehrBertDataCollator:
                 batch_labels = [self._convert_to_tensor(example["labels"]) for example in examples]
                 batch["labels"] = pad_sequence(batch_labels, batch_first=True, padding_value=-100)
                 # Disable MLM for the CLS token
-                batch["labels"] = torch.cat(
-                    [torch.full((batch_size, 1), -100), batch["labels"]], dim=1
-                )
+                batch["labels"] = torch.cat([torch.full((batch_size, 1), -100), batch["labels"]], dim=1)
             else:
                 # If the labels is not already provided, we assume all the tokens are subject to
                 # the MLM and simply clone the input_ids
                 batch["labels"] = batch["input_ids"].clone()
 
-            batch["input_ids"], batch["labels"] = self.torch_mask_tokens(
-                batch["input_ids"], batch["labels"]
-            )
+            batch["input_ids"], batch["labels"] = self.torch_mask_tokens(batch["input_ids"], batch["labels"])
 
         if "age_at_index" in examples[0]:
             batch["age_at_index"] = torch.cat(
-                [
-                    self._convert_to_tensor(example["age_at_index"]).reshape(-1, 1)
-                    for example in examples
-                ],
+                [self._convert_to_tensor(example["age_at_index"]).reshape(-1, 1) for example in examples],
                 dim=0,
             ).to(torch.float)
 
         if "classifier_label" in examples[0]:
             batch["classifier_label"] = torch.cat(
-                [
-                    self._convert_to_tensor(example["classifier_label"]).reshape(-1, 1)
-                    for example in examples
-                ],
+                [self._convert_to_tensor(example["classifier_label"]).reshape(-1, 1) for example in examples],
                 dim=0,
             ).to(torch.float)
 
@@ -204,11 +164,7 @@ class CehrBertDataCollator:
         inputs[indices_replaced] = self.tokenizer.mask_token_index
 
         # 10% of the time, we replace masked input tokens with random word
-        indices_random = (
-            torch.bernoulli(torch.full(labels.shape, 0.5)).bool()
-            & masked_indices
-            & ~indices_replaced
-        )
+        indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
         random_words = torch.randint(self.tokenizer.vocab_size, labels.shape, dtype=torch.long)
         inputs[indices_random] = random_words[indices_random]
 
@@ -265,11 +221,7 @@ class CehrBertDataCollator:
 
         new_record = collections.OrderedDict()
         for k, v in record.items():
-            if (
-                isinstance(v, list)
-                or isinstance(v, np.ndarray)
-                or (isinstance(v, torch.Tensor) and v.dim() > 0)
-            ):
+            if isinstance(v, list) or isinstance(v, np.ndarray) or (isinstance(v, torch.Tensor) and v.dim() > 0):
                 if len(v) == seq_length:
                     new_record[k] = v[start_index:end_index]
             else:

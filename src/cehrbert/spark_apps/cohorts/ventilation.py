@@ -19,6 +19,4 @@ def query_builder():
         parameters={},
     )
 
-    return QueryBuilder(
-        cohort_name=DEFAULT_COHORT_NAME, dependency_list=DEPENDENCY_LIST, query=query
-    )
+    return QueryBuilder(cohort_name=DEFAULT_COHORT_NAME, dependency_list=DEPENDENCY_LIST, query=query)

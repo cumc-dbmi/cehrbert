@@ -39,9 +39,7 @@ DOMAIN_KEY_FIELDS = {
             "condition",
         )
     ],
-    "procedure_occurrence_id": [
-        ("procedure_concept_id", "procedure_date", "procedure_datetime", "procedure")
-    ],
+    "procedure_occurrence_id": [("procedure_concept_id", "procedure_date", "procedure_datetime", "procedure")],
     "drug_exposure_id": [
         (
             "drug_concept_id",
@@ -137,9 +135,7 @@ def join_domain_tables(domain_tables):
             sub_domain_table = domain_table.where(F.col(date_field).isNotNull()).where(
                 F.col(concept_id_field).isNotNull()
             )
-            datetime_field_udf = F.to_timestamp(
-                F.coalesce(datetime_field, date_field), "yyyy-MM-dd HH:mm:ss"
-            )
+            datetime_field_udf = F.to_timestamp(F.coalesce(datetime_field, date_field), "yyyy-MM-dd HH:mm:ss")
             sub_domain_table = (
                 sub_domain_table.where(F.col(concept_id_field).cast("string") != "0")
                 .withColumn("date", F.to_date(F.col(date_field)))
@@ -181,9 +177,7 @@ def preprocess_domain_table(
         return domain_table
 
     # lowercase the schema fields
-    domain_table = domain_table.select(
-        [F.col(f_n).alias(f_n.lower()) for f_n in domain_table.schema.fieldNames()]
-    )
+    domain_table = domain_table.select([F.col(f_n).alias(f_n.lower()) for f_n in domain_table.schema.fieldNames()])
 
     for f_n in domain_table.schema.fieldNames():
         if "date" in f_n and "datetime" not in f_n:
@@ -196,9 +190,7 @@ def preprocess_domain_table(
     if domain_table_name == "visit_occurrence":
         # This is CDM 5.2, we need to rename this column to be CDM 5.3 compatible
         if "discharge_to_concept_id" in domain_table.schema.fieldNames():
-            domain_table = domain_table.withColumnRenamed(
-                "discharge_to_concept_id", "discharged_to_concept_id"
-            )
+            domain_table = domain_table.withColumnRenamed("discharge_to_concept_id", "discharged_to_concept_id")
 
     if with_drug_rollup:
         if (
@@ -207,9 +199,7 @@ def preprocess_domain_table(
             and path.exists(create_file_path(input_folder, "concept_ancestor"))
         ):
             concept = spark.read.parquet(create_file_path(input_folder, "concept"))
-            concept_ancestor = spark.read.parquet(
-                create_file_path(input_folder, "concept_ancestor")
-            )
+            concept_ancestor = spark.read.parquet(create_file_path(input_folder, "concept_ancestor"))
             domain_table = roll_up_to_drug_ingredients(domain_table, concept, concept_ancestor)
 
     if with_diagnosis_rollup:
@@ -219,9 +209,7 @@ def preprocess_domain_table(
             and path.exists(create_file_path(input_folder, "concept_relationship"))
         ):
             concept = spark.read.parquet(create_file_path(input_folder, "concept"))
-            concept_relationship = spark.read.parquet(
-                create_file_path(input_folder, "concept_relationship")
-            )
+            concept_relationship = spark.read.parquet(create_file_path(input_folder, "concept_relationship"))
             domain_table = roll_up_diagnosis(domain_table, concept, concept_relationship)
 
         if (
@@ -230,9 +218,7 @@ def preprocess_domain_table(
             and path.exists(create_file_path(input_folder, "concept_ancestor"))
         ):
             concept = spark.read.parquet(create_file_path(input_folder, "concept"))
-            concept_ancestor = spark.read.parquet(
-                create_file_path(input_folder, "concept_ancestor")
-            )
+            concept_ancestor = spark.read.parquet(create_file_path(input_folder, "concept_ancestor"))
             domain_table = roll_up_procedure(domain_table, concept, concept_ancestor)
 
     return domain_table
@@ -240,9 +226,7 @@ def preprocess_domain_table(
 
 def roll_up_to_drug_ingredients(drug_exposure, concept, concept_ancestor):
     # lowercase the schema fields
-    drug_exposure = drug_exposure.select(
-        [F.col(f_n).alias(f_n.lower()) for f_n in drug_exposure.schema.fieldNames()]
-    )
+    drug_exposure = drug_exposure.select([F.col(f_n).alias(f_n.lower()) for f_n in drug_exposure.schema.fieldNames()])
 
     drug_ingredient = (
         drug_exposure.select("drug_concept_id")
@@ -254,21 +238,13 @@ def roll_up_to_drug_ingredients(drug_exposure, concept, concept_ancestor):
     )
 
     drug_ingredient_fields = [
-        F.coalesce(F.col("ingredient_concept_id"), F.col("drug_concept_id")).alias(
-            "drug_concept_id"
-        )
+        F.coalesce(F.col("ingredient_concept_id"), F.col("drug_concept_id")).alias("drug_concept_id")
     ]
     drug_ingredient_fields.extend(
-        [
-            F.col(field_name)
-            for field_name in drug_exposure.schema.fieldNames()
-            if field_name != "drug_concept_id"
-        ]
+        [F.col(field_name) for field_name in drug_exposure.schema.fieldNames() if field_name != "drug_concept_id"]
     )
 
-    drug_exposure = drug_exposure.join(drug_ingredient, "drug_concept_id", "left_outer").select(
-        drug_ingredient_fields
-    )
+    drug_exposure = drug_exposure.join(drug_ingredient, "drug_concept_id", "left_outer").select(drug_ingredient_fields)
 
     return drug_exposure
 
@@ -309,8 +285,7 @@ def roll_up_diagnosis(condition_occurrence, concept, concept_relationship):
         )
         .join(
             concept,
-            (F.col("concept_id_2") == F.col("concept_id"))
-            & (F.col("concept_class_id").isin(list_3dig_code)),
+            (F.col("concept_id_2") == F.col("concept_id")) & (F.col("concept_class_id").isin(list_3dig_code)),
             how="left",
         )
         .select(
@@ -346,8 +321,7 @@ def roll_up_diagnosis(condition_occurrence, concept, concept_relationship):
     condition_occurrence = (
         condition_occurrence.join(
             condition_icd_hierarchy,
-            condition_occurrence["condition_source_concept_id"]
-            == condition_icd_hierarchy["source_concept_id"],
+            condition_occurrence["condition_source_concept_id"] == condition_icd_hierarchy["source_concept_id"],
             how="left",
         )
         .select(condition_occurrence_fields)
@@ -443,9 +417,7 @@ def roll_up_procedure(procedure_occurrence, concept, concept_ancestor):
     procedure_icd = procedure_code.where(F.col("vocabulary_id").isin(icd_list))
 
     procedure_icd = (
-        procedure_icd.withColumn(
-            "parent_concept_code", parent_code_udf(F.col("child_concept_code"))
-        )
+        procedure_icd.withColumn("parent_concept_code", parent_code_udf(F.col("child_concept_code")))
         .withColumnRenamed("procedure_source_concept_id", "source_concept_id")
         .withColumnRenamed("concept_name", "child_concept_name")
         .withColumnRenamed("vocabulary_id", "child_vocabulary_id")
@@ -468,9 +440,7 @@ def roll_up_procedure(procedure_occurrence, concept, concept_ancestor):
     procedure_10pcs = procedure_code.where(F.col("vocabulary_id") == "ICD10PCS")
 
     procedure_10pcs = (
-        procedure_10pcs.withColumn(
-            "parent_concept_code", F.substring(F.col("child_concept_code"), 1, 3)
-        )
+        procedure_10pcs.withColumn("parent_concept_code", F.substring(F.col("child_concept_code"), 1, 3))
         .withColumnRenamed("procedure_source_concept_id", "source_concept_id")
         .withColumnRenamed("concept_name", "child_concept_name")
         .withColumnRenamed("vocabulary_id", "child_vocabulary_id")
@@ -517,8 +487,7 @@ def roll_up_procedure(procedure_occurrence, concept, concept_ancestor):
     procedure_occurrence = (
         procedure_occurrence.join(
             procedure_hierarchy,
-            procedure_occurrence["procedure_source_concept_id"]
-            == procedure_hierarchy["source_concept_id"],
+            procedure_occurrence["procedure_source_concept_id"] == procedure_hierarchy["source_concept_id"],
             how="left",
         )
         .select(procedure_occurrence_fields)
@@ -527,9 +496,7 @@ def roll_up_procedure(procedure_occurrence, concept, concept_ancestor):
     return procedure_occurrence
 
 
-def create_sequence_data(
-    patient_event, date_filter=None, include_visit_type=False, classic_bert_seq=False
-):
+def create_sequence_data(patient_event, date_filter=None, include_visit_type=False, classic_bert_seq=False):
     """
     Create a sequence of the events associated with one patient in a chronological order.
 
@@ -547,9 +514,7 @@ def create_sequence_data(
     date_conversion_udf = (F.unix_timestamp("date") / F.lit(24 * 60 * 60 * 7)).cast("int")
     earliest_visit_date_udf = F.min("date_in_week").over(W.partitionBy("visit_occurrence_id"))
 
-    visit_rank_udf = F.dense_rank().over(
-        W.partitionBy("cohort_member_id", "person_id").orderBy("earliest_visit_date")
-    )
+    visit_rank_udf = F.dense_rank().over(W.partitionBy("cohort_member_id", "person_id").orderBy("earliest_visit_date"))
     visit_segment_udf = F.col("visit_rank_order") % F.lit(2) + 1
 
     # Derive columns
@@ -570,9 +535,7 @@ def create_sequence_data(
 
         # Udf for identifying the previous visit_occurrence_id
         prev_visit_occurrence_id_udf = F.lag("visit_occurrence_id").over(
-            W.partitionBy("cohort_member_id", "person_id").orderBy(
-                "visit_start_date", "visit_occurrence_id"
-            )
+            W.partitionBy("cohort_member_id", "person_id").orderBy("visit_start_date", "visit_occurrence_id")
         )
 
         # We can achieve this by overwriting the record with the earliest time stamp
@@ -850,16 +813,14 @@ def extract_ehr_records(
     domain_tables = []
     for domain_table_name in domain_table_list:
         if domain_table_name != MEASUREMENT:
-            domain_tables.append(
-                preprocess_domain_table(spark, input_folder, domain_table_name, with_rollup)
-            )
+            domain_tables.append(preprocess_domain_table(spark, input_folder, domain_table_name, with_rollup))
     patient_ehr_records = join_domain_tables(domain_tables)
 
     if include_concept_list and patient_ehr_records:
         # Filter out concepts
-        qualified_concepts = preprocess_domain_table(
-            spark, input_folder, QUALIFIED_CONCEPT_LIST_PATH
-        ).select("standard_concept_id")
+        qualified_concepts = preprocess_domain_table(spark, input_folder, QUALIFIED_CONCEPT_LIST_PATH).select(
+            "standard_concept_id"
+        )
 
         patient_ehr_records = patient_ehr_records.join(qualified_concepts, "standard_concept_id")
 
@@ -891,9 +852,7 @@ def extract_ehr_records(
     )
     if include_visit_type:
         visit_occurrence = preprocess_domain_table(spark, input_folder, VISIT_OCCURRENCE)
-        patient_ehr_records = patient_ehr_records.join(
-            visit_occurrence, "visit_occurrence_id"
-        ).select(
+        patient_ehr_records = patient_ehr_records.join(visit_occurrence, "visit_occurrence_id").select(
             patient_ehr_records["person_id"],
             patient_ehr_records["standard_concept_id"],
             patient_ehr_records["date"],
@@ -941,9 +900,7 @@ def build_ancestry_table_for(spark, concept_ids):
     FROM global_temp.candidate
     """
 
-    ancestry_table = spark.sql(
-        initial_query.format(concept_ids=",".join([str(c) for c in concept_ids]))
-    )
+    ancestry_table = spark.sql(initial_query.format(concept_ids=",".join([str(c) for c in concept_ids])))
     ancestry_table.createOrReplaceGlobalTempView("ancestry_table")
 
     candidate_set = spark.sql(recurring_query)
@@ -1039,26 +996,18 @@ def create_hierarchical_sequence_data(
     """
 
     if date_filter:
-        visit_occurrence = visit_occurrence.where(
-            F.col("visit_start_date").cast("date") >= date_filter
-        )
+        visit_occurrence = visit_occurrence.where(F.col("visit_start_date").cast("date") >= date_filter)
 
     # Construct visit information with the person demographic
-    visit_occurrence_person = create_visit_person_join(
-        person, visit_occurrence, include_incomplete_visit
-    )
+    visit_occurrence_person = create_visit_person_join(person, visit_occurrence, include_incomplete_visit)
 
     # Retrieve all visit column references
     visit_column_refs = get_table_column_refs(visit_occurrence_person)
 
     # Construct the patient event column references
     pat_col_refs = [
-        F.coalesce(patient_events["cohort_member_id"], visit_occurrence["person_id"]).alias(
-            "cohort_member_id"
-        ),
-        F.coalesce(patient_events["standard_concept_id"], F.lit(UNKNOWN_CONCEPT)).alias(
-            "standard_concept_id"
-        ),
+        F.coalesce(patient_events["cohort_member_id"], visit_occurrence["person_id"]).alias("cohort_member_id"),
+        F.coalesce(patient_events["standard_concept_id"], F.lit(UNKNOWN_CONCEPT)).alias("standard_concept_id"),
         F.coalesce(patient_events["date"], visit_occurrence["visit_start_date"]).alias("date"),
         F.coalesce(patient_events["domain"], F.lit("unknown")).alias("domain"),
         F.coalesce(patient_events["concept_value"], F.lit(-1.0)).alias("concept_value"),
@@ -1098,9 +1047,7 @@ def create_hierarchical_sequence_data(
 
     # UDF for creating the concept orders within each visit
     visit_concept_order_udf = F.row_number().over(
-        W.partitionBy("cohort_member_id", "person_id", "visit_occurrence_id").orderBy(
-            "date", "standard_concept_id"
-        )
+        W.partitionBy("cohort_member_id", "person_id", "visit_occurrence_id").orderBy("date", "standard_concept_id")
     )
 
     patient_events = (
@@ -1158,9 +1105,7 @@ def create_hierarchical_sequence_data(
     )
 
     patient_visit_sequence = (
-        patent_visit_sequence.withColumn(
-            "visit_concept_orders", F.col("visit_struct_data.visit_concept_order")
-        )
+        patent_visit_sequence.withColumn("visit_concept_orders", F.col("visit_struct_data.visit_concept_order"))
         .withColumn("visit_concept_ids", F.col("visit_struct_data.standard_concept_id"))
         .withColumn("visit_concept_dates", F.col("visit_struct_data.date_in_week"))
         .withColumn("visit_concept_ages", F.col("visit_struct_data.age"))
@@ -1213,9 +1158,7 @@ def create_hierarchical_sequence_data(
     )
 
     if max_num_of_visits_per_person:
-        patient_sequence = patient_sequence.where(
-            F.col("num_of_visits") <= max_num_of_visits_per_person
-        )
+        patient_sequence = patient_sequence.where(F.col("num_of_visits") <= max_num_of_visits_per_person)
 
     patient_sequence = (
         patient_sequence.withColumn("visit_rank_orders", F.col("patient_list.visit_rank_order"))
@@ -1269,14 +1212,10 @@ def create_visit_person_join(person, visit_occurrence, include_incomplete_visit=
         return time_intervals.apply(time_token_func)
 
     visit_rank_udf = F.row_number().over(
-        W.partitionBy("person_id").orderBy(
-            "visit_start_date", "visit_end_date", "visit_occurrence_id"
-        )
+        W.partitionBy("person_id").orderBy("visit_start_date", "visit_end_date", "visit_occurrence_id")
     )
     visit_segment_udf = F.col("visit_rank_order") % F.lit(2) + 1
-    visit_windowing = W.partitionBy("person_id").orderBy(
-        "visit_start_date", "visit_end_date", "visit_occurrence_id"
-    )
+    visit_windowing = W.partitionBy("person_id").orderBy("visit_start_date", "visit_end_date", "visit_occurrence_id")
     # Check whehter or not the visit is either an inpatient visit or E-I visit
     is_inpatient_logic = F.col("visit_concept_id").isin([9201, 262]).cast("integer")
     # Construct the logic for readmission, which is defined as inpatient visit occurred within 30
@@ -1332,9 +1271,7 @@ def create_visit_person_join(person, visit_occurrence, include_incomplete_visit=
         .withColumn("is_readmission", readmission_logic)
     )
 
-    visit_occurrence = visit_occurrence.withColumn(
-        "prolonged_stay", prolonged_length_stay_logic
-    ).select(
+    visit_occurrence = visit_occurrence.withColumn("prolonged_stay", prolonged_length_stay_logic).select(
         "visit_occurrence_id",
         "visit_concept_id",
         "person_id",
@@ -1379,9 +1316,7 @@ def process_measurement(spark, measurement, required_measurement, output_folder:
         measurement_unit_stats_df.repartition(10).write.mode("overwrite").parquet(
             path.join(output_folder, "measurement_unit_stats")
         )
-        measurement_unit_stats_df = spark.read.parquet(
-            path.join(output_folder, "measurement_unit_stats")
-        )
+        measurement_unit_stats_df = spark.read.parquet(path.join(output_folder, "measurement_unit_stats"))
 
     # Cache the stats in memory
     measurement_unit_stats_df.cache()
@@ -1440,12 +1375,8 @@ def process_measurement(spark, measurement, required_measurement, output_folder:
     processed_measurement_df = scaled_numeric_lab.unionAll(categorical_lab)
 
     if output_folder:
-        processed_measurement_df.write.mode("overwrite").parquet(
-            path.join(output_folder, "processed_measurement")
-        )
-        processed_measurement_df = spark.read.parquet(
-            path.join(output_folder, "processed_measurement")
-        )
+        processed_measurement_df.write.mode("overwrite").parquet(path.join(output_folder, "processed_measurement"))
+        processed_measurement_df = spark.read.parquet(path.join(output_folder, "processed_measurement"))
 
     return processed_measurement_df
 
@@ -1460,8 +1391,7 @@ def get_mlm_skip_domains(spark, input_folder, mlm_skip_table_list):
     :return:
     """
     domain_tables = [
-        preprocess_domain_table(spark, input_folder, domain_table_name)
-        for domain_table_name in mlm_skip_table_list
+        preprocess_domain_table(spark, input_folder, domain_table_name) for domain_table_name in mlm_skip_table_list
     ]
 
     return list(map(get_domain_field, domain_tables))

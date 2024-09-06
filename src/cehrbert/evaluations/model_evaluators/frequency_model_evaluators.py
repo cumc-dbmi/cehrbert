@@ -4,19 +4,13 @@ from itertools import chain
 import numpy as np
 from scipy.sparse import csr_matrix, hstack
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import (
-    GridSearchCV,
-    StratifiedKFold,
-    StratifiedShuffleSplit,
-)
+from sklearn.model_selection import GridSearchCV, StratifiedKFold, StratifiedShuffleSplit
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler, normalize
 from tensorflow.keras.preprocessing.text import Tokenizer
 from xgboost import XGBClassifier
 
-from cehrbert.evaluations.model_evaluators.model_evaluators import (
-    AbstractModelEvaluator,
-)
+from cehrbert.evaluations.model_evaluators.model_evaluators import AbstractModelEvaluator
 from cehrbert.utils.model_utils import compute_binary_metrics
 
 
@@ -71,9 +65,7 @@ class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
         if self._k_fold_test:
             stratified_splitter = StratifiedKFold(n_splits=self._num_of_folds, random_state=10)
         else:
-            stratified_splitter = StratifiedShuffleSplit(
-                n_splits=1, test_size=0.15, random_state=10
-            )
+            stratified_splitter = StratifiedShuffleSplit(n_splits=1, test_size=0.15, random_state=10)
 
         for train, val_test in stratified_splitter.split(X=labels, y=labels):
             # further split val_test using a 2:3 ratio between val and test
@@ -103,9 +95,7 @@ class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
 
         # Create the row index
         dataset = self._dataset.reset_index().reset_index()
-        dataset["row_index"] = dataset[["token_ids", "level_0"]].apply(
-            lambda tup: [tup[1]] * len(tup[0]), axis=1
-        )
+        dataset["row_index"] = dataset[["token_ids", "level_0"]].apply(lambda tup: [tup[1]] * len(tup[0]), axis=1)
 
         row_index = list(chain(*dataset["row_index"].tolist()))
         col_index = list(chain(*dataset["token_ids"].tolist()))
@@ -113,13 +103,9 @@ class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
 
         data_size = len(dataset)
         vocab_size = len(tokenizer.word_index) + 1
-        row_index, col_index, values = zip(
-            *sorted(zip(row_index, col_index, values), key=lambda tup: (tup[0], tup[1]))
-        )
+        row_index, col_index, values = zip(*sorted(zip(row_index, col_index, values), key=lambda tup: (tup[0], tup[1])))
 
-        concept_freq_count = csr_matrix(
-            (values, (row_index, col_index)), shape=(data_size, vocab_size)
-        )
+        concept_freq_count = csr_matrix((values, (row_index, col_index)), shape=(data_size, vocab_size))
         normalized_concept_freq_count = normalize(concept_freq_count)
 
         # one_hot_gender_race = OneHotEncoder(handle_unknown='ignore') \

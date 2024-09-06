@@ -31,6 +31,4 @@ def query_builder(spark_args):
         query_template=COHORT_QUERY,
         parameters={"date_lower_bound": spark_args.date_lower_bound},
     )
-    return QueryBuilder(
-        cohort_name=DEFAULT_COHORT_NAME, dependency_list=DEPENDENCY_LIST, query=query
-    )
+    return QueryBuilder(cohort_name=DEFAULT_COHORT_NAME, dependency_list=DEPENDENCY_LIST, query=query)

@@ -167,8 +167,7 @@ class CEHRGPTConfig(PretrainedConfig):
     def token_to_time_token_mapping(self) -> Dict[int, List[int]]:
         # The saved _token_to_time_token_mapping converts the key to string, so we need to convert it back to int
         return {
-            int(token): list(map(int, sub_tokens))
-            for token, sub_tokens in self._token_to_time_token_mapping.items()
+            int(token): list(map(int, sub_tokens)) for token, sub_tokens in self._token_to_time_token_mapping.items()
         }
 
 

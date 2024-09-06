@@ -60,9 +60,7 @@ class ConceptTokenizer:
             all_keys.remove(self.tokenizer.word_index[self.tokenizer.oov_token])
 
         if self.special_tokens is not None:
-            excluded = set(
-                [self.tokenizer.word_index[special_token] for special_token in self.special_tokens]
-            )
+            excluded = set([self.tokenizer.word_index[special_token] for special_token in self.special_tokens])
             all_keys = all_keys - excluded
         return all_keys
 

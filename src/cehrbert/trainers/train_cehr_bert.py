@@ -6,14 +6,9 @@ from ..data_generators.data_generator_base import (
     BertVisitPredictionDataGenerator,
     MedBertDataGenerator,
 )
-from ..keras_transformer.bert import (
-    MaskedPenalizedSparseCategoricalCrossentropy,
-    masked_perplexity,
-)
+from ..keras_transformer.bert import MaskedPenalizedSparseCategoricalCrossentropy, masked_perplexity
 from ..models.bert_models import transformer_bert_model
-from ..models.bert_models_visit_prediction import (
-    transformer_bert_model_visit_prediction,
-)
+from ..models.bert_models_visit_prediction import transformer_bert_model_visit_prediction
 from ..models.parse_args import create_parse_args_base_bert
 from ..trainers.model_trainer import AbstractConceptEmbeddingTrainer
 from ..utils.model_utils import tokenize_one_field
@@ -66,9 +61,7 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
 
     def _load_dependencies(self):
 
-        self._tokenizer = tokenize_one_field(
-            self._training_data, "concept_ids", "token_ids", self.get_tokenizer_path()
-        )
+        self._tokenizer = tokenize_one_field(self._training_data, "concept_ids", "token_ids", self.get_tokenizer_path())
 
         if self._include_visit_prediction:
             self._visit_tokenizer = tokenize_one_field(
@@ -122,12 +115,8 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
                     )
 
                     losses = {
-                        "concept_predictions": MaskedPenalizedSparseCategoricalCrossentropy(
-                            self.confidence_penalty
-                        ),
-                        "visit_predictions": MaskedPenalizedSparseCategoricalCrossentropy(
-                            self.confidence_penalty
-                        ),
+                        "concept_predictions": MaskedPenalizedSparseCategoricalCrossentropy(self.confidence_penalty),
+                        "visit_predictions": MaskedPenalizedSparseCategoricalCrossentropy(self.confidence_penalty),
                     }
                 else:
                     model = transformer_bert_model(
@@ -143,9 +132,7 @@ class VanillaBertTrainer(AbstractConceptEmbeddingTrainer):
                     )
 
                     losses = {
-                        "concept_predictions": MaskedPenalizedSparseCategoricalCrossentropy(
-                            self.confidence_penalty
-                        )
+                        "concept_predictions": MaskedPenalizedSparseCategoricalCrossentropy(self.confidence_penalty)
                     }
 
                     if self._include_prolonged_length_stay:

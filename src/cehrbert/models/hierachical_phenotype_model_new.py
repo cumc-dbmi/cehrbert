@@ -13,9 +13,9 @@ from .layers.custom_layers import (
 
 def create_visit_masks(visit_mask, num_of_visits):
     # Expand dimension for masking MultiHeadAttention in Visit Encoder
-    visit_mask_with_att = tf.reshape(
-        tf.tile(visit_mask[:, :, tf.newaxis], [1, 1, 3]), (-1, num_of_visits * 3)
-    )[:, tf.newaxis, tf.newaxis, 1:]
+    visit_mask_with_att = tf.reshape(tf.tile(visit_mask[:, :, tf.newaxis], [1, 1, 3]), (-1, num_of_visits * 3))[
+        :, tf.newaxis, tf.newaxis, 1:
+    ]
 
     # (num_of_visits_with_att, num_of_visits_with_att)
     look_ahead_mask_base = tf.cast(
@@ -50,9 +50,7 @@ def create_concept_masks(visit_mask, num_of_visits, num_of_concepts):
     )
 
     # (batch_size, 1, num_of_visits * num_of_concepts, num_of_visits)
-    look_ahead_concept_mask = tf.maximum(
-        visit_mask[:, tf.newaxis, tf.newaxis, :], look_ahead_concept_mask
-    )
+    look_ahead_concept_mask = tf.maximum(visit_mask[:, tf.newaxis, tf.newaxis, :], look_ahead_concept_mask)
     return look_ahead_concept_mask
 
 
@@ -208,9 +206,7 @@ class HierarchicalBertModel(tf.keras.Model):
         visit_visit_type = inputs["masked_visit_type"]
 
         # Expand dimensions for masking MultiHeadAttention in Concept Encoder
-        pat_concept_mask = tf.reshape(pat_mask, shape=(-1, self.num_of_concepts))[
-            :, tf.newaxis, tf.newaxis, :
-        ]
+        pat_concept_mask = tf.reshape(pat_mask, shape=(-1, self.num_of_concepts))[:, tf.newaxis, tf.newaxis, :]
 
         # Look up the embeddings for the concepts
         concept_embeddings, embedding_matrix = self.concept_embedding_layer(pat_seq)
@@ -219,9 +215,7 @@ class HierarchicalBertModel(tf.keras.Model):
         att_embeddings, _ = self.concept_embedding_layer(visit_time_delta_att)
 
         # Re-purpose token id 0 as the visit start embedding
-        visit_start_embeddings, _ = self.concept_embedding_layer(
-            tf.zeros_like(visit_mask, dtype=tf.int32)
-        )
+        visit_start_embeddings, _ = self.concept_embedding_layer(tf.zeros_like(visit_mask, dtype=tf.int32))
 
         # Transform the concept embeddings by combining their concept embeddings with the
         # corresponding val
@@ -241,9 +235,7 @@ class HierarchicalBertModel(tf.keras.Model):
         )
 
         # (batch * num_of_visits, num_of_concepts, embedding_size)
-        concept_embeddings = tf.reshape(
-            concept_embeddings, shape=(-1, self.num_of_concepts, self.embedding_size)
-        )
+        concept_embeddings = tf.reshape(concept_embeddings, shape=(-1, self.num_of_concepts, self.embedding_size))
 
         # Step 1: apply the first bert to the concept embeddings for each visit
         concept_embeddings, _ = self.concept_encoder(
@@ -262,9 +254,7 @@ class HierarchicalBertModel(tf.keras.Model):
         visit_embeddings = concept_embeddings[:, :, 0]
 
         # (batch_size, num_of_visits, embedding_size)
-        visit_type_embeddings, visit_type_embedding_matrix = self.visit_type_embedding_layer(
-            visit_visit_type, **kwargs
-        )
+        visit_type_embeddings, visit_type_embedding_matrix = self.visit_type_embedding_layer(visit_visit_type, **kwargs)
 
         # Combine visit_type_embeddings with visit_embeddings
         visit_embeddings = self.visit_type_embedding_dense_layer(
@@ -287,9 +277,7 @@ class HierarchicalBertModel(tf.keras.Model):
         look_ahead_visit_mask_with_att = create_visit_masks(visit_mask, self.num_of_visits)
 
         # Feed augmented visit embeddings into encoders to get contextualized visit embeddings
-        visit_embeddings, _ = self.visit_encoder(
-            visit_embeddings, look_ahead_visit_mask_with_att, **kwargs
-        )
+        visit_embeddings, _ = self.visit_encoder(visit_embeddings, look_ahead_visit_mask_with_att, **kwargs)
 
         # Pad contextualized_visit_embeddings on axis 1 with one extra visit, we can extract the
         # visit embeddings using reshape trick
@@ -304,9 +292,7 @@ class HierarchicalBertModel(tf.keras.Model):
         (
             visit_embeddings_without_att,
             _,
-        ) = self.visit_phenotype_layer(
-            [visit_embeddings_without_att, visit_mask, embedding_matrix], **kwargs
-        )
+        ) = self.visit_phenotype_layer([visit_embeddings_without_att, visit_mask, embedding_matrix], **kwargs)
 
         # # Step 3 decoder applied to patient level
         # Reshape the data in visit view back to patient view:
@@ -316,9 +302,7 @@ class HierarchicalBertModel(tf.keras.Model):
             shape=(-1, self.num_of_visits * self.num_of_concepts, self.embedding_size),
         )
 
-        look_ahead_concept_mask = create_concept_masks(
-            visit_mask, self.num_of_visits, self.num_of_concepts
-        )
+        look_ahead_concept_mask = create_concept_masks(visit_mask, self.num_of_visits, self.num_of_concepts)
 
         global_concept_embeddings, _ = self.global_concept_embeddings_layer(
             concept_embeddings,
@@ -346,9 +330,7 @@ class HierarchicalBertModel(tf.keras.Model):
 
             # Create the att to concept mask ATT tokens only attend to the concepts in the
             # neighboring visits
-            att_concept_mask = create_att_concept_mask(
-                self.num_of_concepts, self.num_of_visits, visit_mask
-            )
+            att_concept_mask = create_att_concept_mask(self.num_of_concepts, self.num_of_visits, visit_mask)
 
             # Use the simple decoder layer to decode att embeddings using the neighboring concept
             # embeddings
@@ -412,9 +394,7 @@ class MultiTaskHierarchicalBertModel(HierarchicalBertModel):
             self.visit_softmax_layer = tf.keras.layers.Softmax(name="visit_predictions")
 
         if include_readmission:
-            self.is_readmission_layer = tf.keras.layers.Dense(
-                1, activation="sigmoid", name="is_readmission"
-            )
+            self.is_readmission_layer = tf.keras.layers.Dense(1, activation="sigmoid", name="is_readmission")
 
         if include_prolonged_length_stay:
             self.visit_prolonged_stay_layer = tf.keras.layers.Dense(
@@ -438,9 +418,7 @@ class MultiTaskHierarchicalBertModel(HierarchicalBertModel):
             # Slice out the visit embeddings (CLS tokens)
             visit_type_embedding_matrix = self.visit_type_embedding_layer.embeddings
             visit_predictions = self.visit_softmax_layer(
-                self.visit_prediction_output_layer(
-                    [visit_embeddings_without_att, visit_type_embedding_matrix]
-                )
+                self.visit_prediction_output_layer([visit_embeddings_without_att, visit_type_embedding_matrix])
             )
             outputs["visit_predictions"] = visit_predictions
 
@@ -449,9 +427,7 @@ class MultiTaskHierarchicalBertModel(HierarchicalBertModel):
             outputs["is_readmission"] = is_readmission_output
 
         if self.include_prolonged_length_stay:
-            visit_prolonged_stay_output = self.visit_prolonged_stay_layer(
-                visit_embeddings_without_att
-            )
+            visit_prolonged_stay_output = self.visit_prolonged_stay_layer(visit_embeddings_without_att)
             outputs["visit_prolonged_stay"] = visit_prolonged_stay_output
 
         return outputs

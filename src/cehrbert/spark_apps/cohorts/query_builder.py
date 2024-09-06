@@ -28,9 +28,7 @@ class QuerySpec(NamedTuple):
     table_name: str
 
     def __str__(self):
-        return (
-            f"table={self.table_name}\n" f"query={self.query_template.format(**self.parameters)}\n"
-        )
+        return f"table={self.table_name}\n" f"query={self.query_template.format(**self.parameters)}\n"
 
 
 class AncestorTableSpec(NamedTuple):
