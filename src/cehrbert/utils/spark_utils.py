@@ -128,10 +128,10 @@ def join_domain_tables(domain_tables):
         # extract the domain concept_id from the table fields. E.g. condition_concept_id from
         # condition_occurrence extract the domain start_date column extract the name of the table
         for (
-                concept_id_field,
-                date_field,
-                datetime_field,
-                table_domain_field,
+            concept_id_field,
+            date_field,
+            datetime_field,
+            table_domain_field,
         ) in get_key_fields(domain_table):
             # Remove records that don't have a date or standard_concept_id
             sub_domain_table = domain_table.where(F.col(date_field).isNotNull()).where(
@@ -169,11 +169,11 @@ def join_domain_tables(domain_tables):
 
 
 def preprocess_domain_table(
-        spark,
-        input_folder,
-        domain_table_name,
-        with_diagnosis_rollup=False,
-        with_drug_rollup=True,
+    spark,
+    input_folder,
+    domain_table_name,
+    with_diagnosis_rollup=False,
+    with_drug_rollup=True,
 ):
     domain_table = spark.read.parquet(create_file_path(input_folder, domain_table_name))
 
@@ -202,9 +202,9 @@ def preprocess_domain_table(
 
     if with_drug_rollup:
         if (
-                domain_table_name == "drug_exposure"
-                and path.exists(create_file_path(input_folder, "concept"))
-                and path.exists(create_file_path(input_folder, "concept_ancestor"))
+            domain_table_name == "drug_exposure"
+            and path.exists(create_file_path(input_folder, "concept"))
+            and path.exists(create_file_path(input_folder, "concept_ancestor"))
         ):
             concept = spark.read.parquet(create_file_path(input_folder, "concept"))
             concept_ancestor = spark.read.parquet(
@@ -214,9 +214,9 @@ def preprocess_domain_table(
 
     if with_diagnosis_rollup:
         if (
-                domain_table_name == "condition_occurrence"
-                and path.exists(create_file_path(input_folder, "concept"))
-                and path.exists(create_file_path(input_folder, "concept_relationship"))
+            domain_table_name == "condition_occurrence"
+            and path.exists(create_file_path(input_folder, "concept"))
+            and path.exists(create_file_path(input_folder, "concept_relationship"))
         ):
             concept = spark.read.parquet(create_file_path(input_folder, "concept"))
             concept_relationship = spark.read.parquet(
@@ -225,9 +225,9 @@ def preprocess_domain_table(
             domain_table = roll_up_diagnosis(domain_table, concept, concept_relationship)
 
         if (
-                domain_table_name == "procedure_occurrence"
-                and path.exists(create_file_path(input_folder, "concept"))
-                and path.exists(create_file_path(input_folder, "concept_ancestor"))
+            domain_table_name == "procedure_occurrence"
+            and path.exists(create_file_path(input_folder, "concept"))
+            and path.exists(create_file_path(input_folder, "concept_ancestor"))
         ):
             concept = spark.read.parquet(create_file_path(input_folder, "concept"))
             concept_ancestor = spark.read.parquet(
@@ -528,7 +528,7 @@ def roll_up_procedure(procedure_occurrence, concept, concept_ancestor):
 
 
 def create_sequence_data(
-        patient_event, date_filter=None, include_visit_type=False, classic_bert_seq=False
+    patient_event, date_filter=None, include_visit_type=False, classic_bert_seq=False
 ):
     """
     Create a sequence of the events associated with one patient in a chronological order.
@@ -663,17 +663,17 @@ def create_sequence_data(
 
 
 def create_sequence_data_with_att(
-        patient_events,
-        visit_occurrence,
-        date_filter=None,
-        include_visit_type=False,
-        exclude_visit_tokens=False,
-        patient_demographic=None,
-        death=None,
-        att_type: AttType = AttType.CEHR_BERT,
-        exclude_demographic: bool = True,
-        use_age_group: bool = False,
-        include_inpatient_hour_token: bool = False,
+    patient_events,
+    visit_occurrence,
+    date_filter=None,
+    include_visit_type=False,
+    exclude_visit_tokens=False,
+    patient_demographic=None,
+    death=None,
+    att_type: AttType = AttType.CEHR_BERT,
+    exclude_demographic: bool = True,
+    use_age_group: bool = False,
+    include_inpatient_hour_token: bool = False,
 ):
     """
     Create a sequence of the events associated with one patient in a chronological order.
@@ -829,12 +829,12 @@ def create_concept_frequency_data(patient_event, date_filter=None):
 
 
 def extract_ehr_records(
-        spark,
-        input_folder,
-        domain_table_list,
-        include_visit_type=False,
-        with_rollup=False,
-        include_concept_list=False,
+    spark,
+    input_folder,
+    domain_table_list,
+    include_visit_type=False,
+    with_rollup=False,
+    include_concept_list=False,
 ):
     """
     Extract the ehr records for domain_table_list from input_folder.
@@ -1017,13 +1017,13 @@ def get_table_column_refs(dataframe):
 
 
 def create_hierarchical_sequence_data(
-        person,
-        visit_occurrence,
-        patient_events,
-        date_filter=None,
-        max_num_of_visits_per_person=None,
-        include_incomplete_visit=True,
-        allow_measurement_only=False,
+    person,
+    visit_occurrence,
+    patient_events,
+    date_filter=None,
+    max_num_of_visits_per_person=None,
+    include_incomplete_visit=True,
+    allow_measurement_only=False,
 ):
     """
     This creates a hierarchical data frame for the hierarchical bert model.
@@ -1195,7 +1195,7 @@ def create_hierarchical_sequence_data(
     ]
 
     visit_weeks_since_epoch_udf = (
-            F.unix_timestamp(F.col("visit_start_date").cast("date")) / F.lit(24 * 60 * 60 * 7)
+        F.unix_timestamp(F.col("visit_start_date").cast("date")) / F.lit(24 * 60 * 60 * 7)
     ).cast("int")
 
     patient_sequence = (
@@ -1283,9 +1283,9 @@ def create_visit_person_join(person, visit_occurrence, include_incomplete_visit=
     # days of the discharge
     readmission_logic = F.coalesce(
         (
-                (F.col("time_interval") <= 30)
-                & (F.col("visit_concept_id").isin([9201, 262]))
-                & (F.col("prev_visit_concept_id").isin([9201, 262]))
+            (F.col("time_interval") <= 30)
+            & (F.col("visit_concept_id").isin([9201, 262]))
+            & (F.col("prev_visit_concept_id").isin([9201, 262]))
         ).cast("integer"),
         F.lit(0),
     )

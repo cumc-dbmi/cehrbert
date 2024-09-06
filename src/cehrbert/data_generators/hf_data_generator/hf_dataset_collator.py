@@ -12,12 +12,12 @@ from cehrbert.models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 
 class CehrBertDataCollator:
     def __init__(
-            self,
-            tokenizer: CehrBertTokenizer,
-            max_length: int,
-            mlm_probability: float = 0.15,
-            is_pretraining: bool = True,
-            truncate_type: TruncationType = TruncationType.RANDOM_RIGHT_TRUNCATION,
+        self,
+        tokenizer: CehrBertTokenizer,
+        max_length: int,
+        mlm_probability: float = 0.15,
+        is_pretraining: bool = True,
+        truncate_type: TruncationType = TruncationType.RANDOM_RIGHT_TRUNCATION,
     ):
         self.tokenizer = tokenizer
         self.max_length = max_length
@@ -205,9 +205,9 @@ class CehrBertDataCollator:
 
         # 10% of the time, we replace masked input tokens with random word
         indices_random = (
-                torch.bernoulli(torch.full(labels.shape, 0.5)).bool()
-                & masked_indices
-                & ~indices_replaced
+            torch.bernoulli(torch.full(labels.shape, 0.5)).bool()
+            & masked_indices
+            & ~indices_replaced
         )
         random_words = torch.randint(self.tokenizer.vocab_size, labels.shape, dtype=torch.long)
         inputs[indices_random] = random_words[indices_random]
@@ -233,8 +233,8 @@ class CehrBertDataCollator:
             start_index = random.randint(0, seq_length - new_max_length)
             end_index = min(seq_length, start_index + new_max_length)
         elif self.truncate_type in (
-                TruncationType.RANDOM_RIGHT_TRUNCATION,
-                TruncationType.RANDOM_COMPLETE,
+            TruncationType.RANDOM_RIGHT_TRUNCATION,
+            TruncationType.RANDOM_COMPLETE,
         ):
             # We randomly pick a [VS] token
             starting_points = []
@@ -266,9 +266,9 @@ class CehrBertDataCollator:
         new_record = collections.OrderedDict()
         for k, v in record.items():
             if (
-                    isinstance(v, list)
-                    or isinstance(v, np.ndarray)
-                    or (isinstance(v, torch.Tensor) and v.dim() > 0)
+                isinstance(v, list)
+                or isinstance(v, np.ndarray)
+                or (isinstance(v, torch.Tensor) and v.dim() > 0)
             ):
                 if len(v) == seq_length:
                     new_record[k] = v[start_index:end_index]

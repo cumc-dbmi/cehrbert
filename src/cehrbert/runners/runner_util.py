@@ -19,7 +19,7 @@ LOG = logging.get_logger("transformers")
 
 
 def load_parquet_as_dataset(
-        data_folder, split="train", streaming=False
+    data_folder, split="train", streaming=False
 ) -> Union[Dataset, IterableDataset]:
     """
     Loads a dataset from Parquet files located within a specified folder into a Hugging Face `datasets.Dataset`.
@@ -101,14 +101,14 @@ def get_last_hf_checkpoint(training_args):
     last_checkpoint = None
     output_dir_abspath = os.path.abspath(training_args.output_dir)
     if (
-            os.path.isdir(output_dir_abspath)
-            and training_args.do_train
-            and not training_args.overwrite_output_dir
+        os.path.isdir(output_dir_abspath)
+        and training_args.do_train
+        and not training_args.overwrite_output_dir
     ):
         last_checkpoint = get_last_checkpoint(output_dir_abspath)
         if (
-                last_checkpoint is None
-                and len([_ for _ in os.listdir(output_dir_abspath) if os.path.isdir(_)]) > 0
+            last_checkpoint is None
+            and len([_ for _ in os.listdir(output_dir_abspath) if os.path.isdir(_)]) > 0
         ):
             raise ValueError(
                 f"Output directory ({output_dir_abspath}) already exists and is not empty. "
@@ -196,23 +196,23 @@ def generate_prepared_ds_path(data_args, model_args, data_folder=None) -> Path:
     """
     data_folder = data_folder if data_folder else data_args.data_folder
     concatenated_str = (
-            str(model_args.max_position_embeddings)
-            + "|"
-            + os.path.abspath(data_folder)
-            + "|"
-            + os.path.abspath(model_args.tokenizer_name_or_path)
-            + "|"
-            + (
-                str(data_args.validation_split_percentage)
-                if data_args.validation_split_percentage
-                else ""
-            )
-            + "|"
-            + f"test_eval_ratio={str(data_args.test_eval_ratio)}"
-            + "|"
-            + f"split_by_patient={str(data_args.split_by_patient)}"
-            + "|"
-            + f"chronological_split={str(data_args.chronological_split)}"
+        str(model_args.max_position_embeddings)
+        + "|"
+        + os.path.abspath(data_folder)
+        + "|"
+        + os.path.abspath(model_args.tokenizer_name_or_path)
+        + "|"
+        + (
+            str(data_args.validation_split_percentage)
+            if data_args.validation_split_percentage
+            else ""
+        )
+        + "|"
+        + f"test_eval_ratio={str(data_args.test_eval_ratio)}"
+        + "|"
+        + f"split_by_patient={str(data_args.split_by_patient)}"
+        + "|"
+        + f"chronological_split={str(data_args.chronological_split)}"
     )
     basename = os.path.basename(data_folder)
     cleaned_basename = re.sub(r"[^a-zA-Z0-9_]", "", basename)
