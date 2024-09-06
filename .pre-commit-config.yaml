@@ -17,7 +17,7 @@ repos:
           [
             "-rn", # Only display messages
             "-sn", # Don't display the score
-            "--disable=pointless-statement,duplicate-code,line-too-long,missing-module-docstring,missing-class-docstring"
+            "--disable=pointless-statement,duplicate-code,line-too-long,missing-module-docstring,missing-class-docstring,import-error"
             # do not warn on bit operator statements
           ]
 

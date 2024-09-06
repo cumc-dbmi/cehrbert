@@ -30,7 +30,7 @@ DECIMAL_PLACE = 4
 LOGGER = logging.getLogger(__name__)
 
 
-def create_sub_folder(folder: str, sub_folder_name: str) -> Path:
+def create_folder_if_not_exist(folder: str, sub_folder_name: str) -> Path:
     """
     Creates a subfolder if it does not exist and returns the full Path object.
 
