@@ -11,6 +11,7 @@ class RecordStatus(Enum):
     history, we should not add [START] token and [END] token to such a sequence because this partial history got
     truncated on both ends.
     """
+
     COMPLETE = 1
     RIGHT_TRUNCATION = 2
     TRUNCATION = 3
@@ -20,6 +21,7 @@ class RowSlicer(NamedTuple):
     """
     A data class for storing the row from the pandas data frame and the indexes for slicing the
     """
+
     row: Tuple
     start_index: int
     end_index: int

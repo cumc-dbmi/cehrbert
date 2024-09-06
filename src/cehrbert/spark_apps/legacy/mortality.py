@@ -76,12 +76,12 @@ WHERE v.index_date BETWEEN '{date_lower_bound}' AND '{date_upper_bound}'
     --AND v.num_of_visits >= {num_of_visits}
 """
 
-DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure', 'procedure_occurrence']
+DOMAIN_TABLE_LIST = ["condition_occurrence", "drug_exposure", "procedure_occurrence"]
 
-COHORT_TABLE = 'cohort'
-DEATH = 'death'
-PERSON = 'person'
-VISIT_OCCURRENCE = 'visit_occurrence'
+COHORT_TABLE = "cohort"
+DEATH = "death"
+PERSON = "person"
+VISIT_OCCURRENCE = "visit_occurrence"
 DEPENDENCY_LIST = [DEATH, PERSON, VISIT_OCCURRENCE]
 
 
@@ -90,12 +90,14 @@ class MortalityCohortBuilder(LastVisitCohortBuilderBase):
     def preprocess_dependencies(self):
         self.spark.sql(QUALIFIED_DEATH_DATE_QUERY).createOrReplaceGlobalTempView(DEATH)
 
-        num_of_visits = ((self._observation_window // 360) + 1)
+        num_of_visits = (self._observation_window // 360) + 1
 
-        cohort_query = COHORT_QUERY_TEMPLATE.format(date_lower_bound=self._date_lower_bound,
-                                                    date_upper_bound=self._date_upper_bound,
-                                                    observation_period=self._observation_window,
-                                                    num_of_visits=num_of_visits)
+        cohort_query = COHORT_QUERY_TEMPLATE.format(
+            date_lower_bound=self._date_lower_bound,
+            date_upper_bound=self._date_upper_bound,
+            observation_period=self._observation_window,
+            num_of_visits=num_of_visits,
+        )
 
         cohort = self.spark.sql(cohort_query)
         cohort.createOrReplaceGlobalTempView(COHORT_TABLE)
@@ -104,13 +106,15 @@ class MortalityCohortBuilder(LastVisitCohortBuilderBase):
 
     def create_incident_cases(self):
         cohort = self._dependency_dict[COHORT_TABLE]
-        return cohort.where(f.col('label') == 1)
+        return cohort.where(f.col("label") == 1)
 
     def create_control_cases(self):
         cohort = self._dependency_dict[COHORT_TABLE]
-        return cohort.where(f.col('label') == 0)
+        return cohort.where(f.col("label") == 0)
 
-    def create_matching_control_cases(self, incident_cases: DataFrame, control_cases: DataFrame):
+    def create_matching_control_cases(
+        self, incident_cases: DataFrame, control_cases: DataFrame
+    ):
         """
         Do not match for control and simply what's in the control cases
         :param incident_cases:
@@ -120,45 +124,61 @@ class MortalityCohortBuilder(LastVisitCohortBuilderBase):
         return control_cases
 
 
-def main(cohort_name, input_folder, output_folder, date_lower_bound, date_upper_bound,
-         age_lower_bound, age_upper_bound, observation_window, prediction_window, hold_off_window,
-         index_date_match_window, include_visit_type, is_feature_concept_frequency,
-         is_roll_up_concept):
-    cohort_builder = MortalityCohortBuilder(cohort_name,
-                                            input_folder,
-                                            output_folder,
-                                            date_lower_bound,
-                                            date_upper_bound,
-                                            age_lower_bound,
-                                            age_upper_bound,
-                                            observation_window,
-                                            prediction_window,
-                                            hold_off_window,
-                                            index_date_match_window,
-                                            DOMAIN_TABLE_LIST,
-                                            DEPENDENCY_LIST,
-                                            True,
-                                            include_visit_type,
-                                            is_feature_concept_frequency,
-                                            is_roll_up_concept)
+def main(
+    cohort_name,
+    input_folder,
+    output_folder,
+    date_lower_bound,
+    date_upper_bound,
+    age_lower_bound,
+    age_upper_bound,
+    observation_window,
+    prediction_window,
+    hold_off_window,
+    index_date_match_window,
+    include_visit_type,
+    is_feature_concept_frequency,
+    is_roll_up_concept,
+):
+    cohort_builder = MortalityCohortBuilder(
+        cohort_name,
+        input_folder,
+        output_folder,
+        date_lower_bound,
+        date_upper_bound,
+        age_lower_bound,
+        age_upper_bound,
+        observation_window,
+        prediction_window,
+        hold_off_window,
+        index_date_match_window,
+        DOMAIN_TABLE_LIST,
+        DEPENDENCY_LIST,
+        True,
+        include_visit_type,
+        is_feature_concept_frequency,
+        is_roll_up_concept,
+    )
 
     cohort_builder.build()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     spark_args = create_spark_args()
 
-    main(spark_args.cohort_name,
-         spark_args.input_folder,
-         spark_args.output_folder,
-         spark_args.date_lower_bound,
-         spark_args.date_upper_bound,
-         spark_args.lower_bound,
-         spark_args.upper_bound,
-         spark_args.observation_window,
-         spark_args.prediction_window,
-         spark_args.hold_off_window,
-         spark_args.index_date_match_window,
-         spark_args.include_visit_type,
-         spark_args.is_feature_concept_frequency,
-         spark_args.is_roll_up_concept)
+    main(
+        spark_args.cohort_name,
+        spark_args.input_folder,
+        spark_args.output_folder,
+        spark_args.date_lower_bound,
+        spark_args.date_upper_bound,
+        spark_args.lower_bound,
+        spark_args.upper_bound,
+        spark_args.observation_window,
+        spark_args.prediction_window,
+        spark_args.hold_off_window,
+        spark_args.index_date_match_window,
+        spark_args.include_visit_type,
+        spark_args.is_feature_concept_frequency,
+        spark_args.is_roll_up_concept,
+    )

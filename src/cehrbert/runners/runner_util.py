@@ -18,7 +18,9 @@ from .hf_runner_argument_dataclass import ModelArguments, DataTrainingArguments
 LOG = logging.get_logger("transformers")
 
 
-def load_parquet_as_dataset(data_folder, split="train", streaming=False) -> Union[Dataset, IterableDataset]:
+def load_parquet_as_dataset(
+    data_folder, split="train", streaming=False
+) -> Union[Dataset, IterableDataset]:
     """
     Loads a dataset from Parquet files located within a specified folder into a Hugging Face `datasets.Dataset`.
 
@@ -50,7 +52,9 @@ def load_parquet_as_dataset(data_folder, split="train", streaming=False) -> Unio
     """
     data_abspath = os.path.abspath(data_folder)
     data_files = glob.glob(os.path.join(data_abspath, "*.parquet"))
-    dataset = load_dataset('parquet', data_files=data_files, split=split, streaming=streaming)
+    dataset = load_dataset(
+        "parquet", data_files=data_files, split=split, streaming=streaming
+    )
     return dataset
 
 
@@ -97,14 +101,23 @@ def get_last_hf_checkpoint(training_args):
     """
     last_checkpoint = None
     output_dir_abspath = os.path.abspath(training_args.output_dir)
-    if os.path.isdir(output_dir_abspath) and training_args.do_train and not training_args.overwrite_output_dir:
+    if (
+        os.path.isdir(output_dir_abspath)
+        and training_args.do_train
+        and not training_args.overwrite_output_dir
+    ):
         last_checkpoint = get_last_checkpoint(output_dir_abspath)
-        if last_checkpoint is None and len([_ for _ in os.listdir(output_dir_abspath) if os.path.isdir(_)]) > 0:
+        if (
+            last_checkpoint is None
+            and len([_ for _ in os.listdir(output_dir_abspath) if os.path.isdir(_)]) > 0
+        ):
             raise ValueError(
                 f"Output directory ({output_dir_abspath}) already exists and is not empty. "
                 "Use --overwrite_output_dir to overcome."
             )
-        elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
+        elif (
+            last_checkpoint is not None and training_args.resume_from_checkpoint is None
+        ):
             LOG.info(
                 f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
@@ -167,68 +180,85 @@ def generate_prepared_ds_path(data_args, model_args, data_folder=None) -> Path:
     """
     data_folder = data_folder if data_folder else data_args.data_folder
     concatenated_str = (
-            str(model_args.max_position_embeddings) +
-            "|" + os.path.abspath(data_folder) +
-            "|" + os.path.abspath(model_args.tokenizer_name_or_path) +
-            "|" + (str(data_args.validation_split_percentage) if data_args.validation_split_percentage else "") +
-            "|" + f"test_eval_ratio={str(data_args.test_eval_ratio)}" +
-            "|" + f"split_by_patient={str(data_args.split_by_patient)}" +
-            "|" + f"chronological_split={str(data_args.chronological_split)}"
+        str(model_args.max_position_embeddings)
+        + "|"
+        + os.path.abspath(data_folder)
+        + "|"
+        + os.path.abspath(model_args.tokenizer_name_or_path)
+        + "|"
+        + (
+            str(data_args.validation_split_percentage)
+            if data_args.validation_split_percentage
+            else ""
+        )
+        + "|"
+        + f"test_eval_ratio={str(data_args.test_eval_ratio)}"
+        + "|"
+        + f"split_by_patient={str(data_args.split_by_patient)}"
+        + "|"
+        + f"chronological_split={str(data_args.chronological_split)}"
     )
     basename = os.path.basename(data_folder)
-    cleaned_basename = re.sub(r'[^a-zA-Z0-9_]', '', basename)
+    cleaned_basename = re.sub(r"[^a-zA-Z0-9_]", "", basename)
     LOG.info(f"concatenated_str: {concatenated_str}")
     ds_hash = f"{cleaned_basename}_{str(md5(concatenated_str))}"
     LOG.info(f"ds_hash: {ds_hash}")
-    prepared_ds_path = (
-            Path(os.path.abspath(data_args.dataset_prepared_path)) / ds_hash
-    )
+    prepared_ds_path = Path(os.path.abspath(data_args.dataset_prepared_path)) / ds_hash
     return prepared_ds_path
 
 
-def parse_runner_args() -> Tuple[DataTrainingArguments, ModelArguments, TrainingArguments]:
+def parse_runner_args() -> (
+    Tuple[DataTrainingArguments, ModelArguments, TrainingArguments]
+):
     """
-   Parses command line arguments provided to a script for training a model using the Hugging Face library.
+    Parses command line arguments provided to a script for training a model using the Hugging Face
+    library.
 
-   This function uses HfArgumentParser to parse arguments from either command line directly or from configuration files
-   in JSON or YAML format. The arguments are expected to belong to three categories: ModelArguments, DataTrainingArguments,
-   and TrainingArguments, each corresponding to specific configurations required for the model training.
+    This function uses HfArgumentParser to parse arguments from either command line directly or from configuration files
+    in JSON or YAML format. The arguments are expected to belong to three categories: ModelArguments, DataTrainingArguments,
+    and TrainingArguments, each corresponding to specific configurations required for the model training.
 
-   The function checks the system's command line arguments:
-   - If there is exactly one argument and it is a JSON file, it parses the JSON file to extract the arguments.
-   - If there is exactly one argument and it is a YAML file, it parses the YAML file instead.
-   - Otherwise, it assumes arguments are provided directly through the command line and parses them accordingly.
+    The function checks the system's command line arguments:
+    - If there is exactly one argument and it is a JSON file, it parses the JSON file to extract the arguments.
+    - If there is exactly one argument and it is a YAML file, it parses the YAML file instead.
+    - Otherwise, it assumes arguments are provided directly through the command line and parses them accordingly.
 
-   Returns:
-       tuple: A tuple containing three elements:
-           - data_args (DataTrainingArguments): Arguments related to data processing and dataset handling.
-           - model_args (ModelArguments): Arguments related to model configuration and specifics.
-           - training_args (TrainingArguments): Arguments related to the training process, such as learning rate and
-             training epochs.
+    Returns:
+        tuple: A tuple containing three elements:
+            - data_args (DataTrainingArguments): Arguments related to data processing and dataset handling.
+            - model_args (ModelArguments): Arguments related to model configuration and specifics.
+            - training_args (TrainingArguments): Arguments related to the training process, such as learning rate and
+              training epochs.
 
-   Raises:
-       FileNotFoundError: If the specified JSON or YAML file does not exist.
-       json.JSONDecodeError: If there is an error parsing a JSON file.
-       yaml.YAMLError: If there is an error parsing a YAML file.
-       Exception: For other issues that occur during argument parsing.
+    Raises:
+        FileNotFoundError: If the specified JSON or YAML file does not exist.
+        json.JSONDecodeError: If there is an error parsing a JSON file.
+        yaml.YAMLError: If there is an error parsing a YAML file.
+        Exception: For other issues that occur during argument parsing.
 
-   Examples:
-       Command line usage might look like this:
-       $ python training_script.py --model_name_or_path bert-base-uncased --do_train
+    Examples:
+        Command line usage might look like this:
+        $ python training_script.py --model_name_or_path bert-base-uncased --do_train
 
-       Or using a JSON configuration file:
-       $ python training_script.py config.json
+        Or using a JSON configuration file:
+        $ python training_script.py config.json
 
-       Or using a YAML configuration file:
-       $ python training_script.py config.yaml
+        Or using a YAML configuration file:
+        $ python training_script.py config.yaml
     """
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    parser = HfArgumentParser(
+        (ModelArguments, DataTrainingArguments, TrainingArguments)
+    )
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+        model_args, data_args, training_args = parser.parse_json_file(
+            json_file=os.path.abspath(sys.argv[1])
+        )
     elif len(sys.argv) == 2 and sys.argv[1].endswith(".yaml"):
-        model_args, data_args, training_args = parser.parse_yaml_file(yaml_file=os.path.abspath(sys.argv[1]))
+        model_args, data_args, training_args = parser.parse_yaml_file(
+            yaml_file=os.path.abspath(sys.argv[1])
+        )
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
     return data_args, model_args, training_args
@@ -286,13 +316,29 @@ def compute_metrics(eval_pred: EvalPrediction):
     # Calculate perplexity
     perplexity = torch.exp(torch.mean(cross_entropy_loss))
 
-    return {"perplexity": perplexity.item()}  # Use .item() to extract the scalar value from the tensor
+    return {"perplexity": perplexity.item()}
 
 
 def get_meds_extension_path(data_folder: str, dataset_prepared_path: str):
-    data_folder = data_folder
+    """
+    Generates the file path for the 'meds_extension' by appending the base name of the data folder
+    to the dataset prepared path.
+
+    Args:
+        data_folder (str): The path to the data folder. The trailing backslash will be removed.
+        dataset_prepared_path (str): The directory where the dataset is prepared.
+
+    Returns:
+        str: The constructed file path for the meds extension.
+
+    Example:
+        If data_folder is "C:\\data\\" and dataset_prepared_path is "C:\\prepared_data",
+        the function will return "C:\\prepared_data\\data_meds_extension".
+    """
     if data_folder.endswith("\\"):
-        data_folder.rstrip("\\")
+        data_folder = data_folder.rstrip("\\")
     basename = os.path.basename(data_folder)
-    meds_extension_path = os.path.join(dataset_prepared_path, f"{basename}_meds_extension")
+    meds_extension_path = os.path.join(
+        dataset_prepared_path, f"{basename}_meds_extension"
+    )
     return meds_extension_path

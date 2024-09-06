@@ -1,4 +1,4 @@
-measurement_unit_stats_query = '''
+measurement_unit_stats_query = """
 WITH measurement_percentile AS
 (
     SELECT
@@ -39,4 +39,4 @@ WHERE
     AND m.measurement_concept_id <> 0
 GROUP BY m.measurement_concept_id, m.unit_concept_id
 HAVING COUNT(*) >= 100
-'''
+"""

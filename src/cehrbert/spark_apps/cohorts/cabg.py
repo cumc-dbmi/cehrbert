@@ -25,12 +25,24 @@ FROM
 WHERE c.index_date >= '{date_lower_bound}'
 """
 
-DEFAULT_COHORT_NAME = 'cabg'
-DEPENDENCY_LIST = ['person', 'procedure_occurrence', 'visit_occurrence']
-CABG_INCLUSION_TABLE = 'CABG'
+DEFAULT_COHORT_NAME = "cabg"
+DEPENDENCY_LIST = ["person", "procedure_occurrence", "visit_occurrence"]
+CABG_INCLUSION_TABLE = "CABG"
 CABG_CONCEPTS = [
-    43528001, 43528003, 43528004, 43528002, 4305852, 4168831, 2107250,
-    2107216, 2107222, 2107231, 4336464, 4231998, 4284104, 2100873
+    43528001,
+    43528003,
+    43528004,
+    43528002,
+    4305852,
+    4168831,
+    2107250,
+    2107216,
+    2107222,
+    2107231,
+    4336464,
+    4231998,
+    4284104,
+    2100873,
 ]
 
 
@@ -39,21 +51,21 @@ def query_builder(spark_args):
         table_name=DEFAULT_COHORT_NAME,
         query_template=COHORT_QUERY_TEMPLATE,
         parameters={
-            'cabg_concept_table': CABG_INCLUSION_TABLE,
-            'date_lower_bound': spark_args.date_lower_bound
-        }
+            "cabg_concept_table": CABG_INCLUSION_TABLE,
+            "date_lower_bound": spark_args.date_lower_bound,
+        },
     )
 
     ancestor_table_specs = [
         AncestorTableSpec(
             table_name=CABG_INCLUSION_TABLE,
             ancestor_concept_ids=CABG_CONCEPTS,
-            is_standard=True
+            is_standard=True,
         )
     ]
     return QueryBuilder(
         cohort_name=DEFAULT_COHORT_NAME,
         dependency_list=DEPENDENCY_LIST,
         query=query,
-        ancestor_table_specs=ancestor_table_specs
+        ancestor_table_specs=ancestor_table_specs,
     )

@@ -2,7 +2,8 @@ import re
 from typing import List
 
 from ....data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules.meds_to_cehrbert_base import (
-    MedsToCehrBertConversion, EventConversionRule
+    MedsToCehrBertConversion,
+    EventConversionRule,
 )
 
 
@@ -23,13 +24,13 @@ class MedsToBertMimic4(MedsToCehrBertConversion):
             "Blood Pressure Lying",
             "Blood Pressure Sitting",
             "Blood Pressure Standing (1 min)",
-            "Blood Pressure Standing (3 mins)"
+            "Blood Pressure Standing (3 mins)",
         ]
         blood_pressure_rules = [
             EventConversionRule(
                 code=code,
                 parsing_pattern=re.compile(r"(\d+)/(\d+)"),
-                mapped_event_labels=[f"Systolic {code}", f"Diastolic {code}"]
+                mapped_event_labels=[f"Systolic {code}", f"Diastolic {code}"],
             )
             for code in blood_pressure_codes
         ]
@@ -38,7 +39,7 @@ class MedsToBertMimic4(MedsToCehrBertConversion):
             EventConversionRule(
                 code=code,
                 parsing_pattern=re.compile(r"(\d+)"),
-                mapped_event_labels=[code]
+                mapped_event_labels=[code],
             )
             for code in height_weight_codes
         ]
@@ -46,7 +47,7 @@ class MedsToBertMimic4(MedsToCehrBertConversion):
             EventConversionRule(
                 code="LAB//50827//UNK",
                 parsing_pattern=re.compile(r"(\d+)/(\d+)"),
-                mapped_event_labels=["LAB//50827//UNK//1", "LAB//50827//UNK//2"]
+                mapped_event_labels=["LAB//50827//UNK//1", "LAB//50827//UNK//2"],
             )
         ]
         return blood_pressure_rules + height_weight_rules + ventilation_rate_rules

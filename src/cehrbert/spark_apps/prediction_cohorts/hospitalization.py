@@ -46,10 +46,15 @@ WHERE num_of_visits between 2 and 30
     AND index_date >= '{date_lower_bound}'
 """
 
-HOSPITALIZATION_TARGET_COHORT = 'hospitalization_target'
-HOSPITALIZATION_OUTCOME_COHORT = 'hospitalization_outcome'
-DEPENDENCY_LIST = ['person', 'condition_occurrence', 'visit_occurrence']
-DOMAIN_TABLE_LIST = ['condition_occurrence', 'drug_exposure', 'procedure_occurrence', 'measurement']
+HOSPITALIZATION_TARGET_COHORT = "hospitalization_target"
+HOSPITALIZATION_OUTCOME_COHORT = "hospitalization_outcome"
+DEPENDENCY_LIST = ["person", "condition_occurrence", "visit_occurrence"]
+DOMAIN_TABLE_LIST = [
+    "condition_occurrence",
+    "drug_exposure",
+    "procedure_occurrence",
+    "measurement",
+]
 
 
 def main(spark_args):
@@ -58,36 +63,38 @@ def main(spark_args):
         table_name=HOSPITALIZATION_TARGET_COHORT,
         query_template=HOSPITALIZATION_TARGET_QUERY,
         parameters={
-            'total_window': total_window,
-            'date_lower_bound': spark_args.date_lower_bound
-        }
+            "total_window": total_window,
+            "date_lower_bound": spark_args.date_lower_bound,
+        },
     )
     hospitalization_querybuilder = QueryBuilder(
         cohort_name=HOSPITALIZATION_TARGET_COHORT,
         dependency_list=DEPENDENCY_LIST,
-        query=hospitalization_target_query
+        query=hospitalization_target_query,
     )
 
     hospitalization_outcome_query = QuerySpec(
         table_name=HOSPITALIZATION_OUTCOME_COHORT,
         query_template=HOSPITALIZATION_OUTCOME_QUERY,
-        parameters={}
+        parameters={},
     )
     hospitalization_outcome_querybuilder = QueryBuilder(
         cohort_name=HOSPITALIZATION_OUTCOME_COHORT,
         dependency_list=DEPENDENCY_LIST,
-        query=hospitalization_outcome_query
+        query=hospitalization_outcome_query,
     )
 
-    ehr_table_list = spark_args.ehr_table_list if spark_args.ehr_table_list else DOMAIN_TABLE_LIST
+    ehr_table_list = (
+        spark_args.ehr_table_list if spark_args.ehr_table_list else DOMAIN_TABLE_LIST
+    )
 
     create_prediction_cohort(
         spark_args,
         hospitalization_querybuilder,
         hospitalization_outcome_querybuilder,
-        ehr_table_list
+        ehr_table_list,
     )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main(create_spark_args())

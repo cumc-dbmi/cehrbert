@@ -8,20 +8,18 @@ from ..const.common import UNKNOWN_CONCEPT
 
 
 class ConceptTokenizer:
-    unused_token = '[UNUSED]'
-    mask_token = '[MASK]'
-    att_mask_token = '[ATT_MASK]'
-    cls_token = '[CLS]'
-    start_token = '[START]'
-    end_token = '[END]'
-    visit_start_token = 'VS'
-    visit_end_token = 'VE'
+    unused_token = "[UNUSED]"
+    mask_token = "[MASK]"
+    att_mask_token = "[ATT_MASK]"
+    cls_token = "[CLS]"
+    start_token = "[START]"
+    end_token = "[END]"
+    visit_start_token = "VS"
+    visit_end_token = "VE"
 
-    def __init__(
-            self, special_tokens: Optional[Sequence[str]] = None, oov_token='-1'
-    ):
+    def __init__(self, special_tokens: Optional[Sequence[str]] = None, oov_token="-1"):
         self.special_tokens = special_tokens
-        self.tokenizer = Tokenizer(oov_token=oov_token, filters='', lower=False)
+        self.tokenizer = Tokenizer(oov_token=oov_token, filters="", lower=False)
 
         self.tokenizer.fit_on_texts([self.mask_token])
         self.tokenizer.fit_on_texts([self.att_mask_token])
@@ -40,14 +38,14 @@ class ConceptTokenizer:
         if isinstance(concept_sequences, df_series):
             self.tokenizer.fit_on_texts(concept_sequences.apply(list))
         else:
-            self.tokenizer.fit_on_texts(
-                concept_sequences.apply(list, meta='iterable')
-            )
+            self.tokenizer.fit_on_texts(concept_sequences.apply(list, meta="iterable"))
 
     def encode(self, concept_sequences, is_generator=False):
-        return self.tokenizer.texts_to_sequences_generator(
-            concept_sequences) if is_generator else self.tokenizer.texts_to_sequences(
-            concept_sequences)
+        return (
+            self.tokenizer.texts_to_sequences_generator(concept_sequences)
+            if is_generator
+            else self.tokenizer.texts_to_sequences(concept_sequences)
+        )
 
     def decode(self, concept_sequence_token_ids):
         return self.tokenizer.sequences_to_texts(concept_sequence_token_ids)
@@ -63,14 +61,18 @@ class ConceptTokenizer:
 
         if self.special_tokens is not None:
             excluded = set(
-                [self.tokenizer.word_index[special_token] for special_token in self.special_tokens])
+                [
+                    self.tokenizer.word_index[special_token]
+                    for special_token in self.special_tokens
+                ]
+            )
             all_keys = all_keys - excluded
         return all_keys
 
     def get_token_by_index(self, index):
         if index in self.tokenizer.index_word:
             return self.tokenizer.index_word[index]
-        raise RuntimeError(f'{index} is not a valid index in tokenizer')
+        raise RuntimeError(f"{index} is not a valid index in tokenizer")
 
     def get_first_token_index(self):
         return min(self.get_all_token_indexes())

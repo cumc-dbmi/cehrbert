@@ -2,6 +2,7 @@
 Tools that are not necessary for the Transformer by itself, but might be
 useful in building models with it.
 """
+
 import math
 import tensorflow as tf
 
@@ -18,13 +19,13 @@ class ReusableEmbedding(tf.keras.layers.Embedding):
     This is necessary to guarantee correct work of Keras when the matrix
     is being re-used again in TiedOutputEmbedding layer.
     """
+
     def call(self, inputs):
         result = super().call(inputs)
         return [result, self.embeddings]
 
     def compute_output_shape(self, input_shape):
-        return [super().compute_output_shape(input_shape),
-                K.int_shape(self.embeddings)]
+        return [super().compute_output_shape(input_shape), K.int_shape(self.embeddings)]
 
     def compute_mask(self, inputs, mask=None):
         return [super().compute_mask(inputs, mask), None]
@@ -50,11 +51,16 @@ class TiedOutputEmbedding(tf.keras.layers.Layer):
     https://arxiv.org/abs/1611.01462
     https://blog.openai.com/language-unsupervised/
     """
-    def __init__(self, activation=None,
-                 add_biases=False, projection_regularizer=None,
-                 projection_dropout: float = 0.0,
-                 scaled_attention=False,
-                 **kwargs):
+
+    def __init__(
+        self,
+        activation=None,
+        add_biases=False,
+        projection_regularizer=None,
+        projection_dropout: float = 0.0,
+        scaled_attention=False,
+        **kwargs,
+    ):
         self.activation = activations.get(activation)
         self.add_biases = add_biases
         self.projection_regularizer = regularizers.get(projection_regularizer)
@@ -68,10 +74,10 @@ class TiedOutputEmbedding(tf.keras.layers.Layer):
             config,
             activation=activations.serialize(self.activation),
             add_biases=self.add_biases,
-            projection_regularizer=regularizers.serialize(
-                self.projection_regularizer),
+            projection_regularizer=regularizers.serialize(self.projection_regularizer),
             projection_dropout=self.projection_dropout,
-            scaled_attention=self.scaled_attention)
+            scaled_attention=self.scaled_attention,
+        )
 
     # noinspection PyAttributeOutsideInit
     def build(self, input_shape):
@@ -79,17 +85,19 @@ class TiedOutputEmbedding(tf.keras.layers.Layer):
         emb_input_dim, emb_output_dim = embedding_matrix_shape
         assert len(main_input_shape) == 3
         self.projection = self.add_weight(
-            name='kernel',
+            name="kernel",
             shape=(main_input_shape[-1], emb_output_dim),
-            initializer='glorot_uniform',
+            initializer="glorot_uniform",
             regularizer=self.projection_regularizer,
-            trainable=True)
+            trainable=True,
+        )
         if self.add_biases:
             self.biases = self.add_weight(
-                name='biases',
+                name="biases",
                 shape=(emb_output_dim,),
-                initializer='zeros',
-                trainable=True)
+                initializer="zeros",
+                trainable=True,
+            )
         return super().build(input_shape)
 
     def call(self, inputs, **kwargs):
@@ -97,16 +105,15 @@ class TiedOutputEmbedding(tf.keras.layers.Layer):
         input_shape_tensor = K.shape(main_input)
         last_input_dim = K.int_shape(main_input)[-1]
         emb_input_dim, emb_output_dim = K.int_shape(embedding_matrix)
-        projected = K.dot(K.reshape(main_input, (-1, last_input_dim)),
-                          self.projection)
+        projected = K.dot(K.reshape(main_input, (-1, last_input_dim)), self.projection)
         if self.add_biases:
-            projected = K.bias_add(projected, self.biases,
-                                   data_format='channels_last')
+            projected = K.bias_add(projected, self.biases, data_format="channels_last")
         if 0 < self.projection_dropout < 1:
             projected = K.in_train_phase(
                 lambda: K.dropout(projected, self.projection_dropout),
                 projected,
-                training=kwargs.get('training'))
+                training=kwargs.get("training"),
+            )
         attention = K.dot(projected, K.transpose(embedding_matrix))
         if self.scaled_attention:
             # scaled dot-product attention, described in
@@ -115,9 +122,8 @@ class TiedOutputEmbedding(tf.keras.layers.Layer):
             attention = attention / sqrt_d
         result = K.reshape(
             self.activation(attention),
-            (input_shape_tensor[0],
-             input_shape_tensor[1],
-             emb_input_dim))
+            (input_shape_tensor[0], input_shape_tensor[1], emb_input_dim),
+        )
         return result
 
     def compute_output_shape(self, input_shape):
@@ -126,7 +132,9 @@ class TiedOutputEmbedding(tf.keras.layers.Layer):
         return main_input_shape[0], main_input_shape[1], emb_input_dim
 
 
-get_custom_objects().update({
-    'ReusableEmbedding': ReusableEmbedding,
-    'TiedOutputEmbedding': TiedOutputEmbedding,
-})
+get_custom_objects().update(
+    {
+        "ReusableEmbedding": ReusableEmbedding,
+        "TiedOutputEmbedding": TiedOutputEmbedding,
+    }
+)

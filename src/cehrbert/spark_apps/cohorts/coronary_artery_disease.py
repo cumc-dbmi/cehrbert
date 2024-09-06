@@ -43,12 +43,17 @@ WHERE NOT EXISTS (
 ) AND c.index_date >= '{date_lower_bound}' 
 """
 
-DEFAULT_COHORT_NAME = 'coronary_artery_disease'
-DEPENDENCY_LIST = ['person', 'condition_occurrence', 'procedure_occurrence', 'visit_occurrence']
-CAD_INCLUSION_TABLE = 'CAD'
+DEFAULT_COHORT_NAME = "coronary_artery_disease"
+DEPENDENCY_LIST = [
+    "person",
+    "condition_occurrence",
+    "procedure_occurrence",
+    "visit_occurrence",
+]
+CAD_INCLUSION_TABLE = "CAD"
 CAD_CONCEPTS = [317576]
 
-PRIOR_PROCEDURE_TABLE = 'graft_stent'
+PRIOR_PROCEDURE_TABLE = "graft_stent"
 PRIOR_PROCEDURES = [4296227, 42537730, 762043, 44782770, 42537729]
 
 
@@ -57,27 +62,27 @@ def query_builder(spark_args):
         table_name=DEFAULT_COHORT_NAME,
         query_template=COHORT_QUERY_TEMPLATE,
         parameters={
-            'cad_concept_table': CAD_INCLUSION_TABLE,
-            'graft_stent_table': PRIOR_PROCEDURE_TABLE,
-            'date_lower_bound': spark_args.date_lower_bound
-        }
+            "cad_concept_table": CAD_INCLUSION_TABLE,
+            "graft_stent_table": PRIOR_PROCEDURE_TABLE,
+            "date_lower_bound": spark_args.date_lower_bound,
+        },
     )
 
     ancestor_table_specs = [
         AncestorTableSpec(
             table_name=CAD_INCLUSION_TABLE,
             ancestor_concept_ids=CAD_CONCEPTS,
-            is_standard=True
+            is_standard=True,
         ),
         AncestorTableSpec(
             table_name=PRIOR_PROCEDURE_TABLE,
             ancestor_concept_ids=PRIOR_PROCEDURES,
-            is_standard=True
-        )
+            is_standard=True,
+        ),
     ]
     return QueryBuilder(
         cohort_name=DEFAULT_COHORT_NAME,
         dependency_list=DEPENDENCY_LIST,
         query=query,
-        ancestor_table_specs=ancestor_table_specs
+        ancestor_table_specs=ancestor_table_specs,
     )

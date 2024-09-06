@@ -32,15 +32,15 @@ FROM
 ) c
 """
 
-DEFAULT_COHORT_NAME = 'covid19'
-DEPENDENCY_LIST = ['person', 'visit_occurrence', 'measurement', 'condition_occurrence']
+DEFAULT_COHORT_NAME = "covid19"
+DEPENDENCY_LIST = ["person", "visit_occurrence", "measurement", "condition_occurrence"]
 
 
 def query_builder():
-    query = QuerySpec(table_name=DEFAULT_COHORT_NAME,
-                      query_template=COVID_COHORT_QUERY,
-                      parameters={})
+    query = QuerySpec(
+        table_name=DEFAULT_COHORT_NAME, query_template=COVID_COHORT_QUERY, parameters={}
+    )
 
-    return QueryBuilder(cohort_name=DEFAULT_COHORT_NAME,
-                        dependency_list=DEPENDENCY_LIST,
-                        query=query)
+    return QueryBuilder(
+        cohort_name=DEFAULT_COHORT_NAME, dependency_list=DEPENDENCY_LIST, query=query
+    )

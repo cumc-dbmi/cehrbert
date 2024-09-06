@@ -11,8 +11,9 @@ class EventConversionRule:
     mapped_event_labels: List[str]
 
     def __post_init__(self):
-        assert self.parsing_pattern.groups == len(self.mapped_event_labels), \
-            "The number the mapped event labels needs to match the number of groups in the regex"
+        assert self.parsing_pattern.groups == len(
+            self.mapped_event_labels
+        ), "The number the mapped event labels needs to match the number of groups in the regex"
 
 
 class MedsToCehrBertConversion(ABC):
@@ -27,15 +28,21 @@ class MedsToCehrBertConversion(ABC):
 
     @abstractmethod
     def _create_ed_admission_matching_rules(self) -> List[str]:
-        raise NotImplementedError("Must implement the matching rules for identifying the ED admission")
+        raise NotImplementedError(
+            "Must implement the matching rules for identifying the ED admission"
+        )
 
     @abstractmethod
     def _create_admission_matching_rules(self) -> List[str]:
-        raise NotImplementedError("Must implement the matching rules for identifying the admission")
+        raise NotImplementedError(
+            "Must implement the matching rules for identifying the admission"
+        )
 
     @abstractmethod
     def _create_discharge_matching_rules(self) -> List[str]:
-        raise NotImplementedError("Must implement the matching rules for identifying the discharge")
+        raise NotImplementedError(
+            "Must implement the matching rules for identifying the discharge"
+        )
 
     @abstractmethod
     def _create_text_event_to_numeric_event_rules(self) -> List[EventConversionRule]:
@@ -52,7 +59,9 @@ class MedsToCehrBertConversion(ABC):
     def get_discharge_matching_rules(self) -> List[str]:
         return self._discharge_matching_rules
 
-    def get_text_event_to_numeric_events_rule(self, code) -> Optional[EventConversionRule]:
+    def get_text_event_to_numeric_events_rule(
+        self, code
+    ) -> Optional[EventConversionRule]:
         if code in self._text_event_numeric_event_map:
             return self._text_event_numeric_event_map[code]
         return None

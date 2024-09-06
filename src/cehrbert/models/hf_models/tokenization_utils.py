@@ -6,9 +6,7 @@ from typing import Dict, Any
 from femr.stat_utils import OnlineStatistics
 
 
-def load_json_file(
-        json_file
-):
+def load_json_file(json_file):
     try:
         with open(json_file, "r", encoding="utf-8") as reader:
             file_contents = reader.read()
@@ -24,26 +22,26 @@ def _agg_helper(*args, map_func):
 
 
 def map_statistics(batch: Dict[str, Any]) -> Dict[str, Any]:
-    if 'units' in batch:
-        concept_value_units = batch['units']
+    if "units" in batch:
+        concept_value_units = batch["units"]
     else:
-        concept_value_units = [['default_unit' for _ in cons] for cons in batch['concept_ids']]
+        concept_value_units = [
+            ["default_unit" for _ in cons] for cons in batch["concept_ids"]
+        ]
 
     numeric_stats_by_lab = collections.defaultdict(OnlineStatistics)
     for concept_ids, concept_values, concept_value_indicators, units in zip(
-            batch['concept_ids'],
-            batch['concept_values'],
-            batch['concept_value_masks'],
-            concept_value_units
+        batch["concept_ids"],
+        batch["concept_values"],
+        batch["concept_value_masks"],
+        concept_value_units,
     ):
         for concept_id, concept_value, concept_value_indicator, unit in zip(
-                concept_ids, concept_values, concept_value_indicators, units
+            concept_ids, concept_values, concept_value_indicators, units
         ):
             if concept_value_indicator == 1:
                 numeric_stats_by_lab[(concept_id, unit)].add(1, concept_value)
-    return {
-        'numeric_stats_by_lab': numeric_stats_by_lab
-    }
+    return {"numeric_stats_by_lab": numeric_stats_by_lab}
 
 
 def agg_statistics(stats1, stats2):
