@@ -16,7 +16,7 @@ class AttType(Enum):
     DAY = "day"
     WEEK = "week"
     MONTH = "month"
-    CEHR_BERT = "cehrbert"
+    CEHR_BERT = "cehr_bert"
     MIX = "mix"
     NONE = "none"
 
