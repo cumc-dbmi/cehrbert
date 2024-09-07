@@ -39,7 +39,7 @@ def get_meds_to_cehrbert_conversion_cls(
     raise RuntimeError(f"{meds_to_cehrbert_conversion_type} is not a valid MedsToCehrBertConversionType")
 
 
-def get_patient_split(meds_reader_db_path: str) -> Dict[str, List[int]]:
+def get_subject_split(meds_reader_db_path: str) -> Dict[str, List[int]]:
     patient_split = pd.read_parquet(os.path.join(meds_reader_db_path, "metadata/subject_splits.parquet"))
     result = {str(group): records["subject_id"].tolist() for group, records in patient_split.groupby("split")}
     return result
@@ -431,14 +431,14 @@ def _create_cehrbert_data_from_meds(
     if data_args.cohort_folder:
         cohort = pd.read_parquet(os.path.join(data_args.cohort_folder, split))
         for cohort_row in cohort.itertuples():
-            patient_id = cohort_row.subject_id
+            subject_id = cohort_row.subject_id
             prediction_time = cohort_row.prediction_time
             label = int(cohort_row.boolean_value)
-            batches.append((patient_id, prediction_time, label))
+            batches.append((subject_id, prediction_time, label))
     else:
-        patient_split = get_patient_split(data_args.data_folder)
-        for patient_id in patient_split[split]:
-            batches.append((patient_id, None, None))
+        patient_split = get_subject_split(data_args.data_folder)
+        for subject_id in patient_split[split]:
+            batches.append((subject_id, None, None))
 
     split_batches = np.array_split(np.asarray(batches), data_args.preprocessing_num_workers)
     batch_func = functools.partial(
