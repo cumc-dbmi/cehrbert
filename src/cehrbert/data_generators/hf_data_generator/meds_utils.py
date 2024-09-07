@@ -34,7 +34,7 @@ def get_meds_to_cehrbert_conversion_cls(
     meds_to_cehrbert_conversion_type: MedsToCehrBertConversionType,
 ) -> MedsToCehrBertConversion:
     for cls in MedsToCehrBertConversion.__subclasses__():
-        if meds_to_cehrbert_conversion_type.name == cls.__name__:
+        if meds_to_cehrbert_conversion_type.__name__ == cls.__name__:
             return cls()
     raise RuntimeError(f"{meds_to_cehrbert_conversion_type} is not a valid MedsToCehrBertConversionType")
 
@@ -364,10 +364,10 @@ def convert_one_patient(
             age_at_index -= 1
 
     # birth_datetime can not be None
-    assert birth_datetime is not None, f"patient_id: {patient.patient_id} does not have a valid birth_datetime"
+    assert birth_datetime is not None, f"patient_id: {patient.subject_id} does not have a valid birth_datetime"
 
     return CehrBertPatient(
-        patient_id=patient.patient_id,
+        patient_id=patient.subject_id,
         birth_datetime=birth_datetime,
         visits=visits,
         race=race if race else UNKNOWN_VALUE,
@@ -445,6 +445,7 @@ def _create_cehrbert_data_from_meds(
         _meds_to_cehrbert_generator,
         path_to_db=data_args.data_folder,
         default_visit_id=default_visit_id,
+        meds_to_cehrbert_conversion_type=data_args.meds_to_cehrbert_conversion_type,
     )
     dataset = Dataset.from_generator(
         batch_func,
