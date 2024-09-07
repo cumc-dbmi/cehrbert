@@ -10,13 +10,13 @@ import numpy as np
 import pandas as pd
 from datasets import Dataset, DatasetDict, Split
 
-from ...data_generators.hf_data_generator.hf_dataset import apply_cehrbert_dataset_mapping
-from ...data_generators.hf_data_generator.hf_dataset_mapping import MedToCehrBertDatasetMapping, birth_codes
-from ...data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules.meds_to_cehrbert_base import (
+from cehrbert.data_generators.hf_data_generator.hf_dataset import apply_cehrbert_dataset_mapping
+from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import MedToCehrBertDatasetMapping, birth_codes
+from cehrbert.data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules.meds_to_cehrbert_base import (
     MedsToCehrBertConversion,
 )
-from ...med_extension.schema_extension import CehrBertPatient, Event, Visit
-from ...runners.hf_runner_argument_dataclass import DataTrainingArguments, MedsToCehrBertConversionType
+from cehrbert.med_extension.schema_extension import CehrBertPatient, Event, Visit
+from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments, MedsToCehrBertConversionType
 
 UNKNOWN_VALUE = "Unknown"
 DEFAULT_ED_CONCEPT_ID = "9203"

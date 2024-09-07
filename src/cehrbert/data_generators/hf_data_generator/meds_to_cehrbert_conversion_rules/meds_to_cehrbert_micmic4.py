@@ -1,7 +1,7 @@
 import re
 from typing import List
 
-from ....data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules.meds_to_cehrbert_base import (
+from cehrbert.data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules.meds_to_cehrbert_base import (
     EventConversionRule,
     MedsToCehrBertConversion,
 )

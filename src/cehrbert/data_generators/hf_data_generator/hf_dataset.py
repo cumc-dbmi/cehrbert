@@ -2,14 +2,14 @@ from typing import Union
 
 from datasets import Dataset, DatasetDict, IterableDataset, IterableDatasetDict
 
-from ...data_generators.hf_data_generator.hf_dataset_mapping import (
+from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import (
     DatasetMapping,
     HFFineTuningMapping,
     HFTokenizationMapping,
     SortPatientSequenceMapping,
 )
-from ...models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
-from ...runners.hf_runner_argument_dataclass import DataTrainingArguments
+from cehrbert.models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
+from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments
 
 CEHRBERT_COLUMNS = [
     "concept_ids",
