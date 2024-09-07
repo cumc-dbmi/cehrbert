@@ -41,7 +41,7 @@ def get_meds_to_cehrbert_conversion_cls(
 
 def get_patient_split(meds_reader_db_path: str) -> Dict[str, List[int]]:
     patient_split = pd.read_parquet(os.path.join(meds_reader_db_path, "metadata/subject_splits.parquet"))
-    result = {str(group): records["patient_id"].tolist() for group, records in patient_split.groupby("split")}
+    result = {str(group): records["subject_id"].tolist() for group, records in patient_split.groupby("split")}
     return result
 
 
