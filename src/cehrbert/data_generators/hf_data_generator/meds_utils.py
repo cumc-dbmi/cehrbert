@@ -34,7 +34,7 @@ def get_meds_to_cehrbert_conversion_cls(
     meds_to_cehrbert_conversion_type: MedsToCehrBertConversionType,
 ) -> MedsToCehrBertConversion:
     for cls in MedsToCehrBertConversion.__subclasses__():
-        if meds_to_cehrbert_conversion_type.__name__ == cls.__name__:
+        if meds_to_cehrbert_conversion_type.name == cls.__name__:
             return cls()
     raise RuntimeError(f"{meds_to_cehrbert_conversion_type} is not a valid MedsToCehrBertConversionType")
 
