@@ -40,18 +40,47 @@ def get_meds_to_cehrbert_conversion_cls(
 
 
 def get_patient_split(meds_reader_db_path: str) -> Dict[str, List[int]]:
-    patient_split = pd.read_parquet(os.path.join(meds_reader_db_path, "metadata/patient_splits.parquet"))
+    patient_split = pd.read_parquet(os.path.join(meds_reader_db_path, "metadata/subject_splits.parquet"))
     result = {str(group): records["patient_id"].tolist() for group, records in patient_split.groupby("split")}
     return result
 
 
 class PatientBlock:
+    """
+    Represents a block of medical events for a single patient visit, including.
+
+    inferred visit type and various admission and discharge statuses.
+
+    Attributes:
+        visit_id (int): The unique ID of the visit.
+        events (List[meds_reader.Event]): A list of medical events associated with this visit.
+        min_time (datetime): The earliest event time in the visit.
+        max_time (datetime): The latest event time in the visit.
+        conversion (MedsToCehrBertConversion): Conversion object for mapping event codes to CEHR-BERT.
+        has_ed_admission (bool): Whether the visit includes an emergency department (ED) admission event.
+        has_admission (bool): Whether the visit includes an admission event.
+        has_discharge (bool): Whether the visit includes a discharge event.
+        visit_type (str): The inferred type of visit, such as inpatient, ED, or outpatient.
+    """
+
     def __init__(
         self,
         events: List[meds_reader.Event],
         visit_id: int,
         conversion: MedsToCehrBertConversion,
     ):
+        """
+        Initializes a PatientBlock instance, inferring the visit type based on the events and caching.
+
+        admission and discharge status.
+
+        Args:
+            events (List[meds_reader.Event]): The medical events associated with the visit.
+            visit_id (int): The unique ID of the visit.
+            conversion (MedsToCehrBertConversion): Conversion object for mapping event codes to CEHR-BERT.
+
+        Attributes are initialized to store visit metadata and calculate admission/discharge statuses.
+        """
         self.visit_id = visit_id
         self.events = events
         self.min_time = events[0].time
@@ -73,7 +102,12 @@ class PatientBlock:
             self.visit_type = DEFAULT_OUTPATIENT_CONCEPT_ID
 
     def _has_ed_admission(self) -> bool:
-        """Make this configurable in the future."""
+        """
+        Determines if the visit includes an emergency department (ED) admission event.
+
+        Returns:
+            bool: True if an ED admission event is found, False otherwise.
+        """
         for event in self.events:
             for matching_rule in self.conversion.get_ed_admission_matching_rules():
                 if re.match(matching_rule, event.code):
@@ -81,6 +115,12 @@ class PatientBlock:
         return False
 
     def _has_admission(self) -> bool:
+        """
+        Determines if the visit includes a hospital admission event.
+
+        Returns:
+            bool: True if an admission event is found, False otherwise.
+        """
         for event in self.events:
             for matching_rule in self.conversion.get_admission_matching_rules():
                 if re.match(matching_rule, event.code):
@@ -88,6 +128,12 @@ class PatientBlock:
         return False
 
     def _has_discharge(self) -> bool:
+        """
+        Determines if the visit includes a discharge event.
+
+        Returns:
+            bool: True if a discharge event is found, False otherwise.
+        """
         for event in self.events:
             for matching_rule in self.conversion.get_discharge_matching_rules():
                 if re.match(matching_rule, event.code):
@@ -95,6 +141,12 @@ class PatientBlock:
         return False
 
     def get_discharge_facility(self) -> Optional[str]:
+        """
+        Extracts the discharge facility code from the discharge event, if present.
+
+        Returns:
+            Optional[str]: The sanitized discharge facility code, or None if no discharge event is found.
+        """
         if self._has_discharge():
             for event in self.events:
                 for matching_rule in self.conversion.get_discharge_matching_rules():
@@ -105,12 +157,22 @@ class PatientBlock:
         return None
 
     def _convert_event(self, event) -> List[Event]:
+        """
+        Converts a medical event into a list of CEHR-BERT-compatible events, potentially parsing.
+
+        numeric values from text-based events.
+
+        Args:
+            event (meds_reader.Event): The medical event to be converted.
+
+        Returns:
+            List[Event]: A list of converted events, possibly numeric, based on the original event's code and value.
+        """
         code = event.code
         time = getattr(event, "time", None)
         text_value = getattr(event, "text_value", None)
         numeric_value = getattr(event, "numeric_value", None)
-        # We try to parse the numeric values from the text value, in other words,
-        # we try to construct numeric events from the event with a text value
+
         if numeric_value is None and text_value is not None:
             conversion_rule = self.conversion.get_text_event_to_numeric_events_rule(code)
             if conversion_rule:
@@ -140,6 +202,12 @@ class PatientBlock:
         ]
 
     def get_meds_events(self) -> Iterable[Event]:
+        """
+        Retrieves all medication events for the visit, converting each raw event if necessary.
+
+        Returns:
+            Iterable[Event]: A list of CEHR-BERT-compatible medication events for the visit.
+        """
         events = []
         for e in self.events:
             events.extend(self._convert_event(e))
@@ -147,7 +215,7 @@ class PatientBlock:
 
 
 def convert_one_patient(
-    patient: meds_reader.Patient,
+    patient: meds_reader.Subject,
     conversion: MedsToCehrBertConversion,
     default_visit_id: int = 1,
     prediction_time: datetime = None,
@@ -346,7 +414,7 @@ def _meds_to_cehrbert_generator(
 ) -> CehrBertPatient:
     conversion = get_meds_to_cehrbert_conversion_cls(meds_to_cehrbert_conversion_type)
     for shard in shards:
-        with meds_reader.PatientDatabase(path_to_db) as patient_database:
+        with meds_reader.SubjectDatabase(path_to_db) as patient_database:
             for patient_id, prediction_time, label in shard:
                 patient = patient_database[patient_id]
                 yield convert_one_patient(patient, conversion, default_visit_id, prediction_time, label)
@@ -363,7 +431,7 @@ def _create_cehrbert_data_from_meds(
     if data_args.cohort_folder:
         cohort = pd.read_parquet(os.path.join(data_args.cohort_folder, split))
         for cohort_row in cohort.itertuples():
-            patient_id = cohort_row.patient_id
+            patient_id = cohort_row.subject_id
             prediction_time = cohort_row.prediction_time
             label = int(cohort_row.boolean_value)
             batches.append((patient_id, prediction_time, label))
