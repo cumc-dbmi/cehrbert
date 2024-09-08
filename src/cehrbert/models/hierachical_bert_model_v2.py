@@ -1,11 +1,12 @@
-from .layers.custom_layers import (
+import tensorflow as tf
+
+from cehrbert.models.layers.custom_layers import (
     ConceptValueTransformationLayer,
     Encoder,
     ReusableEmbedding,
     SimpleDecoderLayer,
     TemporalTransformationLayer,
     TiedOutputEmbedding,
-    tf,
 )
 
 

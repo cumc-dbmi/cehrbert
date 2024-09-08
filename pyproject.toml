@@ -43,7 +43,6 @@ dependencies = [
     "Pillow==10.3.0",
     "pyarrow==15.0.0",
     "pydantic==2.6.0",
-    "pyspark==3.2.2",
     "python-dateutil==2.8.2",
     "PyYAML==6.0.1",
     "scikit-learn==1.4.0",
@@ -57,7 +56,8 @@ dependencies = [
     "transformers==4.39.3",
     "Werkzeug==3.0.1",
     "wandb==0.17.8",
-    "xgboost==2.0.3"
+    "xgboost==2.0.3",
+    "cehrbert_data==0.0.1"
 ]
 
 [tool.setuptools_scm]
@@ -66,8 +66,8 @@ dependencies = [
 Homepage = "https://github.com/cumc-dbmi/cehr-bert"
 
 [project.scripts]
-cehrbert-pretraining = "cehrbert.runner.hf_cehrbert_pretrain_runner:main"
-cehrbert-finetuning = "cehrbert.runner.hf_cehrbert_finetuning_runner:main"
+cehrbert-pretraining = "cehrbert.runners.hf_cehrbert_pretrain_runner:main"
+cehrbert-finetuning = "cehrbert.runners.hf_cehrbert_finetuning_runner:main"
 
 [project.optional-dependencies]
 dev = [

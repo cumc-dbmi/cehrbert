@@ -2,8 +2,8 @@ import tensorflow as tf
 from tensorflow.keras.initializers import Constant
 from tensorflow.keras.models import Model
 
-from .bert_models_visit_prediction import transformer_bert_model_visit_prediction
-from .layers.custom_layers import ConvolutionBertLayer, get_custom_objects
+from cehrbert.models.bert_models_visit_prediction import transformer_bert_model_visit_prediction
+from cehrbert.models.layers.custom_layers import ConvolutionBertLayer, get_custom_objects
 
 
 def create_bi_lstm_model(

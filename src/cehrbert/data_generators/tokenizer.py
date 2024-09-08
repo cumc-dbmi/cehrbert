@@ -1,10 +1,9 @@
 from typing import Optional, Sequence, Union
 
+from cehrbert_data.const.common import UNKNOWN_CONCEPT
 from dask.dataframe import Series as dd_series
 from pandas import Series as df_series
 from tensorflow.keras.preprocessing.text import Tokenizer
-
-from ..const.common import UNKNOWN_CONCEPT
 
 
 class ConceptTokenizer:

@@ -2,11 +2,12 @@ import dataclasses
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 
+from cehrbert_data.decorators.patient_event_decorator import AttType
+
 from ..data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules import (
     MedsToBertMimic4,
     MedsToCehrBertConversion,
 )
-from ..spark_apps.decorators.patient_event_decorator import AttType
 
 # Create an enum dynamically from the list
 MedsToCehrBertConversionType = Enum(

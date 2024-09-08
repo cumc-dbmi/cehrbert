@@ -1,7 +1,7 @@
 import tensorflow as tf
 
-from ..keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
-from .layers.custom_layers import (
+from cehrbert.keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
+from cehrbert.models.layers.custom_layers import (
     ConceptValueTransformationLayer,
     DecoderLayer,
     Encoder,

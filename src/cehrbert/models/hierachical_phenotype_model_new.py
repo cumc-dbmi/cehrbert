@@ -1,5 +1,7 @@
-from .hierachical_bert_model_v2 import create_att_concept_mask
-from .layers.custom_layers import (
+import tensorflow as tf
+
+from cehrbert.models.hierachical_bert_model_v2 import create_att_concept_mask
+from cehrbert.models.layers.custom_layers import (
     ConceptValueTransformationLayer,
     Encoder,
     ReusableEmbedding,
@@ -7,7 +9,6 @@ from .layers.custom_layers import (
     TemporalTransformationLayer,
     TiedOutputEmbedding,
     VisitPhenotypeLayer,
-    tf,
 )
 
 
