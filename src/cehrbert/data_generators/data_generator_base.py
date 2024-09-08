@@ -9,8 +9,8 @@ from typing import List, Set
 import numpy as np
 import pandas as pd
 
-from .data_classes import RowSlicer
-from .learning_objective import (
+from cehrbert.data_generators.data_classes import RowSlicer
+from cehrbert.data_generators.learning_objective import (
     BertFineTuningLearningObjective,
     DemographicsLearningObjective,
     HierarchicalArtificialTokenPredictionLearningObjective,
@@ -24,7 +24,7 @@ from .learning_objective import (
     TimeAttentionLearningObjective,
     VisitPredictionLearningObjective,
 )
-from .tokenizer import ConceptTokenizer
+from cehrbert.data_generators.tokenizer import ConceptTokenizer
 
 
 def create_indexes_by_time_window(dates, cursor, max_seq_len, time_window_size):

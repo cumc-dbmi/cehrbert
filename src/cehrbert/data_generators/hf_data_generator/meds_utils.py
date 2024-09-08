@@ -31,11 +31,15 @@ NON_ALPHANUMERIC_CHARS = r"[\w\/\\:\-_]"
 
 
 def get_meds_to_cehrbert_conversion_cls(
-    meds_to_cehrbert_conversion_type: MedsToCehrBertConversionType,
+    meds_to_cehrbert_conversion_type: Union[MedsToCehrBertConversionType, str],
 ) -> MedsToCehrBertConversion:
     for cls in MedsToCehrBertConversion.__subclasses__():
-        if meds_to_cehrbert_conversion_type.name == cls.__name__:
-            return cls()
+        if isinstance(meds_to_cehrbert_conversion_type, MedsToCehrBertConversionType):
+            if meds_to_cehrbert_conversion_type.name == cls.__name__:
+                return cls()
+        elif isinstance(meds_to_cehrbert_conversion_type, str):
+            if meds_to_cehrbert_conversion_type == cls.__name__:
+                return cls()
     raise RuntimeError(f"{meds_to_cehrbert_conversion_type} is not a valid MedsToCehrBertConversionType")
 
 

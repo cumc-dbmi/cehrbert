@@ -1,7 +1,7 @@
 import argparse
 from sys import argv
 
-from ..data_generators.graph_sample_method import SimilarityType
+from cehrbert.data_generators.graph_sample_method import SimilarityType
 
 
 def create_parse_args():

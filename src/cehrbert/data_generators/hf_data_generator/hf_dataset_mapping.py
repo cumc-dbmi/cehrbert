@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Union
 
 import numpy as np
 import pandas as pd
+from cehrbert_data.decorators.patient_event_decorator import get_att_function
 from datasets.formatting.formatting import LazyBatch
 from dateutil.relativedelta import relativedelta
 from meds.schema import birth_code, death_code
@@ -15,7 +16,6 @@ from pandas import Series
 
 from cehrbert.models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments
-from cehrbert.spark_apps.decorators.patient_event_decorator import get_att_function
 
 birth_codes = [birth_code, "MEDS_BIRTH"]
 death_codes = [death_code, "MEDS_DEATH"]

@@ -1,8 +1,11 @@
 import copy
+import os
+import pathlib
 from abc import abstractmethod
 
-from ...trainers.model_trainer import AbstractModel
-from ...utils.model_utils import os, pathlib, tf
+import tensorflow as tf
+
+from cehrbert.trainers.model_trainer import AbstractModel
 
 
 def get_metrics():

@@ -13,7 +13,7 @@ from transformers import EvalPrediction, HfArgumentParser, TrainingArguments
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import logging
 
-from .hf_runner_argument_dataclass import DataTrainingArguments, ModelArguments
+from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments, ModelArguments
 
 LOG = logging.get_logger("transformers")
 
