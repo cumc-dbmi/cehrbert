@@ -453,6 +453,6 @@ class HFFineTuningMapping(DatasetMapping):
 
     def transform(self, record: Dict[str, Any]) -> Dict[str, Any]:
         return {
-            "age_at_index": record["age_at_index"],
+            "age_at_index": record["age"] if "age" in record else record["age_at_index"],
             "classifier_label": record["label"],
         }
