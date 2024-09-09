@@ -35,19 +35,20 @@ LOG = logging.get_logger("transformers")
 
 def compute_metrics(references: List[float], logits: List[float]) -> Dict[str, Any]:
     """
-    Compute a set of evaluation metrics including accuracy, ROC-AUC, and PR-AUC.
+    Computes evaluation metrics for binary classification, including ROC-AUC and PR-AUC, based on reference labels and model logits.
 
     Args:
-        references (list or array-like): Ground truth (correct) labels for each sample.
-        logits (list or array-like): Predicted scores for each sample, typically the model's output.
+        references (List[float]): Ground truth binary labels (0 or 1).
+        logits (List[float]): Logits output from the model (raw prediction scores), which will be converted to probabilities using the sigmoid function.
 
     Returns:
-        Dict[str, Any]: A dictionary containing the computed metrics where keys represent the metric names
-                        (e.g., 'accuracy', 'roc_auc', 'pr_auc') and values are the corresponding metric values.
+        Dict[str, Any]: A dictionary containing:
+            - 'roc_auc': The Area Under the Receiver Operating Characteristic Curve (ROC-AUC).
+            - 'pr_auc': The Area Under the Precision-Recall Curve (PR-AUC).
 
-    This function uses the `evaluate` library to compute the following metrics:
-    - Accuracy: The proportion of correct predictions.
-    - ROC-AUC: The area under the receiver operating characteristic curve.
+    Notes:
+        - The `sigmoid` function is used to convert the logits into probabilities.
+        - ROC-AUC measures the model's ability to distinguish between classes, while PR-AUC focuses on performance when dealing with imbalanced data.
     """
     # Convert logits to probabilities using sigmoid
     probabilities = sigmoid(logits)
