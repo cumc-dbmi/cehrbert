@@ -35,7 +35,7 @@ from cehrbert.runners.runner_util import (
 LOG = logging.get_logger("transformers")
 
 
-def compute_metrics(references: Union[List[float], pd.Series], logits: Union[List[float], pd.Series]) -> Dict[str, Any]:
+def compute_metrics(references: Union[List[float], pd.Series], probs: Union[List[float], pd.Series]) -> Dict[str, Any]:
     """
     Computes evaluation metrics for binary classification, including ROC-AUC and PR-AUC, based on reference labels and model logits.
 
@@ -52,12 +52,10 @@ def compute_metrics(references: Union[List[float], pd.Series], logits: Union[Lis
         - The `sigmoid` function is used to convert the logits into probabilities.
         - ROC-AUC measures the model's ability to distinguish between classes, while PR-AUC focuses on performance when dealing with imbalanced data.
     """
-    # Convert logits to probabilities using sigmoid
-    probabilities = sigmoid(logits)
     # # Calculate PR-AUC
     # Calculate ROC-AUC
-    roc_auc = roc_auc_score(references, probabilities)
-    precision, recall, _ = precision_recall_curve(references, probabilities)
+    roc_auc = roc_auc_score(references, probs)
+    precision, recall, _ = precision_recall_curve(references, probs)
     pr_auc = auc(recall, precision)
     return {"roc_auc": roc_auc, "pr_auc": pr_auc}
 
@@ -347,8 +345,9 @@ def do_predict(test_dataloader: DataLoader, model_args: ModelArguments, training
             # Collect logits and labels for prediction
             logits = output.logits.cpu().numpy().squeeze()
             labels = batch["classifier_label"].cpu().numpy().squeeze()
+            probabilities = sigmoid(logits)
             # Save predictions to parquet file
-            test_prediction_pd = pd.DataFrame({"prediction": logits, "label": labels})
+            test_prediction_pd = pd.DataFrame({"logits": logits, "probability": probabilities, "label": labels})
             test_prediction_pd.to_parquet(test_prediction_folder / f"{index}.parquet")
 
     LOG.info("Computing metrics using the test set predictions at %s", test_prediction_folder)
@@ -357,7 +356,7 @@ def do_predict(test_dataloader: DataLoader, model_args: ModelArguments, training
     test_prediction_pd = pd.read_parquet(test_prediction_folder)
 
     # Compute metrics and save results
-    metrics = compute_metrics(references=test_prediction_pd.label, logits=test_prediction_pd.prediction)
+    metrics = compute_metrics(references=test_prediction_pd.label, probs=test_prediction_pd.probability)
     metrics["test_loss"] = np.mean(test_losses)
 
     test_results_path = Path(training_args.output_dir) / "test_results.json"
@@ -367,7 +366,7 @@ def do_predict(test_dataloader: DataLoader, model_args: ModelArguments, training
     LOG.info("Test results: %s", metrics)
 
 
-def load_lora_model(model_args, training_args) -> Union[LoraModel, CehrBertPreTrainedModel]:
+def load_lora_model(model_args, training_args) -> LoraModel:
     LOG.info("Loading base model from %s", model_args.model_name_or_path)
     base_model = load_finetuned_model(model_args, model_args.model_name_or_path)
 
