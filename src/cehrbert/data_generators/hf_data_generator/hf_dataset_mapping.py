@@ -119,7 +119,6 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
         else:
             return [
                 "visits",
-                "patient_id",
                 "birth_datetime",
                 "index_date",
                 "visit_concept_ids",
@@ -456,3 +455,6 @@ class HFFineTuningMapping(DatasetMapping):
             "age_at_index": record["age"] if "age" in record else record["age_at_index"],
             "classifier_label": record["label"],
         }
+
+    def remove_columns(self):
+        return ["age", "label"]
