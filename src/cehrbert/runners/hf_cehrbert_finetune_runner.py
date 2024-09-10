@@ -1,27 +1,29 @@
 import json
-import os
-from typing import Any, Dict, List, Tuple
+from pathlib import Path
+from typing import Any, Dict, List, Union
 
 import numpy as np
 import pandas as pd
+import torch
 from datasets import DatasetDict, load_from_disk
-from peft import LoraConfig, get_peft_model
+from peft import LoraConfig, LoraModel, PeftModel, get_peft_model
 from scipy.special import expit as sigmoid
 from sklearn.metrics import auc, precision_recall_curve, roc_auc_score
-from transformers import EarlyStoppingCallback, Trainer, set_seed
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+from transformers import EarlyStoppingCallback, Trainer, TrainingArguments, set_seed
 from transformers.utils import logging
 
 from cehrbert.data_generators.hf_data_generator.hf_dataset import create_cehrbert_finetuning_dataset
 from cehrbert.data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
 from cehrbert.data_generators.hf_data_generator.meds_utils import create_dataset_from_meds_reader
-from cehrbert.models.hf_models.config import CehrBertConfig
 from cehrbert.models.hf_models.hf_cehrbert import (
     CehrBertForClassification,
     CehrBertLstmForClassification,
     CehrBertPreTrainedModel,
 )
 from cehrbert.models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
-from cehrbert.runners.hf_runner_argument_dataclass import FineTuneModelType
+from cehrbert.runners.hf_runner_argument_dataclass import FineTuneModelType, ModelArguments
 from cehrbert.runners.runner_util import (
     generate_prepared_ds_path,
     get_last_hf_checkpoint,
@@ -33,7 +35,7 @@ from cehrbert.runners.runner_util import (
 LOG = logging.get_logger("transformers")
 
 
-def compute_metrics(references: List[float], logits: List[float]) -> Dict[str, Any]:
+def compute_metrics(references: Union[List[float], pd.Series], probs: Union[List[float], pd.Series]) -> Dict[str, Any]:
     """
     Computes evaluation metrics for binary classification, including ROC-AUC and PR-AUC, based on reference labels and model logits.
 
@@ -50,48 +52,24 @@ def compute_metrics(references: List[float], logits: List[float]) -> Dict[str, A
         - The `sigmoid` function is used to convert the logits into probabilities.
         - ROC-AUC measures the model's ability to distinguish between classes, while PR-AUC focuses on performance when dealing with imbalanced data.
     """
-    # Convert logits to probabilities using sigmoid
-    probabilities = sigmoid(logits)
     # # Calculate PR-AUC
     # Calculate ROC-AUC
-    roc_auc = roc_auc_score(references, probabilities)
-    precision, recall, _ = precision_recall_curve(references, probabilities)
+    roc_auc = roc_auc_score(references, probs)
+    precision, recall, _ = precision_recall_curve(references, probs)
     pr_auc = auc(recall, precision)
     return {"roc_auc": roc_auc, "pr_auc": pr_auc}
 
 
-def load_pretrained_model_and_tokenizer(
+def load_pretrained_tokenizer(
     model_args,
-) -> Tuple[CehrBertPreTrainedModel, CehrBertTokenizer]:
-    """
-    Loads a pretrained model and tokenizer based on the given model arguments.
-
-    Args:
-        model_args (Namespace): An argument object containing the following fields:
-            - tokenizer_name_or_path (str): The path or name of the pretrained tokenizer to load.
-            - model_name_or_path (str): The path or name of the pretrained model to load.
-            - finetune_model_type (str): The type of fine-tuning model to use. Must be one of the values in `FineTuneModelType`.
-
-    Returns:
-        Tuple[CehrBertPreTrainedModel, CehrBertTokenizer]:
-            - CehrBertPreTrainedModel: The loaded pretrained model (either a classification or LSTM model).
-            - CehrBertTokenizer: The loaded pretrained tokenizer.
-
-    Raises:
-        ValueError: If the tokenizer cannot be loaded from the specified path, or if the fine-tuning model type is invalid.
-
-    Notes:
-        - If loading the model fails, the function will attempt to create a new model using the provided model arguments
-          and the tokenizer's configuration.
-        - The function supports two types of models for fine-tuning:
-            - `CehrBertForClassification` for pooling-based models.
-            - `CehrBertLstmForClassification` for LSTM-based models.
-    """
+) -> CehrBertTokenizer:
     try:
-        tokenizer = CehrBertTokenizer.from_pretrained(model_args.tokenizer_name_or_path)
+        return CehrBertTokenizer.from_pretrained(model_args.tokenizer_name_or_path)
     except Exception:
         raise ValueError(f"Can not load the pretrained tokenizer from {model_args.tokenizer_name_or_path}")
 
+
+def load_finetuned_model(model_args: ModelArguments, model_name_or_path: str) -> CehrBertPreTrainedModel:
     if model_args.finetune_model_type == FineTuneModelType.POOLING.value:
         finetune_model_cls = CehrBertForClassification
     elif model_args.finetune_model_type == FineTuneModelType.LSTM.value:
@@ -100,51 +78,18 @@ def load_pretrained_model_and_tokenizer(
         raise ValueError(
             f"finetune_model_type can be one of the following types {[e.value for e in FineTuneModelType]}"
         )
-
-    # Try to load the pretrained model
+    # Try to create a new model based on the base model
     try:
-        model = finetune_model_cls.from_pretrained(model_args.model_name_or_path)
-    except Exception as e:
-        LOG.warning(e)
-        model_config = CehrBertConfig(
-            vocab_size=tokenizer.vocab_size,
-            lab_token_ids=tokenizer.lab_token_ids,
-            **model_args.as_dict(),
-        )
-        model = finetune_model_cls(model_config)
-
-    return model, tokenizer
+        return finetune_model_cls.from_pretrained(model_name_or_path)
+    except ValueError:
+        raise ValueError(f"Can not load the finetuned model from {model_name_or_path}")
 
 
 def main():
     data_args, model_args, training_args = parse_runner_args()
 
-    model, tokenizer = load_pretrained_model_and_tokenizer(model_args)
-
+    tokenizer = load_pretrained_tokenizer(model_args)
     prepared_ds_path = generate_prepared_ds_path(data_args, model_args, data_folder=data_args.cohort_folder)
-
-    # If lora is enabled, we add LORA adapters to the model
-    if model_args.use_lora:
-        # When LORA is used, the trainer could not automatically find this label,
-        # therefore we need to manually set label_names to "classifier_label" so the model
-        # can compute the loss during the evaluation
-        if training_args.label_names:
-            training_args.label_names.append("classifier_label")
-        else:
-            training_args.label_names = ["classifier_label"]
-
-        if model_args.finetune_model_type == FineTuneModelType.POOLING.value:
-            config = LoraConfig(
-                r=model_args.lora_rank,
-                lora_alpha=model_args.lora_alpha,
-                target_modules=model_args.target_modules,
-                lora_dropout=model_args.lora_dropout,
-                bias="none",
-                modules_to_save=["classifier", "age_batch_norm", "dense_layer"],
-            )
-            model = get_peft_model(model, config)
-        else:
-            raise ValueError(f"The LORA adapter is not supported for {model_args.finetune_model_type}")
 
     if any(prepared_ds_path.glob("*")):
         LOG.info(f"Loading prepared dataset from disk at {prepared_ds_path}...")
@@ -301,59 +246,132 @@ def main():
     if not data_args.streaming:
         processed_dataset.set_format("pt")
 
-    trainer = Trainer(
-        model=model,
-        data_collator=collator,
-        train_dataset=processed_dataset["train"],
-        eval_dataset=processed_dataset["validation"],
-        callbacks=[EarlyStoppingCallback(early_stopping_patience=model_args.early_stopping_patience)],
-        args=training_args,
-    )
-
-    checkpoint = get_last_hf_checkpoint(training_args)
     if training_args.do_train:
+        model = load_finetuned_model(model_args, model_args.model_name_or_path)
+        # If lora is enabled, we add LORA adapters to the model
+        if model_args.use_lora:
+            # When LORA is used, the trainer could not automatically find this label,
+            # therefore we need to manually set label_names to "classifier_label" so the model
+            # can compute the loss during the evaluation
+            if training_args.label_names:
+                training_args.label_names.append("classifier_label")
+            else:
+                training_args.label_names = ["classifier_label"]
+
+            if model_args.finetune_model_type == FineTuneModelType.POOLING.value:
+                config = LoraConfig(
+                    r=model_args.lora_rank,
+                    lora_alpha=model_args.lora_alpha,
+                    target_modules=model_args.target_modules,
+                    lora_dropout=model_args.lora_dropout,
+                    bias="none",
+                    modules_to_save=["classifier", "age_batch_norm", "dense_layer"],
+                )
+                model = get_peft_model(model, config)
+            else:
+                raise ValueError(f"The LORA adapter is not supported for {model_args.finetune_model_type}")
+
+        trainer = Trainer(
+            model=model,
+            data_collator=collator,
+            train_dataset=processed_dataset["train"],
+            eval_dataset=processed_dataset["validation"],
+            callbacks=[EarlyStoppingCallback(early_stopping_patience=model_args.early_stopping_patience)],
+            args=training_args,
+        )
+
+        checkpoint = get_last_hf_checkpoint(training_args)
+
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()  # Saves the tokenizer too for easy upload
         metrics = train_result.metrics
 
         trainer.log_metrics("train", metrics)
         trainer.save_metrics("train", metrics)
-        trainer.log_metrics("eval", metrics)
-        trainer.save_metrics("eval", metrics)
         trainer.save_state()
 
     if training_args.do_predict:
-        # If do_train is set to False, we need to load the model from the checkpoint.
-        if not training_args.do_train:
-            LOG.info(
-                "The do_train flag is set to False. Loading the weights from %s",
-                training_args.output_dir,
-            )
-            trainer._load_from_checkpoint(training_args.output_dir)
+        test_dataloader = DataLoader(
+            dataset=processed_dataset["test"],
+            batch_size=training_args.per_device_eval_batch_size,
+            num_workers=training_args.dataloader_num_workers,
+            collate_fn=collator,
+            pin_memory=training_args.dataloader_pin_memory,
+        )
+        do_predict(test_dataloader, model_args, training_args)
 
-        test_results = trainer.predict(processed_dataset["test"])
 
-        person_ids = [row["person_id"] for row in processed_dataset["test"]]
+def do_predict(test_dataloader: DataLoader, model_args: ModelArguments, training_args: TrainingArguments):
+    """
+    Performs inference on the test dataset using a fine-tuned model, saves predictions and evaluation metrics.
 
-        if isinstance(test_results.predictions, np.ndarray):
-            predictions = np.squeeze(test_results.predictions).tolist()
-        else:
-            predictions = np.squeeze(test_results.predictions[0]).tolist()
-        if isinstance(test_results.label_ids, np.ndarray):
-            labels = np.squeeze(test_results.label_ids).tolist()
-        else:
-            labels = np.squeeze(test_results.label_ids[0]).tolist()
+    The reason we created this custom do_predict is that there is a memory leakage for transformers trainer.predict(),
+    for large test sets, it will throw the CPU OOM error
 
-        prediction_pd = pd.DataFrame({"person_id ": person_ids, "prediction": predictions, "label": labels})
-        prediction_pd.to_csv(os.path.join(training_args.output_dir, "test_predictions.csv"), index=False)
+    Args:
+        test_dataloader (DataLoader): DataLoader containing the test dataset, with batches of input features and labels.
+        model_args (ModelArguments): Arguments for configuring and loading the fine-tuned model.
+        training_args (TrainingArguments): Arguments related to training, evaluation, and output directories.
 
-        # Save results to JSON
-        metrics = compute_metrics(references=labels, logits=predictions)
-        test_results_path = os.path.join(training_args.output_dir, "test_results.json")
-        with open(test_results_path, "w") as f:
-            json.dump(metrics, f, indent=4)
+    Returns:
+        None. Results are saved to disk.
+    """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        LOG.info(f"Test results: {metrics}")
+    # Load model and LoRA adapters if applicable
+    model = (
+        load_finetuned_model(model_args, model_args.model_name_or_path)
+        if not model_args.use_lora
+        else load_lora_model(model_args, training_args)
+    )
+
+    model = model.to(device).eval()
+
+    # Ensure prediction folder exists
+    test_prediction_folder = Path(training_args.output_dir) / "test_predictions"
+    test_prediction_folder.mkdir(parents=True, exist_ok=True)
+
+    LOG.info("Generating predictions for test set at %s", test_prediction_folder)
+
+    test_losses = []
+    with torch.no_grad():
+        for index, batch in enumerate(tqdm(test_dataloader, desc="Predicting")):
+
+            batch = {k: v.to(device) for k, v in batch.items()}
+            # Forward pass
+            output = model(**batch)
+            test_losses.append(output.loss.item())
+
+            # Collect logits and labels for prediction
+            logits = output.logits.cpu().numpy().squeeze()
+            labels = batch["classifier_label"].cpu().numpy().squeeze()
+            probabilities = sigmoid(logits)
+            # Save predictions to parquet file
+            test_prediction_pd = pd.DataFrame({"logits": logits, "probability": probabilities, "label": labels})
+            test_prediction_pd.to_parquet(test_prediction_folder / f"{index}.parquet")
+
+    LOG.info("Computing metrics using the test set predictions at %s", test_prediction_folder)
+
+    # Load all predictions
+    test_prediction_pd = pd.read_parquet(test_prediction_folder)
+
+    # Compute metrics and save results
+    metrics = compute_metrics(references=test_prediction_pd.label, probs=test_prediction_pd.probability)
+    metrics["test_loss"] = np.mean(test_losses)
+
+    test_results_path = Path(training_args.output_dir) / "test_results.json"
+    with open(test_results_path, "w") as f:
+        json.dump(metrics, f, indent=4)
+
+    LOG.info("Test results: %s", metrics)
+
+
+def load_lora_model(model_args, training_args) -> LoraModel:
+    LOG.info("Loading base model from %s", model_args.model_name_or_path)
+    base_model = load_finetuned_model(model_args, model_args.model_name_or_path)
+
+    LOG.info("Loading LoRA adapter from %s", training_args.output_dir)
+    return PeftModel.from_pretrained(base_model, model_id=training_args.output_dir)
 
 
 if __name__ == "__main__":
