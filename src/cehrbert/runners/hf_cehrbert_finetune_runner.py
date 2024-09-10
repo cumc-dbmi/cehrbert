@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import torch
 from datasets import DatasetDict, load_from_disk
-from peft import LoraConfig, LoraModel, PeftModel, get_peft_model
+from peft import LoraConfig, PeftModel, get_peft_model
 from scipy.special import expit as sigmoid
 from sklearn.metrics import auc, precision_recall_curve, roc_auc_score
 from torch.utils.data import DataLoader
