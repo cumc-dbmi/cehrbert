@@ -320,7 +320,7 @@ def do_predict(test_dataloader: DataLoader, model_args: ModelArguments, training
 
     # Load model and LoRA adapters if applicable
     model = (
-        load_finetuned_model(model_args, model_args.model_name_or_path)
+        load_finetuned_model(model_args, training_args.output_dir)
         if not model_args.use_lora
         else load_lora_model(model_args, training_args)
     )
@@ -366,7 +366,7 @@ def do_predict(test_dataloader: DataLoader, model_args: ModelArguments, training
     LOG.info("Test results: %s", metrics)
 
 
-def load_lora_model(model_args, training_args) -> LoraModel:
+def load_lora_model(model_args, training_args) -> PeftModel:
     LOG.info("Loading base model from %s", model_args.model_name_or_path)
     base_model = load_finetuned_model(model_args, model_args.model_name_or_path)
 
