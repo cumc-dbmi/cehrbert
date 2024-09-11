@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import torch
 from datasets import DatasetDict, load_from_disk
-from peft import LoraConfig, LoraModel, PeftModel, get_peft_model
+from peft import LoraConfig, PeftModel, get_peft_model
 from scipy.special import expit as sigmoid
 from sklearn.metrics import auc, precision_recall_curve, roc_auc_score
 from torch.utils.data import DataLoader
@@ -333,7 +333,7 @@ def do_predict(test_dataloader: DataLoader, model_args: ModelArguments,
 
     # Load model and LoRA adapters if applicable
     model = (
-        load_finetuned_model(model_args, model_args.model_name_or_path)
+        load_finetuned_model(model_args, training_args.output_dir)
         if not model_args.use_lora
         else load_lora_model(model_args, training_args)
     )
