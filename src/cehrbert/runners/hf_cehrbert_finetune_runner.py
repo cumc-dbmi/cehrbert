@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Union
 import numpy as np
 import pandas as pd
 import torch
-from datasets import DatasetDict, load_from_disk, IterableDatasetDict
+from datasets import DatasetDict, IterableDatasetDict, load_from_disk
 from peft import LoraConfig, PeftModel, get_peft_model
 from scipy.special import expit as sigmoid
 from sklearn.metrics import auc, precision_recall_curve, roc_auc_score
@@ -35,8 +35,7 @@ from cehrbert.runners.runner_util import (
 LOG = logging.get_logger("transformers")
 
 
-def compute_metrics(references: Union[List[float], pd.Series],
-                    probs: Union[List[float], pd.Series]) -> Dict[str, Any]:
+def compute_metrics(references: Union[List[float], pd.Series], probs: Union[List[float], pd.Series]) -> Dict[str, Any]:
     """
     Computes evaluation metrics for binary classification, including ROC-AUC and PR-AUC, based on reference labels and model logits.
 
@@ -62,17 +61,15 @@ def compute_metrics(references: Union[List[float], pd.Series],
 
 
 def load_pretrained_tokenizer(
-        model_args,
+    model_args,
 ) -> CehrBertTokenizer:
     try:
         return CehrBertTokenizer.from_pretrained(model_args.tokenizer_name_or_path)
     except Exception:
-        raise ValueError(
-            f"Can not load the pretrained tokenizer from {model_args.tokenizer_name_or_path}")
+        raise ValueError(f"Can not load the pretrained tokenizer from {model_args.tokenizer_name_or_path}")
 
 
-def load_finetuned_model(model_args: ModelArguments,
-                         model_name_or_path: str) -> CehrBertPreTrainedModel:
+def load_finetuned_model(model_args: ModelArguments, model_name_or_path: str) -> CehrBertPreTrainedModel:
     if model_args.finetune_model_type == FineTuneModelType.POOLING.value:
         finetune_model_cls = CehrBertForClassification
     elif model_args.finetune_model_type == FineTuneModelType.LSTM.value:
@@ -92,15 +89,13 @@ def main():
     data_args, model_args, training_args = parse_runner_args()
 
     tokenizer = load_pretrained_tokenizer(model_args)
-    prepared_ds_path = generate_prepared_ds_path(data_args, model_args,
-                                                 data_folder=data_args.cohort_folder)
+    prepared_ds_path = generate_prepared_ds_path(data_args, model_args, data_folder=data_args.cohort_folder)
 
     if any(prepared_ds_path.glob("*")):
         LOG.info(f"Loading prepared dataset from disk at {prepared_ds_path}...")
         processed_dataset = load_from_disk(str(prepared_ds_path))
         if data_args.streaming:
-            processed_dataset = processed_dataset.to_iterable_dataset(
-                num_shards=training_args.dataloader_num_workers)
+            processed_dataset = processed_dataset.to_iterable_dataset(num_shards=training_args.dataloader_num_workers)
         LOG.info("Prepared dataset loaded from disk...")
     else:
         # If the data is in the MEDS format, we need to convert it to the CEHR-BERT format
@@ -115,14 +110,11 @@ def main():
                 if data_args.streaming:
                     if isinstance(dataset, DatasetDict):
                         dataset = {
-                            k: v.to_iterable_dataset(
-                                num_shards=training_args.dataloader_num_workers
-                            ) for k, v in dataset.items()
+                            k: v.to_iterable_dataset(num_shards=training_args.dataloader_num_workers)
+                            for k, v in dataset.items()
                         }
                     else:
-                        dataset = dataset.to_iterable_dataset(
-                            num_shards=training_args.dataloader_num_workers
-                        )
+                        dataset = dataset.to_iterable_dataset(num_shards=training_args.dataloader_num_workers)
             except Exception as e:
                 LOG.exception(e)
                 dataset = create_dataset_from_meds_reader(data_args, is_pretraining=False)
@@ -160,15 +152,13 @@ def main():
                 np.random.seed(training_args.seed)
                 np.random.shuffle(unique_patient_ids)
 
-                train_end = int(
-                    len(unique_patient_ids) * (1 - data_args.validation_split_percentage))
+                train_end = int(len(unique_patient_ids) * (1 - data_args.validation_split_percentage))
                 train_patient_ids = set(unique_patient_ids[:train_end])
                 if not test_set:
                     # Calculate split indices
                     validation_end = (
-                            int(len(
-                                unique_patient_ids) * data_args.validation_split_percentage * data_args.test_eval_ratio)
-                            + train_end
+                        int(len(unique_patient_ids) * data_args.validation_split_percentage * data_args.test_eval_ratio)
+                        + train_end
                     )
 
                     # Split patient IDs
@@ -245,8 +235,7 @@ def main():
                     test_set = test_valid["test"]
 
         # Organize them into a single DatasetDict
-        final_splits = DatasetDict(
-            {"train": train_set, "validation": validation_set, "test": test_set})
+        final_splits = DatasetDict({"train": train_set, "validation": validation_set, "test": test_set})
 
         processed_dataset = create_cehrbert_finetuning_dataset(
             dataset=final_splits, concept_tokenizer=tokenizer, data_args=data_args
@@ -255,8 +244,7 @@ def main():
         if not data_args.streaming:
             processed_dataset.save_to_disk(prepared_ds_path)
 
-    collator = CehrBertDataCollator(tokenizer, model_args.max_position_embeddings,
-                                    is_pretraining=False)
+    collator = CehrBertDataCollator(tokenizer, model_args.max_position_embeddings, is_pretraining=False)
 
     # Set seed before initializing model.
     set_seed(training_args.seed)
@@ -287,16 +275,14 @@ def main():
                 )
                 model = get_peft_model(model, config)
             else:
-                raise ValueError(
-                    f"The LORA adapter is not supported for {model_args.finetune_model_type}")
+                raise ValueError(f"The LORA adapter is not supported for {model_args.finetune_model_type}")
 
         trainer = Trainer(
             model=model,
             data_collator=collator,
             train_dataset=processed_dataset["train"],
             eval_dataset=processed_dataset["validation"],
-            callbacks=[
-                EarlyStoppingCallback(early_stopping_patience=model_args.early_stopping_patience)],
+            callbacks=[EarlyStoppingCallback(early_stopping_patience=model_args.early_stopping_patience)],
             args=training_args,
         )
 
@@ -321,8 +307,7 @@ def main():
         do_predict(test_dataloader, model_args, training_args)
 
 
-def do_predict(test_dataloader: DataLoader, model_args: ModelArguments,
-               training_args: TrainingArguments):
+def do_predict(test_dataloader: DataLoader, model_args: ModelArguments, training_args: TrainingArguments):
     """
     Performs inference on the test dataset using a fine-tuned model, saves predictions and evaluation metrics.
 
@@ -358,7 +343,7 @@ def do_predict(test_dataloader: DataLoader, model_args: ModelArguments,
     with torch.no_grad():
         for index, batch in enumerate(tqdm(test_dataloader, desc="Predicting")):
             person_ids = batch.pop("person_id").numpy().squeeze().astype(int)
-            index_dates = batch.pop("index_date") if "index_date" in batch else None
+            index_dates = batch.pop("index_date").numpy().squeeze() if "index_date" in batch else None
             batch = {k: v.to(device) for k, v in batch.items()}
             # Forward pass
             output = model(**batch, output_attentions=False, output_hidden_states=False)
@@ -369,13 +354,15 @@ def do_predict(test_dataloader: DataLoader, model_args: ModelArguments,
             labels = batch["classifier_label"].cpu().numpy().squeeze().astype(bool)
             probabilities = sigmoid(logits)
             # Save predictions to parquet file
-            test_prediction_pd = pd.DataFrame({
-                "subject_id": person_ids,
-                "prediction_time": index_dates,
-                "boolean_prediction_probability": probabilities,
-                "boolean_prediction": logits,
-                "boolean_value": labels
-            })
+            test_prediction_pd = pd.DataFrame(
+                {
+                    "subject_id": person_ids,
+                    "prediction_time": index_dates,
+                    "boolean_prediction_probability": probabilities,
+                    "boolean_prediction": logits,
+                    "boolean_value": labels,
+                }
+            )
             test_prediction_pd.to_parquet(test_prediction_folder / f"{index}.parquet")
 
     LOG.info("Computing metrics using the test set predictions at %s", test_prediction_folder)
@@ -383,8 +370,7 @@ def do_predict(test_dataloader: DataLoader, model_args: ModelArguments,
     test_prediction_pd = pd.read_parquet(test_prediction_folder)
     # Compute metrics and save results
     metrics = compute_metrics(
-        references=test_prediction_pd.boolean_value,
-        probs=test_prediction_pd.boolean_prediction_probability
+        references=test_prediction_pd.boolean_value, probs=test_prediction_pd.boolean_prediction_probability
     )
     metrics["test_loss"] = np.mean(test_losses)
 
