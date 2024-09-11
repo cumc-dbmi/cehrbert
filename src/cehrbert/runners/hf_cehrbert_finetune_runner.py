@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Union
 
@@ -6,7 +7,7 @@ import numpy as np
 import pandas as pd
 import torch
 from datasets import DatasetDict, load_from_disk
-from peft import LoraConfig, LoraModel, PeftModel, get_peft_model
+from peft import LoraConfig, PeftModel, get_peft_model
 from scipy.special import expit as sigmoid
 from sklearn.metrics import auc, precision_recall_curve, roc_auc_score
 from torch.utils.data import DataLoader
@@ -108,7 +109,13 @@ def main():
                 LOG.info(f"Trying to load the MEDS extension from disk at {meds_extension_path}...")
                 dataset = load_from_disk(meds_extension_path)
                 if data_args.streaming:
-                    dataset = dataset.to_iterable_dataset(num_shards=training_args.dataloader_num_workers)
+                    if isinstance(dataset, DatasetDict):
+                        dataset = {
+                            k: v.to_iterable_dataset(num_shards=training_args.dataloader_num_workers)
+                            for k, v in dataset.items()
+                        }
+                    else:
+                        dataset = dataset.to_iterable_dataset(num_shards=training_args.dataloader_num_workers)
             except Exception as e:
                 LOG.exception(e)
                 dataset = create_dataset_from_meds_reader(data_args, is_pretraining=False)
@@ -320,7 +327,7 @@ def do_predict(test_dataloader: DataLoader, model_args: ModelArguments, training
 
     # Load model and LoRA adapters if applicable
     model = (
-        load_finetuned_model(model_args, model_args.model_name_or_path)
+        load_finetuned_model(model_args, training_args.output_dir)
         if not model_args.use_lora
         else load_lora_model(model_args, training_args)
     )
@@ -336,27 +343,40 @@ def do_predict(test_dataloader: DataLoader, model_args: ModelArguments, training
     test_losses = []
     with torch.no_grad():
         for index, batch in enumerate(tqdm(test_dataloader, desc="Predicting")):
-
+            person_ids = batch.pop("person_id").numpy().squeeze().astype(int)
+            index_dates = (
+                map(datetime.fromtimestamp, batch.pop("index_date").numpy().squeeze().tolist())
+                if "index_date" in batch
+                else None
+            )
             batch = {k: v.to(device) for k, v in batch.items()}
             # Forward pass
-            output = model(**batch)
+            output = model(**batch, output_attentions=False, output_hidden_states=False)
             test_losses.append(output.loss.item())
 
             # Collect logits and labels for prediction
             logits = output.logits.cpu().numpy().squeeze()
-            labels = batch["classifier_label"].cpu().numpy().squeeze()
+            labels = batch["classifier_label"].cpu().numpy().squeeze().astype(bool)
             probabilities = sigmoid(logits)
             # Save predictions to parquet file
-            test_prediction_pd = pd.DataFrame({"logits": logits, "probability": probabilities, "label": labels})
+            test_prediction_pd = pd.DataFrame(
+                {
+                    "subject_id": person_ids,
+                    "prediction_time": index_dates,
+                    "boolean_prediction_probability": probabilities,
+                    "boolean_prediction": logits,
+                    "boolean_value": labels,
+                }
+            )
             test_prediction_pd.to_parquet(test_prediction_folder / f"{index}.parquet")
 
     LOG.info("Computing metrics using the test set predictions at %s", test_prediction_folder)
-
     # Load all predictions
     test_prediction_pd = pd.read_parquet(test_prediction_folder)
-
     # Compute metrics and save results
-    metrics = compute_metrics(references=test_prediction_pd.label, probs=test_prediction_pd.probability)
+    metrics = compute_metrics(
+        references=test_prediction_pd.boolean_value, probs=test_prediction_pd.boolean_prediction_probability
+    )
     metrics["test_loss"] = np.mean(test_losses)
 
     test_results_path = Path(training_args.output_dir) / "test_results.json"
@@ -366,10 +386,9 @@ def do_predict(test_dataloader: DataLoader, model_args: ModelArguments, training
     LOG.info("Test results: %s", metrics)
 
 
-def load_lora_model(model_args, training_args) -> LoraModel:
+def load_lora_model(model_args, training_args) -> PeftModel:
     LOG.info("Loading base model from %s", model_args.model_name_or_path)
     base_model = load_finetuned_model(model_args, model_args.model_name_or_path)
-
     LOG.info("Loading LoRA adapter from %s", training_args.output_dir)
     return PeftModel.from_pretrained(base_model, model_id=training_args.output_dir)
 
