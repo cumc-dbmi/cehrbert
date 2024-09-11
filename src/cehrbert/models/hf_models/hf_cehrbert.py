@@ -104,12 +104,13 @@ class ConceptValueTransformationLayer(nn.Module):
 
 
 class ConceptValuePredictionLayer(nn.Module):
-    def __init__(self, embedding_size):
+    def __init__(self, embedding_size, layer_norm_eps):
         super(ConceptValuePredictionLayer, self).__init__()
         self.embedding_size = embedding_size
         self.concept_value_decoder_layer = nn.Sequential(
             nn.Linear(embedding_size, embedding_size // 2),
             gelu_new,
+            nn.LayerNorm(embedding_size // 2, eps=layer_norm_eps),
             nn.Linear(embedding_size // 2, 1),
             gelu_new,
         )
@@ -260,7 +261,7 @@ class CehrBertForPreTraining(CehrBertPreTrainedModel):
 
         self.bert = CehrBert(config)
         if self.config.include_value_prediction:
-            self.concept_value_decoder_layer = ConceptValuePredictionLayer(config.hidden_size)
+            self.concept_value_decoder_layer = ConceptValuePredictionLayer(config.hidden_size, config.layer_norm_eps)
         self.cls = BertOnlyMLMHead(config)
 
         # Initialize weights and apply final processing
