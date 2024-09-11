@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Union
 import numpy as np
 import pandas as pd
 import torch
-from datasets import DatasetDict, load_from_disk
+from datasets import DatasetDict, load_from_disk, IterableDatasetDict
 from peft import LoraConfig, PeftModel, get_peft_model
 from scipy.special import expit as sigmoid
 from sklearn.metrics import auc, precision_recall_curve, roc_auc_score
@@ -113,8 +113,16 @@ def main():
                 LOG.info(f"Trying to load the MEDS extension from disk at {meds_extension_path}...")
                 dataset = load_from_disk(meds_extension_path)
                 if data_args.streaming:
-                    dataset = dataset.to_iterable_dataset(
-                        num_shards=training_args.dataloader_num_workers)
+                    if isinstance(dataset, DatasetDict):
+                        dataset = {
+                            k: v.to_iterable_dataset(
+                                num_shards=training_args.dataloader_num_workers
+                            ) for k, v in dataset.items()
+                        }
+                    else:
+                        dataset = dataset.to_iterable_dataset(
+                            num_shards=training_args.dataloader_num_workers
+                        )
             except Exception as e:
                 LOG.exception(e)
                 dataset = create_dataset_from_meds_reader(data_args, is_pretraining=False)
