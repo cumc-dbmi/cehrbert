@@ -1,11 +1,12 @@
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Union
 
 import numpy as np
 import pandas as pd
 import torch
-from datasets import DatasetDict, IterableDatasetDict, load_from_disk
+from datasets import DatasetDict, load_from_disk
 from peft import LoraConfig, PeftModel, get_peft_model
 from scipy.special import expit as sigmoid
 from sklearn.metrics import auc, precision_recall_curve, roc_auc_score
@@ -343,7 +344,11 @@ def do_predict(test_dataloader: DataLoader, model_args: ModelArguments, training
     with torch.no_grad():
         for index, batch in enumerate(tqdm(test_dataloader, desc="Predicting")):
             person_ids = batch.pop("person_id").numpy().squeeze().astype(int)
-            index_dates = batch.pop("index_date").numpy().squeeze() if "index_date" in batch else None
+            index_dates = (
+                map(datetime.fromtimestamp, batch.pop("index_date").numpy().squeeze())
+                if "index_date" in batch
+                else None
+            )
             batch = {k: v.to(device) for k, v in batch.items()}
             # Forward pass
             output = model(**batch, output_attentions=False, output_hidden_states=False)
