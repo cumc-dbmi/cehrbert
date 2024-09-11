@@ -111,6 +111,7 @@ class ConceptValuePredictionLayer(nn.Module):
             nn.Linear(embedding_size, embedding_size // 2),
             gelu_new,
             nn.Linear(embedding_size // 2, 1),
+            gelu_new,
         )
 
     def forward(self, hidden_states: Optional[torch.FloatTensor]):
