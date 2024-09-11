@@ -96,7 +96,7 @@ class ConceptValueTransformationLayer(nn.Module):
 
         merged = torch.where(
             concept_value_masks.to(torch.bool),
-            concept_embeddings_with_val,
+            gelu_new(concept_embeddings_with_val),
             concept_embeddings,
         )
 
@@ -319,10 +319,15 @@ class CehrBertForPreTraining(CehrBertPreTrainedModel):
             # In addition to MLM, we also predict the values associated with the masked concepts
             if self.config.include_value_prediction:
                 mlm_masks = labels != -100
+                # The intersection of the MLM masks and concept_value_masks is taken into account
+                # for this loss term Basically we only want to calculate the MLE loss for the lab
+                # concepts that are selected for MLM
+                masks = torch.logical_and(mlm_masks, concept_value_masks.to(torch.bool))
+                masks = masks.to(torch.float32)
                 predicted_values = self.concept_value_decoder_layer(cehrbert_output.last_hidden_state)
-                num_items = torch.sum(concept_value_masks.to(torch.float32), dim=-1) + 1e-6
+                num_items = torch.sum(masks, dim=-1) + 1e-6
                 values_ = (predicted_values.squeeze(-1) - concept_values) ** 2
-                masked_mse = torch.sum(values_ * concept_value_masks * mlm_masks, dim=-1) / num_items
+                masked_mse = torch.sum(values_ * masks, dim=-1) / num_items
                 total_loss += torch.mean(masked_mse)
 
         return CehrBertModelOutput(
