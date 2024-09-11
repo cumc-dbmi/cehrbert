@@ -97,7 +97,8 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
     def __init__(self, data_args: DataTrainingArguments, is_pretraining: bool = True):
         self._time_token_function = get_att_function(data_args.att_function_type)
         self._include_auxiliary_token = data_args.include_auxiliary_token
-        self._inpatient_time_token_function = get_att_function(data_args.inpatient_att_function_type)
+        self._inpatient_time_token_function = get_att_function(
+            data_args.inpatient_att_function_type)
         self._include_demographic_prompt = data_args.include_demographic_prompt
         self._is_pretraining = is_pretraining
 
@@ -127,16 +128,16 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
 
     @staticmethod
     def _update_cehrbert_record(
-        cehrbert_record: Dict[str, Any],
-        code: str,
-        visit_segment: int = 0,
-        date: int = 0,
-        age: int = -1,
-        visit_concept_order: int = 0,
-        visit_concept_id: str = "0",
-        concept_value_mask: int = 0,
-        concept_value: float = -1.0,
-        mlm_skip_value: int = 0,
+            cehrbert_record: Dict[str, Any],
+            code: str,
+            visit_segment: int = 0,
+            date: int = 0,
+            age: int = -1,
+            visit_concept_order: int = 0,
+            visit_concept_id: str = "0",
+            concept_value_mask: int = 0,
+            concept_value: float = -1.0,
+            mlm_skip_value: int = 0,
     ) -> None:
         cehrbert_record["concept_ids"].append(code)
         cehrbert_record["visit_concept_orders"].append(visit_concept_order)
@@ -187,7 +188,8 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
         date_cursor = None
 
         # Loop through all the visits excluding the first event containing the demographics
-        for i, visit in enumerate(sorted(record["visits"], key=lambda e: e["visit_start_datetime"])):
+        for i, visit in enumerate(
+                sorted(record["visits"], key=lambda e: e["visit_start_datetime"])):
 
             events = visit["events"]
 
@@ -215,7 +217,8 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
             # Add the VS token to the patient timeline to mark the start of a visit
             age = relativedelta(visit["visit_start_datetime"], birth_datetime).years
             # Calculate the week number since the epoch time
-            date = (visit["visit_start_datetime"] - datetime.datetime(year=1970, month=1, day=1)).days // 7
+            date = (visit["visit_start_datetime"] - datetime.datetime(year=1970, month=1,
+                                                                      day=1)).days // 7
             visit_segment = int(visit_segment_indicator) + 1
 
             self._update_cehrbert_record(
@@ -387,7 +390,8 @@ class SortPatientSequenceMapping(DatasetMapping):
                 column_names.append(k)
                 column_values.append(v)
 
-        sorted_list = sorted(zip(sorting_columns, *column_values), key=lambda tup2: (tup2[0], tup2[1]))
+        sorted_list = sorted(zip(sorting_columns, *column_values),
+                             key=lambda tup2: (tup2[0], tup2[1]))
 
         # uses a combination of zip() and unpacking (*) to transpose the list of tuples. This means converting rows
         # into columns: the first tuple formed from all the first elements of the sorted tuples, the second tuple
@@ -421,10 +425,10 @@ class HFTokenizationMapping(DatasetMapping):
         if np.any(np.asarray(concept_value_masks) > 0):
             normalized_concept_values = copy.deepcopy(concept_values)
             for i, (
-                concept_id,
-                token_id,
-                concept_value_mask,
-                concept_value,
+                    concept_id,
+                    token_id,
+                    concept_value_mask,
+                    concept_value,
             ) in enumerate(
                 zip(
                     record["concept_ids"],
@@ -434,7 +438,8 @@ class HFTokenizationMapping(DatasetMapping):
                 )
             ):
                 if token_id in self._lab_token_ids:
-                    normalized_concept_value = self._concept_tokenizer.normalize(concept_id, concept_value)
+                    normalized_concept_value = self._concept_tokenizer.normalize(concept_id,
+                                                                                 concept_value)
                     normalized_concept_values[i] = normalized_concept_value
             record["concept_values"] = normalized_concept_values
 
@@ -456,4 +461,4 @@ class HFFineTuningMapping(DatasetMapping):
         }
 
     def remove_columns(self):
-        return ["age", "label"]
+        return ["label"]
