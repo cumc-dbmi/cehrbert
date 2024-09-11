@@ -120,7 +120,6 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
             return [
                 "visits",
                 "birth_datetime",
-                "index_date",
                 "visit_concept_ids",
                 "num_of_concepts",
                 "num_of_visits",
