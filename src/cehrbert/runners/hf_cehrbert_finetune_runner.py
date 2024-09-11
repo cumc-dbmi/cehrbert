@@ -345,7 +345,7 @@ def do_predict(test_dataloader: DataLoader, model_args: ModelArguments, training
         for index, batch in enumerate(tqdm(test_dataloader, desc="Predicting")):
             person_ids = batch.pop("person_id").numpy().squeeze().astype(int)
             index_dates = (
-                map(datetime.fromtimestamp, batch.pop("index_date").numpy().squeeze())
+                map(datetime.fromtimestamp, batch.pop("index_date").numpy().squeeze().tolist())
                 if "index_date" in batch
                 else None
             )

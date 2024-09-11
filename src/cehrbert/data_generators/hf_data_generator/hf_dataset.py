@@ -71,14 +71,14 @@ def create_cehrbert_finetuning_dataset(
 
     if data_args.is_data_in_med:
         mapping_functions = [
-            HFTokenizationMapping(concept_tokenizer, False),
             HFFineTuningMapping(),
+            HFTokenizationMapping(concept_tokenizer, False),
         ]
     else:
         mapping_functions = [
+            HFFineTuningMapping(),
             SortPatientSequenceMapping(),
             HFTokenizationMapping(concept_tokenizer, False),
-            HFFineTuningMapping(),
         ]
 
     for mapping_function in mapping_functions:
