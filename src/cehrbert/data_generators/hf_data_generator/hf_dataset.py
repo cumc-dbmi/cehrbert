@@ -12,6 +12,7 @@ from cehrbert.models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments
 
 CEHRBERT_COLUMNS = [
+    "person_id",
     "concept_ids",
     "ages",
     "dates",
