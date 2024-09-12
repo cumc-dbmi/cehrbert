@@ -22,13 +22,13 @@ def agg_helper(*args, map_func):
     return {"data": [pickle.dumps(result)]}
 
 
-def map_statistics(batch: Dict[str, Any]) -> Dict[str, Any]:
+def map_statistics(batch: Dict[str, Any], capacity=100, value_outlier_std=2.0) -> Dict[str, Any]:
     if "units" in batch:
         concept_value_units = batch["units"]
     else:
         concept_value_units = [["default_unit" for _ in cons] for cons in batch["concept_ids"]]
     numeric_stats_by_lab = collections.defaultdict(
-        partial(RunningStatistics, capacity=100, lower_quantile=0.05, upper_quantile=0.95)
+        partial(RunningStatistics, capacity=capacity, value_outlier_std=value_outlier_std)
     )
     for concept_ids, concept_values, concept_value_indicators, units in zip(
         batch["concept_ids"],

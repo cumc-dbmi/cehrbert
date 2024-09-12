@@ -64,6 +64,7 @@ class CehrBertTokenizer(PushToHubMixin):
                 "unit": lab_stat["unit"],
                 "mean": lab_stat["mean"],
                 "std": lab_stat["std"],
+                "value_outlier_std": lab_stat["value_outlier_std"],
             }
             for lab_stat in lab_stats
         }
@@ -296,16 +297,22 @@ class CehrBertTokenizer(PushToHubMixin):
 
             tokenizer.train_from_iterator(generator, trainer=trainer)
 
+        map_statistics_partial = partial(
+            map_statistics,
+            capacity=data_args.lab_value_initial_capacity,
+            value_outlier_std=data_args.value_outlier_std,
+        )
+
         if data_args.streaming:
             parts = dataset.map(
-                partial(agg_helper, map_func=map_statistics),
+                partial(agg_helper, map_func=map_statistics_partial),
                 batched=True,
                 batch_size=data_args.preprocessing_batch_size,
                 remove_columns=dataset.column_names,
             )
         else:
             parts = dataset.map(
-                partial(agg_helper, map_func=map_statistics),
+                partial(agg_helper, map_func=map_statistics_partial),
                 batched=True,
                 batch_size=data_args.preprocessing_batch_size,
                 remove_columns=dataset.column_names,
@@ -327,6 +334,9 @@ class CehrBertTokenizer(PushToHubMixin):
                 "mean": online_stats.mean(),
                 "std": online_stats.standard_deviation(),
                 "count": online_stats.count,
+                "value_outlier_std": data_args.value_outlier_std,
+                "lower_bound": online_stats.mean() - data_args.value_outlier_std * online_stats.standard_deviation(),
+                "upper_bound": online_stats.mean() + data_args.value_outlier_std * online_stats.standard_deviation(),
             }
             for (concept_id, unit), online_stats in current["numeric_stats_by_lab"].items()
         ]
@@ -343,6 +353,11 @@ class CehrBertTokenizer(PushToHubMixin):
             std = self._lab_stat_mapping[concept_id]["std"]
             if std > 0:
                 normalized_value = mean_ / self._lab_stat_mapping[concept_id]["std"]
+                # Clip the value between the lower and upper bounds of the corresponding lab
+                normalized_value = max(
+                    self._lab_stat_mapping[concept_id]["lower_bound"],
+                    min(self._lab_stat_mapping[concept_id]["upper_bound"], normalized_value),
+                )
             else:
                 normalized_value = mean_
             return normalized_value

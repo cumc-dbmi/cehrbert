@@ -1,12 +1,13 @@
 import numpy as np
+import scipy.stats as stats
 from femr.stat_utils import OnlineStatistics
 
 
 class RunningStatistics(OnlineStatistics):
-    def __init__(self, capacity=100, lower_quantile=0.05, upper_quantile=0.950):
+    def __init__(self, capacity=100, value_outlier_std=2.0):
         super().__init__()
         self.excluding_outlier_online_statistics = ExcludingOutlierOnlineStatistics(
-            capacity=capacity, lower_quantile=lower_quantile, upper_quantile=upper_quantile
+            capacity=capacity, value_outlier_std=value_outlier_std
         )
 
     def add(self, weight: float, value: float) -> None:
@@ -35,10 +36,10 @@ class RunningStatistics(OnlineStatistics):
 
 
 class ExcludingOutlierOnlineStatistics:
-    def __init__(self, capacity=100, lower_quantile=0.05, upper_quantile=0.950):
+    def __init__(self, capacity=100, value_outlier_std=2.0):
         super().__init__()
-        self.lower_quantile = lower_quantile
-        self.upper_quantile = upper_quantile
+        self.lower_quantile = stats.norm.cdf(-value_outlier_std)
+        self.upper_quantile = stats.norm.cdf(value_outlier_std)
         self.capacity = capacity
         self.raw_data = list()
         self.filtered_data = list()

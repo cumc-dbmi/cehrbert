@@ -9,7 +9,7 @@ class TestExcludingOutlierOnlineStatistics(unittest.TestCase):
 
     def setUp(self):
         # Create an instance of ExcludingOutlierOnlineStatistics with default settings
-        self.stats = ExcludingOutlierOnlineStatistics(capacity=10, lower_quantile=0.05, upper_quantile=0.95)
+        self.stats = ExcludingOutlierOnlineStatistics(capacity=10, value_outlier_std=2.0)
 
     def test_add_data_within_capacity(self):
         # Test adding data within the capacity

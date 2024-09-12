@@ -156,6 +156,16 @@ class DataTrainingArguments:
         default=False,
         metadata={"help": "Indicates whether to randomly shuffle the records that have the same rank"},
     )
+    lab_value_initial_capacity: Optional[int] = dataclasses.field(
+        default=100,
+        metadata={
+            "help": "The minimum num of lab values to collect before switching to the running average calculation"
+        },
+    )
+    value_outlier_std: Optional[float] = dataclasses.field(
+        default=2.0,
+        metadata={"help": "The lower quantile for excluding the extreme lower lab values"},
+    )
 
 
 @dataclasses.dataclass
