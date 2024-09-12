@@ -327,6 +327,7 @@ class CehrBertTokenizer(PushToHubMixin):
                 current = fixed_stat
             else:
                 current = agg_statistics(current, fixed_stat)
+
         lab_stats = [
             {
                 "concept_id": concept_id,

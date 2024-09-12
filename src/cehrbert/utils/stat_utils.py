@@ -6,33 +6,49 @@ from femr.stat_utils import OnlineStatistics
 class RunningStatistics(OnlineStatistics):
     def __init__(self, capacity=100, value_outlier_std=2.0):
         super().__init__()
+        self.value_outlier_std = value_outlier_std
         self.excluding_outlier_online_statistics = ExcludingOutlierOnlineStatistics(
             capacity=capacity, value_outlier_std=value_outlier_std
         )
 
+    def _update_stats(self):
+        if self.count == 0:
+            self.current_mean = self.excluding_outlier_online_statistics.get_current_mean()
+            self.variance = self.excluding_outlier_online_statistics.get_sum_of_squared()
+            self.count = self.excluding_outlier_online_statistics.get_count()
+
     def add(self, weight: float, value: float) -> None:
         if self.excluding_outlier_online_statistics.is_full():
-            super().add(weight, value)
+            std = self.standard_deviation()
+            if (
+                self.current_mean - self.value_outlier_std * std
+                <= value
+                <= self.current_mean + self.value_outlier_std * std
+            ):
+                super().add(weight, value)
         else:
             self.excluding_outlier_online_statistics.add(value)
             if self.excluding_outlier_online_statistics.is_full():
-                self.current_mean = self.excluding_outlier_online_statistics.get_current_mean()
-                self.variance = self.excluding_outlier_online_statistics.get_sum_of_squared()
-                self.count = self.excluding_outlier_online_statistics.get_count()
+                self._update_stats()
 
     def mean(self) -> float:
         """Return the current mean."""
         if self.excluding_outlier_online_statistics.is_full():
             return super().mean()
         else:
-            self.excluding_outlier_online_statistics.get_current_mean()
+            return self.excluding_outlier_online_statistics.get_current_mean()
 
     def standard_deviation(self) -> float:
         """Return the current standard devation."""
         if self.excluding_outlier_online_statistics.is_full():
             return super().standard_deviation()
         else:
-            return self.excluding_outlier_online_statistics.standard_deviation()
+            return self.excluding_outlier_online_statistics.get_std()
+
+    def combine(self, other) -> None:
+        self._update_stats()
+        other._update_stats()
+        super().combine(other)
 
 
 class ExcludingOutlierOnlineStatistics:
@@ -70,7 +86,7 @@ class ExcludingOutlierOnlineStatistics:
         if self.filtered_data:
             return np.mean(self.filtered_data)
         else:
-            raise ValueError(f"There is no value")
+            return 0.0
 
     def get_sum_of_squared(self) -> float:
         self.update_remove_outliers()
@@ -78,14 +94,14 @@ class ExcludingOutlierOnlineStatistics:
             current_mean = np.mean(self.filtered_data)
             return np.sum([(x - current_mean) ** 2 for x in self.filtered_data])
         else:
-            raise ValueError(f"There is no value")
+            return 0.0
 
-    def standard_deviation(self) -> float:
+    def get_std(self) -> float:
         self.update_remove_outliers()
         if self.filtered_data:
             return np.std(self.filtered_data)
         else:
-            raise ValueError(f"There is no value")
+            return 0.0
 
     def update_remove_outliers(
         self,
