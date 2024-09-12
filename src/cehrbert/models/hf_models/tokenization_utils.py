@@ -1,9 +1,10 @@
 import collections
 import json
 import pickle
+from functools import partial
 from typing import Any, Dict
 
-from femr.stat_utils import OnlineStatistics
+from cehrbert.utils.stat_utils import RunningStatistics
 
 
 def load_json_file(json_file):
@@ -26,8 +27,9 @@ def map_statistics(batch: Dict[str, Any]) -> Dict[str, Any]:
         concept_value_units = batch["units"]
     else:
         concept_value_units = [["default_unit" for _ in cons] for cons in batch["concept_ids"]]
-
-    numeric_stats_by_lab = collections.defaultdict(OnlineStatistics)
+    numeric_stats_by_lab = collections.defaultdict(
+        partial(RunningStatistics, capacity=100, lower_quantile=0.05, upper_quantile=0.95)
+    )
     for concept_ids, concept_values, concept_value_indicators, units in zip(
         batch["concept_ids"],
         batch["concept_values"],
