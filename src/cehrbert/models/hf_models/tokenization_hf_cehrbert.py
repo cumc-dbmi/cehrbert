@@ -11,6 +11,7 @@ from tokenizers import Tokenizer
 from tokenizers.models import WordLevel
 from tokenizers.pre_tokenizers import WhitespaceSplit
 from tokenizers.trainers import WordLevelTrainer
+from tqdm import tqdm
 from transformers.tokenization_utils_base import PushToHubMixin
 
 from cehrbert.models.hf_models.tokenization_utils import agg_helper, agg_statistics, map_statistics
@@ -321,7 +322,7 @@ class CehrBertTokenizer(PushToHubMixin):
                 new_fingerprint="invalid",
             )
         current = None
-        for stat in parts:
+        for stat in tqdm(parts, desc="Aggregating the lab statistics"):
             fixed_stat = pickle.loads(stat["data"])
             if current is None:
                 current = fixed_stat
