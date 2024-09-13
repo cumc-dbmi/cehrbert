@@ -66,6 +66,8 @@ class CehrBertTokenizer(PushToHubMixin):
                 "mean": lab_stat["mean"],
                 "std": lab_stat["std"],
                 "value_outlier_std": lab_stat["value_outlier_std"],
+                "lower_bound": lab_stat["lower_bound"],
+                "upper_bound": lab_stat["upper_bound"],
             }
             for lab_stat in lab_stats
         }
