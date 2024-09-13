@@ -11,6 +11,7 @@ from tokenizers import Tokenizer
 from tokenizers.models import WordLevel
 from tokenizers.pre_tokenizers import WhitespaceSplit
 from tokenizers.trainers import WordLevelTrainer
+from tqdm import tqdm
 from transformers.tokenization_utils_base import PushToHubMixin
 
 from cehrbert.models.hf_models.tokenization_utils import agg_helper, agg_statistics, map_statistics
@@ -64,6 +65,9 @@ class CehrBertTokenizer(PushToHubMixin):
                 "unit": lab_stat["unit"],
                 "mean": lab_stat["mean"],
                 "std": lab_stat["std"],
+                "value_outlier_std": lab_stat["value_outlier_std"],
+                "lower_bound": lab_stat["lower_bound"],
+                "upper_bound": lab_stat["upper_bound"],
             }
             for lab_stat in lab_stats
         }
@@ -296,16 +300,22 @@ class CehrBertTokenizer(PushToHubMixin):
 
             tokenizer.train_from_iterator(generator, trainer=trainer)
 
+        map_statistics_partial = partial(
+            map_statistics,
+            capacity=data_args.offline_stats_capacity,
+            value_outlier_std=data_args.value_outlier_std,
+        )
+
         if data_args.streaming:
             parts = dataset.map(
-                partial(agg_helper, map_func=map_statistics),
+                partial(agg_helper, map_func=map_statistics_partial),
                 batched=True,
                 batch_size=data_args.preprocessing_batch_size,
                 remove_columns=dataset.column_names,
             )
         else:
             parts = dataset.map(
-                partial(agg_helper, map_func=map_statistics),
+                partial(agg_helper, map_func=map_statistics_partial),
                 batched=True,
                 batch_size=data_args.preprocessing_batch_size,
                 remove_columns=dataset.column_names,
@@ -314,12 +324,13 @@ class CehrBertTokenizer(PushToHubMixin):
                 new_fingerprint="invalid",
             )
         current = None
-        for stat in parts:
+        for stat in tqdm(parts, desc="Aggregating the lab statistics"):
             fixed_stat = pickle.loads(stat["data"])
             if current is None:
                 current = fixed_stat
             else:
                 current = agg_statistics(current, fixed_stat)
+
         lab_stats = [
             {
                 "concept_id": concept_id,
@@ -327,6 +338,9 @@ class CehrBertTokenizer(PushToHubMixin):
                 "mean": online_stats.mean(),
                 "std": online_stats.standard_deviation(),
                 "count": online_stats.count,
+                "value_outlier_std": data_args.value_outlier_std,
+                "lower_bound": online_stats.mean() - data_args.value_outlier_std * online_stats.standard_deviation(),
+                "upper_bound": online_stats.mean() + data_args.value_outlier_std * online_stats.standard_deviation(),
             }
             for (concept_id, unit), online_stats in current["numeric_stats_by_lab"].items()
         ]
@@ -342,8 +356,13 @@ class CehrBertTokenizer(PushToHubMixin):
             mean_ = concept_value - self._lab_stat_mapping[concept_id]["mean"]
             std = self._lab_stat_mapping[concept_id]["std"]
             if std > 0:
+                value_outlier_std = self._lab_stat_mapping[concept_id]["value_outlier_std"]
                 normalized_value = mean_ / self._lab_stat_mapping[concept_id]["std"]
+                # Clip the value between the lower and upper bounds of the corresponding lab
+                normalized_value = max(-value_outlier_std, min(value_outlier_std, normalized_value))
             else:
-                normalized_value = mean_
+                # If there is not a valid standard deviation,
+                # we just the normalized value to the mean of the standard normal
+                normalized_value = 0.0
             return normalized_value
         return concept_value

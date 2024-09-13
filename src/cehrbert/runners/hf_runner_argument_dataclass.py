@@ -156,6 +156,16 @@ class DataTrainingArguments:
         default=False,
         metadata={"help": "Indicates whether to randomly shuffle the records that have the same rank"},
     )
+    offline_stats_capacity: Optional[int] = dataclasses.field(
+        default=100,
+        metadata={
+            "help": "The minimum num of lab values to collect for the truncated offline statistics before switching to the online statistics calculation"
+        },
+    )
+    value_outlier_std: Optional[float] = dataclasses.field(
+        default=3.0,
+        metadata={"help": "The lower quantile for excluding the extreme lower lab values"},
+    )
 
 
 @dataclasses.dataclass

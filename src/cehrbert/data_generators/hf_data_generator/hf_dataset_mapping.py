@@ -115,7 +115,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
 
     def remove_columns(self):
         if self._is_pretraining:
-            return ["visits", "patient_id", "birth_datetime", "index_date"]
+            return ["visits", "birth_datetime", "index_date"]
         else:
             return [
                 "visits",
