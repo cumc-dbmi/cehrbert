@@ -36,7 +36,10 @@ class TruncatedOnlineStatistics(OnlineStatistics):
 
     def standard_deviation(self) -> float:
         """Return the current standard deviation."""
-        if self.is_online_update_started:
+        # If the count is zero, we don't calculate the standard deviation
+        if self.count == 0:
+            return 0.0
+        elif self.is_online_update_started:
             return super().standard_deviation()
         else:
             return self.truncated_offline_statistics.get_standard_deviation()

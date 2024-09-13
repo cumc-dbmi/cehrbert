@@ -11,6 +11,13 @@ class TestTruncatedOfflineStatistics(unittest.TestCase):
         # Create an instance of ExcludingOutlierOnlineStatistics with default settings
         self.stats = TruncatedOfflineStatistics(capacity=10, value_outlier_std=2.0)
 
+    def test_two_elements(self):
+        # Test adding data within the capacity
+        for i in range(2):
+            self.stats.add(i)
+        self.stats._update_filtered_data()
+        self.assertEqual(0, len(self.stats.filtered_data))
+
     def test_add_data_within_capacity(self):
         # Test adding data within the capacity
         for i in range(10):
