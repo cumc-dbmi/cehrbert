@@ -356,13 +356,13 @@ class CehrBertTokenizer(PushToHubMixin):
             mean_ = concept_value - self._lab_stat_mapping[concept_id]["mean"]
             std = self._lab_stat_mapping[concept_id]["std"]
             if std > 0:
+                value_outlier_std = self._lab_stat_mapping[concept_id]["value_outlier_std"]
                 normalized_value = mean_ / self._lab_stat_mapping[concept_id]["std"]
                 # Clip the value between the lower and upper bounds of the corresponding lab
-                normalized_value = max(
-                    self._lab_stat_mapping[concept_id]["lower_bound"],
-                    min(self._lab_stat_mapping[concept_id]["upper_bound"], normalized_value),
-                )
+                normalized_value = max(-value_outlier_std, min(value_outlier_std, normalized_value))
             else:
-                normalized_value = mean_
+                # If there is not a valid standard deviation,
+                # we just the normalized value to the mean of the standard normal
+                normalized_value = 0.0
             return normalized_value
         return concept_value
