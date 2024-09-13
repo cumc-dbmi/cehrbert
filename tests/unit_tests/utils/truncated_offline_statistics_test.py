@@ -2,14 +2,14 @@ import unittest
 
 import numpy as np
 
-from cehrbert.utils.stat_utils import ExcludingOutlierOnlineStatistics  # Replace with the actual module name
+from cehrbert.utils.stat_utils import TruncatedOfflineStatistics  # Replace with the actual module name
 
 
-class TestExcludingOutlierOnlineStatistics(unittest.TestCase):
+class TestTruncatedOfflineStatistics(unittest.TestCase):
 
     def setUp(self):
         # Create an instance of ExcludingOutlierOnlineStatistics with default settings
-        self.stats = ExcludingOutlierOnlineStatistics(capacity=10, value_outlier_std=2.0)
+        self.stats = TruncatedOfflineStatistics(capacity=10, value_outlier_std=2.0)
 
     def test_add_data_within_capacity(self):
         # Test adding data within the capacity
@@ -33,7 +33,7 @@ class TestExcludingOutlierOnlineStatistics(unittest.TestCase):
             self.stats.add(x)
 
         # Trigger outlier removal
-        self.stats.update_remove_outliers()
+        self.stats._update_filtered_data()
 
         # The expected filtered data excludes -1000 and 1000 since they are extreme values
         expected_filtered_data = [10, 12, 13, 14, 15, 16, 17, 18]
@@ -70,15 +70,16 @@ class TestExcludingOutlierOnlineStatistics(unittest.TestCase):
             self.stats.add(x)
 
         # Test standard deviation after excluding outliers
-        stddev = self.stats.standard_deviation()
+        stddev = self.stats.get_standard_deviation()
         expected_stddev = np.std([10, 12, 13, 14, 15, 16, 17, 18], ddof=0)
         self.assertAlmostEqual(stddev, expected_stddev, places=5)
         self.stats.reset()
 
     def test_empty_filtered_data(self):
         # Test when no data is present
-        self.assertRaises(ValueError, self.stats.get_current_mean)
-        self.assertRaises(ValueError, self.stats.standard_deviation)
+        self.assertEqual(0.0, self.stats.get_current_mean())
+        self.assertEqual(0.0, self.stats.get_standard_deviation())
+        self.assertEqual(0.0, self.stats.get_sum_of_squared())
 
 
 if __name__ == "__main__":

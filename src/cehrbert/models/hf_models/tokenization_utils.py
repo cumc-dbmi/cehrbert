@@ -4,7 +4,7 @@ import pickle
 from functools import partial
 from typing import Any, Dict
 
-from cehrbert.utils.stat_utils import RunningStatistics
+from cehrbert.utils.stat_utils import TruncatedOnlineStatistics
 
 
 def load_json_file(json_file):
@@ -28,7 +28,7 @@ def map_statistics(batch: Dict[str, Any], capacity=100, value_outlier_std=2.0) -
     else:
         concept_value_units = [["default_unit" for _ in cons] for cons in batch["concept_ids"]]
     numeric_stats_by_lab = collections.defaultdict(
-        partial(RunningStatistics, capacity=capacity, value_outlier_std=value_outlier_std)
+        partial(TruncatedOnlineStatistics, capacity=capacity, value_outlier_std=value_outlier_std)
     )
     for concept_ids, concept_values, concept_value_indicators, units in zip(
         batch["concept_ids"],

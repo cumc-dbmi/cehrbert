@@ -299,7 +299,7 @@ class CehrBertTokenizer(PushToHubMixin):
 
         map_statistics_partial = partial(
             map_statistics,
-            capacity=data_args.lab_value_initial_capacity,
+            capacity=data_args.offline_stats_capacity,
             value_outlier_std=data_args.value_outlier_std,
         )
 
