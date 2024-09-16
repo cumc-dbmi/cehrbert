@@ -187,9 +187,7 @@ def generate_prepared_ds_path(data_args, model_args, data_folder=None) -> Path:
     """
     data_folder = data_folder if data_folder else data_args.data_folder
     concatenated_str = (
-        str(model_args.max_position_embeddings)
-        + "|"
-        + os.path.abspath(data_folder)
+        +os.path.abspath(data_folder)
         + "|"
         + os.path.abspath(model_args.tokenizer_name_or_path)
         + "|"
