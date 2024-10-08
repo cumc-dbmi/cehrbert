@@ -247,11 +247,11 @@ def convert_one_patient(
         # This indicates demographics features
         if e.code in birth_codes:
             birth_datetime = e.time
-        elif e.code.startswith("RACE"):
+        elif e.code.upper().startswith("RACE"):
             race = e.code
-        elif e.code.startswith("GENDER"):
+        elif e.code.upper().startswith("GENDER"):
             gender = e.code
-        elif e.code.startswith("ETHNICITY"):
+        elif e.code.upper().startswith("ETHNICITY"):
             ethnicity = e.code
         elif e.time is not None:
             if not current_date:
