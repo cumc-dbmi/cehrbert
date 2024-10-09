@@ -8,7 +8,8 @@ from typing import Any, Dict, List, Union
 
 import numpy as np
 import pandas as pd
-from cehrbert_data.decorators.patient_event_decorator import get_att_function
+from cehrbert_data.const.common import NA
+from cehrbert_data.decorators.patient_event_decorator_base import get_att_function
 from datasets.formatting.formatting import LazyBatch
 from dateutil.relativedelta import relativedelta
 from meds.schema import birth_code, death_code
@@ -137,6 +138,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
         concept_value_mask: int = 0,
         concept_value: float = -1.0,
         mlm_skip_value: int = 0,
+        unit: str = NA,
     ) -> None:
         cehrbert_record["concept_ids"].append(code)
         cehrbert_record["visit_concept_orders"].append(visit_concept_order)
@@ -146,6 +148,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
         cehrbert_record["visit_concept_ids"].append(visit_concept_id)
         cehrbert_record["concept_value_masks"].append(concept_value_mask)
         cehrbert_record["concept_values"].append(concept_value)
+        cehrbert_record["units"].append(unit)
         cehrbert_record["mlm_skip_values"].append(mlm_skip_value)
 
     def transform(self, record: Dict[str, Any]) -> Dict[str, Any]:
@@ -160,6 +163,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
             "visit_concept_orders": [],
             "concept_value_masks": [],
             "concept_values": [],
+            "units": [],
             "mlm_skip_values": [],
             "visit_concept_ids": [],
         }
@@ -274,6 +278,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
 
                 # If numeric_value exists, this is a concept/value tuple, we indicate this using a concept_value_mask
                 numeric_value = e.get("numeric_value", None)
+                unit = e.get("unit", NA)
                 concept_value_mask = int(numeric_value is not None)
                 concept_value = numeric_value if concept_value_mask == 1 else -1.0
                 code = replace_escape_chars(e["code"])
@@ -295,6 +300,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                     visit_concept_id=visit_type,
                     concept_value_mask=concept_value_mask,
                     concept_value=concept_value,
+                    unit=unit,
                     mlm_skip_value=concept_value_mask,
                 )
 
@@ -419,22 +425,25 @@ class HFTokenizationMapping(DatasetMapping):
 
         # If any concept has a value associated with it, we normalize the value
         if np.any(np.asarray(concept_value_masks) > 0):
+            units = record["units"]
             normalized_concept_values = copy.deepcopy(concept_values)
             for i, (
                 concept_id,
+                unit,
                 token_id,
                 concept_value_mask,
                 concept_value,
             ) in enumerate(
                 zip(
                     record["concept_ids"],
+                    units,
                     input_ids,
                     concept_value_masks,
                     concept_values,
                 )
             ):
                 if token_id in self._lab_token_ids:
-                    normalized_concept_value = self._concept_tokenizer.normalize(concept_id, concept_value)
+                    normalized_concept_value = self._concept_tokenizer.normalize(concept_id, unit, concept_value)
                     normalized_concept_values[i] = normalized_concept_value
             record["concept_values"] = normalized_concept_values
 

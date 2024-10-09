@@ -4,6 +4,8 @@ import pickle
 from functools import partial
 from typing import Any, Dict
 
+from cehrbert_data.const.common import NA
+
 from cehrbert.utils.stat_utils import TruncatedOnlineStatistics
 
 
@@ -26,7 +28,7 @@ def map_statistics(batch: Dict[str, Any], capacity=100, value_outlier_std=2.0) -
     if "units" in batch:
         concept_value_units = batch["units"]
     else:
-        concept_value_units = [["default_unit" for _ in cons] for cons in batch["concept_ids"]]
+        concept_value_units = [[NA for _ in cons] for cons in batch["concept_ids"]]
     numeric_stats_by_lab = collections.defaultdict(
         partial(TruncatedOnlineStatistics, capacity=capacity, value_outlier_std=value_outlier_std)
     )

@@ -1,11 +1,14 @@
+import collections
 import json
 import os
 import pickle
 from functools import partial
 from itertools import islice
-from typing import Any, Dict, List, Sequence, Union
+from typing import Any, Dict, List, Sequence, Tuple, Union
 
+import numpy as np
 import transformers
+from cehrbert_data.const.common import NA
 from datasets import Dataset, DatasetDict
 from tokenizers import Tokenizer
 from tokenizers.models import WordLevel
@@ -25,7 +28,7 @@ OUT_OF_VOCABULARY_TOKEN = "[OOV]"
 
 TOKENIZER_FILE_NAME = "tokenizer.json"
 CONCEPT_MAPPING_FILE_NAME = "concept_name_mapping.json"
-LAB_STATS_FILE_NAME = "cehrgpt_lab_stats.json"
+LAB_STATS_FILE_NAME = "cehrbert_lab_stats.json"
 
 
 def load_json_file(json_file) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
@@ -50,6 +53,76 @@ def load_json_file(json_file) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
         raise RuntimeError(f"Can't load the json file at {json_file}") from e
 
 
+def create_numeric_concept_unit_mapping(
+    lab_stats: List[Dict[str, Any]]
+) -> Tuple[Dict[str, List[float]], Dict[str, List[str]]]:
+    numeric_concept_unit_mapping = collections.defaultdict(list)
+    for each_lab_stat in lab_stats:
+        numeric_concept_unit_mapping[each_lab_stat["concept_id"]].append(
+            (each_lab_stat["count"], each_lab_stat["unit"])
+        )
+
+    concept_prob_mapping = dict()
+    concept_unit_mapping = dict()
+    for concept_id in numeric_concept_unit_mapping.keys():
+        counts, units = zip(*numeric_concept_unit_mapping[concept_id])
+        total_count = sum(counts)
+        probs = [float(c) / total_count for c in counts]
+        concept_prob_mapping[concept_id] = probs
+        concept_unit_mapping[concept_id] = units
+    return concept_prob_mapping, concept_unit_mapping
+
+
+class NumericEventStatistics:
+    def __init__(self, lab_stats: List[Dict[str, Any]]):
+        self._lab_stats = lab_stats
+        self._lab_stats_mapping = {
+            (lab_stat["concept_id"], lab_stat["unit"]): {
+                "unit": lab_stat["unit"],
+                "mean": lab_stat["mean"],
+                "std": lab_stat["std"],
+                "value_outlier_std": lab_stat["value_outlier_std"],
+                "lower_bound": lab_stat["lower_bound"],
+                "upper_bound": lab_stat["upper_bound"],
+            }
+            for lab_stat in lab_stats
+        }
+        self._concept_prob_mapping, self._concept_unit_mapping = create_numeric_concept_unit_mapping(lab_stats)
+
+    def get_numeric_concept_ids(self) -> List[str]:
+        return [_["concept_id"] for _ in self._lab_stats]
+
+    def get_random_unit(self, concept_id: str) -> str:
+        if concept_id in self._concept_prob_mapping:
+            unit_probs = self._concept_prob_mapping[concept_id]
+            return np.random.choice(self._concept_unit_mapping[concept_id], p=unit_probs)
+        return NA
+
+    def normalize(self, concept_id: str, unit: str, concept_value: float) -> float:
+        if (concept_id, unit) in self._lab_stats_mapping:
+            concept_unit_stats = self._lab_stats_mapping[(concept_id, unit)]
+            mean_ = concept_value - concept_unit_stats["mean"]
+            std = concept_unit_stats["std"]
+            if std > 0:
+                value_outlier_std = concept_unit_stats["value_outlier_std"]
+                normalized_value = mean_ / std
+                # Clip the value between the lower and upper bounds of the corresponding lab
+                normalized_value = max(-value_outlier_std, min(value_outlier_std, normalized_value))
+            else:
+                # If there is not a valid standard deviation,
+                # we just the normalized value to the mean of the standard normal
+                normalized_value = 0.0
+            return normalized_value
+        return concept_value
+
+    def denormalize(self, concept_id: str, value: float) -> Tuple[float, str]:
+        unit = self.get_random_unit(concept_id)
+        if (concept_id, unit) in self._lab_stats_mapping:
+            stats = self._lab_stats_mapping[(concept_id, unit)]
+            value = value * stats["std"] + stats["mean"]
+        return value, unit
+
+
 class CehrBertTokenizer(PushToHubMixin):
 
     def __init__(
@@ -60,17 +133,7 @@ class CehrBertTokenizer(PushToHubMixin):
     ):
         self._tokenizer = tokenizer
         self._lab_stats = lab_stats
-        self._lab_stat_mapping = {
-            lab_stat["concept_id"]: {
-                "unit": lab_stat["unit"],
-                "mean": lab_stat["mean"],
-                "std": lab_stat["std"],
-                "value_outlier_std": lab_stat["value_outlier_std"],
-                "lower_bound": lab_stat["lower_bound"],
-                "upper_bound": lab_stat["upper_bound"],
-            }
-            for lab_stat in lab_stats
-        }
+        self._numeric_event_statistics = NumericEventStatistics(lab_stats)
         self._concept_name_mapping = concept_name_mapping
         self._oov_token_index = self._tokenizer.token_to_id(OUT_OF_VOCABULARY_TOKEN)
         self._padding_token_index = self._tokenizer.token_to_id(PAD_TOKEN)
@@ -112,7 +175,13 @@ class CehrBertTokenizer(PushToHubMixin):
             UNUSED_TOKEN,
             OUT_OF_VOCABULARY_TOKEN,
         ]
-        return self.encode([_["concept_id"] for _ in self._lab_stats if _["concept_id"] not in reserved_tokens])
+        return self.encode(
+            [
+                concept_id
+                for concept_id in self._numeric_event_statistics.get_numeric_concept_ids()
+                if concept_id not in reserved_tokens
+            ]
+        )
 
     def encode(self, concept_ids: Sequence[str]) -> Sequence[int]:
         encoded = self._tokenizer.encode(concept_ids, is_pretokenized=True)
@@ -351,18 +420,5 @@ class CehrBertTokenizer(PushToHubMixin):
     def batch_concat_concepts(cls, records: Dict[str, List], feature_name) -> Dict[str, List]:
         return {feature_name: [" ".join(map(str, _)) for _ in records[feature_name]]}
 
-    def normalize(self, concept_id, concept_value) -> float:
-        if concept_id in self._lab_stat_mapping:
-            mean_ = concept_value - self._lab_stat_mapping[concept_id]["mean"]
-            std = self._lab_stat_mapping[concept_id]["std"]
-            if std > 0:
-                value_outlier_std = self._lab_stat_mapping[concept_id]["value_outlier_std"]
-                normalized_value = mean_ / self._lab_stat_mapping[concept_id]["std"]
-                # Clip the value between the lower and upper bounds of the corresponding lab
-                normalized_value = max(-value_outlier_std, min(value_outlier_std, normalized_value))
-            else:
-                # If there is not a valid standard deviation,
-                # we just the normalized value to the mean of the standard normal
-                normalized_value = 0.0
-            return normalized_value
-        return concept_value
+    def normalize(self, concept_id: str, unit: str, concept_value: float) -> float:
+        return self._numeric_event_statistics.normalize(concept_id, unit, concept_value)
