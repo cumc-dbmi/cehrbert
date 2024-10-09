@@ -103,8 +103,8 @@ def main():
         # If the data is in the MEDS format, we need to convert it to the CEHR-BERT format
         if data_args.is_data_in_med:
             meds_extension_path = get_meds_extension_path(
-                data_folder=os.path.abspath(data_args.cohort_folder),
-                dataset_prepared_path=os.path.abspath(data_args.dataset_prepared_path),
+                data_folder=os.path.expanduser(data_args.cohort_folder),
+                dataset_prepared_path=os.path.expanduser(data_args.dataset_prepared_path),
             )
             try:
                 LOG.info(f"Trying to load the MEDS extension from disk at {meds_extension_path}...")
@@ -126,7 +126,7 @@ def main():
             validation_set = dataset["validation"]
             test_set = dataset["test"]
         else:
-            dataset = load_parquet_as_dataset(os.path.abspath(data_args.data_folder))
+            dataset = load_parquet_as_dataset(os.path.expanduser(data_args.data_folder))
             test_set = None
             if data_args.test_data_folder:
                 test_set = load_parquet_as_dataset(data_args.test_data_folder)

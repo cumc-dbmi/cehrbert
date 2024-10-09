@@ -169,8 +169,8 @@ def main():
         # If the data is in the MEDS format, we need to convert it to the CEHR-BERT format
         if data_args.is_data_in_med:
             meds_extension_path = get_meds_extension_path(
-                data_folder=os.path.abspath(data_args.data_folder),
-                dataset_prepared_path=os.path.abspath(data_args.dataset_prepared_path),
+                data_folder=os.path.expanduser(data_args.data_folder),
+                dataset_prepared_path=os.path.expanduser(data_args.dataset_prepared_path),
             )
             try:
                 LOG.info(
@@ -194,7 +194,7 @@ def main():
         else:
             # Load the dataset from the parquet files
             dataset = load_parquet_as_dataset(
-                os.path.abspath(data_args.data_folder), split="train", streaming=data_args.streaming
+                os.path.expanduser(data_args.data_folder), split="train", streaming=data_args.streaming
             )
             # If streaming is enabled, we need to manually split the data into train/val
             if data_args.streaming and data_args.validation_split_num:

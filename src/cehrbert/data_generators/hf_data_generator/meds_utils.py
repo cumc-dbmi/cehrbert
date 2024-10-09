@@ -433,21 +433,21 @@ def _create_cehrbert_data_from_meds(
     assert split in ["held_out", "train", "tuning"]
     batches = []
     if data_args.cohort_folder:
-        cohort = pd.read_parquet(os.path.join(os.path.abspath(data_args.cohort_folder), split))
+        cohort = pd.read_parquet(os.path.join(os.path.expanduser(data_args.cohort_folder), split))
         for cohort_row in cohort.itertuples():
             subject_id = cohort_row.subject_id
             prediction_time = cohort_row.prediction_time
             label = int(cohort_row.boolean_value)
             batches.append((subject_id, prediction_time, label))
     else:
-        patient_split = get_subject_split(os.path.abspath(data_args.data_folder))
+        patient_split = get_subject_split(os.path.expanduser(data_args.data_folder))
         for subject_id in patient_split[split]:
             batches.append((subject_id, None, None))
 
     split_batches = np.array_split(np.asarray(batches), data_args.preprocessing_num_workers)
     batch_func = functools.partial(
         _meds_to_cehrbert_generator,
-        path_to_db=os.path.abspath(data_args.data_folder),
+        path_to_db=os.path.expanduser(data_args.data_folder),
         default_visit_id=default_visit_id,
         meds_to_cehrbert_conversion_type=data_args.meds_to_cehrbert_conversion_type,
     )
