@@ -67,7 +67,10 @@ def create_numeric_concept_unit_mapping(
     for concept_id in numeric_concept_unit_mapping.keys():
         counts, units = zip(*numeric_concept_unit_mapping[concept_id])
         total_count = sum(counts)
-        probs = [float(c) / total_count for c in counts]
+        if total_count == 0:
+            probs = [1.0]
+        else:
+            probs = [float(c) / total_count for c in counts]
         concept_prob_mapping[concept_id] = probs
         concept_unit_mapping[concept_id] = units
     return concept_prob_mapping, concept_unit_mapping
