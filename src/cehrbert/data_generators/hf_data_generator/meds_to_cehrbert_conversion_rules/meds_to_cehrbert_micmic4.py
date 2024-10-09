@@ -1,13 +1,69 @@
 import re
-from typing import List
+from datetime import datetime
+from typing import List, Tuple
 
+import meds_reader
+
+from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import birth_codes
 from cehrbert.data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules.meds_to_cehrbert_base import (
     EventConversionRule,
     MedsToCehrBertConversion,
 )
+from cehrbert.data_generators.hf_data_generator.meds_utils import PatientBlock, PatientDemographics
 
 
 class MedsToBertMimic4(MedsToCehrBertConversion):
+
+    def __init__(self, default_visit_id):
+        super().__init__()
+        self.default_visit_id = default_visit_id
+
+    def generate_demographics_and_patient_blocks(
+        self, patient: meds_reader.Subject, prediction_time: datetime = None
+    ) -> Tuple[PatientDemographics, List[PatientBlock]]:
+
+        birth_datetime = None
+        race = None
+        gender = None
+        ethnicity = None
+
+        visit_id = self.default_visit_id
+        current_date = None
+        events_for_current_date = []
+        patient_blocks = []
+        for e in patient.events:
+
+            # Skip out of the loop if the events' time stamps are beyond the prediction time
+            if prediction_time is not None and e.time is not None:
+                if e.time > prediction_time:
+                    break
+
+            # This indicates demographics features
+            if e.code in birth_codes:
+                birth_datetime = e.time
+            elif e.code.upper().startswith("RACE"):
+                race = e.code
+            elif e.code.upper().startswith("GENDER"):
+                gender = e.code
+            elif e.code.upper().startswith("ETHNICITY"):
+                ethnicity = e.code
+            elif e.time is not None:
+                if not current_date:
+                    current_date = e.time
+
+                if current_date.date() == e.time.date():
+                    events_for_current_date.append(e)
+                else:
+                    patient_blocks.append(PatientBlock(events_for_current_date, visit_id, self))
+                    events_for_current_date = [e]
+                    current_date = e.time
+                    visit_id += 1
+
+        if events_for_current_date:
+            patient_blocks.append(PatientBlock(events_for_current_date, visit_id, self))
+
+        demographics = PatientDemographics(birth_datetime=birth_datetime, race=race, gender=gender, ethnicity=ethnicity)
+        return demographics, patient_blocks
 
     def _create_ed_admission_matching_rules(self) -> List[str]:
         return ["ED_REGISTRATION//", "TRANSFER_TO//ED"]

@@ -1,7 +1,12 @@
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List, Optional
+from datetime import datetime
+from typing import List, Optional, Tuple
+
+import meds_reader
+
+from cehrbert.data_generators.hf_data_generator.meds_utils import PatientBlock, PatientDemographics
 
 
 @dataclass
@@ -68,6 +73,24 @@ class MedsToCehrBertConversion(ABC):
         self._admission_matching_rules = self._create_admission_matching_rules()
         self._discharge_matching_rules = self._create_discharge_matching_rules()
         self._text_event_numeric_event_map = {r.code: r for r in self._create_text_event_to_numeric_event_rules()}
+
+    @abstractmethod
+    def generate_demographics_and_patient_blocks(
+        self, patient: meds_reader.Subject, prediction_time: datetime = None
+    ) -> Tuple[PatientDemographics, List[PatientBlock]]:
+        """
+        Abstract method for generating demographics and a list of patient blocks from a meds_reader Subject.
+
+        Args:
+            patient:
+            prediction_time:
+
+        Returns:
+             Tuple[PatientDemographics, List[PatientBlock]]
+        """
+        raise NotImplementedError(
+            "Must implement the method for generating the patient blocks from a meds_reader Subject"
+        )
 
     @abstractmethod
     def _create_ed_admission_matching_rules(self) -> List[str]:
