@@ -53,13 +53,14 @@ def load_and_create_tokenizer(
         tokenizer = load_and_create_tokenizer(data_args, model_args, dataset)
     """
     # Try to load the pretrained tokenizer
+    tokenizer_name_or_path = os.path.expanduser(model_args.tokenizer_name_or_path)
     try:
-        tokenizer = CehrBertTokenizer.from_pretrained(model_args.tokenizer_name_or_path)
+        tokenizer = CehrBertTokenizer.from_pretrained(tokenizer_name_or_path)
     except (OSError, RuntimeError, FileNotFoundError, json.JSONDecodeError) as e:
         LOG.warning(
             "Failed to load the tokenizer from %s with the error "
             "\n%s\nTried to create the tokenizer, however the dataset is not provided.",
-            model_args.tokenizer_name_or_path,
+            tokenizer_name_or_path,
             e,
         )
         if dataset is None:
@@ -67,7 +68,7 @@ def load_and_create_tokenizer(
         tokenizer = CehrBertTokenizer.train_tokenizer(
             dataset, feature_names=["concept_ids"], concept_name_mapping={}, data_args=data_args
         )
-        tokenizer.save_pretrained(model_args.tokenizer_name_or_path)
+        tokenizer.save_pretrained(tokenizer_name_or_path)
 
     return tokenizer
 
@@ -93,7 +94,7 @@ def load_and_create_model(model_args: ModelArguments, tokenizer: CehrBertTokeniz
         model = load_and_create_model(model_args, tokenizer)
     """
     try:
-        model_config = AutoConfig.from_pretrained(model_args.model_name_or_path)
+        model_config = AutoConfig.from_pretrained(os.path.expanduser(model_args.model_name_or_path))
     except (OSError, ValueError, FileNotFoundError, json.JSONDecodeError) as e:
         LOG.warning(e)
         model_config = CehrBertConfig(
@@ -168,8 +169,8 @@ def main():
         # If the data is in the MEDS format, we need to convert it to the CEHR-BERT format
         if data_args.is_data_in_med:
             meds_extension_path = get_meds_extension_path(
-                data_folder=data_args.data_folder,
-                dataset_prepared_path=data_args.dataset_prepared_path,
+                data_folder=os.path.expanduser(data_args.data_folder),
+                dataset_prepared_path=os.path.expanduser(data_args.dataset_prepared_path),
             )
             try:
                 LOG.info(
@@ -180,14 +181,11 @@ def main():
                 if data_args.streaming:
                     if isinstance(dataset, DatasetDict):
                         dataset = {
-                            k: v.to_iterable_dataset(
-                                num_shards=training_args.dataloader_num_workers
-                            ) for k, v in dataset.items()
+                            k: v.to_iterable_dataset(num_shards=training_args.dataloader_num_workers)
+                            for k, v in dataset.items()
                         }
                     else:
-                        dataset = dataset.to_iterable_dataset(
-                            num_shards=training_args.dataloader_num_workers
-                        )
+                        dataset = dataset.to_iterable_dataset(num_shards=training_args.dataloader_num_workers)
             except FileNotFoundError as e:
                 LOG.exception(e)
                 dataset = create_dataset_from_meds_reader(data_args, is_pretraining=True)
@@ -195,7 +193,9 @@ def main():
                     dataset.save_to_disk(meds_extension_path)
         else:
             # Load the dataset from the parquet files
-            dataset = load_parquet_as_dataset(data_args.data_folder, split="train", streaming=data_args.streaming)
+            dataset = load_parquet_as_dataset(
+                os.path.expanduser(data_args.data_folder), split="train", streaming=data_args.streaming
+            )
             # If streaming is enabled, we need to manually split the data into train/val
             if data_args.streaming and data_args.validation_split_num:
                 dataset = dataset.shuffle(buffer_size=10_000, seed=training_args.seed)

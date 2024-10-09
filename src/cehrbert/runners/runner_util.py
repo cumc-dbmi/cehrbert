@@ -48,7 +48,7 @@ def load_parquet_as_dataset(data_folder, split="train", streaming=False) -> Unio
         files differ in schema or are meant to represent different splits, separate calls and directory structuring
         are advised.
     """
-    data_abspath = os.path.abspath(data_folder)
+    data_abspath = os.path.expanduser(data_folder)
     data_files = glob.glob(os.path.join(data_abspath, "*.parquet"))
     dataset = load_dataset("parquet", data_files=data_files, split=split, streaming=streaming)
     return dataset
@@ -89,7 +89,7 @@ def get_last_hf_checkpoint(training_args):
         ... )
         >>> last_checkpoint = get_last_hf_checkpoint(training_args)
         >>> print(last_checkpoint)
-        '/absolute/path/to/results/checkpoint-500'
+        '/path/to/results/checkpoint-500'
 
     Note:
         If `last_checkpoint` is detected and `resume_from_checkpoint` is None, training will automatically
@@ -174,12 +174,12 @@ def generate_prepared_ds_path(data_args, model_args, data_folder=None) -> Path:
         >>> model_args = ModelArguments(max_position_embeddings=512, tokenizer_name_or_path='bert-base-uncased')
         >>> path = generate_prepared_ds_path(data_args, model_args)
         >>> print(path)
-        PosixPath('/absolute/path/to/prepared/datafoldername_hash')
+        PosixPath('/path/to/prepared/datafoldername_hash')
 
     Note:
         The hash is generated from a combination of the following:
         - model_args.max_position_embeddings
-        - Absolute paths of `data_folder` and `model_args.tokenizer_name_or_path`
+        - paths of `data_folder` and `model_args.tokenizer_name_or_path`
         - `data_args.validation_split_percentage` (if provided)
         - `data_args.test_eval_ratio`, `data_args.split_by_patient`, and `data_args.chronological_split`
 
@@ -189,9 +189,9 @@ def generate_prepared_ds_path(data_args, model_args, data_folder=None) -> Path:
     concatenated_str = (
         str(model_args.max_position_embeddings)
         + "|"
-        + os.path.abspath(data_folder)
+        + os.path.expanduser(data_folder)
         + "|"
-        + os.path.abspath(model_args.tokenizer_name_or_path)
+        + os.path.expanduser(model_args.tokenizer_name_or_path)
         + "|"
         + (str(data_args.validation_split_percentage) if data_args.validation_split_percentage else "")
         + "|"
@@ -206,7 +206,7 @@ def generate_prepared_ds_path(data_args, model_args, data_folder=None) -> Path:
     LOG.info(f"concatenated_str: {concatenated_str}")
     ds_hash = f"{cleaned_basename}_{str(md5(concatenated_str))}"
     LOG.info(f"ds_hash: {ds_hash}")
-    prepared_ds_path = Path(os.path.abspath(data_args.dataset_prepared_path)) / ds_hash
+    prepared_ds_path = Path(os.path.expanduser(data_args.dataset_prepared_path)) / ds_hash
     return prepared_ds_path
 
 
@@ -252,9 +252,9 @@ def parse_runner_args() -> Tuple[DataTrainingArguments, ModelArguments, Training
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.expanduser(sys.argv[1]))
     elif len(sys.argv) == 2 and sys.argv[1].endswith(".yaml"):
-        model_args, data_args, training_args = parser.parse_yaml_file(yaml_file=os.path.abspath(sys.argv[1]))
+        model_args, data_args, training_args = parser.parse_yaml_file(yaml_file=os.path.expanduser(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
     return data_args, model_args, training_args
