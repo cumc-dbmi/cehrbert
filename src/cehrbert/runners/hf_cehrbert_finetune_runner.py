@@ -65,10 +65,11 @@ def compute_metrics(references: Union[List[float], pd.Series], probs: Union[List
 def load_pretrained_tokenizer(
     model_args,
 ) -> CehrBertTokenizer:
+    tokenizer_name_or_path = os.path.expanduser(model_args.tokenizer_name_or_path)
     try:
-        return CehrBertTokenizer.from_pretrained(model_args.tokenizer_name_or_path)
+        return CehrBertTokenizer.from_pretrained(tokenizer_name_or_path)
     except Exception:
-        raise ValueError(f"Can not load the pretrained tokenizer from {model_args.tokenizer_name_or_path}")
+        raise ValueError(f"Can not load the pretrained tokenizer from {tokenizer_name_or_path}")
 
 
 def load_finetuned_model(model_args: ModelArguments, model_name_or_path: str) -> CehrBertPreTrainedModel:
@@ -81,6 +82,7 @@ def load_finetuned_model(model_args: ModelArguments, model_name_or_path: str) ->
             f"finetune_model_type can be one of the following types {[e.value for e in FineTuneModelType]}"
         )
     # Try to create a new model based on the base model
+    model_name_or_path = os.path.expanduser(model_name_or_path)
     try:
         return finetune_model_cls.from_pretrained(model_name_or_path)
     except ValueError:
