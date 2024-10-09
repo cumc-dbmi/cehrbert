@@ -16,10 +16,9 @@ from tokenizers.trainers import WordLevelTrainer
 from tqdm import tqdm
 from transformers.tokenization_utils_base import PushToHubMixin
 
-from cehrbert.models.hf_models.tokenization_utils import agg_helper, agg_statistics, map_statistics
+from cehrbert.models.hf_models.tokenization_utils import NA, agg_helper, agg_statistics, map_statistics
 from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments
 
-NA = "N/A"
 PAD_TOKEN = "[PAD]"
 CLS_TOKEN = "[CLS]"
 MASK_TOKEN = "[MASK]"
