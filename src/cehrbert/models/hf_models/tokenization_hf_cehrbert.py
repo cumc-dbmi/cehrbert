@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Sequence, Tuple, Union
 
 import numpy as np
 import transformers
+from cehrbert_data.const.common import NA
 from datasets import Dataset, DatasetDict
 from tokenizers import Tokenizer
 from tokenizers.models import WordLevel
@@ -16,7 +17,7 @@ from tokenizers.trainers import WordLevelTrainer
 from tqdm import tqdm
 from transformers.tokenization_utils_base import PushToHubMixin
 
-from cehrbert.models.hf_models.tokenization_utils import NA, agg_helper, agg_statistics, map_statistics
+from cehrbert.models.hf_models.tokenization_utils import agg_helper, agg_statistics, map_statistics
 from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments
 
 PAD_TOKEN = "[PAD]"

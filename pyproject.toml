@@ -58,7 +58,7 @@ dependencies = [
     "Werkzeug==3.0.1",
     "wandb==0.17.8",
     "xgboost==2.0.3",
-    "cehrbert_data==0.0.1"
+    "cehrbert_data==0.0.3"
 ]
 
 [tool.setuptools_scm]

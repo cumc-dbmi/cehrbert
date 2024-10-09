@@ -4,9 +4,9 @@ import pickle
 from functools import partial
 from typing import Any, Dict
 
-from cehrbert.utils.stat_utils import TruncatedOnlineStatistics
+from cehrbert_data.const.common import NA
 
-NA = "N/A"
+from cehrbert.utils.stat_utils import TruncatedOnlineStatistics
 
 
 def load_json_file(json_file):

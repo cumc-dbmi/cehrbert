@@ -2,7 +2,7 @@ import dataclasses
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 
-from cehrbert_data.decorators.patient_event_decorator import AttType
+from cehrbert_data.decorators.patient_event_decorator_base import AttType
 
 from cehrbert.data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules import (
     MedsToBertMimic4,
