@@ -10,6 +10,7 @@ Event = TypedDict(
         "code": str,
         "text_value": NotRequired[Optional[str]],
         "numeric_value": NotRequired[Optional[float]],
+        "unit": NotRequired[Optional[str]],
         "datetime_value": NotRequired[datetime.datetime],
         "properties": NotRequired[Optional[Mapping[str, Any]]],
     },
