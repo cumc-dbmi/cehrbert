@@ -1,3 +1,4 @@
+from collections import defaultdict
 from datetime import datetime
 from typing import List, Tuple
 
@@ -22,22 +23,9 @@ class MedsToCehrbertOMOP(MedsToCehrBertConversion):
         gender = None
         ethnicity = None
 
-        current_visit_id = None
-        current_date = None
-        events_for_current_date = []
-        patient_blocks = []
-
+        visit_events = defaultdict(list)
+        unlinked_event_mapping = defaultdict(list)
         for e in patient.events:
-
-            # Skip out of the loop if the events' time stamps are beyond the prediction time
-            if prediction_time is not None and e.time is not None:
-                if e.time > prediction_time:
-                    break
-
-            # Try to set current_visit_id
-            if not current_visit_id:
-                current_visit_id = e.visit_id if hasattr(e, "visit_id") else None
-
             # This indicates demographics features
             if e.code in birth_codes:
                 birth_datetime = e.time
@@ -48,19 +36,43 @@ class MedsToCehrbertOMOP(MedsToCehrBertConversion):
             elif e.code.upper().startswith("ETHNICITY"):
                 ethnicity = e.code
             elif e.time is not None:
-                if not current_date:
-                    current_date = e.time
-                if current_date.date() == e.time.date():
-                    events_for_current_date.append(e)
+                # Skip out of the loop if the events' time stamps are beyond the prediction time
+                if prediction_time is not None:
+                    if e.time > prediction_time:
+                        break
+                if hasattr(e, "visit_id"):
+                    visit_id = e.visit_id
+                    visit_events[visit_id].append(e)
                 else:
-                    patient_blocks.append(PatientBlock(events_for_current_date, current_visit_id, self))
-                    events_for_current_date = [e]
-                    current_date = e.time
+                    unlinked_event_mapping[e.time.strftime("%Y-%m-%d")].append(e)
 
-        if events_for_current_date:
-            patient_blocks.append(PatientBlock(events_for_current_date, current_visit_id, self))
+        patient_block_mapping = {
+            visit_id: PatientBlock(events=events, visit_id=visit_id, conversion=self)
+            for visit_id, events in visit_events.items()
+        }
 
+        # Try to connect the unlinked events to existing visits
+        for current_date_str in list(unlinked_event_mapping.keys()):
+            current_date = datetime.strptime(current_date_str, "%Y-%m-%d")
+            for visit_id, patient_block in patient_block_mapping.items():
+                if patient_block.min_time.date() <= current_date <= patient_block.max_time.date():
+                    patient_block.events.extend(unlinked_event_mapping.pop(current_date_str, []))
+                    # Need to sort the events if we insert new events to the patient block
+                    patient_block.events = sorted(patient_block.events, key=lambda _: _.time)
+                    break
+
+        max_visit_id = max(patient_block_mapping.keys()) + 1
+        for events in unlinked_event_mapping.values():
+            patient_block_mapping[max_visit_id] = PatientBlock(events, max_visit_id, self)
+            max_visit_id += 1
+
+        patient_blocks = list(patient_block_mapping.values())
         demographics = PatientDemographics(birth_datetime=birth_datetime, race=race, gender=gender, ethnicity=ethnicity)
+
+        # If there are unlinked events, we need to add them as new patient blocks, therefore we need to re-order the patient block
+        if len(unlinked_event_mapping) > 0:
+            patient_blocks = sorted(patient_block_mapping.values(), key=lambda block: block.min_time)
+
         return demographics, patient_blocks
 
     def _create_ed_admission_matching_rules(self) -> List[str]:
