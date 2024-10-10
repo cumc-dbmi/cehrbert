@@ -26,6 +26,7 @@ class MedsToCehrbertOMOP(MedsToCehrBertConversion):
         current_date = None
         events_for_current_date = []
         patient_blocks = []
+
         for e in patient.events:
 
             # Skip out of the loop if the events' time stamps are beyond the prediction time
