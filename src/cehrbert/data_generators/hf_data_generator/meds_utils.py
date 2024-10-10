@@ -1,28 +1,22 @@
 import collections
 import functools
 import os
-import re
-from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from typing import Dict, List, Tuple, Union
 
 import meds_reader
 import numpy as np
 import pandas as pd
 from datasets import Dataset, DatasetDict, Split
 
-from cehrbert.data_generators.hf_data_generator import (
-    DEFAULT_ED_CONCEPT_ID,
-    DEFAULT_INPATIENT_CONCEPT_ID,
-    DEFAULT_OUTPATIENT_CONCEPT_ID,
-    UNKNOWN_VALUE,
-)
+from cehrbert.data_generators.hf_data_generator import DEFAULT_INPATIENT_CONCEPT_ID, UNKNOWN_VALUE
 from cehrbert.data_generators.hf_data_generator.hf_dataset import apply_cehrbert_dataset_mapping
 from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import MedToCehrBertDatasetMapping
-from cehrbert.data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules.meds_to_cehrbert_base import (
-    MedsToCehrBertConversion,
+from cehrbert.data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules import MedsToCehrBertConversion
+from cehrbert.data_generators.hf_data_generator.patient_block import (
+    get_func_for_generate_demographics_and_patient_blocks,
 )
-from cehrbert.med_extension.schema_extension import CehrBertPatient, Event, Visit
+from cehrbert.med_extension.schema_extension import CehrBertPatient, Visit
 from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments, MedsToCehrBertConversionType
 
 MEDS_SPLIT_DATA_SPLIT_MAPPING = {
@@ -50,186 +44,6 @@ def get_subject_split(meds_reader_db_path: str) -> Dict[str, List[int]]:
     patient_split = pd.read_parquet(os.path.join(meds_reader_db_path, "metadata/subject_splits.parquet"))
     result = {str(group): records["subject_id"].tolist() for group, records in patient_split.groupby("split")}
     return result
-
-
-@dataclass
-class PatientDemographics:
-    birth_datetime: datetime = None
-    race: str = None
-    gender: str = None
-    ethnicity: str = None
-
-
-class PatientBlock:
-    """
-    Represents a block of medical events for a single patient visit, including.
-
-    inferred visit type and various admission and discharge statuses.
-
-    Attributes:
-        visit_id (int): The unique ID of the visit.
-        events (List[meds_reader.Event]): A list of medical events associated with this visit.
-        min_time (datetime): The earliest event time in the visit.
-        max_time (datetime): The latest event time in the visit.
-        conversion (MedsToCehrBertConversion): Conversion object for mapping event codes to CEHR-BERT.
-        has_ed_admission (bool): Whether the visit includes an emergency department (ED) admission event.
-        has_admission (bool): Whether the visit includes an admission event.
-        has_discharge (bool): Whether the visit includes a discharge event.
-        visit_type (str): The inferred type of visit, such as inpatient, ED, or outpatient.
-    """
-
-    def __init__(
-        self,
-        events: List[meds_reader.Event],
-        visit_id: int,
-        conversion: MedsToCehrBertConversion,
-    ):
-        """
-        Initializes a PatientBlock instance, inferring the visit type based on the events and caching.
-
-        admission and discharge status.
-
-        Args:
-            events (List[meds_reader.Event]): The medical events associated with the visit.
-            visit_id (int): The unique ID of the visit.
-            conversion (MedsToCehrBertConversion): Conversion object for mapping event codes to CEHR-BERT.
-
-        Attributes are initialized to store visit metadata and calculate admission/discharge statuses.
-        """
-        self.visit_id = visit_id
-        self.events = events
-        self.min_time = events[0].time
-        self.max_time = events[-1].time
-        self.conversion = conversion
-
-        # Cache these variables so we don't need to compute
-        self.has_ed_admission = self._has_ed_admission()
-        self.has_admission = self._has_admission()
-        self.has_discharge = self._has_discharge()
-
-        # Infer the visit_type from the events
-        # Admission takes precedence over ED
-        if self.has_admission:
-            self.visit_type = DEFAULT_INPATIENT_CONCEPT_ID
-        elif self.has_ed_admission:
-            self.visit_type = DEFAULT_ED_CONCEPT_ID
-        else:
-            self.visit_type = DEFAULT_OUTPATIENT_CONCEPT_ID
-
-    def _has_ed_admission(self) -> bool:
-        """
-        Determines if the visit includes an emergency department (ED) admission event.
-
-        Returns:
-            bool: True if an ED admission event is found, False otherwise.
-        """
-        for event in self.events:
-            for matching_rule in self.conversion.get_ed_admission_matching_rules():
-                if re.match(matching_rule, event.code):
-                    return True
-        return False
-
-    def _has_admission(self) -> bool:
-        """
-        Determines if the visit includes a hospital admission event.
-
-        Returns:
-            bool: True if an admission event is found, False otherwise.
-        """
-        for event in self.events:
-            for matching_rule in self.conversion.get_admission_matching_rules():
-                if re.match(matching_rule, event.code):
-                    return True
-        return False
-
-    def _has_discharge(self) -> bool:
-        """
-        Determines if the visit includes a discharge event.
-
-        Returns:
-            bool: True if a discharge event is found, False otherwise.
-        """
-        for event in self.events:
-            for matching_rule in self.conversion.get_discharge_matching_rules():
-                if re.match(matching_rule, event.code):
-                    return True
-        return False
-
-    def get_discharge_facility(self) -> Optional[str]:
-        """
-        Extracts the discharge facility code from the discharge event, if present.
-
-        Returns:
-            Optional[str]: The sanitized discharge facility code, or None if no discharge event is found.
-        """
-        if self._has_discharge():
-            for event in self.events:
-                for matching_rule in self.conversion.get_discharge_matching_rules():
-                    if matching_rule in event.code:
-                        discharge_facility = event.code.replace(matching_rule, "")
-                        discharge_facility = re.sub(r"[^a-zA-Z]", "_", discharge_facility)
-                        return discharge_facility
-        return None
-
-    def _convert_event(self, event) -> List[Event]:
-        """
-        Converts a medical event into a list of CEHR-BERT-compatible events, potentially parsing.
-
-        numeric values from text-based events.
-
-        Args:
-            event (meds_reader.Event): The medical event to be converted.
-
-        Returns:
-            List[Event]: A list of converted events, possibly numeric, based on the original event's code and value.
-        """
-        code = event.code
-        time = getattr(event, "time", None)
-        text_value = getattr(event, "text_value", None)
-        numeric_value = getattr(event, "numeric_value", None)
-        unit = getattr(event, "unit", None)
-
-        if numeric_value is None and text_value is not None:
-            conversion_rule = self.conversion.get_text_event_to_numeric_events_rule(code)
-            if conversion_rule:
-                match = re.search(conversion_rule.parsing_pattern, text_value)
-                if match:
-                    if len(match.groups()) == len(conversion_rule.mapped_event_labels):
-                        events = [
-                            Event(
-                                code=label,
-                                time=time,
-                                numeric_value=float(value),
-                                unit=unit,
-                                properties={"visit_id": self.visit_id, "table": "meds"},
-                            )
-                            for label, value in zip(conversion_rule.mapped_event_labels, match.groups())
-                            if value.isnumeric()
-                        ]
-                        return events
-
-        return [
-            Event(
-                code=code,
-                time=time,
-                numeric_value=numeric_value,
-                unit=unit,
-                text_value=text_value,
-                properties={"visit_id": self.visit_id, "table": "meds"},
-            )
-        ]
-
-    def get_meds_events(self) -> Iterable[Event]:
-        """
-        Retrieves all medication events for the visit, converting each raw event if necessary.
-
-        Returns:
-            Iterable[Event]: A list of CEHR-BERT-compatible medication events for the visit.
-        """
-        events = []
-        for e in self.events:
-            events.extend(self._convert_event(e))
-        return events
 
 
 def convert_one_patient(
@@ -303,8 +117,8 @@ def convert_one_patient(
         label=1
     )
     """
-    demographics, patient_blocks = conversion.generate_demographics_and_patient_blocks(
-        patient=patient, prediction_time=prediction_time
+    demographics, patient_blocks = generate_demographics_and_patient_blocks(
+        conversion=conversion, patient=patient, prediction_time=prediction_time
     )
 
     patient_block_dict = collections.defaultdict(list)
