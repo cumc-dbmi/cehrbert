@@ -14,6 +14,7 @@ from cehrbert.models.hf_models.hf_cehrbert import CehrBertForPreTraining
 from cehrbert.models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments, ModelArguments
 from cehrbert.runners.runner_util import (
+    convert_dataset_to_iterable_dataset,
     generate_prepared_ds_path,
     get_last_hf_checkpoint,
     get_meds_extension_path,
@@ -160,7 +161,9 @@ def main():
         LOG.info("Loading prepared dataset from disk at %s...", prepared_ds_path)
         processed_dataset = load_from_disk(str(prepared_ds_path))
         if data_args.streaming:
-            processed_dataset = processed_dataset.to_iterable_dataset(num_shards=training_args.dataloader_num_workers)
+            processed_dataset = convert_dataset_to_iterable_dataset(
+                processed_dataset, num_shards=training_args.dataloader_num_workers
+            )
         LOG.info("Prepared dataset loaded from disk...")
         # If the data has been processed in the past, it's assume the tokenizer has been created
         # before. We load the CEHR-BERT tokenizer from the output folder.
@@ -179,13 +182,9 @@ def main():
                 )
                 dataset = load_from_disk(meds_extension_path)
                 if data_args.streaming:
-                    if isinstance(dataset, DatasetDict):
-                        dataset = {
-                            k: v.to_iterable_dataset(num_shards=training_args.dataloader_num_workers)
-                            for k, v in dataset.items()
-                        }
-                    else:
-                        dataset = dataset.to_iterable_dataset(num_shards=training_args.dataloader_num_workers)
+                    dataset = convert_dataset_to_iterable_dataset(
+                        dataset, num_shards=training_args.dataloader_num_workers
+                    )
             except FileNotFoundError as e:
                 LOG.exception(e)
                 dataset = create_dataset_from_meds_reader(data_args, is_pretraining=True)
