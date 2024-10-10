@@ -240,7 +240,8 @@ def omop_meds_generate_demographics_and_patient_blocks(
             if prediction_time is not None:
                 if e.time > prediction_time:
                     break
-            if hasattr(e, "visit_id"):
+
+            if getattr(e, "visit_id", None):
                 visit_id = e.visit_id
                 visit_events[visit_id].append(e)
             else:
@@ -253,7 +254,7 @@ def omop_meds_generate_demographics_and_patient_blocks(
 
     # Try to connect the unlinked events to existing visits
     for current_date_str in list(unlinked_event_mapping.keys()):
-        current_date = datetime.strptime(current_date_str, "%Y-%m-%d")
+        current_date = datetime.strptime(current_date_str, "%Y-%m-%d").date()
         for visit_id, patient_block in patient_block_mapping.items():
             if patient_block.min_time.date() <= current_date <= patient_block.max_time.date():
                 patient_block.events.extend(unlinked_event_mapping.pop(current_date_str, []))
@@ -261,7 +262,7 @@ def omop_meds_generate_demographics_and_patient_blocks(
                 patient_block.events = sorted(patient_block.events, key=lambda _: _.time)
                 break
 
-    max_visit_id = max(patient_block_mapping.keys()) + 1
+    max_visit_id = max(patient_block_mapping.keys()) + 1 if len(patient_block_mapping) > 0 else 1
     for events in unlinked_event_mapping.values():
         patient_block_mapping[max_visit_id] = PatientBlock(events, max_visit_id, conversion)
         max_visit_id += 1
