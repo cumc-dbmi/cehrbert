@@ -113,7 +113,8 @@ class DataTrainingArguments:
     # TODO: Python 3.9/10 do not support dynamic unpacking, we have to manually provide the entire
     #  list right now.
     meds_to_cehrbert_conversion_type: Literal[
-        MedsToCehrBertConversionType[MedsToBertMimic4.__name__, MedsToCehrbertOMOP.__name__]
+        MedsToCehrBertConversionType[MedsToBertMimic4.__name__],
+        MedsToCehrBertConversionType[MedsToCehrbertOMOP.__name__],
     ] = dataclasses.field(
         default=MedsToCehrBertConversionType[MedsToBertMimic4.__name__],
         metadata={

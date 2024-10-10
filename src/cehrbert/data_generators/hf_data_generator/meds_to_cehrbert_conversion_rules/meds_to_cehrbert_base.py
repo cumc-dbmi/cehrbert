@@ -3,10 +3,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import List, Optional
 
-import meds_reader
-
-from cehrbert.data_generators.hf_data_generator.meds_utils import PatientBlock, PatientDemographics
-
 
 @dataclass
 class EventConversionRule:

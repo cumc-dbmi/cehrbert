@@ -13,9 +13,7 @@ from cehrbert.data_generators.hf_data_generator import DEFAULT_INPATIENT_CONCEPT
 from cehrbert.data_generators.hf_data_generator.hf_dataset import apply_cehrbert_dataset_mapping
 from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import MedToCehrBertDatasetMapping
 from cehrbert.data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules import MedsToCehrBertConversion
-from cehrbert.data_generators.hf_data_generator.patient_block import (
-    get_func_for_generate_demographics_and_patient_blocks,
-)
+from cehrbert.data_generators.hf_data_generator.patient_block import generate_demographics_and_patient_blocks
 from cehrbert.med_extension.schema_extension import CehrBertPatient, Visit
 from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments, MedsToCehrBertConversionType
 

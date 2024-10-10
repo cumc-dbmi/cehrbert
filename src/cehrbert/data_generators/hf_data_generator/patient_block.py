@@ -17,7 +17,6 @@ from cehrbert.data_generators.hf_data_generator.meds_to_cehrbert_conversion_rule
     MedsToCehrBertConversion,
     MedsToCehrbertOMOP,
 )
-from cehrbert.data_generators.hf_data_generator.meds_utils import PatientBlock, PatientDemographics
 from cehrbert.med_extension.schema_extension import Event
 
 
