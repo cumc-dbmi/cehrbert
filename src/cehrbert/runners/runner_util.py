@@ -4,10 +4,10 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Tuple, Union
+from typing import Dict, Tuple, Union
 
 import torch
-from datasets import Dataset, IterableDataset, load_dataset
+from datasets import Dataset, DatasetDict, IterableDataset, IterableDatasetDict, load_dataset
 from torch.nn import functional as F
 from transformers import EvalPrediction, HfArgumentParser, TrainingArguments
 from transformers.trainer_utils import get_last_checkpoint
@@ -337,3 +337,53 @@ def get_meds_extension_path(data_folder: str, dataset_prepared_path: str):
     basename = os.path.basename(data_folder)
     meds_extension_path = os.path.join(dataset_prepared_path, f"{basename}_meds_extension")
     return meds_extension_path
+
+
+def convert_dataset_to_iterable_dataset(
+    dataset: Union[Dataset, DatasetDict], num_shards: int = 1
+) -> Union[IterableDataset, Dict[str, IterableDataset]]:
+    """
+    Converts a Hugging Face `Dataset` or `DatasetDict` into an `IterableDataset` or.
+
+    a dictionary of `IterableDataset` objects, enabling efficient parallel processing
+    using multiple workers in a data loader.
+
+    Parameters
+    ----------
+    dataset : Union[Dataset, DatasetDict]
+        The input dataset, which can be either:
+        - A single `Dataset` object
+        - A `DatasetDict` (containing multiple datasets, such as train, validation, and test splits)
+
+    num_shards : int
+        The number of workers (shards) to split the dataset into for parallel data loading.
+        This allows efficient sharding of the dataset across multiple workers.
+
+    Returns
+    -------
+    Union[IterableDataset, Dict[str, IterableDataset]]
+        The converted dataset, either as:
+        - A single `IterableDataset` if the input was a `Dataset`
+        - A dictionary of `IterableDataset` objects if the input was a `DatasetDict` or `IterableDatasetDict`
+
+    Notes
+    -----
+    - If the input `dataset` is a `DatasetDict` (or `IterableDatasetDict`), each dataset split
+      (e.g., train, validation, test) is converted into an `IterableDataset`.
+    - If the input `dataset` is a single `Dataset`, it is directly converted into an `IterableDataset`.
+    - The `num_shards` parameter in `to_iterable_dataset` allows splitting the dataset for parallel
+      data loading with multiple workers.
+
+    Example
+    -------
+    # Convert a standard Dataset to an IterableDataset for parallel processing
+    iterable_dataset = convert_dataset_to_iterable_dataset(my_dataset, dataloader_num_workers=4)
+
+    # Convert a DatasetDict (e.g., train, validation splits) into IterableDataset objects
+    iterable_dataset_dict = convert_dataset_to_iterable_dataset(my_dataset_dict, dataloader_num_workers=4)
+    """
+    if isinstance(dataset, DatasetDict) or isinstance(dataset, IterableDatasetDict):
+        dataset = {k: v.to_iterable_dataset(num_shards=num_shards) for k, v in dataset.items()}
+    else:
+        dataset = dataset.to_iterable_dataset(num_shards=num_shards)
+    return dataset
