@@ -226,6 +226,23 @@ def main():
         if not data_args.streaming:
             processed_dataset.save_to_disk(prepared_ds_path)
 
+    def filter_func(examples):
+        return [_ >= data_args.min_num_tokens for _ in examples["num_of_concepts"]]
+
+    # Create the args for batched filtering
+    filter_args = {"batched": True, "batch_size": data_args.preprocessing_batch_size}
+    # If the dataset is not in a streaming mode, we could add num_proc to enable parallelization
+    if not data_args.streaming:
+        filter_args["num_proc"] = data_args.preprocessing_num_workers
+
+    # The filter can't be applied to a DatasetDict of IterableDataset (in case of streaming)
+    # we need to iterate through all the datasets and apply the filter separately
+    if isinstance(processed_dataset, DatasetDict) or isinstance(processed_dataset, IterableDatasetDict):
+        for key in processed_dataset.keys():
+            processed_dataset[key] = processed_dataset[key].filter(filter_func, **filter_args)
+    else:
+        processed_dataset = processed_dataset.filter(filter_func, **filter_args)
+
     model = load_and_create_model(model_args, tokenizer)
 
     collator = CehrBertDataCollator(
