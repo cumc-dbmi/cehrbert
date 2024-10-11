@@ -34,6 +34,15 @@ def create_cehrbert_pretraining_dataset(
     data_args: DataTrainingArguments,
 ) -> Dataset:
     required_columns = TRANSFORMER_COLUMNS + CEHRBERT_COLUMNS
+
+    # Remove patients without any records
+    dataset = dataset.filter(
+        lambda batch: [num_of_concepts > 0 for num_of_concepts in batch["num_of_concepts"]],
+        num_proc=data_args.preprocessing_num_workers if not data_args.streaming else None,
+        batched=True,
+        batch_size=data_args.preprocessing_batch_size,
+    )
+
     # If the data is already in meds, we don't need to sort the sequence anymore
     if data_args.is_data_in_med:
         mapping_functions = [HFTokenizationMapping(concept_tokenizer, True)]
@@ -69,6 +78,14 @@ def create_cehrbert_finetuning_dataset(
     data_args: DataTrainingArguments,
 ) -> Dataset:
     required_columns = TRANSFORMER_COLUMNS + CEHRBERT_COLUMNS + FINETUNING_COLUMNS
+
+    # Remove patients without any records
+    dataset = dataset.filter(
+        lambda batch: [num_of_concepts > 0 for num_of_concepts in batch["num_of_concepts"]],
+        num_proc=data_args.preprocessing_num_workers if not data_args.streaming else None,
+        batched=True,
+        batch_size=data_args.preprocessing_batch_size,
+    )
 
     if data_args.is_data_in_med:
         mapping_functions = [

@@ -256,13 +256,15 @@ def _create_cehrbert_data_from_meds(
         writer_batch_size=data_args.preprocessing_batch_size,
         streaming=data_args.streaming,
     )
+
     # Remove patients without any records
     dataset = dataset.filter(
-        lambda batch: [num_of_concepts > 0 for num_of_concepts in batch["num_of_visits"]],
+        lambda batch: [num_of_concepts > 0 for num_of_concepts in batch["num_of_concepts"]],
         num_proc=data_args.preprocessing_num_workers if not data_args.streaming else None,
         batched=True,
         batch_size=data_args.preprocessing_batch_size,
     )
+
     # Convert the CehrBertPatient to CehrBert data inputs
     dataset = apply_cehrbert_dataset_mapping(
         dataset,
