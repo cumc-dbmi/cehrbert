@@ -278,7 +278,8 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
 
                 # If numeric_value exists, this is a concept/value tuple, we indicate this using a concept_value_mask
                 numeric_value = e.get("numeric_value", None)
-                unit = e.get("unit", NA)
+                # The unit might be populated with a None value
+                unit = e.get("unit", NA) if e.get("unit", NA) else NA
                 concept_value_mask = int(numeric_value is not None)
                 concept_value = numeric_value if concept_value_mask == 1 else -1.0
                 code = replace_escape_chars(e["code"])
