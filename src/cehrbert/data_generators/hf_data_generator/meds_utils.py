@@ -8,6 +8,7 @@ import meds_reader
 import numpy as np
 import pandas as pd
 from datasets import Dataset, DatasetDict, Split
+from transformers.utils import logging
 
 from cehrbert.data_generators.hf_data_generator import DEFAULT_INPATIENT_CONCEPT_ID, UNKNOWN_VALUE
 from cehrbert.data_generators.hf_data_generator.hf_dataset import apply_cehrbert_dataset_mapping
@@ -23,6 +24,7 @@ MEDS_SPLIT_DATA_SPLIT_MAPPING = {
     "held_out": Split.TEST,
 }
 NON_ALPHANUMERIC_CHARS = r"[\w\/\\:\-_]"
+LOG = logging.get_logger("transformers")
 
 
 def get_meds_to_cehrbert_conversion_cls(
@@ -178,6 +180,13 @@ def create_dataset_from_meds_reader(
     default_visit_id: int = 1,
     is_pretraining: bool = True,
 ) -> DatasetDict:
+
+    LOG.info("The meds_to_cehrbert_conversion_type: %s", data_args.meds_to_cehrbert_conversion_type)
+    LOG.info("The att_function_type: %s", data_args.att_function_type)
+    LOG.info("The inpatient_att_function_type: %s", data_args.inpatient_att_function_type)
+    LOG.info("The include_auxiliary_token: %s", data_args.include_auxiliary_token)
+    LOG.info("The include_demographic_prompt: %s", data_args.include_demographic_prompt)
+
     train_dataset = _create_cehrbert_data_from_meds(
         data_args=data_args,
         split="train",
