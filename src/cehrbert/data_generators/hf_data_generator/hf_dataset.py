@@ -21,6 +21,8 @@ CEHRBERT_COLUMNS = [
     "concept_values",
     "concept_value_masks",
     "mlm_skip_values",
+    "num_of_concepts",
+    "num_of_visits",
 ]
 
 TRANSFORMER_COLUMNS = ["input_ids", "labels"]
