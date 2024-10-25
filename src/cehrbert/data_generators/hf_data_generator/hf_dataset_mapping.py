@@ -122,8 +122,6 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                 "visits",
                 "birth_datetime",
                 "visit_concept_ids",
-                "num_of_concepts",
-                "num_of_visits",
             ]
 
     @staticmethod
