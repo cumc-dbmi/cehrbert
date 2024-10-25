@@ -74,6 +74,7 @@ class PatientBlock:
         self.has_ed_admission = self._has_ed_admission()
         self.has_admission = self._has_admission()
         self.has_discharge = self._has_discharge()
+        self.discharged_to = self.get_discharge_facility()
 
         # Infer the visit_type from the events
         # Admission takes precedence over ED
@@ -82,7 +83,14 @@ class PatientBlock:
         elif self.has_ed_admission:
             self.visit_type = DEFAULT_ED_CONCEPT_ID
         else:
-            self.visit_type = DEFAULT_OUTPATIENT_CONCEPT_ID
+            self.visit_type = self._infer_visit_type()
+
+    def _infer_visit_type(self) -> str:
+        for event in self.events:
+            for matching_rule in self.conversion.get_ed_admission_matching_rules():
+                if re.match(matching_rule, event.code):
+                    return event.code
+        return DEFAULT_OUTPATIENT_CONCEPT_ID
 
     def _has_ed_admission(self) -> bool:
         """
@@ -196,6 +204,9 @@ class PatientBlock:
         """
         events = []
         for e in self.events:
+            # We only convert the events that are not visit type and discharge facility events
+            if (e.code == self.visit_type) or (self.discharged_to is not None and e.code == self.discharged_to):
+                continue
             events.extend(self._convert_event(e))
         return events
 
