@@ -54,8 +54,39 @@ DISCHARGE_FACILITY_TYPES = [
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 
 
-def convert_date_to_posix_time(index_date: datetime.date) -> float:
-    return datetime.datetime.combine(index_date, datetime.datetime.min.time()).timestamp()
+def convert_date_to_posix_time(index_date: Union[datetime.date, datetime.datetime]) -> float:
+    """
+    Convert a date or datetime object to POSIX (Unix) time in seconds.
+
+    Parameters
+    ----------
+    index_date : Union[datetime.date, datetime.datetime]
+        The date or datetime object to be converted to POSIX time.
+
+    Returns
+    -------
+    float
+        The POSIX time in seconds as a float.
+
+    Raises
+    ------
+    ValueError
+        If `index_date` is not an instance of `datetime.date` or `datetime.datetime`.
+
+    Examples
+    --------
+    >>> convert_date_to_posix_time(datetime.date(2024, 10, 25))
+    1735104000.0
+
+    >>> convert_date_to_posix_time(datetime.datetime(2024, 10, 25, 12, 30))
+    1735144200.0
+    """
+    if isinstance(index_date, datetime.datetime):
+        return index_date.timestamp()
+    elif isinstance(index_date, datetime.date):
+        return datetime.datetime.combine(index_date, datetime.datetime.min.time()).timestamp()
+    else:
+        raise ValueError("index_date must be datetime or datetime.datetime")
 
 
 def replace_escape_chars(text: str) -> str:
