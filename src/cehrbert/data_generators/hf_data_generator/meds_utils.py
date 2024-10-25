@@ -221,8 +221,9 @@ def _meds_to_cehrbert_generator(
     with meds_reader.SubjectDatabase(path_to_db) as patient_database:
         for shard in shards:
             for patient_id, prediction_time, label in shard:
-                patient = patient_database[patient_id]
-                yield convert_one_patient(patient, conversion, prediction_time, label)
+                if patient_id in patient_database:
+                    patient = patient_database[patient_id]
+                    yield convert_one_patient(patient, conversion, prediction_time, label)
 
 
 def _create_cehrbert_data_from_meds(
