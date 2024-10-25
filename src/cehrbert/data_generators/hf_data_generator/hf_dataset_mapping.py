@@ -54,6 +54,10 @@ DISCHARGE_FACILITY_TYPES = [
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 
 
+def convert_date_to_posix_time(index_date: datetime.date) -> float:
+    return datetime.datetime.combine(index_date, datetime.datetime.min.time()).timestamp()
+
+
 def replace_escape_chars(text: str) -> str:
     return re.sub(r"\s+", "_", text)
 
@@ -461,7 +465,7 @@ class HFFineTuningMapping(DatasetMapping):
         return {
             "age_at_index": record["age"] if "age" in record else record["age_at_index"],
             "classifier_label": record["label"],
-            "index_date": record["index_date"].timestamp() if "index_date" in record else None,
+            "index_date": (convert_date_to_posix_time(record["index_date"]) if "index_date" in record else None),
         }
 
     def remove_columns(self):
