@@ -91,7 +91,7 @@ def convert_date_to_posix_time(index_date: Union[datetime.date, datetime.datetim
 
 
 def replace_escape_chars(text: str) -> str:
-    return re.sub(r"[^a-zA-Z]", "_", text)
+    return re.sub(r"\s+", "_", text)
 
 
 class TruncationType(Enum):
@@ -174,7 +174,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
         mlm_skip_value: int = 0,
         unit: str = NA,
     ) -> None:
-        cehrbert_record["concept_ids"].append(code)
+        cehrbert_record["concept_ids"].append(replace_escape_chars(code))
         cehrbert_record["visit_concept_orders"].append(visit_concept_order)
         cehrbert_record["ages"].append(age)
         cehrbert_record["dates"].append(date)
