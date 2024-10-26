@@ -91,7 +91,7 @@ def convert_date_to_posix_time(index_date: Union[datetime.date, datetime.datetim
 
 
 def replace_escape_chars(text: str) -> str:
-    return re.sub(r"\s+", "_", text)
+    return re.sub(r"[^a-zA-Z]", "_", text)
 
 
 class TruncationType(Enum):

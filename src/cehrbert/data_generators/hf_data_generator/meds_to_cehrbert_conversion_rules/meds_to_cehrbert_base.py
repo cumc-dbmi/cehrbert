@@ -128,6 +128,9 @@ class MedsToCehrBertConversion(ABC):
         """
         raise NotImplementedError("Must implement the event mapping rules for converting text events to numeric events")
 
+    def get_other_visit_matching_rules(self) -> List[str]:
+        return self._create_visit_matching_rules()
+
     def get_ed_admission_matching_rules(self) -> List[str]:
         return self._ed_admission_matching_rules
 
