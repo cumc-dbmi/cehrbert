@@ -280,11 +280,29 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                     visit_segment=visit_segment,
                     visit_concept_id=visit_type,
                 )
-
+            # Keep track of the existing outpatient events, we don't want to add them again
+            existing_outpatient_events = list()
             for e in events:
                 # If the event doesn't have a time stamp, we skip it
                 if not e["time"]:
                     continue
+
+                # If numeric_value exists, this is a concept/value tuple, we indicate this using a concept_value_mask
+                numeric_value = e.get("numeric_value", None)
+                # The unit might be populated with a None value
+                unit = e.get("unit", NA) if e.get("unit", NA) else NA
+                concept_value_mask = int(numeric_value is not None)
+                concept_value = numeric_value if concept_value_mask == 1 else -1.0
+                code = replace_escape_chars(e["code"])
+
+                # If the value mask is 1, this indicates a numeric value associated with the concept
+                if concept_value_mask != 1:
+                    # Otherwise we will try to concatenate the answer with the code if the categorical value is provide
+                    text_value = e.get("text_value", None)
+                    if text_value:
+                        text_value_replaced = replace_escape_chars(text_value)
+                        code = f"{code}//option:{text_value_replaced}"
+
                 # Add a medical token to the patient timeline
                 # If this is an inpatient visit, we use the event time stamps to calculate age and date
                 # because the patient can stay in the hospital for a period of time.
@@ -310,23 +328,11 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                             )
                 else:
                     # For outpatient visits, we use the visit time stamp to calculate age and time because we assume
-                    # the outpatient visits start and end on the same day
-                    pass
-
-                # If numeric_value exists, this is a concept/value tuple, we indicate this using a concept_value_mask
-                numeric_value = e.get("numeric_value", None)
-                # The unit might be populated with a None value
-                unit = e.get("unit", NA) if e.get("unit", NA) else NA
-                concept_value_mask = int(numeric_value is not None)
-                concept_value = numeric_value if concept_value_mask == 1 else -1.0
-                code = replace_escape_chars(e["code"])
-                # If the value mask is 1, this indicates a numeric value associated with the concept
-                if concept_value_mask != 1:
-                    # Otherwise we will try to concatenate the answer with the code if the categorical value is provide
-                    text_value = e.get("text_value", None)
-                    if text_value:
-                        text_value_replaced = replace_escape_chars(text_value)
-                        code = f"{code}//option:{text_value_replaced}"
+                    # the outpatient visits start and end on the same day.
+                    # We check whether the date/code/value combination already exists in the existing events
+                    # If they exist, we do not add them to the patient timeline for outpatient visits.
+                    if (date, code, concept_value) in existing_outpatient_events:
+                        continue
 
                 self._update_cehrbert_record(
                     cehrbert_record,
@@ -341,7 +347,9 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                     unit=unit,
                     mlm_skip_value=concept_value_mask,
                 )
+                existing_outpatient_events.append((date, code, concept_value))
 
+            # For inpatient or ER visits, we want to discharge_facility to the end of the visit
             if is_er_or_inpatient:
                 # If visit_end_datetime is populated for the inpatient visit, we update the date_cursor
                 visit_end_datetime = visit.get("visit_end_datetime", None)
