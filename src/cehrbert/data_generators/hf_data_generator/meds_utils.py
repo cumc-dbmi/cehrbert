@@ -2,7 +2,7 @@ import collections
 import functools
 import os
 from datetime import datetime
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import meds_reader
 import numpy as np
@@ -122,7 +122,9 @@ def convert_one_patient(
     )
     """
     demographics, patient_blocks = generate_demographics_and_patient_blocks(
-        conversion=conversion, patient=patient, prediction_time=prediction_time
+        conversion=conversion,
+        patient=patient,
+        prediction_time=prediction_time,
     )
 
     patient_block_dict = collections.defaultdict(list)
@@ -218,9 +220,10 @@ def _meds_to_cehrbert_generator(
     path_to_db: str,
     default_visit_id: int,
     meds_to_cehrbert_conversion_type: MedsToCehrBertConversionType,
+    meds_exclude_tables: Optional[List[str]] = None,
 ) -> CehrBertPatient:
     conversion = get_meds_to_cehrbert_conversion_cls(
-        meds_to_cehrbert_conversion_type, default_visit_id=default_visit_id
+        meds_to_cehrbert_conversion_type, default_visit_id=default_visit_id, meds_exclude_tables=meds_exclude_tables
     )
     with meds_reader.SubjectDatabase(path_to_db) as patient_database:
         for shard in shards:

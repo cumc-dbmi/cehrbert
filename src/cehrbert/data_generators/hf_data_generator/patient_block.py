@@ -188,6 +188,10 @@ class PatientBlock:
         """
         events = []
         for e in self.events:
+            if self.conversion.meds_exclude_tables:
+                table = getattr(e, "table", None)
+                if table and (table in self.conversion.meds_exclude_tables):
+                    continue
             # We only convert the events that are not visit type and discharge facility events
             if (e.code == self.visit_type) or (self.discharged_to is not None and e.code == self.discharged_to):
                 continue
