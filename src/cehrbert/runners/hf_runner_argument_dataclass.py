@@ -110,6 +110,10 @@ class DataTrainingArguments:
             "choices": f"choices={[e.value for e in AttType]}",
         },
     )
+    meds_exclude_tables: Optional[List[str]] = dataclasses.field(
+        default=list,
+        metadata={"help": "The tables to exclude in the conversion e.g. measurement"},
+    )
     # TODO: Python 3.9/10 do not support dynamic unpacking, we have to manually provide the entire
     #  list right now.
     meds_to_cehrbert_conversion_type: Literal[

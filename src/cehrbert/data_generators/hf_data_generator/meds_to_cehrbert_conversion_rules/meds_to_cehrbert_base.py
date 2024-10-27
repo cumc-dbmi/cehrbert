@@ -64,10 +64,15 @@ class MedsToCehrBertConversion(ABC):
         text-to-numeric event mappings, which are created by calling the respective abstract methods.
         """
         # Cache these variables once
+        self._meds_exclude_tables = kwargs.get("meds_exclude_tables", [])
         self._ed_admission_matching_rules = self._create_ed_admission_matching_rules()
         self._admission_matching_rules = self._create_admission_matching_rules()
         self._discharge_matching_rules = self._create_discharge_matching_rules()
         self._text_event_numeric_event_map = {r.code: r for r in self._create_text_event_to_numeric_event_rules()}
+
+    @property
+    def meds_exclude_tables(self):
+        return self._meds_exclude_tables
 
     @abstractmethod
     def _create_visit_matching_rules(self) -> List[str]:

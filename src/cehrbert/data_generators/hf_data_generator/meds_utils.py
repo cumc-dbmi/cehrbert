@@ -2,7 +2,7 @@ import collections
 import functools
 import os
 from datetime import datetime
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import meds_reader
 import numpy as np
@@ -45,8 +45,11 @@ def get_meds_to_cehrbert_conversion_cls(
 
 
 def get_subject_split(meds_reader_db_path: str) -> Dict[str, List[int]]:
-    patient_split = pd.read_parquet(os.path.join(meds_reader_db_path, "metadata/subject_splits.parquet"))
-    result = {str(group): records["subject_id"].tolist() for group, records in patient_split.groupby("split")}
+    subject_split = pd.read_parquet(os.path.join(meds_reader_db_path, "metadata/subject_splits.parquet"))
+    with meds_reader.SubjectDatabase(meds_reader_db_path) as patient_database:
+        subject_ids = [p for p in patient_database]
+    subject_split = subject_split[subject_split.subject_id.isin(subject_ids)]
+    result = {str(group): records["subject_id"].tolist() for group, records in subject_split.groupby("split")}
     return result
 
 
@@ -122,7 +125,9 @@ def convert_one_patient(
     )
     """
     demographics, patient_blocks = generate_demographics_and_patient_blocks(
-        conversion=conversion, patient=patient, prediction_time=prediction_time
+        conversion=conversion,
+        patient=patient,
+        prediction_time=prediction_time,
     )
 
     patient_block_dict = collections.defaultdict(list)
@@ -218,16 +223,16 @@ def _meds_to_cehrbert_generator(
     path_to_db: str,
     default_visit_id: int,
     meds_to_cehrbert_conversion_type: MedsToCehrBertConversionType,
+    meds_exclude_tables: Optional[List[str]] = None,
 ) -> CehrBertPatient:
     conversion = get_meds_to_cehrbert_conversion_cls(
-        meds_to_cehrbert_conversion_type, default_visit_id=default_visit_id
+        meds_to_cehrbert_conversion_type, default_visit_id=default_visit_id, meds_exclude_tables=meds_exclude_tables
     )
     with meds_reader.SubjectDatabase(path_to_db) as patient_database:
         for shard in shards:
             for patient_id, prediction_time, label in shard:
-                if patient_id in patient_database:
-                    patient = patient_database[patient_id]
-                    yield convert_one_patient(patient, conversion, prediction_time, label)
+                patient = patient_database[patient_id]
+                yield convert_one_patient(patient, conversion, prediction_time, label)
 
 
 def _create_cehrbert_data_from_meds(
