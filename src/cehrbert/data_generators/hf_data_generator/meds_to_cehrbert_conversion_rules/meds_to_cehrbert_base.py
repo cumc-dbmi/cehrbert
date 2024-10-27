@@ -70,6 +70,12 @@ class MedsToCehrBertConversion(ABC):
         self._text_event_numeric_event_map = {r.code: r for r in self._create_text_event_to_numeric_event_rules()}
 
     @abstractmethod
+    def _create_visit_matching_rules(self) -> List[str]:
+        raise NotImplementedError(
+            "Must implement the matching rules for identifying the visits other than ED/admission"
+        )
+
+    @abstractmethod
     def _create_ed_admission_matching_rules(self) -> List[str]:
         """
         Abstract method for defining the matching rules for identifying ED admissions.
@@ -121,6 +127,9 @@ class MedsToCehrBertConversion(ABC):
             NotImplementedError: Must be implemented in a subclass.
         """
         raise NotImplementedError("Must implement the event mapping rules for converting text events to numeric events")
+
+    def get_other_visit_matching_rules(self) -> List[str]:
+        return self._create_visit_matching_rules()
 
     def get_ed_admission_matching_rules(self) -> List[str]:
         return self._ed_admission_matching_rules

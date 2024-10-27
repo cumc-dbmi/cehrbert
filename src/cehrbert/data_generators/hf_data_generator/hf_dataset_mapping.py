@@ -30,6 +30,7 @@ INPATIENT_VISIT_TYPE_CODES = [
     "Visit/61",
     "NUCC/315D00000X",
 ]
+ED_VISIT_TYPE_CODES = ["VISIT/ER"]
 DISCHARGE_FACILITY_TYPES = [
     "8536",
     "8863",
@@ -173,7 +174,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
         mlm_skip_value: int = 0,
         unit: str = NA,
     ) -> None:
-        cehrbert_record["concept_ids"].append(code)
+        cehrbert_record["concept_ids"].append(replace_escape_chars(code))
         cehrbert_record["visit_concept_orders"].append(visit_concept_order)
         cehrbert_record["ages"].append(age)
         cehrbert_record["dates"].append(date)
@@ -238,7 +239,11 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
 
             # We assume the first measurement to be the visit type of the current visit
             visit_type = visit["visit_type"]
-            is_inpatient = visit_type in INPATIENT_VISIT_TYPES or visit_type in INPATIENT_VISIT_TYPE_CODES
+            is_er_or_inpatient = (
+                visit_type in INPATIENT_VISIT_TYPES
+                or visit_type in INPATIENT_VISIT_TYPE_CODES
+                or visit_type in ED_VISIT_TYPE_CODES
+            )
 
             # Add artificial time tokens to the patient timeline if timedelta exists
             if time_delta:
@@ -275,39 +280,12 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                     visit_segment=visit_segment,
                     visit_concept_id=visit_type,
                 )
-
+            # Keep track of the existing outpatient events, we don't want to add them again
+            existing_outpatient_events = list()
             for e in events:
                 # If the event doesn't have a time stamp, we skip it
                 if not e["time"]:
                     continue
-                # Add a medical token to the patient timeline
-                # If this is an inpatient visit, we use the event time stamps to calculate age and date
-                # because the patient can stay in the hospital for a period of time.
-                if is_inpatient:
-                    # Calculate age using the event time stamp
-                    age = relativedelta(e["time"], birth_datetime).years
-                    # Calculate the week number since the epoch time
-                    date = (e["time"] - datetime.datetime(year=1970, month=1, day=1)).days // 7
-                else:
-                    # For outpatient visits, we use the visit time stamp to calculate age and time because we assume
-                    # the outpatient visits start and end on the same day
-                    pass
-
-                # Calculate the time diff in days w.r.t the previous measurement
-                meas_time_diff = (e["time"] - date_cursor).days
-                # Update the date_cursor if the time diff between two neighboring measurements is greater than and
-                # equal to 1 day
-                if meas_time_diff > 0:
-                    date_cursor = e["time"]
-                    if self._inpatient_time_token_function:
-                        # This generates an artificial time token depending on the choice of the time token functions
-                        self._update_cehrbert_record(
-                            cehrbert_record,
-                            code=f"i-{self._inpatient_time_token_function(meas_time_diff)}",
-                            visit_concept_order=i + 1,
-                            visit_segment=visit_segment,
-                            visit_concept_id=visit_type,
-                        )
 
                 # If numeric_value exists, this is a concept/value tuple, we indicate this using a concept_value_mask
                 numeric_value = e.get("numeric_value", None)
@@ -316,6 +294,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                 concept_value_mask = int(numeric_value is not None)
                 concept_value = numeric_value if concept_value_mask == 1 else -1.0
                 code = replace_escape_chars(e["code"])
+
                 # If the value mask is 1, this indicates a numeric value associated with the concept
                 if concept_value_mask != 1:
                     # Otherwise we will try to concatenate the answer with the code if the categorical value is provide
@@ -323,6 +302,37 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                     if text_value:
                         text_value_replaced = replace_escape_chars(text_value)
                         code = f"{code}//option:{text_value_replaced}"
+
+                # Add a medical token to the patient timeline
+                # If this is an inpatient visit, we use the event time stamps to calculate age and date
+                # because the patient can stay in the hospital for a period of time.
+                if is_er_or_inpatient:
+                    # Calculate age using the event time stamp
+                    age = relativedelta(e["time"], birth_datetime).years
+                    # Calculate the week number since the epoch time
+                    date = (e["time"] - datetime.datetime(year=1970, month=1, day=1)).days // 7
+                    # Calculate the time diff in days w.r.t the previous measurement
+                    meas_time_diff = (e["time"] - date_cursor).days
+                    # Update the date_cursor if the time diff between two neighboring measurements is greater than and
+                    # equal to 1 day
+                    if meas_time_diff > 0:
+                        date_cursor = e["time"]
+                        if self._inpatient_time_token_function:
+                            # This generates an artificial time token depending on the choice of the time token functions
+                            self._update_cehrbert_record(
+                                cehrbert_record,
+                                code=f"i-{self._inpatient_time_token_function(meas_time_diff)}",
+                                visit_concept_order=i + 1,
+                                visit_segment=visit_segment,
+                                visit_concept_id=visit_type,
+                            )
+                else:
+                    # For outpatient visits, we use the visit time stamp to calculate age and time because we assume
+                    # the outpatient visits start and end on the same day.
+                    # We check whether the date/code/value combination already exists in the existing events
+                    # If they exist, we do not add them to the patient timeline for outpatient visits.
+                    if (date, code, concept_value) in existing_outpatient_events:
+                        continue
 
                 self._update_cehrbert_record(
                     cehrbert_record,
@@ -337,8 +347,10 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                     unit=unit,
                     mlm_skip_value=concept_value_mask,
                 )
+                existing_outpatient_events.append((date, code, concept_value))
 
-            if is_inpatient:
+            # For inpatient or ER visits, we want to discharge_facility to the end of the visit
+            if is_er_or_inpatient:
                 # If visit_end_datetime is populated for the inpatient visit, we update the date_cursor
                 visit_end_datetime = visit.get("visit_end_datetime", None)
                 if visit_end_datetime:

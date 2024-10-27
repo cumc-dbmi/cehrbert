@@ -13,6 +13,9 @@ class MedsToBertMimic4(MedsToCehrBertConversion):
         super().__init__(**kwargs)
         self.default_visit_id = default_visit_id
 
+    def _create_visit_matching_rules(self) -> List[str]:
+        return []
+
     def _create_ed_admission_matching_rules(self) -> List[str]:
         return ["ED_REGISTRATION//", "TRANSFER_TO//ED"]
 
