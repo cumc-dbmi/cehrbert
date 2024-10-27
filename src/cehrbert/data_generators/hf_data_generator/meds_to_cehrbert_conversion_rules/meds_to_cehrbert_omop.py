@@ -8,9 +8,6 @@ from cehrbert.data_generators.hf_data_generator.meds_to_cehrbert_conversion_rule
 
 class MedsToCehrbertOMOP(MedsToCehrBertConversion):
 
-    def _create_visit_matching_rules(self) -> List[str]:
-        return ["Visit/"]
-
     def _create_ed_admission_matching_rules(self) -> List[str]:
         return ["Visit/ER"]
 

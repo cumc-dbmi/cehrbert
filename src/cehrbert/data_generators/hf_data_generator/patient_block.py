@@ -73,8 +73,7 @@ class PatientBlock:
         # Cache these variables so we don't need to compute
         self.has_ed_admission = self._has_ed_admission()
         self.has_admission = self._has_admission()
-        self.discharged_to = self.get_discharge_facility()
-        self.has_discharge = self.discharged_to is not None
+        self.has_discharge = self._has_discharge()
 
         # Infer the visit_type from the events
         # Admission takes precedence over ED
@@ -83,14 +82,7 @@ class PatientBlock:
         elif self.has_ed_admission:
             self.visit_type = DEFAULT_ED_CONCEPT_ID
         else:
-            self.visit_type = self._infer_visit_type()
-
-    def _infer_visit_type(self) -> str:
-        for event in self.events:
-            for matching_rule in self.conversion.get_other_visit_matching_rules():
-                if re.match(matching_rule, event.code):
-                    return event.code
-        return DEFAULT_OUTPATIENT_CONCEPT_ID
+            self.visit_type = DEFAULT_OUTPATIENT_CONCEPT_ID
 
     def _has_ed_admission(self) -> bool:
         """
@@ -118,7 +110,7 @@ class PatientBlock:
                     return True
         return False
 
-    def get_discharge_facility(self) -> Optional[str]:
+    def _has_discharge(self) -> bool:
         """
         Determines if the visit includes a discharge event.
 
@@ -128,7 +120,23 @@ class PatientBlock:
         for event in self.events:
             for matching_rule in self.conversion.get_discharge_matching_rules():
                 if re.match(matching_rule, event.code):
-                    return event.code
+                    return True
+        return False
+
+    def get_discharge_facility(self) -> Optional[str]:
+        """
+        Extracts the discharge facility code from the discharge event, if present.
+
+        Returns:
+            Optional[str]: The sanitized discharge facility code, or None if no discharge event is found.
+        """
+        if self._has_discharge():
+            for event in self.events:
+                for matching_rule in self.conversion.get_discharge_matching_rules():
+                    if matching_rule in event.code:
+                        discharge_facility = event.code.replace(matching_rule, "")
+                        discharge_facility = re.sub(r"[^a-zA-Z]", "_", discharge_facility)
+                        return discharge_facility
         return None
 
     def _convert_event(self, event) -> List[Event]:
@@ -188,9 +196,6 @@ class PatientBlock:
         """
         events = []
         for e in self.events:
-            # We only convert the events that are not visit type and discharge facility events
-            if (e.code == self.visit_type) or (self.discharged_to is not None and e.code == self.discharged_to):
-                continue
             events.extend(self._convert_event(e))
         return events
 

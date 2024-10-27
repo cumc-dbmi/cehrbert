@@ -10,11 +10,7 @@ import pandas as pd
 from datasets import Dataset, DatasetDict, Split
 from transformers.utils import logging
 
-from cehrbert.data_generators.hf_data_generator import (
-    DEFAULT_ED_CONCEPT_ID,
-    DEFAULT_INPATIENT_CONCEPT_ID,
-    UNKNOWN_VALUE,
-)
+from cehrbert.data_generators.hf_data_generator import DEFAULT_INPATIENT_CONCEPT_ID, UNKNOWN_VALUE
 from cehrbert.data_generators.hf_data_generator.hf_dataset import apply_cehrbert_dataset_mapping
 from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import MedToCehrBertDatasetMapping
 from cehrbert.data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules import MedsToCehrBertConversion
@@ -136,7 +132,7 @@ def convert_one_patient(
         visit_end_datetime = max([b.max_time for b in blocks])
         discharge_facility = (
             next(filter(None, [b.get_discharge_facility() for b in blocks]), None)
-            if visit_type in [DEFAULT_INPATIENT_CONCEPT_ID, DEFAULT_ED_CONCEPT_ID]
+            if visit_type == DEFAULT_INPATIENT_CONCEPT_ID
             else None
         )
         visit_events = list()
