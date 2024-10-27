@@ -45,8 +45,11 @@ def get_meds_to_cehrbert_conversion_cls(
 
 
 def get_subject_split(meds_reader_db_path: str) -> Dict[str, List[int]]:
-    patient_split = pd.read_parquet(os.path.join(meds_reader_db_path, "metadata/subject_splits.parquet"))
-    result = {str(group): records["subject_id"].tolist() for group, records in patient_split.groupby("split")}
+    subject_split = pd.read_parquet(os.path.join(meds_reader_db_path, "metadata/subject_splits.parquet"))
+    with meds_reader.SubjectDatabase(meds_reader_db_path) as patient_database:
+        subject_ids = [p for p in patient_database]
+    subject_split = subject_split[subject_split.subject_id.isin(subject_ids)]
+    result = {str(group): records["subject_id"].tolist() for group, records in subject_split.groupby("split")}
     return result
 
 
@@ -228,9 +231,8 @@ def _meds_to_cehrbert_generator(
     with meds_reader.SubjectDatabase(path_to_db) as patient_database:
         for shard in shards:
             for patient_id, prediction_time, label in shard:
-                if patient_id in patient_database:
-                    patient = patient_database[patient_id]
-                    yield convert_one_patient(patient, conversion, prediction_time, label)
+                patient = patient_database[patient_id]
+                yield convert_one_patient(patient, conversion, prediction_time, label)
 
 
 def _create_cehrbert_data_from_meds(
