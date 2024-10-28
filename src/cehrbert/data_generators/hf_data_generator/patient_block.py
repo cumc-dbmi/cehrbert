@@ -65,7 +65,7 @@ class PatientBlock:
         Attributes are initialized to store visit metadata and calculate admission/discharge statuses.
         """
         self.visit_id = visit_id
-        self.events = events
+        self.events = sorted(events, key=lambda e: [e.time, e.code])
         self.min_time = events[0].time
         self.max_time = events[-1].time
         self.conversion = conversion
@@ -179,6 +179,12 @@ class PatientBlock:
             )
         ]
 
+    def get_visit_end_datetime(self) -> datetime:
+        for e in self.events:
+            if hasattr(e, "end"):
+                return getattr(e, "end")
+        return self.max_time
+
     def get_meds_events(self) -> Iterable[Event]:
         """
         Retrieves all medication events for the visit, converting each raw event if necessary.
@@ -258,7 +264,7 @@ def omop_meds_generate_demographics_and_patient_blocks(
             if patient_block.min_time.date() <= current_date <= patient_block.max_time.date():
                 patient_block.events.extend(unlinked_event_mapping.pop(current_date_str, []))
                 # Need to sort the events if we insert new events to the patient block
-                patient_block.events = sorted(patient_block.events, key=lambda _: _.time)
+                patient_block.events = sorted(patient_block.events, key=lambda _: [_.time, _.code])
                 break
 
     max_visit_id = max(patient_block_mapping.keys()) + 1 if len(patient_block_mapping) > 0 else 1
