@@ -246,7 +246,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
             )
 
             # Add artificial time tokens to the patient timeline if timedelta exists
-            if time_delta:
+            if time_delta is not None:
                 # This generates an artificial time token depending on the choice of the time token functions
                 self._update_cehrbert_record(
                     cehrbert_record,

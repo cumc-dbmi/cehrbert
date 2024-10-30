@@ -111,7 +111,7 @@ class DataTrainingArguments:
         },
     )
     meds_exclude_tables: Optional[List[str]] = dataclasses.field(
-        default=list,
+        default_factory=list,
         metadata={"help": "The tables to exclude in the conversion e.g. measurement"},
     )
     # TODO: Python 3.9/10 do not support dynamic unpacking, we have to manually provide the entire

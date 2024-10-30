@@ -138,7 +138,7 @@ def convert_one_patient(
     for visit_id, blocks in patient_block_dict.items():
         visit_type = blocks[0].visit_type
         visit_start_datetime = min([b.min_time for b in blocks])
-        visit_end_datetime = max([b.max_time for b in blocks])
+        visit_end_datetime = max([b.get_visit_end_datetime() for b in blocks])
         discharge_facility = (
             next(filter(None, [b.get_discharge_facility() for b in blocks]), None)
             if visit_type in [DEFAULT_INPATIENT_CONCEPT_ID, DEFAULT_ED_CONCEPT_ID]
@@ -195,6 +195,7 @@ def create_dataset_from_meds_reader(
     LOG.info("The inpatient_att_function_type: %s", data_args.inpatient_att_function_type)
     LOG.info("The include_auxiliary_token: %s", data_args.include_auxiliary_token)
     LOG.info("The include_demographic_prompt: %s", data_args.include_demographic_prompt)
+    LOG.info("The meds_exclude_tables: %s", "\n".join(data_args.meds_exclude_tables))
 
     train_dataset = _create_cehrbert_data_from_meds(
         data_args=data_args,
