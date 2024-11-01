@@ -15,7 +15,7 @@ min_frequency: 0
 
 # Below is a list of Med-to-CehrBert related arguments
 att_function_type: "cehrbert"
-is_data_in_med: true
+is_data_in_meds: true
 inpatient_att_function_type: "mix"
 include_auxiliary_token: true
 include_demographic_prompt: false

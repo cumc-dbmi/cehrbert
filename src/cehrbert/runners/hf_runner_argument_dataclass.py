@@ -90,9 +90,9 @@ class DataTrainingArguments:
             "choices": f"choices={[e.value for e in AttType]}",
         },
     )
-    is_data_in_med: Optional[bool] = dataclasses.field(
+    is_data_in_meds: Optional[bool] = dataclasses.field(
         default=False,
-        metadata={"help": "The boolean indicator to indicate whether the data is in the MED format"},
+        metadata={"help": "The boolean indicator to indicate whether the data is in the MEDS format"},
     )
     inpatient_att_function_type: Literal[
         AttType.CEHR_BERT.value,

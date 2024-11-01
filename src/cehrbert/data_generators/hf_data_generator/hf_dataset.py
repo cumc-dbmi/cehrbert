@@ -46,7 +46,7 @@ def create_cehrbert_pretraining_dataset(
     )
 
     # If the data is already in meds, we don't need to sort the sequence anymore
-    if data_args.is_data_in_med:
+    if data_args.is_data_in_meds:
         mapping_functions = [HFTokenizationMapping(concept_tokenizer, True)]
     else:
         mapping_functions = [
@@ -89,7 +89,7 @@ def create_cehrbert_finetuning_dataset(
         batch_size=data_args.preprocessing_batch_size,
     )
 
-    if data_args.is_data_in_med:
+    if data_args.is_data_in_meds:
         mapping_functions = [
             HFFineTuningMapping(),
             HFTokenizationMapping(concept_tokenizer, False),
