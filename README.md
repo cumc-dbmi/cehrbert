@@ -142,7 +142,7 @@ PYTHONPATH=./:$PYTHONPATH spark-submit spark_apps/prediction_cohorts/hf_readmiss
 
 ```console
 mkdir test_finetune_results;
-python -m cehrbert.runners.hf_cehrbert_finetuning_runner sample_configs/hf_cehrbert_finetuning_runner_config.yaml
+python -m cehrbert.runners.hf_cehrbert_finetune_runner sample_configs/hf_cehrbert_finetuning_runner_config.yaml
 ```
 
 ## Contact us
