@@ -206,6 +206,7 @@ def main():
                     test_size=data_args.validation_split_percentage,
                     seed=training_args.seed,
                 )
+                dataset = DatasetDict({"train": dataset["train"], "validation": dataset["test"]})
             else:
                 raise RuntimeError(
                     f"Can not split the data. If streaming is enabled, validation_split_num needs  "
@@ -261,20 +262,11 @@ def main():
     if not data_args.streaming:
         processed_dataset.set_format("pt")
 
-    eval_dataset = None
-    if isinstance(processed_dataset, DatasetDict) or isinstance(processed_dataset, IterableDatasetDict):
-        train_dataset = processed_dataset["train"]
-        if "validation" in processed_dataset:
-            eval_dataset = processed_dataset["validation"]
-    else:
-        train_dataset = processed_dataset
-
     trainer = Trainer(
         model=model,
         data_collator=collator,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        # compute_metrics=compute_metrics,
+        train_dataset=processed_dataset["train"],
+        eval_dataset=processed_dataset["validation"],
         args=training_args,
     )
 
