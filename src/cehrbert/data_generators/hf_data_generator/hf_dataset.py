@@ -38,12 +38,7 @@ def create_cehrbert_pretraining_dataset(
     required_columns = TRANSFORMER_COLUMNS + CEHRBERT_COLUMNS
 
     # Remove patients without any records
-    dataset = dataset.filter(
-        lambda batch: [num_of_concepts > 0 for num_of_concepts in batch["num_of_concepts"]],
-        num_proc=data_args.preprocessing_num_workers if not data_args.streaming else None,
-        batched=True,
-        batch_size=data_args.preprocessing_batch_size,
-    )
+    dataset = filter_dataset(dataset, data_args)
 
     # If the data is already in meds, we don't need to sort the sequence anymore
     if data_args.is_data_in_meds:
@@ -82,12 +77,7 @@ def create_cehrbert_finetuning_dataset(
     required_columns = TRANSFORMER_COLUMNS + CEHRBERT_COLUMNS + FINETUNING_COLUMNS
 
     # Remove patients without any records
-    dataset = dataset.filter(
-        lambda batch: [num_of_concepts > 0 for num_of_concepts in batch["num_of_concepts"]],
-        num_proc=data_args.preprocessing_num_workers if not data_args.streaming else None,
-        batched=True,
-        batch_size=data_args.preprocessing_batch_size,
-    )
+    dataset = filter_dataset(dataset, data_args)
 
     if data_args.is_data_in_meds:
         mapping_functions = [
@@ -117,6 +107,26 @@ def create_cehrbert_finetuning_dataset(
             all_columns = dataset.column_names
         columns_to_remove = [_ for _ in all_columns if _ not in required_columns]
         dataset = dataset.remove_columns(columns_to_remove)
+    return dataset
+
+
+def filter_dataset(dataset: Union[Dataset, DatasetDict], data_args: DataTrainingArguments):
+    # Remove patients without any records
+    # check if DatatsetDict or IterableDatasetDict, if so, filter each dataset
+    if isinstance(dataset, DatasetDict) and data_args.streaming:
+        for key in dataset.keys():
+            dataset[key] = dataset[key].filter(
+                lambda batch: [num_of_concepts > 0 for num_of_concepts in batch["num_of_concepts"]],
+                batched=True,
+                batch_size=data_args.preprocessing_batch_size,
+            )
+    else:
+        dataset = dataset.filter(
+            lambda batch: [num_of_concepts > 0 for num_of_concepts in batch["num_of_concepts"]],
+            num_proc=data_args.preprocessing_num_workers if not data_args.streaming else None,
+            batched=True,
+            batch_size=data_args.preprocessing_batch_size,
+        )
     return dataset
 
 
