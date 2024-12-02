@@ -166,11 +166,6 @@ def convert_one_patient(
         ):
             age_at_index -= 1
 
-    # birth_datetime can not be None
-    assert (
-        demographics.birth_datetime is not None
-    ), f"patient_id: {patient.subject_id} does not have a valid birth_datetime"
-
     return CehrBertPatient(
         patient_id=patient.subject_id,
         birth_datetime=demographics.birth_datetime,
@@ -233,7 +228,12 @@ def _meds_to_cehrbert_generator(
         for shard in shards:
             for patient_id, prediction_time, label in shard:
                 patient = patient_database[patient_id]
-                yield convert_one_patient(patient, conversion, prediction_time, label)
+                converted_patient = convert_one_patient(patient, conversion, prediction_time, label)
+                # there are patients whose birthdate is none
+                if converted_patient["birth_datetime"] is None:
+                    LOG.warning("patient_id: %s does not have a valid birth_datetime, therefore skipped", patient_id)
+                else:
+                    yield converted_patient
 
 
 def _create_cehrbert_data_from_meds(
