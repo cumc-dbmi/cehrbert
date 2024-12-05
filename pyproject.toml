@@ -53,7 +53,7 @@ dependencies = [
     "tqdm==4.66.1",
     "torch==2.4.0",
     "tokenizers==0.15.2",
-    "transformers==4.39.3",
+    "transformers>=4.39.3",
     "accelerate==0.31.0",
     "Werkzeug==3.0.1",
     "wandb==0.17.8",
