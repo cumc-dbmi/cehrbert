@@ -346,11 +346,15 @@ def do_predict(test_dataloader: DataLoader, model_args: ModelArguments, training
     with torch.no_grad():
         for index, batch in enumerate(tqdm(test_dataloader, desc="Predicting")):
             person_ids = batch.pop("person_id").numpy().squeeze().astype(int)
-            index_dates = (
-                map(datetime.fromtimestamp, batch.pop("index_date").numpy().squeeze().tolist())
-                if "index_date" in batch
-                else None
-            )
+            # Extract and process index_dates
+            index_dates = None
+            if "index_date" in batch:
+                try:
+                    timestamps = batch.pop("index_date").numpy().squeeze().tolist()
+                    # Handle potential NaN or invalid timestamps
+                    index_dates = [datetime.fromtimestamp(ts) if not np.isnan(ts) else None for ts in timestamps]
+                except (ValueError, OverflowError, TypeError):
+                    index_dates = [None] * len(timestamps)
             batch = {k: v.to(device) for k, v in batch.items()}
             # Forward pass
             output = model(**batch, output_attentions=False, output_hidden_states=False)
