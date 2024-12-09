@@ -377,7 +377,7 @@ def do_predict(test_dataloader: DataLoader, model_args: ModelArguments, training
     test_prediction_pd = pd.read_parquet(test_prediction_folder)
     # Compute metrics and save results
     metrics = compute_metrics(
-        references=test_prediction_pd.boolean_value, probs=test_prediction_pd.boolean_prediction_probability
+        references=test_prediction_pd.boolean_value, probs=test_prediction_pd.predicted_boolean_probability
     )
     metrics["test_loss"] = np.mean(test_losses)
 
