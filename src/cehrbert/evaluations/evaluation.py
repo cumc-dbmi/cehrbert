@@ -318,8 +318,9 @@ def evaluate_baseline_models(args):
     # Load the training data
     dataset = pd.read_parquet(args.data_path)
     test_person_ids = None
-    if args.test_person_ids_path:
-        test_person_ids = pd.read_parquet(args.test_person_ids_path)
+    if args.patient_splits_folder:
+        patient_splits = pd.read_parquet(args.patient_splits_folder)
+        test_person_ids = patient_splits[patient_splits.split == "test"]
 
     LogisticRegressionModelEvaluator(
         dataset=dataset,
