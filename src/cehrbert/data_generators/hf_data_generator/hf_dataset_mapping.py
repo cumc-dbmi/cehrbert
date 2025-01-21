@@ -467,6 +467,9 @@ class HFTokenizationMapping(DatasetMapping):
         if "concept_values" not in record:
             record["concept_values"] = record["number_as_values"]
 
+        if np.isnan(record["concept_values"]).any():
+            record["concept_values"] = [v if not pd.isna(v) else 0.0 for v in record["concept_values"]]
+
         assert len(input_ids) == len(
             record["concept_ids"]
         ), "the length of input_ids needs to be the same as the length of concept_ids"
