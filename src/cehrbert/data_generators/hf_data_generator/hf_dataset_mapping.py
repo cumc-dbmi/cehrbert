@@ -463,7 +463,7 @@ class HFTokenizationMapping(DatasetMapping):
         input_ids = self._concept_tokenizer.encode(record["concept_ids"])
         record["input_ids"] = input_ids
         concept_value_masks = record["concept_value_masks"]
-        concept_values = record["concept_values"]
+        concept_values = record["concept_values"] if "concept_values" in record else record["number_as_values"]
 
         assert len(input_ids) == len(
             record["concept_ids"]
