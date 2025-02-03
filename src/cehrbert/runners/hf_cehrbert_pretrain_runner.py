@@ -241,12 +241,8 @@ def main():
     if isinstance(processed_dataset, DatasetDict) or isinstance(processed_dataset, IterableDatasetDict):
         for key in processed_dataset.keys():
             processed_dataset[key] = processed_dataset[key].filter(filter_func, **filter_args)
-            if "number_as_values" not in processed_dataset[key].column_names:
-                processed_dataset[key] = processed_dataset[key].rename_column("number_as_values", "concept_values")
     else:
         processed_dataset = processed_dataset.filter(filter_func, **filter_args)
-        if "number_as_values" not in processed_dataset.column_names:
-            processed_dataset = processed_dataset.rename_column("number_as_values", "concept_values")
 
     model = load_and_create_model(model_args, tokenizer)
 
