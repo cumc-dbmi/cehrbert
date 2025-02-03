@@ -57,10 +57,14 @@ def compute_metrics(references: Union[List[float], pd.Series], probs: Union[List
     """
     # # Calculate PR-AUC
     # Calculate ROC-AUC
-    roc_auc = roc_auc_score(references, probs)
-    precision, recall, _ = precision_recall_curve(references, probs)
-    pr_auc = auc(recall, precision)
-    return {"roc_auc": roc_auc, "pr_auc": pr_auc}
+    try:
+        roc_auc = roc_auc_score(references, probs)
+        precision, recall, _ = precision_recall_curve(references, probs)
+        pr_auc = auc(recall, precision)
+        return {"roc_auc": roc_auc, "pr_auc": pr_auc}
+    except Exception as e:
+        LOG.exception(e)
+        return {"roc_auc": None, "pr_auc": None}
 
 
 def load_pretrained_tokenizer(
