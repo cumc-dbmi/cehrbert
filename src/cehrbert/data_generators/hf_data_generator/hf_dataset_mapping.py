@@ -463,7 +463,12 @@ class HFTokenizationMapping(DatasetMapping):
         input_ids = self._concept_tokenizer.encode(record["concept_ids"])
         record["input_ids"] = input_ids
         concept_value_masks = record["concept_value_masks"]
-        concept_values = record["concept_values"]
+        # Backward compatibility
+        if "concept_values" not in record:
+            record["concept_values"] = record["number_as_values"]
+
+        if np.isnan(record["concept_values"]).any():
+            record["concept_values"] = [v if not pd.isna(v) else 0.0 for v in record["concept_values"]]
 
         assert len(input_ids) == len(
             record["concept_ids"]
@@ -472,7 +477,7 @@ class HFTokenizationMapping(DatasetMapping):
         # If any concept has a value associated with it, we normalize the value
         if np.any(np.asarray(concept_value_masks) > 0):
             units = record["units"]
-            normalized_concept_values = copy.deepcopy(concept_values)
+            normalized_concept_values = copy.deepcopy(record["concept_values"])
             for i, (
                 concept_id,
                 unit,
@@ -485,7 +490,7 @@ class HFTokenizationMapping(DatasetMapping):
                     units,
                     input_ids,
                     concept_value_masks,
-                    concept_values,
+                    record["concept_values"],
                 )
             ):
                 if token_id in self._lab_token_ids:

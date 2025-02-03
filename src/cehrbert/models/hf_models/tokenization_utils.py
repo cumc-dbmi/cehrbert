@@ -32,9 +32,10 @@ def map_statistics(batch: Dict[str, Any], capacity=100, value_outlier_std=2.0) -
     numeric_stats_by_lab = collections.defaultdict(
         partial(TruncatedOnlineStatistics, capacity=capacity, value_outlier_std=value_outlier_std)
     )
+
     for concept_ids, concept_values, concept_value_indicators, units in zip(
         batch["concept_ids"],
-        batch["concept_values"],
+        batch["concept_values"] if "concept_values" in batch else batch["number_as_values"],
         batch["concept_value_masks"],
         concept_value_units,
     ):
