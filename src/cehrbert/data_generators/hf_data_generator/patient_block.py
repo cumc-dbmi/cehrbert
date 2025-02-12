@@ -306,13 +306,14 @@ def mimic_meds_generate_demographics_and_patient_blocks(
                 break
 
         # This indicates demographics features
-        if e.code in birth_codes:
+        event_code_uppercase = e.code.upper()
+        if event_code_uppercase.startswith(birth_code):
             birth_datetime = e.time
-        elif e.code.upper().startswith("RACE"):
+        elif event_code_uppercase.startswith("RACE"):
             race = e.code
-        elif e.code.upper().startswith("GENDER"):
+        elif event_code_uppercase.startswith("GENDER"):
             gender = e.code
-        elif e.code.upper().startswith("ETHNICITY"):
+        elif event_code_uppercase.startswith("ETHNICITY"):
             ethnicity = e.code
         elif e.time is not None:
             if not current_date:
