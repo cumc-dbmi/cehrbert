@@ -5,13 +5,13 @@ from datetime import datetime
 from typing import Iterable, List, Optional, Tuple
 
 import meds_reader
+from meds.schema import birth_code
 
 from cehrbert.data_generators.hf_data_generator import (
     DEFAULT_ED_CONCEPT_ID,
     DEFAULT_INPATIENT_CONCEPT_ID,
     DEFAULT_OUTPATIENT_CONCEPT_ID,
 )
-from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import birth_codes
 from cehrbert.data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules import (
     MedsToBertMimic4,
     MedsToCehrBertConversion,
@@ -232,13 +232,14 @@ def omop_meds_generate_demographics_and_patient_blocks(
     unlinked_event_mapping = defaultdict(list)
     for e in patient.events:
         # This indicates demographics features
-        if e.code in birth_codes:
+        event_code_uppercase = e.code.upper()
+        if event_code_uppercase.startswith(birth_code):
             birth_datetime = e.time
-        elif e.code.upper().startswith("RACE"):
+        elif event_code_uppercase.startswith("RACE"):
             race = e.code
-        elif e.code.upper().startswith("GENDER"):
+        elif event_code_uppercase.startswith("GENDER"):
             gender = e.code
-        elif e.code.upper().startswith("ETHNICITY"):
+        elif event_code_uppercase.startswith("ETHNICITY"):
             ethnicity = e.code
         elif e.time is not None:
             # Skip out of the loop if the events' time stamps are beyond the prediction time
