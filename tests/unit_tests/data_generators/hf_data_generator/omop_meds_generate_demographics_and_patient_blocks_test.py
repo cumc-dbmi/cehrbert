@@ -37,6 +37,40 @@ class TestOmopMedsGenerateDemographicsAndPatientBlocks(unittest.TestCase):
             ]
         )
 
+        # Mocked patient events: birth date, race, gender, and a few medical events
+        self.patient_two = MockSubject(
+            events=[
+                MockEvent(code="MEDS_BIRTH//MODIFIER", time=datetime(1985, 1, 1), visit_id=None),
+                MockEvent(code="RACE_WHITE", time=None, visit_id=None),
+                MockEvent(code="GENDER_MALE", time=None, visit_id=None),
+                MockEvent(code="ETHNICITY_NON_HISPANIC", time=None, visit_id=None),
+                MockEvent(code="VS/IP", time=datetime(2021, 5, 5, 10, 0), visit_id=1),
+                MockEvent(code="EVENT_2", time=datetime(2021, 5, 5, 15, 0), visit_id=1),
+                MockEvent(code="EVENT_3", time=datetime(2021, 5, 5, 16, 0), visit_id=None),
+                MockEvent(code="DISCHARGE", time=datetime(2021, 5, 5, 20, 0), visit_id=1),
+                MockEvent(code="EVENT_4", time=datetime(2021, 5, 20, 20, 0), visit_id=None),
+                MockEvent(code="VS/OP", time=datetime(2021, 6, 5, 10, 0), visit_id=2),
+                MockEvent(code="EVENT_5", time=datetime(2021, 6, 5, 15, 0), visit_id=2),
+            ]
+        )
+
+        # Mocked patient events: birth date, race, gender, and a few medical events
+        self.patient_three = MockSubject(
+            events=[
+                MockEvent(code="//MEDS_BIRTH//MODIFIER", time=datetime(1985, 1, 1), visit_id=None),
+                MockEvent(code="RACE_WHITE", time=None, visit_id=None),
+                MockEvent(code="GENDER_MALE", time=None, visit_id=None),
+                MockEvent(code="ETHNICITY_NON_HISPANIC", time=None, visit_id=None),
+                MockEvent(code="VS/IP", time=datetime(2021, 5, 5, 10, 0), visit_id=1),
+                MockEvent(code="EVENT_2", time=datetime(2021, 5, 5, 15, 0), visit_id=1),
+                MockEvent(code="EVENT_3", time=datetime(2021, 5, 5, 16, 0), visit_id=None),
+                MockEvent(code="DISCHARGE", time=datetime(2021, 5, 5, 20, 0), visit_id=1),
+                MockEvent(code="EVENT_4", time=datetime(2021, 5, 20, 20, 0), visit_id=None),
+                MockEvent(code="VS/OP", time=datetime(2021, 6, 5, 10, 0), visit_id=2),
+                MockEvent(code="EVENT_5", time=datetime(2021, 6, 5, 15, 0), visit_id=2),
+            ]
+        )
+
         # Expected demographics output
         self.expected_demographics = PatientDemographics(
             birth_datetime=datetime(1985, 1, 1),
@@ -91,6 +125,26 @@ class TestOmopMedsGenerateDemographicsAndPatientBlocks(unittest.TestCase):
             self.assertEqual(patient_blocks[i].visit_id, self.expected_patient_blocks[i].visit_id)
             self.assertListEqual(patient_blocks[i].events, self.expected_patient_blocks[i].events)
             self.assertEqual(patient_blocks[i].conversion, self.expected_patient_blocks[i].conversion)
+
+    def test_generate_demographics_and_patient_blocks_two(self):
+        """Test the function that generates demographics and patient blocks."""
+        # Run the function
+        demographics, patient_blocks = omop_meds_generate_demographics_and_patient_blocks(
+            self.patient_two, self.conversion
+        )
+
+        # Check if the demographics match the expected output
+        self.assertEqual(demographics.birth_datetime, self.expected_demographics.birth_datetime)
+
+    def test_generate_demographics_and_patient_blocks_three(self):
+        """Test the function that generates demographics and patient blocks."""
+        # Run the function
+        demographics, patient_blocks = omop_meds_generate_demographics_and_patient_blocks(
+            self.patient_three, self.conversion
+        )
+
+        # Check if the demographics match the expected output
+        self.assertTrue(demographics.birth_datetime is None)
 
 
 if __name__ == "__main__":
