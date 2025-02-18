@@ -28,7 +28,7 @@ classifiers = [
 dependencies = [
     "dask==2024.1.1",
     "dask[dataframe]==2024.1.1",
-    "datasets==2.16.1",
+    "datasets>=2.16.1",
     "evaluate==0.4.1",
     "fast-ml==3.68",
     "femr==0.2.0",
@@ -39,7 +39,7 @@ dependencies = [
     "numpy==1.24.3",
     "packaging==23.2",
     "pandas==2.2.0",
-    "peft==0.10.0",
+    "peft>=0.10.0",
     "Pillow==10.3.0",
     "pyarrow==15.0.0",
     "pydantic==2.6.0",
@@ -50,13 +50,13 @@ dependencies = [
     "tensorflow==2.15.0",
     "tensorflow-metal==1.1.0; sys_platform == 'darwin'", # macOS only
     "tensorflow-datasets==4.5.2",
-    "tqdm==4.66.1",
+    "tqdm>=4.66.1",
     "torch==2.4.0",
-    "tokenizers==0.19.0",
-    "transformers==4.40.0",
-    "accelerate==0.31.0",
+    "tokenizers>=0.19.0",
+    "transformers>=4.40.0",
+    "accelerate>=0.31.0",
     "Werkzeug==3.0.1",
-    "wandb==0.17.8",
+    "wandb>=0.17.8",
     "xgboost==2.0.3",
     "cehrbert_data==0.0.5"
 ]

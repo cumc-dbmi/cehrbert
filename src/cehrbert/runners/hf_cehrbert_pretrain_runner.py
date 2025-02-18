@@ -189,7 +189,7 @@ def main():
                 LOG.exception(e)
                 dataset = create_dataset_from_meds_reader(data_args, is_pretraining=True)
                 if not data_args.streaming:
-                    dataset.save_to_disk(meds_extension_path)
+                    dataset.save_to_disk(str(meds_extension_path))
         else:
             # Load the dataset from the parquet files
             dataset = load_parquet_as_dataset(
@@ -225,7 +225,7 @@ def main():
         )
         # only save the data to the disk if it is not streaming
         if not data_args.streaming:
-            processed_dataset.save_to_disk(prepared_ds_path)
+            processed_dataset.save_to_disk(str(prepared_ds_path))
 
     def filter_func(examples):
         return [_ >= data_args.min_num_tokens for _ in examples["num_of_concepts"]]
