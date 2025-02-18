@@ -126,7 +126,7 @@ def main():
                 LOG.exception(e)
                 dataset = create_dataset_from_meds_reader(data_args, is_pretraining=False)
                 if not data_args.streaming:
-                    dataset.save_to_disk(meds_extension_path)
+                    dataset.save_to_disk(str(meds_extension_path))
             train_set = dataset["train"]
             validation_set = dataset["validation"]
             test_set = dataset["test"]
@@ -249,7 +249,7 @@ def main():
         )
 
         if not data_args.streaming:
-            processed_dataset.save_to_disk(prepared_ds_path)
+            processed_dataset.save_to_disk(str(prepared_ds_path))
 
     collator = CehrBertDataCollator(tokenizer, model_args.max_position_embeddings, is_pretraining=False)
 
