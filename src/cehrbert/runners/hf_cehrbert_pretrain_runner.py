@@ -4,7 +4,7 @@ from typing import Optional, Union
 
 import torch
 from datasets import Dataset, DatasetDict, IterableDatasetDict, load_from_disk
-from transformers import AutoConfig, Trainer, set_seed
+from transformers import Trainer, set_seed
 from transformers.utils import logging
 
 from cehrbert.data_generators.hf_data_generator.hf_dataset import create_cehrbert_pretraining_dataset
@@ -96,7 +96,7 @@ def load_and_create_model(model_args: ModelArguments, tokenizer: CehrBertTokeniz
         model = load_and_create_model(model_args, tokenizer)
     """
     try:
-        model_config = AutoConfig.from_pretrained(os.path.expanduser(model_args.model_name_or_path))
+        model_config = CehrBertConfig.from_pretrained(os.path.expanduser(model_args.model_name_or_path))
     except (OSError, ValueError, FileNotFoundError, json.JSONDecodeError) as e:
         LOG.warning(e)
         model_config = CehrBertConfig(
