@@ -95,7 +95,16 @@ def load_finetuned_model(model_args: ModelArguments, model_name_or_path: str) ->
 
 
 def main():
+
     data_args, model_args, training_args = parse_runner_args()
+
+    if data_args.streaming:
+        # This happens only when streaming is enabled. This is for disabling the warning message
+        # https://github.com/huggingface/transformers/issues/5486
+        os.environ["TOKENIZERS_PARALLELISM"] = "false"
+        # The iterable dataset doesn't have sharding implemented, so the number of works has to
+        # be set to 0. Otherwise the trainer will throw an error
+        training_args.dataloader_num_workers = 0
 
     tokenizer = load_pretrained_tokenizer(model_args)
     prepared_ds_path = generate_prepared_ds_path(data_args, model_args, data_folder=data_args.cohort_folder)

@@ -2,8 +2,9 @@ import json
 import os
 from typing import Optional, Union
 
+import torch
 from datasets import Dataset, DatasetDict, IterableDatasetDict, load_from_disk
-from transformers import AutoConfig, Trainer, set_seed
+from transformers import Trainer, set_seed
 from transformers.utils import logging
 
 from cehrbert.data_generators.hf_data_generator.hf_dataset import create_cehrbert_pretraining_dataset
@@ -95,7 +96,7 @@ def load_and_create_model(model_args: ModelArguments, tokenizer: CehrBertTokeniz
         model = load_and_create_model(model_args, tokenizer)
     """
     try:
-        model_config = AutoConfig.from_pretrained(os.path.expanduser(model_args.model_name_or_path))
+        model_config = CehrBertConfig.from_pretrained(os.path.expanduser(model_args.model_name_or_path))
     except (OSError, ValueError, FileNotFoundError, json.JSONDecodeError) as e:
         LOG.warning(e)
         model_config = CehrBertConfig(
@@ -262,9 +263,17 @@ def main():
     if not data_args.streaming:
         processed_dataset.set_format("pt")
 
+    def data_collator(features):
+        batch = collator(features)
+        # Convert any float64 tensors to float32
+        for key in batch:
+            if isinstance(batch[key], torch.Tensor) and batch[key].dtype == torch.float64:
+                batch[key] = batch[key].to(torch.float32)
+        return batch
+
     trainer = Trainer(
         model=model,
-        data_collator=collator,
+        data_collator=data_collator,
         train_dataset=processed_dataset["train"],
         eval_dataset=processed_dataset["validation"],
         args=training_args,
