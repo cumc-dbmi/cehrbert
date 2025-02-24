@@ -379,11 +379,12 @@ class CehrBertTokenizer(PushToHubMixin):
         )
 
         if data_args.streaming:
+            first_example = next(iter(dataset))
             parts = dataset.map(
                 partial(agg_helper, map_func=map_statistics_partial),
                 batched=True,
                 batch_size=data_args.preprocessing_batch_size,
-                remove_columns=dataset.column_names,
+                remove_columns=first_example.keys(),
             )
         else:
             parts = dataset.map(
