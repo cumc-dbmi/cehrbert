@@ -194,6 +194,12 @@ def main():
                 )
                 if not data_args.streaming:
                     dataset.save_to_disk(str(meds_extension_path))
+                    stats = dataset.cleanup_cache_files()
+                    LOG.info(
+                        "Clean up the cached files for the cehrbert dataset transformed from the MEDS: %s",
+                        stats,
+                    )
+                    dataset = load_from_disk(str(meds_extension_path))
         else:
             # Load the dataset from the parquet files
             dataset = load_parquet_as_dataset(
@@ -230,6 +236,12 @@ def main():
         # only save the data to the disk if it is not streaming
         if not data_args.streaming:
             processed_dataset.save_to_disk(str(prepared_ds_path))
+            stats = processed_dataset.cleanup_cache_files()
+            LOG.info(
+                "Clean up the cached files for the cehrbert pretraining dataset: %s",
+                stats,
+            )
+            processed_dataset = load_from_disk(str(prepared_ds_path))
 
     def filter_func(examples):
         return [_ >= data_args.min_num_tokens for _ in examples["num_of_concepts"]]

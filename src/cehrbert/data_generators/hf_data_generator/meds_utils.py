@@ -234,7 +234,7 @@ def _meds_to_cehrbert_generator(
                 if converted_patient["birth_datetime"] is None:
                     LOG.warning("patient_id: %s does not have a valid birth_datetime, therefore skipped", patient_id)
                 elif visits is None or len(visits) == 0:
-                    LOG.warning("patient_id: %s does not have visits, therefore skipped", patient_id)
+                    LOG.debug("patient_id: %s does not have visits, therefore skipped", patient_id)
                 else:
                     yield converted_patient
 
