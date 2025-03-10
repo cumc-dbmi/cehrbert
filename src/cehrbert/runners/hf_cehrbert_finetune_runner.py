@@ -139,6 +139,13 @@ def main():
                 )
                 if not data_args.streaming:
                     dataset.save_to_disk(str(meds_extension_path))
+                    stats = dataset.cleanup_cache_files()
+                    LOG.info(
+                        "Clean up the cached files for the cehrbert dataset transformed from the MEDS: %s",
+                        stats,
+                    )
+                    dataset = load_from_disk(str(meds_extension_path))
+
             train_set = dataset["train"]
             validation_set = dataset["validation"]
             test_set = dataset["test"]
@@ -262,6 +269,12 @@ def main():
 
         if not data_args.streaming:
             processed_dataset.save_to_disk(str(prepared_ds_path))
+            stats = processed_dataset.cleanup_cache_files()
+            LOG.info(
+                "Clean up the cached files for the cehrbert fine-tuning dataset: %s",
+                stats,
+            )
+            processed_dataset = load_from_disk(str(prepared_ds_path))
 
     collator = CehrBertDataCollator(tokenizer, model_args.max_position_embeddings, is_pretraining=False)
 
