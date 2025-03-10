@@ -230,8 +230,11 @@ def _meds_to_cehrbert_generator(
                 patient = patient_database[patient_id]
                 converted_patient = convert_one_patient(patient, conversion, prediction_time, label)
                 # there are patients whose birthdate is none
+                visits = converted_patient["visits"]
                 if converted_patient["birth_datetime"] is None:
                     LOG.warning("patient_id: %s does not have a valid birth_datetime, therefore skipped", patient_id)
+                elif visits is None or len(visits) == 0:
+                    LOG.warning("patient_id: %s does not have visits, therefore skipped", patient_id)
                 else:
                     yield converted_patient
 
