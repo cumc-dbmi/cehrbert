@@ -9,6 +9,7 @@ from transformers.utils import logging
 
 from cehrbert.data_generators.hf_data_generator.hf_dataset import create_cehrbert_pretraining_dataset
 from cehrbert.data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
+from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import MedToCehrBertDatasetMapping
 from cehrbert.data_generators.hf_data_generator.meds_utils import create_dataset_from_meds_reader
 from cehrbert.models.hf_models.config import CehrBertConfig
 from cehrbert.models.hf_models.hf_cehrbert import CehrBertForPreTraining
@@ -188,7 +189,9 @@ def main():
                     )
             except FileNotFoundError as e:
                 LOG.exception(e)
-                dataset = create_dataset_from_meds_reader(data_args, is_pretraining=True)
+                dataset = create_dataset_from_meds_reader(
+                    data_args, dataset_mappings=[MedToCehrBertDatasetMapping(data_args=data_args, is_pretraining=True)]
+                )
                 if not data_args.streaming:
                     dataset.save_to_disk(str(meds_extension_path))
         else:
