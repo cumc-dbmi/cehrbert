@@ -16,7 +16,7 @@ from cehrbert.data_generators.hf_data_generator import (
     UNKNOWN_VALUE,
 )
 from cehrbert.data_generators.hf_data_generator.hf_dataset import apply_cehrbert_dataset_mapping
-from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import MedToCehrBertDatasetMapping
+from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import DatasetMapping
 from cehrbert.data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules import MedsToCehrBertConversion
 from cehrbert.data_generators.hf_data_generator.patient_block import generate_demographics_and_patient_blocks
 from cehrbert.med_extension.schema_extension import CehrBertPatient, Visit
@@ -182,7 +182,7 @@ def convert_one_patient(
 def create_dataset_from_meds_reader(
     data_args: DataTrainingArguments,
     default_visit_id: int = 1,
-    is_pretraining: bool = True,
+    dataset_mappings: Optional[List[DatasetMapping]] = None,
 ) -> DatasetDict:
 
     LOG.info("The meds_to_cehrbert_conversion_type: %s", data_args.meds_to_cehrbert_conversion_type)
@@ -196,19 +196,19 @@ def create_dataset_from_meds_reader(
         data_args=data_args,
         split="train",
         default_visit_id=default_visit_id,
-        is_pretraining=is_pretraining,
+        dataset_mappings=dataset_mappings,
     )
     tuning_dataset = _create_cehrbert_data_from_meds(
         data_args=data_args,
         split="tuning",
         default_visit_id=default_visit_id,
-        is_pretraining=is_pretraining,
+        dataset_mappings=dataset_mappings,
     )
     held_out_dataset = _create_cehrbert_data_from_meds(
         data_args=data_args,
         split="held_out",
         default_visit_id=default_visit_id,
-        is_pretraining=is_pretraining,
+        dataset_mappings=dataset_mappings,
     )
 
     return DatasetDict({"train": train_dataset, "validation": tuning_dataset, "test": held_out_dataset})
@@ -243,7 +243,7 @@ def _create_cehrbert_data_from_meds(
     data_args: DataTrainingArguments,
     split: str,
     default_visit_id: int = 1,
-    is_pretraining: bool = True,
+    dataset_mappings: Optional[List[DatasetMapping]] = None,
 ):
     assert split in ["held_out", "train", "tuning"]
     batches = []
@@ -280,12 +280,14 @@ def _create_cehrbert_data_from_meds(
         streaming=data_args.streaming,
     )
 
-    # Convert the CehrBertPatient to CehrBert data inputs
-    dataset = apply_cehrbert_dataset_mapping(
-        dataset,
-        MedToCehrBertDatasetMapping(data_args, is_pretraining),
-        num_proc=data_args.preprocessing_num_workers,
-        batch_size=data_args.preprocessing_batch_size,
-        streaming=data_args.streaming,
-    )
+    if dataset_mappings:
+        for dataset_mapping in dataset_mappings:
+            # Convert the CehrBertPatient to CehrBert data inputs
+            dataset = apply_cehrbert_dataset_mapping(
+                dataset,
+                dataset_mapping,
+                num_proc=data_args.preprocessing_num_workers,
+                batch_size=data_args.preprocessing_batch_size,
+                streaming=data_args.streaming,
+            )
     return dataset
