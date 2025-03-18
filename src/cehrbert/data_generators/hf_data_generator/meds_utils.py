@@ -259,22 +259,35 @@ def _create_cehrbert_data_from_meds(
 
     features = Features(
         {
-            "patient_id": Value(dtype="int32", id=None),
-            "race": Value(dtype="string", id=None),
-            "gender": Value(dtype="string", id=None),
-            "ethnicity": Value(dtype="string", id=None),
-            "age_at_index": Value(dtype="int32", id=None),
-            "label": Value(dtype="null", id=None),
-            "person_id": Value(dtype="int32", id=None),
-            "concept_ids": Sequence(feature=Value(dtype="string", id=None), length=-1, id=None),
-            "concept_value_masks": Sequence(feature=Value(dtype="int32", id=None), length=-1, id=None),
-            "number_as_values": Sequence(feature=Value(dtype="float64", id=None), length=-1, id=None),
-            "concept_as_values": Sequence(feature=Value(dtype="string", id=None), length=-1, id=None),
-            "units": Sequence(feature=Value(dtype="string", id=None), length=-1, id=None),
-            "is_numeric_types": Sequence(feature=Value(dtype="int32", id=None), length=-1, id=None),
-            "orders": Sequence(feature=Value(dtype="int32", id=None), length=-1, id=None),
-            "num_of_concepts": Value(dtype="int32", id=None),
-            "num_of_visits": Value(dtype="int32", id=None),
+            "patient_id": Value(dtype="int32"),
+            "birth_datetime": Value(dtype="timestamp[ms]"),  # Use timestamp with microsecond precision
+            "gender": Value(dtype="string"),
+            "race": Value(dtype="string"),
+            "ethnicity": Value(dtype="string"),
+            "index_date": Value(dtype="timestamp[ms]"),
+            "age_at_index": Value(dtype="int16"),
+            "label": Value(dtype="float32"),  # Using float to accommodate both int and float labels
+            "visits": Sequence(
+                feature={
+                    "visit_type": Value(dtype="string"),
+                    "visit_start_datetime": Value(dtype="timestamp[ms]"),
+                    "visit_end_datetime": Value(dtype="timestamp[ms]"),
+                    "discharge_facility": Value(dtype="string"),
+                    "events": Sequence(
+                        feature={
+                            "time": Value(dtype="timestamp[ms]"),
+                            "code": Value(dtype="string"),
+                            "text_value": Value(dtype="string"),
+                            "numeric_value": Value(dtype="float32"),
+                            "unit": Value(dtype="string"),
+                            "properties": {
+                                "visit_id": Value(dtype="int32"),
+                                "table": Value(dtype="string"),
+                            },
+                        }
+                    ),
+                }
+            ),
         }
     )
 
