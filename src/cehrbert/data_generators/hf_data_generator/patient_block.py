@@ -66,23 +66,31 @@ class PatientBlock:
         """
         self.visit_id = visit_id
         self.events = sorted(events, key=lambda e: [e.time, e.code])
-        self.min_time = events[0].time
-        self.max_time = events[-1].time
         self.conversion = conversion
 
-        # Cache these variables so we don't need to compute
-        self._ed_admission_event = self._has_ed_admission()
-        self._admission_event = self._has_admission()
-        self.discharged_to = self.get_discharge_facility()
+        self._admission_event, admission_event_time = self._find_admission()
+        self._ed_admission_event, ed_admission_event_time = self._find_ed_admission()
+        self._inferred_visit_type, inferred_visit_event_time = self._infer_visit_type()
+        self._discharge_facility = self.get_discharge_facility()
 
-        # Infer the visit_type from the events
         # Admission takes precedence over ED
         if self.has_admission:
             self.visit_type = self._admission_event
+            self.visit_event_time = admission_event_time
         elif self.has_ed_admission:
             self.visit_type = self._ed_admission_event
+            self.visit_event_time = ed_admission_event_time
         else:
             self.visit_type = self._infer_visit_type()
+            self.visit_event_time = inferred_visit_event_time
+
+    @property
+    def min_time(self) -> datetime:
+        return self.events[0].time
+
+    @property
+    def max_time(self) -> datetime:
+        return self.events[-1].time
 
     @property
     def has_admission(self) -> bool:
@@ -96,14 +104,18 @@ class PatientBlock:
     def has_discharge(self) -> bool:
         return self.discharged_to is not None
 
-    def _infer_visit_type(self) -> str:
+    @property
+    def discharged_to(self) -> Optional[str]:
+        return self._discharge_facility
+
+    def _infer_visit_type(self) -> Tuple[Optional[str], Optional[datetime]]:
         for event in self.events:
             for matching_rule in self.conversion.get_other_visit_matching_rules():
                 if re.match(matching_rule, event.code):
-                    return event.code
-        return DEFAULT_OUTPATIENT_CONCEPT_ID
+                    return event.code, event.time
+        return DEFAULT_OUTPATIENT_CONCEPT_ID, self.events[-1].time
 
-    def _has_ed_admission(self) -> Optional[str]:
+    def _find_ed_admission(self) -> Tuple[Optional[str], Optional[datetime]]:
         """
         Determines if the visit includes an emergency department (ED) admission event.
 
@@ -113,10 +125,10 @@ class PatientBlock:
         for event in self.events:
             for matching_rule in self.conversion.get_ed_admission_matching_rules():
                 if re.match(matching_rule, event.code):
-                    return event.code
-        return None
+                    return event.code, event.time
+        return None, None
 
-    def _has_admission(self) -> Optional[str]:
+    def _find_admission(self) -> Tuple[Optional[str], Optional[datetime]]:
         """
         Determines if the visit includes a hospital admission event.
 
@@ -126,8 +138,8 @@ class PatientBlock:
         for event in self.events:
             for matching_rule in self.conversion.get_admission_matching_rules():
                 if re.match(matching_rule, event.code):
-                    return event.code
-        return None
+                    return event.code, event.time
+        return None, None
 
     def get_discharge_facility(self) -> Optional[str]:
         """
@@ -264,17 +276,21 @@ def omop_meds_generate_demographics_and_patient_blocks(
             else:
                 unlinked_event_mapping[e.time.strftime("%Y-%m-%d")].append(e)
 
-    # Disassociate the events with the corresponding visits if they occur 24 before or after the visit
-    # This could happen to the problem list events
-    for visit_id in visit_events.keys():
-        events = visit_events[visit_id]
-        for event in visit_events[visit_id]:
-            e.time
-
-    patient_block_mapping = {
-        visit_id: PatientBlock(events=events, visit_id=visit_id, conversion=conversion)
-        for visit_id, events in visit_events.items()
-    }
+    # We create patient blocks (placeholders for visits), we need to disassociate the problem list records from the
+    # corresponding visit otherwise this will mess up the patient timeline
+    patient_block_mapping = dict()
+    for visit_id, events in visit_events.items():
+        patient_block = PatientBlock(events=events, visit_id=visit_id, conversion=conversion)
+        updated_events = []
+        for e in patient_block.events:
+            # We need to handle the problem list here, because those records could occur years before the current visit
+            # we use one day as the threshold to disconnect the records from the visit
+            if (patient_block.visit_event_time - e.time).days > 1:
+                unlinked_event_mapping[e.time.strftime("%Y-%m-%d")].append(e)
+            else:
+                updated_events.append(e)
+        patient_block.events = updated_events
+        patient_block_mapping[visit_id] = patient_block
 
     # Try to connect the unlinked events to existing visits
     for current_date_str in list(unlinked_event_mapping.keys()):
@@ -286,6 +302,7 @@ def omop_meds_generate_demographics_and_patient_blocks(
                 patient_block.events = sorted(patient_block.events, key=lambda _: [_.time, _.code])
                 break
 
+    # For the orphan records, we create artificial visits for them
     max_visit_id = max(patient_block_mapping.keys()) + 1 if len(patient_block_mapping) > 0 else 1
     for events in unlinked_event_mapping.values():
         patient_block_mapping[max_visit_id] = PatientBlock(events, max_visit_id, conversion)
