@@ -72,11 +72,8 @@ class PatientBlock:
 
         # Cache these variables so we don't need to compute
         self._ed_admission_event = self._has_ed_admission()
-        self.has_ed_admission = self._ed_admission_event is not None
         self._admission_event = self._has_admission()
-        self.has_admission = self._admission_event is not None
         self.discharged_to = self.get_discharge_facility()
-        self.has_discharge = self.discharged_to is not None
 
         # Infer the visit_type from the events
         # Admission takes precedence over ED
@@ -86,6 +83,18 @@ class PatientBlock:
             self.visit_type = self._ed_admission_event
         else:
             self.visit_type = self._infer_visit_type()
+
+    @property
+    def has_admission(self) -> bool:
+        return self._admission_event is not None
+
+    @property
+    def has_ed_admission(self) -> bool:
+        return self._ed_admission_event is not None
+
+    @property
+    def has_discharge(self) -> bool:
+        return self.discharged_to is not None
 
     def _infer_visit_type(self) -> str:
         for event in self.events:
