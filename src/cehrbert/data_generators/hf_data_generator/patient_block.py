@@ -71,17 +71,19 @@ class PatientBlock:
         self.conversion = conversion
 
         # Cache these variables so we don't need to compute
-        self.has_ed_admission = self._has_ed_admission()
-        self.has_admission = self._has_admission()
+        self._ed_admission_event = self._has_ed_admission()
+        self.has_ed_admission = self._ed_admission_event is not None
+        self._admission_event = self._has_admission()
+        self.has_admission = self._admission_event is not None
         self.discharged_to = self.get_discharge_facility()
         self.has_discharge = self.discharged_to is not None
 
         # Infer the visit_type from the events
         # Admission takes precedence over ED
         if self.has_admission:
-            self.visit_type = DEFAULT_INPATIENT_CONCEPT_ID
+            self.visit_type = self._admission_event
         elif self.has_ed_admission:
-            self.visit_type = DEFAULT_ED_CONCEPT_ID
+            self.visit_type = self._ed_admission_event
         else:
             self.visit_type = self._infer_visit_type()
 
@@ -92,7 +94,7 @@ class PatientBlock:
                     return event.code
         return DEFAULT_OUTPATIENT_CONCEPT_ID
 
-    def _has_ed_admission(self) -> bool:
+    def _has_ed_admission(self) -> Optional[str]:
         """
         Determines if the visit includes an emergency department (ED) admission event.
 
@@ -102,10 +104,10 @@ class PatientBlock:
         for event in self.events:
             for matching_rule in self.conversion.get_ed_admission_matching_rules():
                 if re.match(matching_rule, event.code):
-                    return True
-        return False
+                    return event.code
+        return None
 
-    def _has_admission(self) -> bool:
+    def _has_admission(self) -> Optional[str]:
         """
         Determines if the visit includes a hospital admission event.
 
@@ -115,8 +117,8 @@ class PatientBlock:
         for event in self.events:
             for matching_rule in self.conversion.get_admission_matching_rules():
                 if re.match(matching_rule, event.code):
-                    return True
-        return False
+                    return event.code
+        return None
 
     def get_discharge_facility(self) -> Optional[str]:
         """
@@ -252,6 +254,13 @@ def omop_meds_generate_demographics_and_patient_blocks(
                 visit_events[visit_id].append(e)
             else:
                 unlinked_event_mapping[e.time.strftime("%Y-%m-%d")].append(e)
+
+    # Disassociate the events with the corresponding visits if they occur 24 before or after the visit
+    # This could happen to the problem list events
+    for visit_id in visit_events.keys():
+        events = visit_events[visit_id]
+        for event in visit_events[visit_id]:
+            e.time
 
     patient_block_mapping = {
         visit_id: PatientBlock(events=events, visit_id=visit_id, conversion=conversion)
