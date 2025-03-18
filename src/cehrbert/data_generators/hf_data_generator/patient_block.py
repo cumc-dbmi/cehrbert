@@ -7,11 +7,7 @@ from typing import Iterable, List, Optional, Tuple
 import meds_reader
 from meds.schema import birth_code
 
-from cehrbert.data_generators.hf_data_generator import (
-    DEFAULT_ED_CONCEPT_ID,
-    DEFAULT_INPATIENT_CONCEPT_ID,
-    DEFAULT_OUTPATIENT_CONCEPT_ID,
-)
+from cehrbert.data_generators.hf_data_generator import DEFAULT_INPATIENT_CONCEPT_ID, DEFAULT_OUTPATIENT_CONCEPT_ID
 from cehrbert.data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules import (
     MedsToBertMimic4,
     MedsToCehrBertConversion,
