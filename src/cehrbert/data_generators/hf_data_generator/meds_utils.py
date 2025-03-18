@@ -7,14 +7,10 @@ from typing import Dict, List, Optional, Tuple, Union
 import meds_reader
 import numpy as np
 import pandas as pd
-from datasets import Dataset, DatasetDict, Split
+from datasets import Dataset, DatasetDict, Features, Sequence, Split, Value
 from transformers.utils import logging
 
-from cehrbert.data_generators.hf_data_generator import (
-    DEFAULT_ED_CONCEPT_ID,
-    DEFAULT_INPATIENT_CONCEPT_ID,
-    UNKNOWN_VALUE,
-)
+from cehrbert.data_generators.hf_data_generator import UNKNOWN_VALUE
 from cehrbert.data_generators.hf_data_generator.hf_dataset import apply_cehrbert_dataset_mapping
 from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import DatasetMapping
 from cehrbert.data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules import MedsToCehrBertConversion
@@ -183,7 +179,6 @@ def create_dataset_from_meds_reader(
     default_visit_id: int = 1,
     dataset_mappings: Optional[List[DatasetMapping]] = None,
 ) -> DatasetDict:
-
     LOG.info("The meds_to_cehrbert_conversion_type: %s", data_args.meds_to_cehrbert_conversion_type)
     LOG.info("The att_function_type: %s", data_args.att_function_type)
     LOG.info("The inpatient_att_function_type: %s", data_args.inpatient_att_function_type)
@@ -262,6 +257,27 @@ def _create_cehrbert_data_from_meds(
         for subject_id in patient_split[split]:
             batches.append((subject_id, None, None))
 
+    features = Features(
+        {
+            "patient_id": Value(dtype="int32", id=None),
+            "race": Value(dtype="string", id=None),
+            "gender": Value(dtype="string", id=None),
+            "ethnicity": Value(dtype="string", id=None),
+            "age_at_index": Value(dtype="int32", id=None),
+            "label": Value(dtype="null", id=None),
+            "person_id": Value(dtype="int32", id=None),
+            "concept_ids": Sequence(feature=Value(dtype="string", id=None), length=-1, id=None),
+            "concept_value_masks": Sequence(feature=Value(dtype="int32", id=None), length=-1, id=None),
+            "number_as_values": Sequence(feature=Value(dtype="float64", id=None), length=-1, id=None),
+            "concept_as_values": Sequence(feature=Value(dtype="string", id=None), length=-1, id=None),
+            "units": Sequence(feature=Value(dtype="string", id=None), length=-1, id=None),
+            "is_numeric_types": Sequence(feature=Value(dtype="int32", id=None), length=-1, id=None),
+            "orders": Sequence(feature=Value(dtype="int32", id=None), length=-1, id=None),
+            "num_of_concepts": Value(dtype="int32", id=None),
+            "num_of_visits": Value(dtype="int32", id=None),
+        }
+    )
+
     split_batches = np.array_split(np.asarray(batches), data_args.preprocessing_num_workers)
     batch_func = functools.partial(
         _meds_to_cehrbert_generator,
@@ -277,6 +293,7 @@ def _create_cehrbert_data_from_meds(
         num_proc=(data_args.preprocessing_num_workers if not data_args.streaming else None),
         writer_batch_size=data_args.preprocessing_batch_size,
         streaming=data_args.streaming,
+        features=features,
     )
 
     if dataset_mappings:
