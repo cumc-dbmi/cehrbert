@@ -311,7 +311,7 @@ def omop_meds_generate_demographics_and_patient_blocks(
     patient_blocks = list(patient_block_mapping.values())
     demographics = PatientDemographics(birth_datetime=birth_datetime, race=race, gender=gender, ethnicity=ethnicity)
 
-    # If there are unlinked events, we need to add them as new patient blocks, therefore we need to re-order the patient block
+    # If there are unlinked events, we have added them as new patient blocks, therefore we need to re-order the patient block
     if len(unlinked_event_mapping) > 0:
         patient_blocks = sorted(patient_block_mapping.values(), key=lambda block: block.min_time)
 
