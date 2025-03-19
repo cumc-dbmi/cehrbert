@@ -73,6 +73,26 @@ class VisitObject:
         return self.visit_start_datetime < other.visit_start_datetime
 
 
+def get_value(obj, key, default=None):
+    """
+    Generic function to get a value from either a dictionary or an object attribute.
+
+    Args:
+        obj: Either a dictionary or an object with attributes
+        key: The key/attribute name to retrieve
+        default: Value to return if the key/attribute doesn't exist
+
+    Returns:
+        The value associated with the key/attribute or the default value
+    """
+    if isinstance(obj, dict):
+        # If it's a dictionary, use .get() method
+        return obj.get(key, default)
+    else:
+        # If it's an object, use getattr
+        return getattr(obj, key, default)
+
+
 def has_events_and_get_events(events_iterable):
     """
     Check if an events iterable has at least one event, and return a new.
@@ -302,11 +322,13 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
         visits = record["visits"]
         # This indicates this is columnar format
         if isinstance(visits, dict):
-            visits = self.convert_visit_columnar_to_python(visits)
+            visits = sorted(self.convert_visit_columnar_to_python(visits))
+        else:
+            visits = sorted(visits, key=lambda e: get_value(e, "visit_start_datetime"))
 
         if self._include_demographic_prompt:
             first_visit = visits[0]
-            first_visit_start_datetime = first_visit.visit_start_datetime
+            first_visit_start_datetime: datetime.datetime = get_value(first_visit, "visit_start_datetime")
             year_str = f"year:{str(first_visit_start_datetime.year)}"
             age_str = f"age:{str(relativedelta(first_visit_start_datetime, birth_datetime).years)}"
 
@@ -322,19 +344,18 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
         date_cursor: Optional[datetime.datetime] = None
         visit: VisitObject
         # Loop through all the visits excluding the first event containing the demographics
-        for i, visit in enumerate(sorted(visits)):
-
-            events: Generator[Event, None, None] = visit.events
+        for i, visit in enumerate(visits):
+            events: Generator[Event, None, None] = get_value(visit, "events")
             has_events, events = has_events_and_get_events(events)
             if not has_events:
                 continue
 
-            visit_start_datetime: datetime.datetime = visit.visit_start_datetime
+            visit_start_datetime: datetime.datetime = get_value(visit, "visit_start_datetime")
             time_delta = (visit_start_datetime - date_cursor).days if date_cursor else None
             date_cursor = visit_start_datetime
 
             # We assume the first measurement to be the visit type of the current visit
-            visit_type = visit.visit_type
+            visit_type = get_value(visit, "visit_type")
             is_er_or_inpatient = (
                 visit_type in INPATIENT_VISIT_TYPES
                 or visit_type in INPATIENT_VISIT_TYPE_CODES
@@ -448,14 +469,16 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
             # For inpatient or ER visits, we want to discharge_facility to the end of the visit
             if is_er_or_inpatient:
                 # If visit_end_datetime is populated for the inpatient visit, we update the date_cursor
-                visit_end_datetime = visit.visit_end_datetime
+                visit_end_datetime: datetime.datetime = get_value(visit, "visit_end_datetime")
                 if visit_end_datetime:
                     date_cursor = visit_end_datetime
 
                 if self._include_auxiliary_token:
                     # Reuse the age and date calculated for the last event in the patient timeline for the discharge
                     # facility event
-                    discharge_facility = visit.discharge_facility if visit.discharge_facility else "0"
+                    discharge_facility = get_value(visit, "discharge_facility")
+                    if not discharge_facility:
+                        discharge_facility = "0"
 
                     self._update_cehrbert_record(
                         cehrbert_record,
