@@ -1,10 +1,12 @@
 import collections
 import copy
 import datetime
+import itertools
 import re
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, Generator, List, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -15,6 +17,7 @@ from dateutil.relativedelta import relativedelta
 from meds.schema import birth_code, death_code
 from pandas import Series
 
+from cehrbert.med_extension.schema_extension import Event, Visit
 from cehrbert.models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments
 
@@ -53,6 +56,44 @@ DISCHARGE_FACILITY_TYPES = [
 ]
 
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
+
+
+@dataclass
+class VisitObject:
+    visit_start_datetime: datetime.datetime
+    visit_end_datetime: Optional[datetime.datetime]
+    visit_type: str
+    discharge_facility: Optional[str]
+    events: Union[List[Event], Generator[Event, None, None]]
+
+    def __lt__(self, other):
+        """Compare visits chronologically by start datetime."""
+        if not isinstance(other, VisitObject):
+            return NotImplemented
+        return self.visit_start_datetime < other.visit_start_datetime
+
+
+def has_events_and_get_events(events_iterable):
+    """
+    Check if an events iterable has at least one event, and return a new.
+
+    iterable that includes all events if it does.
+
+    Returns:
+        (bool, Iterable): A tuple with (has_events, events_iterable)
+    """
+    if events_iterable is None:
+        return False, None
+
+    try:
+        events_iter = iter(events_iterable)
+        first_event = next(events_iter, None)
+
+        if first_event is None:
+            return False, None
+        return True, itertools.chain([first_event], events_iter)
+    except (TypeError, StopIteration):
+        return False, None
 
 
 def convert_date_to_posix_time(index_date: Union[datetime.date, datetime.datetime]) -> float:
@@ -128,6 +169,57 @@ class DatasetMapping(ABC):
         Returns
             A dictionary from names to numpy arrays to be used by pytorch.
         """
+
+    @staticmethod
+    def convert_visit_columnar_to_python(visits: Dict[str, List[Any]]) -> List[VisitObject]:
+
+        def event_generator(columnar_events: Dict[str, List[Any]]) -> Generator[Event, None, None]:
+            batched_time = columnar_events["time"]
+            batched_code = columnar_events["code"]
+            batched_text_value = columnar_events["text_value"]
+            batched_numeric_value = columnar_events["numeric_value"]
+            batched_unit = columnar_events["unit"]
+            batched_properties = columnar_events["properties"]
+            batched_event_tuples = zip(
+                batched_time, batched_code, batched_text_value, batched_numeric_value, batched_unit, batched_properties
+            )
+            for time, code, text_value, numeric_value, unit, properties in batched_event_tuples:
+                yield Event(
+                    time=time,
+                    code=code,
+                    text_value=text_value,
+                    numeric_value=numeric_value,
+                    unit=unit,
+                    properties=properties,
+                )
+
+        batched_visit_start_datetime = visits["visit_start_datetime"]
+        batched_visit_end_datetime = visits["visit_end_datetime"]
+        batched_visit_type = visits["visit_type"]
+        batched_discharge_facility = visits["discharge_facility"]
+        batched_events = visits["events"]
+
+        batched_tuples = zip(
+            batched_visit_start_datetime,
+            batched_visit_end_datetime,
+            batched_visit_type,
+            batched_discharge_facility,
+            batched_events,
+        )
+
+        python_list = []
+        for visit_tuple in batched_tuples:
+            visit_start_datetime, visit_end_datetime, visit_type, discharge_facility, events = visit_tuple
+            python_list.append(
+                VisitObject(
+                    visit_type=visit_type,
+                    visit_start_datetime=visit_start_datetime,
+                    visit_end_datetime=visit_end_datetime,
+                    discharge_facility=discharge_facility,
+                    events=event_generator(events),
+                )
+            )
+        return python_list
 
 
 class MedToCehrBertDatasetMapping(DatasetMapping):
@@ -207,11 +299,16 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
             birth_datetime = birth_datetime.to_pydatetime()
         gender = record["gender"]
         race = record["race"]
+        visits = record["visits"]
+        # This indicates this is columnar format
+        if isinstance(visits, dict):
+            visits = self.convert_visit_columnar_to_python(visits)
 
         if self._include_demographic_prompt:
-            first_visit = record["visits"][0]
-            year_str = f'year:{str(first_visit["visit_start_datetime"].year)}'
-            age_str = f'age:{str(relativedelta(first_visit["visit_start_datetime"], birth_datetime).years)}'
+            first_visit = visits[0]
+            first_visit_start_datetime = first_visit.visit_start_datetime
+            year_str = f"year:{str(first_visit_start_datetime.year)}"
+            age_str = f"age:{str(relativedelta(first_visit_start_datetime, birth_datetime).years)}"
 
             self._update_cehrbert_record(cehrbert_record, year_str)
             self._update_cehrbert_record(cehrbert_record, age_str)
@@ -222,23 +319,22 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
         visit_segment_indicator = False
 
         # Use a data cursor to keep track of time
-        date_cursor = None
-
+        date_cursor: Optional[datetime.datetime] = None
+        visit: VisitObject
         # Loop through all the visits excluding the first event containing the demographics
-        for i, visit in enumerate(sorted(record["visits"], key=lambda e: e["visit_start_datetime"])):
+        for i, visit in enumerate(sorted(visits)):
 
-            events = visit["events"]
-
-            # Skip this visit if the number measurements in the event is zero
-            if events is None or len(events) == 0:
+            events: Generator[Event, None, None] = visit.events
+            has_events, events = has_events_and_get_events(events)
+            if not has_events:
                 continue
 
-            visit_start_datetime = visit["visit_start_datetime"]
+            visit_start_datetime: datetime.datetime = visit.visit_start_datetime
             time_delta = (visit_start_datetime - date_cursor).days if date_cursor else None
             date_cursor = visit_start_datetime
 
             # We assume the first measurement to be the visit type of the current visit
-            visit_type = visit["visit_type"]
+            visit_type = visit.visit_type
             is_er_or_inpatient = (
                 visit_type in INPATIENT_VISIT_TYPES
                 or visit_type in INPATIENT_VISIT_TYPE_CODES
@@ -255,9 +351,9 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                 )
 
             # Add the VS token to the patient timeline to mark the start of a visit
-            age = relativedelta(visit["visit_start_datetime"], birth_datetime).years
+            age = relativedelta(visit_start_datetime, birth_datetime).years
             # Calculate the week number since the epoch time
-            date = (visit["visit_start_datetime"] - datetime.datetime(year=1970, month=1, day=1)).days // 7
+            date = (visit_start_datetime - datetime.datetime(year=1970, month=1, day=1)).days // 7
             visit_segment = int(visit_segment_indicator) + 1
 
             self._update_cehrbert_record(
@@ -352,18 +448,14 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
             # For inpatient or ER visits, we want to discharge_facility to the end of the visit
             if is_er_or_inpatient:
                 # If visit_end_datetime is populated for the inpatient visit, we update the date_cursor
-                visit_end_datetime = visit.get("visit_end_datetime", None)
+                visit_end_datetime = visit.visit_end_datetime
                 if visit_end_datetime:
                     date_cursor = visit_end_datetime
 
                 if self._include_auxiliary_token:
                     # Reuse the age and date calculated for the last event in the patient timeline for the discharge
                     # facility event
-                    discharge_facility = (
-                        visit["discharge_facility"]
-                        if ("discharge_facility" in visit) and visit["discharge_facility"]
-                        else "0"
-                    )
+                    discharge_facility = visit.discharge_facility if visit.discharge_facility else "0"
 
                     self._update_cehrbert_record(
                         cehrbert_record,
@@ -394,7 +486,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
 
         # Add some count information for this sequence
         cehrbert_record["num_of_concepts"] = len(cehrbert_record["concept_ids"])
-        cehrbert_record["num_of_visits"] = len(record["visits"])
+        cehrbert_record["num_of_visits"] = len(visits)
 
         if "label" in record:
             cehrbert_record["label"] = record["label"]
