@@ -8,7 +8,11 @@ import meds_reader
 from meds.schema import birth_code
 from transformers import logging
 
-from cehrbert.data_generators.hf_data_generator import DEFAULT_INPATIENT_CONCEPT_ID, DEFAULT_OUTPATIENT_CONCEPT_ID
+from cehrbert.data_generators.hf_data_generator import (
+    DEFAULT_ED_TO_INPATIENT_CONCEPT_ID,
+    DEFAULT_INPATIENT_CONCEPT_ID,
+    DEFAULT_OUTPATIENT_CONCEPT_ID,
+)
 from cehrbert.data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules import (
     MedsToBertMimic4,
     MedsToCehrBertConversion,
@@ -387,6 +391,10 @@ def merge_patient_blocks(patient: meds_reader.Subject, patient_blocks: List[Pati
 
                 # Sort the combined events chronologically and by code
                 prev_block.events = sorted(prev_block.events, key=lambda _: [_.time, _.code])
+
+                # Set longer visit to E-I
+                if prev_block.has_admission and next_block.has_ed_admission:
+                    prev_block.visit_type = DEFAULT_ED_TO_INPATIENT_CONCEPT_ID
 
                 # Mark this block to be skipped in the outer loop
                 block_indices_to_skip.append(next_index)
