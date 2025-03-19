@@ -248,7 +248,7 @@ class PatientBlock:
 
     def get_visit_end_datetime(self) -> datetime:
         for e in self.events:
-            if hasattr(e, "end"):
+            if getattr(e, "end", None) is not None:
                 return getattr(e, "end")
         if self.has_ed_or_hospital_admission and self.block_end_time is not None:
             return self.block_end_time
