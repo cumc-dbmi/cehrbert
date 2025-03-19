@@ -459,7 +459,13 @@ def merge_patient_blocks(patient: meds_reader.Subject, patient_blocks: List[Pati
                     prev_block, next_block = next_block, prev_block
 
                 # Merge the events from next_block into prev_block
-                prev_block.events.extend(next_block.events)
+                for e in next_block.events:
+                    # We don't want to take the visit type and discharge facility codes from the patient block that will be merged
+                    if (e.code == next_block.visit_type) or (
+                        next_block.discharged_to is not None and e.code == next_block.discharged_to
+                    ):
+                        continue
+                    prev_block.events.append(e)
 
                 # Sort the combined events chronologically and by code
                 prev_block.events = sorted(prev_block.events, key=lambda _: [_.time, _.code])
