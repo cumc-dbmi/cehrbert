@@ -6,6 +6,7 @@ from typing import Iterable, List, Optional, Tuple
 
 import meds_reader
 from meds.schema import birth_code
+from transformers import logging
 
 from cehrbert.data_generators.hf_data_generator import DEFAULT_INPATIENT_CONCEPT_ID, DEFAULT_OUTPATIENT_CONCEPT_ID
 from cehrbert.data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules import (
@@ -14,6 +15,8 @@ from cehrbert.data_generators.hf_data_generator.meds_to_cehrbert_conversion_rule
     MedsToCehrbertOMOP,
 )
 from cehrbert.med_extension.schema_extension import Event
+
+LOG = logging.get_logger("transformers")
 
 
 @dataclass
@@ -311,7 +314,91 @@ def omop_meds_generate_demographics_and_patient_blocks(
     if len(unlinked_event_mapping) > 0:
         patient_blocks = sorted(patient_block_mapping.values(), key=lambda block: block.min_time)
 
-    return demographics, patient_blocks
+    merged_patient_blocks = merge_patient_blocks(patient, patient_blocks)
+    return demographics, merged_patient_blocks
+
+
+def merge_patient_blocks(patient: meds_reader.Subject, patient_blocks: List[PatientBlock]) -> List[PatientBlock]:
+    """
+    Merge patient blocks where one visit completely contains another visit.
+
+    This function merges PatientBlock objects when one block's time range fully
+    contains another block. When a merge occurs, events from the contained block
+    are added to the containing block, and the contained block is removed from
+    the final result.
+
+    The algorithm assumes that patient_blocks are already sorted chronologically
+    by their min_time.
+
+    Args:
+        patient (meds_reader.Subject): The patient subject whose blocks are being merged
+        patient_blocks (List[PatientBlock]): A list of PatientBlock objects to process
+
+    Returns:
+        List[PatientBlock]: A new list with merged PatientBlock objects
+
+    Example:
+        Given these blocks:
+        1. INPATIENT: Jan 1-10
+        2. OUTPATIENT: Jan 3-5 (contained within block 1)
+        3. EMERGENCY: Jan 15-16 (not overlapping)
+
+        The result would be:
+        1. INPATIENT: Jan 1-10 (now contains events from block 2)
+        2. EMERGENCY: Jan 15-16 (unchanged)
+    """
+    merging_info = []
+    block_indices_to_skip = []
+    merged_patient_blocks = []
+
+    for prev_index in range(len(patient_blocks)):
+        # Skip blocks that have already been merged into previous blocks
+        if prev_index in block_indices_to_skip:
+            continue
+
+        prev_block = patient_blocks[prev_index]
+
+        for next_index in range(prev_index + 1, len(patient_blocks)):
+            next_block = patient_blocks[next_index]
+
+            # Check if prev_block completely contains next_block:
+            # [prev_block_start] [next_block_start] [next_block_end] [prev_block_end]
+            if prev_block.min_time <= next_block.min_time and next_block.max_time <= prev_block.max_time:
+                # Merge the events from next_block into prev_block
+                prev_block.events.extend(next_block.events)
+
+                # Sort the combined events chronologically and by code
+                prev_block.events = sorted(prev_block.events, key=lambda _: [_.time, _.code])
+
+                # Mark this block to be skipped in the outer loop
+                block_indices_to_skip.append(next_index)
+
+                # Record merge information for debugging
+                merging_info.append(
+                    (
+                        prev_block.visit_type,
+                        prev_block.min_time,
+                        prev_block.max_time,
+                        next_block.visit_type,
+                        next_block.min_time,
+                        next_block.max_time,
+                    )
+                )
+
+        # Add the block (with any merged events) to the result
+        merged_patient_blocks.append(prev_block)
+
+    # Log debugging information about merges if any occurred
+    if merging_info:
+        debug_log = ""
+        for prev_v, prev_min_t, prev_max_t, next_v, next_min_t, next_max_t in merging_info:
+            debug_log += (
+                f"{patient.subject_id}: visit {prev_v} with {prev_min_t} and {prev_max_t} "
+                f"has been merged into visit {next_v} with {next_min_t} and {next_max_t}"
+            )
+        LOG.debug(debug_log)
+
+    return merged_patient_blocks
 
 
 def mimic_meds_generate_demographics_and_patient_blocks(

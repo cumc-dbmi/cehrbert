@@ -40,7 +40,7 @@ class HfCehrBertRunnerIntegrationTest(unittest.TestCase):
             self.dataset_prepared_path,
             "--max_steps",
             "10",
-            # "--streaming",
+            "--streaming",
             "--is_data_in_meds",
         ]
 
