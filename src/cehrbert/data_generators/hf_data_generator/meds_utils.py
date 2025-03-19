@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import meds_reader
 import numpy as np
 import pandas as pd
-from datasets import Dataset, DatasetDict, Features, IterableDataset, Sequence, Split, Value
+from datasets import Dataset, DatasetDict, Features, Sequence, Split, Value
 from transformers.utils import logging
 
 from cehrbert.data_generators.hf_data_generator import UNKNOWN_VALUE
@@ -40,10 +40,10 @@ class CacheFileCollector:
                 try:
                     if os.path.isdir(file_name):
                         shutil.rmtree(file_name)
-                        LOG.info(f"Removed cache directory: {file_name}")
+                        LOG.debug(f"Removed cache directory: {file_name}")
                     else:
                         os.remove(file_name)
-                        LOG.info(f"Removed cache file: {file_name}")
+                        LOG.debug(f"Removed cache file: {file_name}")
                 except OSError as e:
                     LOG.warning(f"Error removing {file_name}: {e}")
 
@@ -336,7 +336,6 @@ def _create_cehrbert_data_from_meds(
     # These cached files need to be deleted manually
     if cache_file_collector:
         cache_file_collector.cache_files.extend(dataset.cache_files)
-
     if dataset_mappings:
         for dataset_mapping in dataset_mappings:
             # Convert the CehrBertPatient to CehrBert data inputs
@@ -347,4 +346,7 @@ def _create_cehrbert_data_from_meds(
                 batch_size=data_args.preprocessing_batch_size,
                 streaming=data_args.streaming,
             )
+            # Collect additional cached files for every transformation applied to the dataset
+            if cache_file_collector:
+                cache_file_collector.cache_files.extend(dataset.cache_files)
     return dataset
