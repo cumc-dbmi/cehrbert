@@ -76,31 +76,29 @@ class PatientBlock:
         self._inferred_visit_type, inferred_visit_event_time = self._infer_visit_type()
         self._discharge_facility, discharge_event_time = self._find_discharge_facility()
 
+        # Set the block start time depending on the visit type
+        self.block_start_time: datetime
         # Admission takes precedence over ED
         if self.has_admission:
             self.visit_type = self._admission_event
-            self.visit_event_time = admission_event_time
+            self.block_start_time = admission_event_time
         elif self.has_ed_admission:
             self.visit_type = self._ed_admission_event
-            self.visit_event_time = ed_admission_event_time
+            self.block_start_time = ed_admission_event_time
         else:
             self.visit_type = self._inferred_visit_type
-            self.visit_event_time = inferred_visit_event_time
+            self.block_start_time = inferred_visit_event_time
 
-        self.visit_complete_event_time = None
-        if self.has_admission | self.has_ed_admission:
+        # Set the block end time depending on the visit type
+        self.block_end_time: Optional[datetime] = None
+        if self.has_ed_or_hospital_admission:
             if discharge_event_time:
-                self.visit_complete_event_time = discharge_event_time
+                self.block_end_time = discharge_event_time
             else:
-                # If the discharge event is missing, we try to infer the end of the visit by one of the following records
-                for event in reversed(self.events):
-                    table = getattr(event, "table", None)
-                    if table in ["measurement", "condition_occurrence", "procedure_occurrence", "observation"]:
-                        self.visit_complete_event_time = event.time
+                self.block_end_time = self._infer_block_end_time()
         else:
-            self.visit_complete_event_time = self.visit_event_time.replace(
-                hour=23, minute=59, second=59, microsecond=999999
-            )
+            # For outpatient blocks, we simply set it one second before next day
+            self.block_end_time = self.block_start_time.replace(hour=23, minute=59, second=59, microsecond=999999)
 
     @property
     def min_time(self) -> datetime:
@@ -119,6 +117,10 @@ class PatientBlock:
         return self._ed_admission_event is not None
 
     @property
+    def has_ed_or_hospital_admission(self) -> bool:
+        return self.has_admission | self.has_ed_admission
+
+    @property
     def has_discharge(self) -> bool:
         return self.discharged_to is not None
 
@@ -126,12 +128,31 @@ class PatientBlock:
     def discharged_to(self) -> Optional[str]:
         return self._discharge_facility
 
+    def _infer_block_end_time(self) -> Optional[datetime]:
+        """
+        If the discharge event is missing, we try to infer the end of the visit.
+
+        by one of the following records. We do not want to use drug because they could
+        occur years away after the visit occurred. We also do not want to use condition
+        because they could be problem list conditions that occurred years before the visit
+
+        Returns datetime.datetime:
+        """
+        for event in reversed(self.events):
+            table = getattr(event, "table", None)
+            if table in ["measurement", "visit_occurrence", "procedure_occurrence", "observation"]:
+                return event.time
+        return None
+
     def _infer_visit_type(self) -> Tuple[Optional[str], Optional[datetime]]:
         for event in self.events:
             for matching_rule in self.conversion.get_other_visit_matching_rules():
                 if re.match(matching_rule, event.code):
                     return event.code, event.time
-        return DEFAULT_OUTPATIENT_CONCEPT_ID, self.events[-1].time
+        inferred_block_end_time = self._infer_block_end_time()
+        if inferred_block_end_time is None:
+            inferred_block_end_time = self.events[-1].time
+        return DEFAULT_OUTPATIENT_CONCEPT_ID, inferred_block_end_time
 
     def _find_ed_admission(self) -> Tuple[Optional[str], Optional[datetime]]:
         """
@@ -220,10 +241,17 @@ class PatientBlock:
             )
         ]
 
+    def get_visit_start_datetime(self) -> datetime:
+        if self.has_ed_or_hospital_admission:
+            return self.block_start_time
+        return self.min_time
+
     def get_visit_end_datetime(self) -> datetime:
         for e in self.events:
             if hasattr(e, "end"):
                 return getattr(e, "end")
+        if self.has_ed_or_hospital_admission and self.block_end_time is not None:
+            return self.block_end_time
         return self.max_time
 
     def get_meds_events(self) -> Iterable[Event]:
@@ -304,9 +332,9 @@ def omop_meds_generate_demographics_and_patient_blocks(
             # We need to handle the problem list here, because those records could occur years before the current visit
             # we use one day as the threshold to disconnect the records from the visit.  For some drug records, they
             # could occur years after the visit, we need to disconnect such records from the visit as well.
-            if (patient_block.visit_event_time - e.time).days > 1:
+            if (patient_block.block_start_time - e.time).days > 1:
                 unlinked_event_mapping[e.time.strftime("%Y-%m-%d")].append(e)
-            elif patient_block.visit_complete_event_time and (e.time - patient_block.visit_event_time).days > 1:
+            elif patient_block.block_end_time and (e.time - patient_block.block_end_time).days > 1:
                 unlinked_event_mapping[e.time.strftime("%Y-%m-%d")].append(e)
             else:
                 updated_events.append(e)
@@ -386,6 +414,13 @@ def merge_patient_blocks(patient: meds_reader.Subject, patient_blocks: List[Pati
             # Check if prev_block completely contains next_block:
             # [prev_block_start] [next_block_start] [next_block_end] [prev_block_end]
             if prev_block.min_time <= next_block.min_time and next_block.max_time <= prev_block.max_time:
+                # If the long visit is not an admission visit and the short visit is an admission visit, this could happen
+                # when the hospitalization only lasts less than a day, and followed by an outpatient visit
+                # the outpatient starts at midnight of the day simply because how it is generated by the system
+                # and does not represent the true time stamps, we swap these two blocks
+                if not prev_block.has_ed_or_hospital_admission and next_block.has_ed_or_hospital_admission:
+                    prev_block, next_block = next_block, prev_block
+
                 # Merge the events from next_block into prev_block
                 prev_block.events.extend(next_block.events)
 

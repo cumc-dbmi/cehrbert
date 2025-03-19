@@ -10,11 +10,16 @@ from cehrbert.data_generators.hf_data_generator.patient_block import merge_patie
 
 # Create a mock PatientBlock class if you can't import the real one
 class MockPatientBlock:
-    def __init__(self, visit_type, min_time, max_time, events=None):
+    def __init__(
+        self, visit_type, min_time, max_time, has_ed_admission: bool = False, has_admission: bool = False, events=None
+    ):
         self.visit_type = visit_type
         self.min_time = min_time
         self.max_time = max_time
         self.events = events or []
+        self.has_ed_admission = has_ed_admission
+        self.has_admission = has_admission
+        self.has_ed_or_hospital_admission = has_ed_admission | has_admission
 
 
 # Create a mock Subject class
@@ -47,6 +52,7 @@ def test_merge_patient_blocks():
         visit_type="INPATIENT",
         min_time=now,
         max_time=now + timedelta(days=5),
+        has_admission=True,
         events=[MockEvent(now + timedelta(hours=1), "code1"), MockEvent(now + timedelta(hours=2), "code2")],
     )
 
@@ -71,6 +77,7 @@ def test_merge_patient_blocks():
         visit_type="EMERGENCY",
         min_time=now + timedelta(days=10),
         max_time=now + timedelta(days=11),
+        has_ed_admission=True,
         events=[MockEvent(now + timedelta(days=10, hours=5), "code4")],
     )
 
@@ -86,6 +93,7 @@ def test_merge_patient_blocks():
         visit_type="INPATIENT",
         min_time=now,
         max_time=now + timedelta(days=5),
+        has_admission=True,
         events=[MockEvent(now + timedelta(hours=1), "code1"), MockEvent(now + timedelta(hours=2), "code2")],
     )
 

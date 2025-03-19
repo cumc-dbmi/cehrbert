@@ -133,8 +133,8 @@ def convert_one_patient(
     visits = list()
     for visit_id, blocks in patient_block_dict.items():
         visit_type = blocks[0].visit_type
-        has_discharge_facility = any([b.has_admission | b.has_ed_admission for b in blocks])
-        visit_start_datetime = min([b.min_time for b in blocks])
+        has_discharge_facility = any([b.has_ed_or_hospital_admission for b in blocks])
+        visit_start_datetime = min([b.get_visit_start_datetime() for b in blocks])
         visit_end_datetime = max([b.get_visit_end_datetime() for b in blocks])
         discharge_facility = (
             next(filter(None, [b.discharged_to for b in blocks]), None) if has_discharge_facility else None
