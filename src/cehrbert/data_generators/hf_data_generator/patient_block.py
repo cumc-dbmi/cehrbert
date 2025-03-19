@@ -77,7 +77,7 @@ class PatientBlock:
             self.visit_type = self._ed_admission_event
             self.visit_event_time = ed_admission_event_time
         else:
-            self.visit_type = self._infer_visit_type()
+            self.visit_type = self._inferred_visit_type
             self.visit_event_time = inferred_visit_event_time
 
     @property
