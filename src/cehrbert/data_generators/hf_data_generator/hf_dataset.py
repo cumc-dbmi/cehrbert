@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Optional, Union
 
 from datasets import Dataset, DatasetDict, IterableDataset, IterableDatasetDict
 
@@ -8,6 +8,7 @@ from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import (
     HFTokenizationMapping,
     SortPatientSequenceMapping,
 )
+from cehrbert.data_generators.hf_data_generator.meds_utils import CacheFileCollector
 from cehrbert.models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments
 
@@ -36,6 +37,7 @@ def create_cehrbert_pretraining_dataset(
     dataset: Union[Dataset, DatasetDict],
     concept_tokenizer: CehrBertTokenizer,
     data_args: DataTrainingArguments,
+    cache_file_collector: Optional[CacheFileCollector] = None,
 ) -> Dataset:
     required_columns = TRANSFORMER_COLUMNS + CEHRBERT_COLUMNS
 
@@ -59,6 +61,8 @@ def create_cehrbert_pretraining_dataset(
             batch_size=data_args.preprocessing_batch_size,
             streaming=data_args.streaming,
         )
+        if cache_file_collector is not None:
+            cache_file_collector.cache_files.extend(dataset.cache_files)
 
     if not data_args.streaming:
         if isinstance(dataset, DatasetDict):
@@ -75,6 +79,7 @@ def create_cehrbert_finetuning_dataset(
     dataset: Union[Dataset, DatasetDict],
     concept_tokenizer: CehrBertTokenizer,
     data_args: DataTrainingArguments,
+    cache_file_collector: Optional[CacheFileCollector] = None,
 ) -> Dataset:
     required_columns = TRANSFORMER_COLUMNS + CEHRBERT_COLUMNS + FINETUNING_COLUMNS
 
@@ -101,6 +106,8 @@ def create_cehrbert_finetuning_dataset(
             batch_size=data_args.preprocessing_batch_size,
             streaming=data_args.streaming,
         )
+        if cache_file_collector is not None:
+            cache_file_collector.cache_files.extend(dataset.cache_files)
 
     if not data_args.streaming:
         if isinstance(dataset, DatasetDict):

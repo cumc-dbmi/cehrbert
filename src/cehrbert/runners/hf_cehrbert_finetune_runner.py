@@ -268,8 +268,12 @@ def main():
         # Organize them into a single DatasetDict
         final_splits = DatasetDict({"train": train_set, "validation": validation_set, "test": test_set})
 
+        cache_file_collector = CacheFileCollector()
         processed_dataset = create_cehrbert_finetuning_dataset(
-            dataset=final_splits, concept_tokenizer=tokenizer, data_args=data_args
+            dataset=final_splits,
+            concept_tokenizer=tokenizer,
+            data_args=data_args,
+            cache_file_collector=cache_file_collector,
         )
 
         if not data_args.streaming:
@@ -279,6 +283,7 @@ def main():
                 "Clean up the cached files for the cehrbert fine-tuning dataset: %s",
                 stats,
             )
+            cache_file_collector.remove_cache_files()
             processed_dataset = load_from_disk(str(prepared_ds_path))
 
     collator = CehrBertDataCollator(tokenizer, model_args.max_position_embeddings, is_pretraining=False)

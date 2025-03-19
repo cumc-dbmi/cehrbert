@@ -232,11 +232,12 @@ def main():
                     f"streaming: {data_args.streaming}"
                 )
 
+        cache_file_collector = CacheFileCollector()
         # Create the CEHR-BERT tokenizer if it's not available in the output folder
         tokenizer = load_and_create_tokenizer(data_args=data_args, model_args=model_args, dataset=dataset)
         # sort the patient features chronologically and tokenize the data
         processed_dataset = create_cehrbert_pretraining_dataset(
-            dataset=dataset, concept_tokenizer=tokenizer, data_args=data_args
+            dataset=dataset, concept_tokenizer=tokenizer, data_args=data_args, cache_file_collector=cache_file_collector
         )
         # only save the data to the disk if it is not streaming
         if not data_args.streaming:
@@ -246,6 +247,7 @@ def main():
                 "Clean up the cached files for the cehrbert pretraining dataset: %s",
                 stats,
             )
+            cache_file_collector.remove_cache_files()
             processed_dataset = load_from_disk(str(prepared_ds_path))
 
     def filter_func(examples):
@@ -267,13 +269,6 @@ def main():
 
     model = load_and_create_model(model_args, tokenizer)
 
-    collator = CehrBertDataCollator(
-        tokenizer=tokenizer,
-        max_length=model_args.max_position_embeddings,
-        is_pretraining=True,
-        mlm_probability=model.config.mlm_probability,
-    )
-
     # Detecting last checkpoint.
     last_checkpoint = get_last_hf_checkpoint(training_args)
 
@@ -284,6 +279,12 @@ def main():
         processed_dataset.set_format("pt")
 
     def data_collator(features):
+        collator = CehrBertDataCollator(
+            tokenizer=tokenizer,
+            max_length=model_args.max_position_embeddings,
+            is_pretraining=True,
+            mlm_probability=model.config.mlm_probability,
+        )
         batch = collator(features)
         # Convert any float64 tensors to float32
         for key in batch:
