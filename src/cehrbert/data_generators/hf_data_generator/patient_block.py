@@ -407,12 +407,13 @@ def merge_patient_blocks(patient: meds_reader.Subject, patient_blocks: List[Pati
 
     # Log debugging information about merges if any occurred
     if merging_info:
-        debug_log = ""
+        debug_log = "\n"
         for prev_v, prev_min_t, prev_max_t, next_v, next_min_t, next_max_t in merging_info:
             debug_log += (
                 f"{patient.subject_id}: visit {next_v} with {next_min_t} and {next_max_t} "
-                f"has been merged into visit {prev_v} with {prev_min_t} and {prev_max_t}"
+                f"has been merged into visit {prev_v} with {prev_min_t} and {prev_max_t}\n"
             )
+        debug_log += "\n"
         LOG.debug(debug_log)
 
     return merged_patient_blocks
