@@ -83,6 +83,7 @@ class PatientBlock:
             self.visit_type = self._inferred_visit_type
             self.visit_event_time = inferred_visit_event_time
 
+        self.visit_complete_event_time = None
         if self.has_admission | self.has_ed_admission:
             if discharge_event_time:
                 self.visit_complete_event_time = discharge_event_time
@@ -90,7 +91,7 @@ class PatientBlock:
                 # If the discharge event is missing, we try to infer the end of the visit by one of the following records
                 for event in reversed(self.events):
                     table = getattr(event, "table", None)
-                    if table in ["measurement", "condition_occurrence", "procedure_occurrence"]:
+                    if table in ["measurement", "condition_occurrence", "procedure_occurrence", "observation"]:
                         self.visit_complete_event_time = event.time
         else:
             self.visit_complete_event_time = self.visit_event_time.replace(
