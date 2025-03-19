@@ -10,7 +10,7 @@ from transformers.utils import logging
 from cehrbert.data_generators.hf_data_generator.hf_dataset import create_cehrbert_pretraining_dataset
 from cehrbert.data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
 from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import MedToCehrBertDatasetMapping
-from cehrbert.data_generators.hf_data_generator.meds_utils import create_dataset_from_meds_reader
+from cehrbert.data_generators.hf_data_generator.meds_utils import CacheFileCollector, create_dataset_from_meds_reader
 from cehrbert.models.hf_models.config import CehrBertConfig
 from cehrbert.models.hf_models.hf_cehrbert import CehrBertForPreTraining
 from cehrbert.models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
@@ -189,8 +189,11 @@ def main():
                     )
             except FileNotFoundError as e:
                 LOG.exception(e)
+                cache_file_collector = CacheFileCollector()
                 dataset = create_dataset_from_meds_reader(
-                    data_args, dataset_mappings=[MedToCehrBertDatasetMapping(data_args=data_args, is_pretraining=True)]
+                    data_args,
+                    dataset_mappings=[MedToCehrBertDatasetMapping(data_args=data_args, is_pretraining=True)],
+                    cache_file_collector=cache_file_collector,
                 )
                 if not data_args.streaming:
                     dataset.save_to_disk(str(meds_extension_path))
@@ -199,6 +202,8 @@ def main():
                         "Clean up the cached files for the cehrbert dataset transformed from the MEDS: %s",
                         stats,
                     )
+                    # Clean up the files created from the data generator
+                    cache_file_collector.remove_cache_files()
                     dataset = load_from_disk(str(meds_extension_path))
         else:
             # Load the dataset from the parquet files

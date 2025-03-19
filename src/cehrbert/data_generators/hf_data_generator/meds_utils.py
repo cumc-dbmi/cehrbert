@@ -1,13 +1,15 @@
 import collections
 import functools
 import os
+import shutil
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Union
 
 import meds_reader
 import numpy as np
 import pandas as pd
-from datasets import Dataset, DatasetDict, Features, Sequence, Split, Value
+from datasets import Dataset, DatasetDict, Features, IterableDataset, Sequence, Split, Value
 from transformers.utils import logging
 
 from cehrbert.data_generators.hf_data_generator import UNKNOWN_VALUE
@@ -25,6 +27,25 @@ MEDS_SPLIT_DATA_SPLIT_MAPPING = {
 }
 NON_ALPHANUMERIC_CHARS = r"[\w\/\\:\-_]"
 LOG = logging.get_logger("transformers")
+
+
+@dataclass
+class CacheFileCollector:
+    cache_files: List[Dict[str, str]] = field(default_factory=list)
+
+    def remove_cache_files(self):
+        for cache_file in self.cache_files:
+            file_name = cache_file.get("filename", None)
+            if file_name and os.path.exists(file_name):
+                try:
+                    if os.path.isdir(file_name):
+                        shutil.rmtree(file_name)
+                        LOG.info(f"Removed cache directory: {file_name}")
+                    else:
+                        os.remove(file_name)
+                        LOG.info(f"Removed cache file: {file_name}")
+                except OSError as e:
+                    LOG.warning(f"Error removing {file_name}: {e}")
 
 
 def get_meds_to_cehrbert_conversion_cls(
@@ -178,6 +199,7 @@ def create_dataset_from_meds_reader(
     data_args: DataTrainingArguments,
     default_visit_id: int = 1,
     dataset_mappings: Optional[List[DatasetMapping]] = None,
+    cache_file_collector: Optional[CacheFileCollector] = None,
 ) -> DatasetDict:
     LOG.info("The meds_to_cehrbert_conversion_type: %s", data_args.meds_to_cehrbert_conversion_type)
     LOG.info("The att_function_type: %s", data_args.att_function_type)
@@ -191,20 +213,22 @@ def create_dataset_from_meds_reader(
         split="train",
         default_visit_id=default_visit_id,
         dataset_mappings=dataset_mappings,
+        cache_file_collector=cache_file_collector,
     )
     tuning_dataset = _create_cehrbert_data_from_meds(
         data_args=data_args,
         split="tuning",
         default_visit_id=default_visit_id,
         dataset_mappings=dataset_mappings,
+        cache_file_collector=cache_file_collector,
     )
     held_out_dataset = _create_cehrbert_data_from_meds(
         data_args=data_args,
         split="held_out",
         default_visit_id=default_visit_id,
         dataset_mappings=dataset_mappings,
+        cache_file_collector=cache_file_collector,
     )
-
     return DatasetDict({"train": train_dataset, "validation": tuning_dataset, "test": held_out_dataset})
 
 
@@ -238,6 +262,7 @@ def _create_cehrbert_data_from_meds(
     split: str,
     default_visit_id: int = 1,
     dataset_mappings: Optional[List[DatasetMapping]] = None,
+    cache_file_collector: Optional[CacheFileCollector] = None,
 ):
     assert split in ["held_out", "train", "tuning"]
     batches = []
@@ -308,6 +333,9 @@ def _create_cehrbert_data_from_meds(
         streaming=data_args.streaming,
         features=features,
     )
+    # These cached files need to be deleted manually
+    if cache_file_collector:
+        cache_file_collector.cache_files.extend(dataset.cache_files)
 
     if dataset_mappings:
         for dataset_mapping in dataset_mappings:
