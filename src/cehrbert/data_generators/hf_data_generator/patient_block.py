@@ -23,6 +23,34 @@ from cehrbert.med_extension.schema_extension import Event
 LOG = logging.get_logger("transformers")
 
 
+def is_visit_table(table_name: str) -> bool:
+    return table_name in ["visit", "visit_occurrence"]
+
+
+def is_condition_table(table_name: str) -> bool:
+    return table_name in ["condition", "condition_occurrence"]
+
+
+def is_procedure_table(table_name: str) -> bool:
+    return table_name in ["procedure", "procedure_occurrence"]
+
+
+def is_drug_table(table_name: str) -> bool:
+    return table_name in ["drug", "drug_exposure"]
+
+
+def is_device_table(table_name: str) -> bool:
+    return table_name in ["device", "device_exposure"]
+
+
+def is_measurement_table(table_name: str) -> bool:
+    return table_name == "measurement"
+
+
+def is_observation_table(table_name: str) -> bool:
+    return table_name == "observation"
+
+
 @dataclass
 class PatientDemographics:
     birth_datetime: datetime = None
@@ -140,7 +168,13 @@ class PatientBlock:
         """
         for event in reversed(self.events):
             table = getattr(event, "table", None)
-            if table in ["measurement", "visit_occurrence", "procedure_occurrence", "observation"]:
+            can_infer = (
+                is_measurement_table(table)
+                | is_visit_table(table)
+                | is_procedure_table(table)
+                | is_observation_table(table)
+            )
+            if can_infer:
                 return event.time
         return None
 
@@ -247,9 +281,12 @@ class PatientBlock:
         return self.min_time
 
     def get_visit_end_datetime(self) -> datetime:
+        # Events connected to the same visit id may not have the same end datetime
         for e in self.events:
-            if getattr(e, "end", None) is not None:
-                return getattr(e, "end")
+            table = getattr(e, "table", None)
+            if is_visit_table(table):
+                if getattr(e, "end", None) is not None:
+                    return getattr(e, "end")
         if self.has_ed_or_hospital_admission and self.block_end_time is not None:
             return self.block_end_time
         return self.max_time
