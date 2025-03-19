@@ -343,7 +343,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
         # Use a data cursor to keep track of time
         date_cursor: Optional[datetime.datetime] = None
         visit: VisitObject
-        # Loop through all the visits excluding the first event containing the demographics
+        # Loop through all the visits
         for i, visit in enumerate(visits):
             events: Generator[Event, None, None] = get_value(visit, "events")
             has_events, events = has_events_and_get_events(events)
@@ -469,7 +469,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
             # For inpatient or ER visits, we want to discharge_facility to the end of the visit
             if is_er_or_inpatient:
                 # If visit_end_datetime is populated for the inpatient visit, we update the date_cursor
-                visit_end_datetime: datetime.datetime = get_value(visit, "visit_end_datetime")
+                visit_end_datetime: Optional[datetime.datetime] = get_value(visit, "visit_end_datetime")
                 if visit_end_datetime:
                     date_cursor = visit_end_datetime
 
