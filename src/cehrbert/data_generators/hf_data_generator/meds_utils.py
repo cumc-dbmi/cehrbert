@@ -137,7 +137,7 @@ def convert_one_patient(
         visit_start_datetime = min([b.min_time for b in blocks])
         visit_end_datetime = max([b.get_visit_end_datetime() for b in blocks])
         discharge_facility = (
-            next(filter(None, [b.get_discharge_facility() for b in blocks]), None) if has_discharge_facility else None
+            next(filter(None, [b.discharged_to for b in blocks]), None) if has_discharge_facility else None
         )
         visit_events = list()
         for block in blocks:

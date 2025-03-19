@@ -70,7 +70,7 @@ class PatientBlock:
         self._admission_event, admission_event_time = self._find_admission()
         self._ed_admission_event, ed_admission_event_time = self._find_ed_admission()
         self._inferred_visit_type, inferred_visit_event_time = self._infer_visit_type()
-        self._discharge_facility = self.get_discharge_facility()
+        self._discharge_facility, discharge_event_time = self._find_discharge_facility()
 
         # Admission takes precedence over ED
         if self.has_admission:
@@ -82,6 +82,20 @@ class PatientBlock:
         else:
             self.visit_type = self._inferred_visit_type
             self.visit_event_time = inferred_visit_event_time
+
+        if self.has_admission | self.has_ed_admission:
+            if discharge_event_time:
+                self.visit_complete_event_time = discharge_event_time
+            else:
+                # If the discharge event is missing, we try to infer the end of the visit by one of the following records
+                for event in reversed(self.events):
+                    table = getattr(event, "table", None)
+                    if table in ["measurement", "condition_occurrence", "procedure_occurrence"]:
+                        self.visit_complete_event_time = event.time
+        else:
+            self.visit_complete_event_time = self.visit_event_time.replace(
+                hour=23, minute=59, second=59, microsecond=999999
+            )
 
     @property
     def min_time(self) -> datetime:
@@ -140,7 +154,7 @@ class PatientBlock:
                     return event.code, event.time
         return None, None
 
-    def get_discharge_facility(self) -> Optional[str]:
+    def _find_discharge_facility(self) -> Tuple[Optional[str], Optional[datetime]]:
         """
         Determines if the visit includes a discharge event.
 
@@ -150,8 +164,8 @@ class PatientBlock:
         for event in self.events:
             for matching_rule in self.conversion.get_discharge_matching_rules():
                 if re.match(matching_rule, event.code):
-                    return event.code
-        return None
+                    return event.code, event.time
+        return None, None
 
     def _convert_event(self, event) -> List[Event]:
         """
@@ -283,8 +297,11 @@ def omop_meds_generate_demographics_and_patient_blocks(
         updated_events = []
         for e in patient_block.events:
             # We need to handle the problem list here, because those records could occur years before the current visit
-            # we use one day as the threshold to disconnect the records from the visit
+            # we use one day as the threshold to disconnect the records from the visit.  For some drug records, they
+            # could occur years after the visit, we need to disconnect such records from the visit as well.
             if (patient_block.visit_event_time - e.time).days > 1:
+                unlinked_event_mapping[e.time.strftime("%Y-%m-%d")].append(e)
+            elif patient_block.visit_complete_event_time and (e.time - patient_block.visit_event_time).days > 1:
                 unlinked_event_mapping[e.time.strftime("%Y-%m-%d")].append(e)
             else:
                 updated_events.append(e)
