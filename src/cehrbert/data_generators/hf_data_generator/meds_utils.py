@@ -260,22 +260,22 @@ def _create_cehrbert_data_from_meds(
     features = Features(
         {
             "patient_id": Value(dtype="int32"),
-            "birth_datetime": Value(dtype="timestamp[ms]"),  # Use timestamp with microsecond precision
+            "birth_datetime": Value(dtype="timestamp[us]"),  # Use timestamp with microsecond precision
             "gender": Value(dtype="string"),
             "race": Value(dtype="string"),
             "ethnicity": Value(dtype="string"),
-            "index_date": Value(dtype="timestamp[ms]"),
+            "index_date": Value(dtype="timestamp[us]"),
             "age_at_index": Value(dtype="int16"),
             "label": Value(dtype="float32"),  # Using float to accommodate both int and float labels
             "visits": Sequence(
                 feature={
                     "visit_type": Value(dtype="string"),
-                    "visit_start_datetime": Value(dtype="timestamp[ms]"),
-                    "visit_end_datetime": Value(dtype="timestamp[ms]"),
+                    "visit_start_datetime": Value(dtype="timestamp[us]"),
+                    "visit_end_datetime": Value(dtype="timestamp[us]"),
                     "discharge_facility": Value(dtype="string"),
                     "events": Sequence(
                         feature={
-                            "time": Value(dtype="timestamp[ms]"),
+                            "time": Value(dtype="timestamp[us]"),
                             "code": Value(dtype="string"),
                             "text_value": Value(dtype="string"),
                             "numeric_value": Value(dtype="float32"),
