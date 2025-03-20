@@ -13,16 +13,16 @@ class MockPatientBlock:
     def __init__(
         self,
         visit_type,
-        min_time,
-        max_time,
+        block_start_time,
+        block_end_time,
         has_ed_admission: bool = False,
         has_admission: bool = False,
         discharged_to: str = None,
         events=None,
     ):
         self.visit_type = visit_type
-        self.min_time = min_time
-        self.max_time = max_time
+        self.block_start_time = block_start_time
+        self.block_end_time = block_end_time
         self.events = events or []
         self.has_ed_admission = has_ed_admission
         self.has_admission = has_admission
@@ -58,16 +58,16 @@ def test_merge_patient_blocks():
     # Scenario 1: One block completely contains another
     block1 = MockPatientBlock(
         visit_type="INPATIENT",
-        min_time=now,
-        max_time=now + timedelta(days=5),
+        block_start_time=now,
+        block_end_time=now + timedelta(days=5),
         has_admission=True,
         events=[MockEvent(now + timedelta(hours=1), "code1"), MockEvent(now + timedelta(hours=2), "code2")],
     )
 
     block2 = MockPatientBlock(
         visit_type="OUTPATIENT",
-        min_time=now + timedelta(days=1),
-        max_time=now + timedelta(days=2),
+        block_start_time=now + timedelta(days=1),
+        block_end_time=now + timedelta(days=2),
         events=[MockEvent(now + timedelta(days=1, hours=3), "code3")],
     )
 
@@ -83,8 +83,8 @@ def test_merge_patient_blocks():
     # Scenario 2: Non-overlapping blocks
     block3 = MockPatientBlock(
         visit_type="EMERGENCY",
-        min_time=now + timedelta(days=10),
-        max_time=now + timedelta(days=11),
+        block_start_time=now + timedelta(days=10),
+        block_end_time=now + timedelta(days=11),
         has_ed_admission=True,
         events=[
             MockEvent(now + timedelta(days=10, hours=5), "code4"),
@@ -101,8 +101,8 @@ def test_merge_patient_blocks():
     # Restored block 1
     block1 = MockPatientBlock(
         visit_type="INPATIENT",
-        min_time=now,
-        max_time=now + timedelta(days=5),
+        block_start_time=now,
+        block_end_time=now + timedelta(days=5),
         has_admission=True,
         events=[MockEvent(now + timedelta(hours=1), "code1"), MockEvent(now + timedelta(hours=2), "code2")],
     )
@@ -110,8 +110,8 @@ def test_merge_patient_blocks():
     # Test Case 3: Multiple contained blocks
     block4 = MockPatientBlock(
         visit_type="OUTPATIENT",
-        min_time=now + timedelta(days=3),
-        max_time=now + timedelta(days=4),
+        block_start_time=now + timedelta(days=3),
+        block_end_time=now + timedelta(days=4),
         events=[MockEvent(now + timedelta(days=3, hours=1), "code5")],
     )
 
@@ -136,15 +136,15 @@ def test_merge_patient_blocks():
     patient_blocks = [
         MockPatientBlock(
             visit_type="INPATIENT",
-            min_time=now,
-            max_time=now + timedelta(days=5),
+            block_start_time=now,
+            block_end_time=now + timedelta(days=5),
             has_admission=True,
             events=[MockEvent(now + timedelta(hours=1), "code1"), MockEvent(now + timedelta(hours=2), "code2")],
         ),
         MockPatientBlock(
             visit_type="INPATIENT",
-            min_time=now + timedelta(days=3),
-            max_time=now + timedelta(days=4),
+            block_start_time=now + timedelta(days=3),
+            block_end_time=now + timedelta(days=4),
             discharged_to="discharged_to",
             events=[
                 MockEvent(now + timedelta(days=3, hours=1), "INPATIENT"),

@@ -1,8 +1,6 @@
 import collections
 import functools
 import os
-import shutil
-from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -13,6 +11,7 @@ from datasets import Dataset, DatasetDict, Features, Sequence, Split, Value
 from transformers.utils import logging
 
 from cehrbert.data_generators.hf_data_generator import UNKNOWN_VALUE
+from cehrbert.data_generators.hf_data_generator.cache_util import CacheFileCollector
 from cehrbert.data_generators.hf_data_generator.hf_dataset import apply_cehrbert_dataset_mapping
 from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import DatasetMapping
 from cehrbert.data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules import MedsToCehrBertConversion
@@ -27,25 +26,6 @@ MEDS_SPLIT_DATA_SPLIT_MAPPING = {
 }
 NON_ALPHANUMERIC_CHARS = r"[\w\/\\:\-_]"
 LOG = logging.get_logger("transformers")
-
-
-@dataclass
-class CacheFileCollector:
-    cache_files: List[Dict[str, str]] = field(default_factory=list)
-
-    def remove_cache_files(self):
-        for cache_file in self.cache_files:
-            file_name = cache_file.get("filename", None)
-            if file_name and os.path.exists(file_name):
-                try:
-                    if os.path.isdir(file_name):
-                        shutil.rmtree(file_name)
-                        LOG.debug(f"Removed cache directory: {file_name}")
-                    else:
-                        os.remove(file_name)
-                        LOG.debug(f"Removed cache file: {file_name}")
-                except OSError as e:
-                    LOG.warning(f"Error removing {file_name}: {e}")
 
 
 def get_meds_to_cehrbert_conversion_cls(
@@ -238,9 +218,13 @@ def _meds_to_cehrbert_generator(
     default_visit_id: int,
     meds_to_cehrbert_conversion_type: MedsToCehrBertConversionType,
     meds_exclude_tables: Optional[List[str]] = None,
+    disconnect_problem_list_events: bool = False,
 ) -> CehrBertPatient:
     conversion = get_meds_to_cehrbert_conversion_cls(
-        meds_to_cehrbert_conversion_type, default_visit_id=default_visit_id, meds_exclude_tables=meds_exclude_tables
+        meds_to_cehrbert_conversion_type,
+        default_visit_id=default_visit_id,
+        meds_exclude_tables=meds_exclude_tables,
+        disconnect_problem_list_events=disconnect_problem_list_events,
     )
     with meds_reader.SubjectDatabase(path_to_db) as patient_database:
         for shard in shards:
@@ -322,6 +306,7 @@ def _create_cehrbert_data_from_meds(
         path_to_db=os.path.expanduser(data_args.data_folder),
         default_visit_id=default_visit_id,
         meds_to_cehrbert_conversion_type=data_args.meds_to_cehrbert_conversion_type,
+        disconnect_problem_list_events=data_args.disconnect_problem_list_events,
     )
     dataset = Dataset.from_generator(
         batch_func,

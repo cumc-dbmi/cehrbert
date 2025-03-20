@@ -16,10 +16,11 @@ from tqdm import tqdm
 from transformers import EarlyStoppingCallback, Trainer, TrainingArguments, set_seed
 from transformers.utils import logging
 
+from cehrbert.data_generators.hf_data_generator.cache_util import CacheFileCollector
 from cehrbert.data_generators.hf_data_generator.hf_dataset import create_cehrbert_finetuning_dataset
 from cehrbert.data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
 from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import MedToCehrBertDatasetMapping
-from cehrbert.data_generators.hf_data_generator.meds_utils import CacheFileCollector, create_dataset_from_meds_reader
+from cehrbert.data_generators.hf_data_generator.meds_utils import create_dataset_from_meds_reader
 from cehrbert.models.hf_models.hf_cehrbert import (
     CehrBertForClassification,
     CehrBertLstmForClassification,
