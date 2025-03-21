@@ -16,7 +16,7 @@ class CacheFileCollector:
     def add_cache_files(self, dataset: Union[Dataset, IterableDataset, DatasetDict]) -> None:
         if isinstance(dataset, Dataset):
             self.cache_files.extend(dataset.cache_files)
-        elif isinstance(dataset, (DatasetDict, IterableDataset)):
+        elif isinstance(dataset, DatasetDict):
             for dataset_split in dataset.values():
                 self.add_cache_files(dataset_split)
 
