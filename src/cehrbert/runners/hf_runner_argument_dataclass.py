@@ -142,6 +142,14 @@ class DataTrainingArguments:
             "including start_year, start_age, gender, race."
         },
     )
+    disconnect_problem_list_events: Optional[bool] = dataclasses.field(
+        default=False,
+        metadata={
+            "help": "The boolean indicator to indicate whether we want to disconnect the problem list events "
+            "from the corresponding visits because the problem list records could occur many days ahead."
+            "This depends on how the EHR records are generated, default to False"
+        },
+    )
     streaming: Optional[bool] = dataclasses.field(
         default=False,
         metadata={"help": "The boolean indicator to indicate whether the data should be streamed"},

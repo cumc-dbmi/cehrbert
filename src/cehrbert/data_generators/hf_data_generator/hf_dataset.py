@@ -43,7 +43,8 @@ def create_cehrbert_pretraining_dataset(
 
     # Remove patients without any records
     dataset = filter_dataset(dataset, data_args)
-
+    if cache_file_collector and isinstance(dataset, Dataset):
+        cache_file_collector.cache_files.extend(dataset.cache_files)
     # If the data is already in meds, we don't need to sort the sequence anymore
     if data_args.is_data_in_meds:
         mapping_functions = [HFTokenizationMapping(concept_tokenizer, True)]
@@ -61,7 +62,7 @@ def create_cehrbert_pretraining_dataset(
             batch_size=data_args.preprocessing_batch_size,
             streaming=data_args.streaming,
         )
-        if cache_file_collector is not None:
+        if cache_file_collector and isinstance(dataset, Dataset):
             cache_file_collector.cache_files.extend(dataset.cache_files)
 
     if not data_args.streaming:

@@ -319,7 +319,7 @@ def _create_cehrbert_data_from_meds(
         features=features,
     )
     # These cached files need to be deleted manually
-    if cache_file_collector:
+    if cache_file_collector and isinstance(dataset, Dataset):
         cache_file_collector.cache_files.extend(dataset.cache_files)
     if dataset_mappings:
         for dataset_mapping in dataset_mappings:
@@ -332,6 +332,6 @@ def _create_cehrbert_data_from_meds(
                 streaming=data_args.streaming,
             )
             # Collect additional cached files for every transformation applied to the dataset
-            if cache_file_collector:
+            if cache_file_collector and isinstance(dataset, Dataset):
                 cache_file_collector.cache_files.extend(dataset.cache_files)
     return dataset
