@@ -260,10 +260,6 @@ class PatientBlock:
         numeric_value = getattr(event, "numeric_value", None)
         unit = getattr(event, "unit", None)
 
-        # We need to bound the event time within the visit start and end
-        time = max(time, self.block_start_time)
-        time = min(time, self.block_end_time)
-
         if numeric_value is None and text_value is not None:
             conversion_rule = self.conversion.get_text_event_to_numeric_events_rule(code)
             if conversion_rule:
