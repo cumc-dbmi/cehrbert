@@ -267,7 +267,6 @@ def main():
 
         # Organize them into a single DatasetDict
         final_splits = DatasetDict({"train": train_set, "validation": validation_set, "test": test_set})
-        cache_file_collector.add_cache_files(final_splits)
 
         processed_dataset = create_cehrbert_finetuning_dataset(
             dataset=final_splits,
