@@ -109,8 +109,8 @@ def main():
         training_args.dataloader_num_workers = 0
 
     tokenizer = load_pretrained_tokenizer(model_args)
+    cache_file_collector = CacheFileCollector()
     prepared_ds_path = generate_prepared_ds_path(data_args, model_args, data_folder=data_args.cohort_folder)
-
     if any(prepared_ds_path.glob("*")):
         LOG.info(f"Loading prepared dataset from disk at {prepared_ds_path}...")
         processed_dataset = load_from_disk(str(prepared_ds_path))
@@ -135,7 +135,6 @@ def main():
                     )
             except Exception as e:
                 LOG.exception(e)
-                cache_file_collector = CacheFileCollector()
                 dataset = create_dataset_from_meds_reader(
                     data_args,
                     dataset_mappings=[MedToCehrBertDatasetMapping(data_args=data_args, is_pretraining=False)],
@@ -268,8 +267,8 @@ def main():
 
         # Organize them into a single DatasetDict
         final_splits = DatasetDict({"train": train_set, "validation": validation_set, "test": test_set})
+        cache_file_collector.add_cache_files(final_splits)
 
-        cache_file_collector = CacheFileCollector()
         processed_dataset = create_cehrbert_finetuning_dataset(
             dataset=final_splits,
             concept_tokenizer=tokenizer,
@@ -284,9 +283,10 @@ def main():
                 "Clean up the cached files for the cehrbert fine-tuning dataset: %s",
                 stats,
             )
-            cache_file_collector.remove_cache_files()
             processed_dataset = load_from_disk(str(prepared_ds_path))
 
+    # Remove all the cached files collected during the data transformation if there are any
+    cache_file_collector.remove_cache_files()
     collator = CehrBertDataCollator(tokenizer, model_args.max_position_embeddings, is_pretraining=False)
 
     # Set seed before initializing model.

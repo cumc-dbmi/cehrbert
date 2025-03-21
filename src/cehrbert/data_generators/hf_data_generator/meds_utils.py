@@ -319,8 +319,9 @@ def _create_cehrbert_data_from_meds(
         features=features,
     )
     # These cached files need to be deleted manually
-    if cache_file_collector and isinstance(dataset, Dataset):
-        cache_file_collector.cache_files.extend(dataset.cache_files)
+    if cache_file_collector:
+        cache_file_collector.add_cache_files(dataset)
+
     if dataset_mappings:
         for dataset_mapping in dataset_mappings:
             # Convert the CehrBertPatient to CehrBert data inputs
@@ -330,8 +331,6 @@ def _create_cehrbert_data_from_meds(
                 num_proc=data_args.preprocessing_num_workers,
                 batch_size=data_args.preprocessing_batch_size,
                 streaming=data_args.streaming,
+                cache_file_collector=cache_file_collector,
             )
-            # Collect additional cached files for every transformation applied to the dataset
-            if cache_file_collector and isinstance(dataset, Dataset):
-                cache_file_collector.cache_files.extend(dataset.cache_files)
     return dataset

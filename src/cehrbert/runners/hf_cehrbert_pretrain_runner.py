@@ -158,8 +158,8 @@ def main():
         # be set to 0. Otherwise the trainer will throw an error
         training_args.dataloader_num_workers = 0
 
+    cache_file_collector = CacheFileCollector()
     prepared_ds_path = generate_prepared_ds_path(data_args, model_args)
-
     if any(prepared_ds_path.glob("*")):
         LOG.info("Loading prepared dataset from disk at %s...", prepared_ds_path)
         processed_dataset = load_from_disk(str(prepared_ds_path))
@@ -190,7 +190,6 @@ def main():
                     )
             except FileNotFoundError as e:
                 LOG.exception(e)
-                cache_file_collector = CacheFileCollector()
                 dataset = create_dataset_from_meds_reader(
                     data_args,
                     dataset_mappings=[MedToCehrBertDatasetMapping(data_args=data_args, is_pretraining=True)],
@@ -232,8 +231,7 @@ def main():
                     f"validation_split_num: {data_args.validation_split_num}\n"
                     f"streaming: {data_args.streaming}"
                 )
-
-        cache_file_collector = CacheFileCollector()
+            cache_file_collector.add_cache_files(dataset)
         # Create the CEHR-BERT tokenizer if it's not available in the output folder
         tokenizer = load_and_create_tokenizer(data_args=data_args, model_args=model_args, dataset=dataset)
         # sort the patient features chronologically and tokenize the data
@@ -248,8 +246,10 @@ def main():
                 "Clean up the cached files for the cehrbert pretraining dataset: %s",
                 stats,
             )
-            cache_file_collector.remove_cache_files()
             processed_dataset = load_from_disk(str(prepared_ds_path))
+
+    # Remove all the cached files collected during the data transformation if there are any
+    cache_file_collector.remove_cache_files()
 
     def filter_func(examples):
         return [_ >= data_args.min_num_tokens for _ in examples["num_of_concepts"]]

@@ -1,8 +1,9 @@
 import os
 import shutil
 from dataclasses import dataclass, field
-from typing import Dict, List
+from typing import Dict, List, Union
 
+from datasets import Dataset, DatasetDict, IterableDataset
 from transformers.utils import logging
 
 LOG = logging.get_logger("transformers")
@@ -12,7 +13,14 @@ LOG = logging.get_logger("transformers")
 class CacheFileCollector:
     cache_files: List[Dict[str, str]] = field(default_factory=list)
 
-    def remove_cache_files(self):
+    def add_cache_files(self, dataset: Union[Dataset, IterableDataset, DatasetDict]) -> None:
+        if isinstance(dataset, Dataset):
+            self.cache_files.extend(dataset.cache_files)
+        elif isinstance(dataset, (DatasetDict, IterableDataset)):
+            for dataset_split in dataset.values():
+                self.add_cache_files(dataset_split)
+
+    def remove_cache_files(self) -> None:
         for cache_file in self.cache_files:
             file_name = cache_file.get("filename", None)
             if file_name and os.path.exists(file_name):
@@ -25,3 +33,4 @@ class CacheFileCollector:
                         LOG.debug(f"Removed cache file: {file_name}")
                 except OSError as e:
                     LOG.warning(f"Error removing {file_name}: {e}")
+        self.cache_files = []
