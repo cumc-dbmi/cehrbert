@@ -7,6 +7,7 @@ from datasets import Dataset, DatasetDict, IterableDatasetDict, load_from_disk
 from transformers import Trainer, set_seed
 from transformers.utils import logging
 
+from cehrbert.data_generators.hf_data_generator.cache_util import CacheFileCollector
 from cehrbert.data_generators.hf_data_generator.hf_dataset import create_cehrbert_pretraining_dataset
 from cehrbert.data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
 from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import MedToCehrBertDatasetMapping
@@ -157,8 +158,8 @@ def main():
         # be set to 0. Otherwise the trainer will throw an error
         training_args.dataloader_num_workers = 0
 
+    cache_file_collector = CacheFileCollector()
     prepared_ds_path = generate_prepared_ds_path(data_args, model_args)
-
     if any(prepared_ds_path.glob("*")):
         LOG.info("Loading prepared dataset from disk at %s...", prepared_ds_path)
         processed_dataset = load_from_disk(str(prepared_ds_path))
@@ -190,7 +191,9 @@ def main():
             except FileNotFoundError as e:
                 LOG.exception(e)
                 dataset = create_dataset_from_meds_reader(
-                    data_args, dataset_mappings=[MedToCehrBertDatasetMapping(data_args=data_args, is_pretraining=True)]
+                    data_args,
+                    dataset_mappings=[MedToCehrBertDatasetMapping(data_args=data_args, is_pretraining=True)],
+                    cache_file_collector=cache_file_collector,
                 )
                 if not data_args.streaming:
                     dataset.save_to_disk(str(meds_extension_path))
@@ -199,6 +202,8 @@ def main():
                         "Clean up the cached files for the cehrbert dataset transformed from the MEDS: %s",
                         stats,
                     )
+                    # Clean up the files created from the data generator
+                    cache_file_collector.remove_cache_files()
                     dataset = load_from_disk(str(meds_extension_path))
         else:
             # Load the dataset from the parquet files
@@ -226,12 +231,12 @@ def main():
                     f"validation_split_num: {data_args.validation_split_num}\n"
                     f"streaming: {data_args.streaming}"
                 )
-
+            cache_file_collector.add_cache_files(dataset)
         # Create the CEHR-BERT tokenizer if it's not available in the output folder
         tokenizer = load_and_create_tokenizer(data_args=data_args, model_args=model_args, dataset=dataset)
         # sort the patient features chronologically and tokenize the data
         processed_dataset = create_cehrbert_pretraining_dataset(
-            dataset=dataset, concept_tokenizer=tokenizer, data_args=data_args
+            dataset=dataset, concept_tokenizer=tokenizer, data_args=data_args, cache_file_collector=cache_file_collector
         )
         # only save the data to the disk if it is not streaming
         if not data_args.streaming:
@@ -242,6 +247,9 @@ def main():
                 stats,
             )
             processed_dataset = load_from_disk(str(prepared_ds_path))
+
+    # Remove all the cached files collected during the data transformation if there are any
+    cache_file_collector.remove_cache_files()
 
     def filter_func(examples):
         return [_ >= data_args.min_num_tokens for _ in examples["num_of_concepts"]]
@@ -262,13 +270,6 @@ def main():
 
     model = load_and_create_model(model_args, tokenizer)
 
-    collator = CehrBertDataCollator(
-        tokenizer=tokenizer,
-        max_length=model_args.max_position_embeddings,
-        is_pretraining=True,
-        mlm_probability=model.config.mlm_probability,
-    )
-
     # Detecting last checkpoint.
     last_checkpoint = get_last_hf_checkpoint(training_args)
 
@@ -279,6 +280,12 @@ def main():
         processed_dataset.set_format("pt")
 
     def data_collator(features):
+        collator = CehrBertDataCollator(
+            tokenizer=tokenizer,
+            max_length=model_args.max_position_embeddings,
+            is_pretraining=True,
+            mlm_probability=model.config.mlm_probability,
+        )
         batch = collator(features)
         # Convert any float64 tensors to float32
         for key in batch:

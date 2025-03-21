@@ -16,6 +16,7 @@ from tqdm import tqdm
 from transformers import EarlyStoppingCallback, Trainer, TrainingArguments, set_seed
 from transformers.utils import logging
 
+from cehrbert.data_generators.hf_data_generator.cache_util import CacheFileCollector
 from cehrbert.data_generators.hf_data_generator.hf_dataset import create_cehrbert_finetuning_dataset
 from cehrbert.data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
 from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import MedToCehrBertDatasetMapping
@@ -108,8 +109,8 @@ def main():
         training_args.dataloader_num_workers = 0
 
     tokenizer = load_pretrained_tokenizer(model_args)
+    cache_file_collector = CacheFileCollector()
     prepared_ds_path = generate_prepared_ds_path(data_args, model_args, data_folder=data_args.cohort_folder)
-
     if any(prepared_ds_path.glob("*")):
         LOG.info(f"Loading prepared dataset from disk at {prepared_ds_path}...")
         processed_dataset = load_from_disk(str(prepared_ds_path))
@@ -135,7 +136,9 @@ def main():
             except Exception as e:
                 LOG.exception(e)
                 dataset = create_dataset_from_meds_reader(
-                    data_args, dataset_mappings=[MedToCehrBertDatasetMapping(data_args=data_args, is_pretraining=False)]
+                    data_args,
+                    dataset_mappings=[MedToCehrBertDatasetMapping(data_args=data_args, is_pretraining=False)],
+                    cache_file_collector=cache_file_collector,
                 )
                 if not data_args.streaming:
                     dataset.save_to_disk(str(meds_extension_path))
@@ -144,6 +147,8 @@ def main():
                         "Clean up the cached files for the cehrbert dataset transformed from the MEDS: %s",
                         stats,
                     )
+                    # Clean up the files created from the data generator
+                    cache_file_collector.remove_cache_files()
                     dataset = load_from_disk(str(meds_extension_path))
 
             train_set = dataset["train"]
@@ -264,7 +269,10 @@ def main():
         final_splits = DatasetDict({"train": train_set, "validation": validation_set, "test": test_set})
 
         processed_dataset = create_cehrbert_finetuning_dataset(
-            dataset=final_splits, concept_tokenizer=tokenizer, data_args=data_args
+            dataset=final_splits,
+            concept_tokenizer=tokenizer,
+            data_args=data_args,
+            cache_file_collector=cache_file_collector,
         )
 
         if not data_args.streaming:
@@ -276,6 +284,8 @@ def main():
             )
             processed_dataset = load_from_disk(str(prepared_ds_path))
 
+    # Remove all the cached files collected during the data transformation if there are any
+    cache_file_collector.remove_cache_files()
     collator = CehrBertDataCollator(tokenizer, model_args.max_position_embeddings, is_pretraining=False)
 
     # Set seed before initializing model.

@@ -1,7 +1,8 @@
-from typing import Union
+from typing import Optional, Union
 
 from datasets import Dataset, DatasetDict, IterableDataset, IterableDatasetDict
 
+from cehrbert.data_generators.hf_data_generator.cache_util import CacheFileCollector
 from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import (
     DatasetMapping,
     HFFineTuningMapping,
@@ -36,12 +37,14 @@ def create_cehrbert_pretraining_dataset(
     dataset: Union[Dataset, DatasetDict],
     concept_tokenizer: CehrBertTokenizer,
     data_args: DataTrainingArguments,
+    cache_file_collector: Optional[CacheFileCollector] = None,
 ) -> Dataset:
     required_columns = TRANSFORMER_COLUMNS + CEHRBERT_COLUMNS
 
     # Remove patients without any records
     dataset = filter_dataset(dataset, data_args)
-
+    if cache_file_collector:
+        cache_file_collector.add_cache_files(dataset)
     # If the data is already in meds, we don't need to sort the sequence anymore
     if data_args.is_data_in_meds:
         mapping_functions = [HFTokenizationMapping(concept_tokenizer, True)]
@@ -58,6 +61,7 @@ def create_cehrbert_pretraining_dataset(
             num_proc=data_args.preprocessing_num_workers,
             batch_size=data_args.preprocessing_batch_size,
             streaming=data_args.streaming,
+            cache_file_collector=cache_file_collector,
         )
 
     if not data_args.streaming:
@@ -75,12 +79,14 @@ def create_cehrbert_finetuning_dataset(
     dataset: Union[Dataset, DatasetDict],
     concept_tokenizer: CehrBertTokenizer,
     data_args: DataTrainingArguments,
+    cache_file_collector: Optional[CacheFileCollector] = None,
 ) -> Dataset:
     required_columns = TRANSFORMER_COLUMNS + CEHRBERT_COLUMNS + FINETUNING_COLUMNS
 
     # Remove patients without any records
     dataset = filter_dataset(dataset, data_args)
-
+    if cache_file_collector:
+        cache_file_collector.add_cache_files(dataset)
     if data_args.is_data_in_meds:
         mapping_functions = [
             HFFineTuningMapping(),
@@ -100,6 +106,7 @@ def create_cehrbert_finetuning_dataset(
             num_proc=data_args.preprocessing_num_workers,
             batch_size=data_args.preprocessing_batch_size,
             streaming=data_args.streaming,
+            cache_file_collector=cache_file_collector,
         )
 
     if not data_args.streaming:
@@ -138,6 +145,7 @@ def apply_cehrbert_dataset_mapping(
     batch_size: int = 128,
     num_proc: int = 1,
     streaming: bool = False,
+    cache_file_collector: Optional[CacheFileCollector] = None,
 ):
     if streaming:
         if isinstance(dataset, DatasetDict):
@@ -162,4 +170,6 @@ def apply_cehrbert_dataset_mapping(
         )
         if mapping_function.remove_columns():
             dataset = dataset.remove_columns(mapping_function.remove_columns())
+    if cache_file_collector:
+        cache_file_collector.add_cache_files(dataset)
     return dataset

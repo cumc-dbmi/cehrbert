@@ -7,14 +7,11 @@ from typing import Dict, List, Optional, Tuple, Union
 import meds_reader
 import numpy as np
 import pandas as pd
-from datasets import Dataset, DatasetDict, Split
+from datasets import Dataset, DatasetDict, Features, Sequence, Split, Value
 from transformers.utils import logging
 
-from cehrbert.data_generators.hf_data_generator import (
-    DEFAULT_ED_CONCEPT_ID,
-    DEFAULT_INPATIENT_CONCEPT_ID,
-    UNKNOWN_VALUE,
-)
+from cehrbert.data_generators.hf_data_generator import UNKNOWN_VALUE
+from cehrbert.data_generators.hf_data_generator.cache_util import CacheFileCollector
 from cehrbert.data_generators.hf_data_generator.hf_dataset import apply_cehrbert_dataset_mapping
 from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import DatasetMapping
 from cehrbert.data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules import MedsToCehrBertConversion
@@ -137,12 +134,11 @@ def convert_one_patient(
     visits = list()
     for visit_id, blocks in patient_block_dict.items():
         visit_type = blocks[0].visit_type
-        visit_start_datetime = min([b.min_time for b in blocks])
+        has_discharge_facility = any([b.has_ed_or_hospital_admission for b in blocks])
+        visit_start_datetime = min([b.get_visit_start_datetime() for b in blocks])
         visit_end_datetime = max([b.get_visit_end_datetime() for b in blocks])
         discharge_facility = (
-            next(filter(None, [b.get_discharge_facility() for b in blocks]), None)
-            if visit_type in [DEFAULT_INPATIENT_CONCEPT_ID, DEFAULT_ED_CONCEPT_ID]
-            else None
+            next(filter(None, [b.discharged_to for b in blocks]), None) if has_discharge_facility else None
         )
         visit_events = list()
         for block in blocks:
@@ -183,34 +179,37 @@ def create_dataset_from_meds_reader(
     data_args: DataTrainingArguments,
     default_visit_id: int = 1,
     dataset_mappings: Optional[List[DatasetMapping]] = None,
+    cache_file_collector: Optional[CacheFileCollector] = None,
 ) -> DatasetDict:
-
     LOG.info("The meds_to_cehrbert_conversion_type: %s", data_args.meds_to_cehrbert_conversion_type)
     LOG.info("The att_function_type: %s", data_args.att_function_type)
     LOG.info("The inpatient_att_function_type: %s", data_args.inpatient_att_function_type)
     LOG.info("The include_auxiliary_token: %s", data_args.include_auxiliary_token)
     LOG.info("The include_demographic_prompt: %s", data_args.include_demographic_prompt)
     LOG.info("The meds_exclude_tables: %s", "\n".join(data_args.meds_exclude_tables))
+    LOG.info("The disconnect_problem_list_events: %s", data_args.disconnect_problem_list_events)
 
     train_dataset = _create_cehrbert_data_from_meds(
         data_args=data_args,
         split="train",
         default_visit_id=default_visit_id,
         dataset_mappings=dataset_mappings,
+        cache_file_collector=cache_file_collector,
     )
     tuning_dataset = _create_cehrbert_data_from_meds(
         data_args=data_args,
         split="tuning",
         default_visit_id=default_visit_id,
         dataset_mappings=dataset_mappings,
+        cache_file_collector=cache_file_collector,
     )
     held_out_dataset = _create_cehrbert_data_from_meds(
         data_args=data_args,
         split="held_out",
         default_visit_id=default_visit_id,
         dataset_mappings=dataset_mappings,
+        cache_file_collector=cache_file_collector,
     )
-
     return DatasetDict({"train": train_dataset, "validation": tuning_dataset, "test": held_out_dataset})
 
 
@@ -220,9 +219,13 @@ def _meds_to_cehrbert_generator(
     default_visit_id: int,
     meds_to_cehrbert_conversion_type: MedsToCehrBertConversionType,
     meds_exclude_tables: Optional[List[str]] = None,
+    disconnect_problem_list_events: bool = False,
 ) -> CehrBertPatient:
     conversion = get_meds_to_cehrbert_conversion_cls(
-        meds_to_cehrbert_conversion_type, default_visit_id=default_visit_id, meds_exclude_tables=meds_exclude_tables
+        meds_to_cehrbert_conversion_type,
+        default_visit_id=default_visit_id,
+        meds_exclude_tables=meds_exclude_tables,
+        disconnect_problem_list_events=disconnect_problem_list_events,
     )
     with meds_reader.SubjectDatabase(path_to_db) as patient_database:
         for shard in shards:
@@ -244,6 +247,7 @@ def _create_cehrbert_data_from_meds(
     split: str,
     default_visit_id: int = 1,
     dataset_mappings: Optional[List[DatasetMapping]] = None,
+    cache_file_collector: Optional[CacheFileCollector] = None,
 ):
     assert split in ["held_out", "train", "tuning"]
     batches = []
@@ -263,12 +267,47 @@ def _create_cehrbert_data_from_meds(
         for subject_id in patient_split[split]:
             batches.append((subject_id, None, None))
 
+    features = Features(
+        {
+            "patient_id": Value(dtype="int32"),
+            "birth_datetime": Value(dtype="timestamp[us]"),  # Use timestamp with microsecond precision
+            "gender": Value(dtype="string"),
+            "race": Value(dtype="string"),
+            "ethnicity": Value(dtype="string"),
+            "index_date": Value(dtype="timestamp[us]"),
+            "age_at_index": Value(dtype="int16"),
+            "label": Value(dtype="float32"),  # Using float to accommodate both int and float labels
+            "visits": Sequence(
+                feature={
+                    "visit_type": Value(dtype="string"),
+                    "visit_start_datetime": Value(dtype="timestamp[us]"),
+                    "visit_end_datetime": Value(dtype="timestamp[us]"),
+                    "discharge_facility": Value(dtype="string"),
+                    "events": Sequence(
+                        feature={
+                            "time": Value(dtype="timestamp[us]"),
+                            "code": Value(dtype="string"),
+                            "text_value": Value(dtype="string"),
+                            "numeric_value": Value(dtype="float32"),
+                            "unit": Value(dtype="string"),
+                            "properties": {
+                                "visit_id": Value(dtype="int32"),
+                                "table": Value(dtype="string"),
+                            },
+                        }
+                    ),
+                }
+            ),
+        }
+    )
+
     split_batches = np.array_split(np.asarray(batches), data_args.preprocessing_num_workers)
     batch_func = functools.partial(
         _meds_to_cehrbert_generator,
         path_to_db=os.path.expanduser(data_args.data_folder),
         default_visit_id=default_visit_id,
         meds_to_cehrbert_conversion_type=data_args.meds_to_cehrbert_conversion_type,
+        disconnect_problem_list_events=data_args.disconnect_problem_list_events,
     )
     dataset = Dataset.from_generator(
         batch_func,
@@ -278,7 +317,11 @@ def _create_cehrbert_data_from_meds(
         num_proc=(data_args.preprocessing_num_workers if not data_args.streaming else None),
         writer_batch_size=data_args.preprocessing_batch_size,
         streaming=data_args.streaming,
+        features=features,
     )
+    # These cached files need to be deleted manually
+    if cache_file_collector:
+        cache_file_collector.add_cache_files(dataset)
 
     if dataset_mappings:
         for dataset_mapping in dataset_mappings:
@@ -289,5 +332,6 @@ def _create_cehrbert_data_from_meds(
                 num_proc=data_args.preprocessing_num_workers,
                 batch_size=data_args.preprocessing_batch_size,
                 streaming=data_args.streaming,
+                cache_file_collector=cache_file_collector,
             )
     return dataset

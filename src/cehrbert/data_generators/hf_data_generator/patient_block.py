@@ -6,9 +6,10 @@ from typing import Iterable, List, Optional, Tuple
 
 import meds_reader
 from meds.schema import birth_code
+from transformers import logging
 
 from cehrbert.data_generators.hf_data_generator import (
-    DEFAULT_ED_CONCEPT_ID,
+    DEFAULT_ED_TO_INPATIENT_CONCEPT_ID,
     DEFAULT_INPATIENT_CONCEPT_ID,
     DEFAULT_OUTPATIENT_CONCEPT_ID,
 )
@@ -18,6 +19,36 @@ from cehrbert.data_generators.hf_data_generator.meds_to_cehrbert_conversion_rule
     MedsToCehrbertOMOP,
 )
 from cehrbert.med_extension.schema_extension import Event
+
+LOG = logging.get_logger("transformers")
+
+
+def is_visit_table(table_name: str) -> bool:
+    return table_name in ["visit", "visit_occurrence"]
+
+
+def is_condition_table(table_name: str) -> bool:
+    return table_name in ["condition", "condition_occurrence"]
+
+
+def is_procedure_table(table_name: str) -> bool:
+    return table_name in ["procedure", "procedure_occurrence"]
+
+
+def is_drug_table(table_name: str) -> bool:
+    return table_name in ["drug", "drug_exposure"]
+
+
+def is_device_table(table_name: str) -> bool:
+    return table_name in ["device", "device_exposure"]
+
+
+def is_measurement_table(table_name: str) -> bool:
+    return table_name == "measurement"
+
+
+def is_observation_table(table_name: str) -> bool:
+    return table_name == "observation"
 
 
 @dataclass
@@ -66,33 +97,113 @@ class PatientBlock:
         """
         self.visit_id = visit_id
         self.events = sorted(events, key=lambda e: [e.time, e.code])
-        self.min_time = events[0].time
-        self.max_time = events[-1].time
         self.conversion = conversion
 
-        # Cache these variables so we don't need to compute
-        self.has_ed_admission = self._has_ed_admission()
-        self.has_admission = self._has_admission()
-        self.discharged_to = self.get_discharge_facility()
-        self.has_discharge = self.discharged_to is not None
+        self._admission_event, admission_event_time = self._find_admission()
+        self._ed_admission_event, ed_admission_event_time = self._find_ed_admission()
+        self._inferred_visit_type, inferred_visit_event_time = self._infer_visit_type()
+        self._discharge_facility, discharge_event_time = self._find_discharge_facility()
 
-        # Infer the visit_type from the events
+        # Set the block start time depending on the visit type
+        self.block_start_time: datetime
         # Admission takes precedence over ED
         if self.has_admission:
-            self.visit_type = DEFAULT_INPATIENT_CONCEPT_ID
+            self.visit_type = self._admission_event
+            self.block_start_time = admission_event_time
         elif self.has_ed_admission:
-            self.visit_type = DEFAULT_ED_CONCEPT_ID
+            self.visit_type = self._ed_admission_event
+            self.block_start_time = ed_admission_event_time
         else:
-            self.visit_type = self._infer_visit_type()
+            self.visit_type = self._inferred_visit_type
+            self.block_start_time = inferred_visit_event_time
 
-    def _infer_visit_type(self) -> str:
+        # Set the block end time depending on the visit type
+        self.block_end_time: datetime
+        if self.has_ed_or_hospital_admission and discharge_event_time:
+            self.block_end_time = discharge_event_time
+        else:
+            self.block_end_time = self._infer_block_end_time()
+            if not self.block_end_time:
+                self.block_end_time = self.block_start_time.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+    @property
+    def min_time(self) -> datetime:
+        return self.events[0].time
+
+    @property
+    def max_time(self) -> datetime:
+        return self.events[-1].time
+
+    @property
+    def has_admission(self) -> bool:
+        return self._admission_event is not None
+
+    @property
+    def has_ed_admission(self) -> bool:
+        return self._ed_admission_event is not None
+
+    @property
+    def has_ed_or_hospital_admission(self) -> bool:
+        return self.has_admission | self.has_ed_admission
+
+    @property
+    def has_discharge(self) -> bool:
+        return self.discharged_to is not None
+
+    @property
+    def discharged_to(self) -> Optional[str]:
+        return self._discharge_facility
+
+    def _infer_block_start_time(self) -> Optional[datetime]:
         for event in self.events:
+            table = getattr(event, "table", None)
+            if is_visit_table(table):
+                return event.time
+        return self.events[0].time
+
+    def _infer_block_end_time(self) -> Optional[datetime]:
+        """
+        If the discharge event is missing, we try to infer the end of the visit.
+
+        by one of the following records. We do not want to use drug because they could
+        occur years away after the visit occurred. We also do not want to use condition
+        because they could be problem list conditions that occurred years before the visit
+
+        Returns datetime.datetime:
+        """
+        for event in self.events:
+            table = getattr(event, "table", None)
+            if is_visit_table(table) and event.end:
+                return event.end
+
+        for event in reversed(self.events):
+            table = getattr(event, "table", None)
+            can_infer = is_measurement_table(table) | is_procedure_table(table) | is_observation_table(table)
+            if can_infer:
+                return event.time
+        return self.events[-1].time
+
+    def _infer_visit_type(self) -> Tuple[Optional[str], Optional[datetime]]:
+
+        inferred_visit_type: Optional[str] = None
+        inferred_block_start_time: Optional[datetime] = None
+        for event in self.events:
+            table = getattr(event, "table", None)
             for matching_rule in self.conversion.get_other_visit_matching_rules():
                 if re.match(matching_rule, event.code):
-                    return event.code
-        return DEFAULT_OUTPATIENT_CONCEPT_ID
+                    return event.code, event.time
+            if is_visit_table(table):
+                inferred_visit_type = event.code
+                inferred_block_start_time = event.time
+                break
 
-    def _has_ed_admission(self) -> bool:
+        if inferred_visit_type is None:
+            inferred_block_start_time = self._infer_block_start_time()
+            inferred_visit_type = DEFAULT_OUTPATIENT_CONCEPT_ID
+
+        return inferred_visit_type, inferred_block_start_time
+
+    def _find_ed_admission(self) -> Tuple[Optional[str], Optional[datetime]]:
         """
         Determines if the visit includes an emergency department (ED) admission event.
 
@@ -102,10 +213,10 @@ class PatientBlock:
         for event in self.events:
             for matching_rule in self.conversion.get_ed_admission_matching_rules():
                 if re.match(matching_rule, event.code):
-                    return True
-        return False
+                    return event.code, event.time
+        return None, None
 
-    def _has_admission(self) -> bool:
+    def _find_admission(self) -> Tuple[Optional[str], Optional[datetime]]:
         """
         Determines if the visit includes a hospital admission event.
 
@@ -115,10 +226,10 @@ class PatientBlock:
         for event in self.events:
             for matching_rule in self.conversion.get_admission_matching_rules():
                 if re.match(matching_rule, event.code):
-                    return True
-        return False
+                    return event.code, event.time
+        return None, None
 
-    def get_discharge_facility(self) -> Optional[str]:
+    def _find_discharge_facility(self) -> Tuple[Optional[str], Optional[datetime]]:
         """
         Determines if the visit includes a discharge event.
 
@@ -128,8 +239,8 @@ class PatientBlock:
         for event in self.events:
             for matching_rule in self.conversion.get_discharge_matching_rules():
                 if re.match(matching_rule, event.code):
-                    return event.code
-        return None
+                    return event.code, event.time
+        return None, None
 
     def _convert_event(self, event) -> List[Event]:
         """
@@ -179,11 +290,11 @@ class PatientBlock:
             )
         ]
 
+    def get_visit_start_datetime(self) -> datetime:
+        return self.block_start_time
+
     def get_visit_end_datetime(self) -> datetime:
-        for e in self.events:
-            if hasattr(e, "end"):
-                return getattr(e, "end")
-        return self.max_time
+        return self.block_end_time
 
     def get_meds_events(self) -> Iterable[Event]:
         """
@@ -223,11 +334,11 @@ def generate_demographics_and_patient_blocks(
 def omop_meds_generate_demographics_and_patient_blocks(
     patient: meds_reader.Subject, conversion: MedsToCehrBertConversion, prediction_time: datetime = None
 ) -> Tuple[PatientDemographics, List[PatientBlock]]:
+    disconnect_problem_list_events = getattr(conversion, "disconnect_problem_list_events", False)
     birth_datetime = None
     race = None
     gender = None
     ethnicity = None
-
     visit_events = defaultdict(list)
     unlinked_event_mapping = defaultdict(list)
     for e in patient.events:
@@ -253,21 +364,46 @@ def omop_meds_generate_demographics_and_patient_blocks(
             else:
                 unlinked_event_mapping[e.time.strftime("%Y-%m-%d")].append(e)
 
-    patient_block_mapping = {
-        visit_id: PatientBlock(events=events, visit_id=visit_id, conversion=conversion)
-        for visit_id, events in visit_events.items()
-    }
+    # We create patient blocks (placeholders for visits), we need to disassociate the problem list records from the
+    # corresponding visit otherwise this will mess up the patient timeline
+    if disconnect_problem_list_events:
+        patient_block_mapping = dict()
+        for visit_id, events in visit_events.items():
+            patient_block = PatientBlock(events=events, visit_id=visit_id, conversion=conversion)
+            updated_events = []
+            for e in patient_block.events:
+                # We need to handle the problem list here, because those records could occur years before the current visit
+                # we use one day as the threshold to disconnect the records from the visit.  For some drug records, they
+                # could occur years after the visit, we need to disconnect such records from the visit as well.
+                if (patient_block.block_start_time - e.time).days > 1:
+                    unlinked_event_mapping[e.time.strftime("%Y-%m-%d")].append(e)
+                elif patient_block.block_end_time and (e.time - patient_block.block_end_time).days > 1:
+                    unlinked_event_mapping[e.time.strftime("%Y-%m-%d")].append(e)
+                else:
+                    updated_events.append(e)
+            patient_block.events = updated_events
+            patient_block_mapping[visit_id] = patient_block
+    else:
+        patient_block_mapping = {
+            visit_id: PatientBlock(events=events, visit_id=visit_id, conversion=conversion)
+            for visit_id, events in visit_events.items()
+        }
 
     # Try to connect the unlinked events to existing visits
     for current_date_str in list(unlinked_event_mapping.keys()):
         current_date = datetime.strptime(current_date_str, "%Y-%m-%d").date()
         for visit_id, patient_block in patient_block_mapping.items():
-            if patient_block.min_time.date() <= current_date <= patient_block.max_time.date():
+            if (
+                patient_block.get_visit_start_datetime().date()
+                <= current_date
+                <= patient_block.get_visit_end_datetime().date()
+            ):
                 patient_block.events.extend(unlinked_event_mapping.pop(current_date_str, []))
                 # Need to sort the events if we insert new events to the patient block
                 patient_block.events = sorted(patient_block.events, key=lambda _: [_.time, _.code])
                 break
 
+    # For the orphan records, we create artificial visits for them
     max_visit_id = max(patient_block_mapping.keys()) + 1 if len(patient_block_mapping) > 0 else 1
     for events in unlinked_event_mapping.values():
         patient_block_mapping[max_visit_id] = PatientBlock(events, max_visit_id, conversion)
@@ -276,11 +412,115 @@ def omop_meds_generate_demographics_and_patient_blocks(
     patient_blocks = list(patient_block_mapping.values())
     demographics = PatientDemographics(birth_datetime=birth_datetime, race=race, gender=gender, ethnicity=ethnicity)
 
-    # If there are unlinked events, we need to add them as new patient blocks, therefore we need to re-order the patient block
+    # If there are unlinked events, we have added them as new patient blocks, therefore we need to re-order the patient block
     if len(unlinked_event_mapping) > 0:
-        patient_blocks = sorted(patient_block_mapping.values(), key=lambda block: block.min_time)
+        patient_blocks = sorted(patient_block_mapping.values(), key=lambda block: block.block_start_time)
 
-    return demographics, patient_blocks
+    merged_patient_blocks = merge_patient_blocks(patient, patient_blocks)
+    return demographics, merged_patient_blocks
+
+
+def merge_patient_blocks(patient: meds_reader.Subject, patient_blocks: List[PatientBlock]) -> List[PatientBlock]:
+    """
+    Merge patient blocks where one visit completely contains another visit.
+
+    This function merges PatientBlock objects when one block's time range fully
+    contains another block. When a merge occurs, events from the contained block
+    are added to the containing block, and the contained block is removed from
+    the final result.
+
+    The algorithm assumes that patient_blocks are already sorted chronologically
+    by their min_time.
+
+    Args:
+        patient (meds_reader.Subject): The patient subject whose blocks are being merged
+        patient_blocks (List[PatientBlock]): A list of PatientBlock objects to process
+
+    Returns:
+        List[PatientBlock]: A new list with merged PatientBlock objects
+
+    Example:
+        Given these blocks:
+        1. INPATIENT: Jan 1-10
+        2. OUTPATIENT: Jan 3-5 (contained within block 1)
+        3. EMERGENCY: Jan 15-16 (not overlapping)
+
+        The result would be:
+        1. INPATIENT: Jan 1-10 (now contains events from block 2)
+        2. EMERGENCY: Jan 15-16 (unchanged)
+    """
+    merging_info = []
+    block_indices_to_skip = []
+    merged_patient_blocks = []
+
+    for prev_index in range(len(patient_blocks)):
+        # Skip blocks that have already been merged into previous blocks
+        if prev_index in block_indices_to_skip:
+            continue
+
+        prev_block = patient_blocks[prev_index]
+
+        for next_index in range(prev_index + 1, len(patient_blocks)):
+            next_block = patient_blocks[next_index]
+
+            # Check if prev_block completely contains next_block:
+            # [prev_block_start] [next_block_start] [next_block_end] [prev_block_end]
+            if (
+                prev_block.block_start_time <= next_block.block_start_time
+                and next_block.block_end_time <= prev_block.block_end_time
+            ):
+                # If the long visit is not an admission visit and the short visit is an admission visit, this could happen
+                # when the hospitalization only lasts less than a day, and followed by an outpatient visit
+                # the outpatient starts at midnight of the day simply because how it is generated by the system
+                # and does not represent the true time stamps, we swap these two blocks
+                if not prev_block.has_ed_or_hospital_admission and next_block.has_ed_or_hospital_admission:
+                    prev_block, next_block = next_block, prev_block
+
+                # Merge the events from next_block into prev_block
+                for e in next_block.events:
+                    # We don't want to take the visit type and discharge facility codes from the patient block that will be merged
+                    if (e.code == next_block.visit_type) or (
+                        next_block.discharged_to is not None and e.code == next_block.discharged_to
+                    ):
+                        continue
+                    prev_block.events.append(e)
+
+                # Sort the combined events chronologically and by code
+                prev_block.events = sorted(prev_block.events, key=lambda _: [_.time, _.code])
+
+                # Set longer visit to E-I
+                if prev_block.has_admission and next_block.has_ed_admission:
+                    prev_block.visit_type = DEFAULT_ED_TO_INPATIENT_CONCEPT_ID
+
+                # Mark this block to be skipped in the outer loop
+                block_indices_to_skip.append(next_index)
+
+                # Record merge information for debugging
+                merging_info.append(
+                    (
+                        prev_block.visit_type,
+                        prev_block.block_start_time,
+                        prev_block.block_end_time,
+                        next_block.visit_type,
+                        next_block.block_start_time,
+                        next_block.block_end_time,
+                    )
+                )
+
+        # Add the block (with any merged events) to the result
+        merged_patient_blocks.append(prev_block)
+
+    # Log debugging information about merges if any occurred
+    if merging_info:
+        debug_log = "\n"
+        for prev_v, prev_min_t, prev_max_t, next_v, next_min_t, next_max_t in merging_info:
+            debug_log += (
+                f"{patient.subject_id}: visit {next_v} with {next_min_t} and {next_max_t} "
+                f"has been merged into visit {prev_v} with {prev_min_t} and {prev_max_t}\n"
+            )
+        LOG.debug(debug_log)
+
+    return merged_patient_blocks
 
 
 def mimic_meds_generate_demographics_and_patient_blocks(
