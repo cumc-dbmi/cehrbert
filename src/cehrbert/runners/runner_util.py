@@ -159,7 +159,6 @@ def generate_prepared_ds_path(data_args, model_args, data_folder=None) -> Path:
             - split_by_patient (bool): A flag indicating if the dataset should be split by patient IDs.
             - chronological_split (bool): A flag indicating if the split should be chronological.
         model_args (ModelArguments): An object containing model-specific arguments, such as:
-            - max_position_embeddings (int): The maximum sequence length that the model supports.
             - tokenizer_name_or_path (str): The path or name of the tokenizer used for preprocessing.
         data_folder (str, optional): An optional folder path to override the `data_folder` from `data_args`.
 
@@ -179,7 +178,6 @@ def generate_prepared_ds_path(data_args, model_args, data_folder=None) -> Path:
 
     Note:
         The hash is generated from a combination of the following:
-        - model_args.max_position_embeddings
         - paths of `data_folder` and `model_args.tokenizer_name_or_path`
         - `data_args.validation_split_percentage` (if provided)
         - `data_args.test_eval_ratio`, `data_args.split_by_patient`, and `data_args.chronological_split`
@@ -188,9 +186,7 @@ def generate_prepared_ds_path(data_args, model_args, data_folder=None) -> Path:
     """
     data_folder = data_folder if data_folder else data_args.data_folder
     concatenated_str = (
-        str(model_args.max_position_embeddings)
-        + "|"
-        + os.path.expanduser(data_folder)
+        os.path.expanduser(data_folder)
         + "|"
         + os.path.expanduser(model_args.tokenizer_name_or_path)
         + "|"
