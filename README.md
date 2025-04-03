@@ -76,10 +76,53 @@ Convert the OMOP dataset to the MEDS format
 pip install meds_etl==0.3.6;
 meds_etl_omop omop_synthea synthea_meds;
 ```
+Add subject_splits.parquet to the MEDS metadata
+
+```python
+import os.path
+import numpy as np
+import polars as pl
+
+person = pl.read_parquet("omop_synthea/person/*.parquet")
+# Set random seed for reproducibility
+np.random.seed(42)
+
+# Generate random indices
+n = len(person)
+indices = np.random.permutation(n)
+
+# Calculate split points
+train_end = int(n * 0.7)
+tuning_end = train_end + int(n * 0.15)
+
+# Create boolean masks
+train_mask = indices < train_end
+tuning_mask = (indices >= train_end) & (indices < tuning_end)
+held_out_mask = indices >= tuning_end
+
+# Split the DataFrame
+train_df = person.filter(pl.Series(train_mask))
+tuning_df = person.filter(pl.Series(tuning_mask))
+held_out_df = person.filter(pl.Series(held_out_mask))
+
+data_split = []
+for split, df in zip(
+    ("train", "tuning", "held_out"), (train_df, tuning_df, held_out_df)
+):
+    df_split = df.select(pl.col("person_id").alias("subject_id")).with_columns(
+        pl.lit(split).alias("split")
+    )
+    data_split.append(df_split)
+split_df = pl.concat(data_split)
+split_df.write_parquet(
+    os.path.join("synthea_meds", "metadata", "subject_splits.parquet")
+)
+```
 Convert MEDS to the meds_reader database to get the patient level data
 ```console
 meds_reader_convert synthea_meds synthea_meds_reader --num_threads 4
 ```
+
 ### 2. Pretrain CEHR-BERT using the meds_reader database
 ```console
 mkdir test_dataset_prepared;

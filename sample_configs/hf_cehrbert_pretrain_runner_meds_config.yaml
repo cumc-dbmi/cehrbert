@@ -14,7 +14,7 @@ vocab_size: 50000
 min_frequency: 0
 
 # Below is a list of Med-to-CehrBert related arguments
-att_function_type: "cehrbert"
+att_function_type: "cehr_bert"
 is_data_in_meds: true
 inpatient_att_function_type: "mix"
 include_auxiliary_token: true
