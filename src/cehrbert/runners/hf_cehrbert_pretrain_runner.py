@@ -230,7 +230,6 @@ def main():
                     f"validation_split_num: {data_args.validation_split_num}\n"
                     f"streaming: {data_args.streaming}"
                 )
-            cache_file_collector.add_cache_files(dataset)
         # Create the CEHR-BERT tokenizer if it's not available in the output folder
         tokenizer = load_and_create_tokenizer(data_args=data_args, model_args=model_args, dataset=dataset)
         # sort the patient features chronologically and tokenize the data
