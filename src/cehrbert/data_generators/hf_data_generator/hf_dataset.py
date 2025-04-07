@@ -43,8 +43,6 @@ def create_cehrbert_pretraining_dataset(
 
     # Remove patients without any records
     dataset = filter_dataset(dataset, data_args)
-    if cache_file_collector:
-        cache_file_collector.add_cache_files(dataset)
     # If the data is already in meds, we don't need to sort the sequence anymore
     if data_args.is_data_in_meds:
         mapping_functions = [HFTokenizationMapping(concept_tokenizer, True)]
@@ -85,8 +83,6 @@ def create_cehrbert_finetuning_dataset(
 
     # Remove patients without any records
     dataset = filter_dataset(dataset, data_args)
-    if cache_file_collector:
-        cache_file_collector.add_cache_files(dataset)
     if data_args.is_data_in_meds:
         mapping_functions = [
             HFFineTuningMapping(),
