@@ -51,3 +51,5 @@ save_total_limit:
 load_best_model_at_end: true
 metric_for_best_model: "eval_loss"
 greater_is_better: false
+
+report_to: "none"
