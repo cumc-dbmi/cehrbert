@@ -209,6 +209,7 @@ def main():
             dataset = load_parquet_as_dataset(
                 os.path.expanduser(data_args.data_folder), split="train", streaming=data_args.streaming
             )
+            cache_file_collector.add_cache_files(dataset)
             # If streaming is enabled, we need to manually split the data into train/val
             if data_args.streaming and data_args.validation_split_num:
                 dataset = dataset.shuffle(buffer_size=10_000, seed=training_args.seed)
