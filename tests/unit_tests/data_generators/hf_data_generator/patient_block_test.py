@@ -159,7 +159,6 @@ def test_merge_patient_blocks():
     assert len(merged_blocks[0].events) == 3, "Should contain three events"
 
     print("All tests passed!")
-    return True
 
 
 # Run the test
