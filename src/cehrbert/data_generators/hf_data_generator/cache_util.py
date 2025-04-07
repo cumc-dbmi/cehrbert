@@ -30,7 +30,9 @@ class CacheFileCollector:
                 found_dataset_folder = True
                 break
             parents.append(str(p))
-        assert len(parents) >= 2, f"the number of parents must be greater and equal than 2 for {file_name}"
+        if len(parents) < 2:
+            LOG.warning(f"the number of parents is less than 2 for {file_name}")
+            return None
         if (parents[-1].endswith("generator") or parents[-1].endswith("parquet")) and found_dataset_folder:
             return parents[-2]
         return None
