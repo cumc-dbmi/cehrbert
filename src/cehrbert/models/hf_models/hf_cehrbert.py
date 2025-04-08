@@ -171,6 +171,7 @@ class CehrBertPreTrainedModel(PreTrainedModel):
     is_parallelizable = False
     supports_gradient_checkpointing = True
     _no_split_modules = ["BertLayer"]
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         """Initialize the weights."""
