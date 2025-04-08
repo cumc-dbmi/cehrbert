@@ -445,7 +445,9 @@ class CehrBert(CehrBertPreTrainedModel):
         # We can provide a self-attention mask of dimensions
         # [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
+        # The flash attention requires the original attention_mask
+        if not getattr(self.config, "_attn_implementation", "eager") == "flash_attention_2":
+            attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
 
         embedding_output = self.cehr_bert_embeddings(
             input_ids=input_ids,
@@ -458,7 +460,7 @@ class CehrBert(CehrBertPreTrainedModel):
         )
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=True,
