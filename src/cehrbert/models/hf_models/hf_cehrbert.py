@@ -26,7 +26,6 @@ def flash_attention_forward(
     key_states,
     value_states,
     attention_mask,
-    query_length,
     dropout=0.0,
     softmax_scale=None,
     is_causal=False,
@@ -51,18 +50,12 @@ def flash_attention_forward(
             The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
         is_causal (`bool`, *optional*):
     """
-
-    # Flash attention requires the input to have the shape
-    # batch_size x seq_length x head_dim x hidden_dim
-    # therefore we just need to keep the original shape
-    dtype = query_states.dtype
-    query_states = query_states.permute(0, 2, 1, 3).contiguous().to(torch.bfloat16)
-    key_states = key_states.permute(0, 2, 1, 3).contiguous().to(torch.bfloat16)
-    value_states = value_states.permute(0, 2, 1, 3).contiguous().to(torch.bfloat16)
-
+    batch_size, query_length = query_states.shape[:2]
+    query_states = query_states.to(torch.bfloat16)
+    key_states = key_states.to(torch.bfloat16)
+    value_states = value_states.to(torch.bfloat16)
     # Contains at least one padding token in the sequence
     if attention_mask is not None:
-        batch_size = query_states.shape[0]
         (
             query_states,
             key_states,
@@ -98,8 +91,7 @@ def flash_attention_forward(
             softmax_scale=softmax_scale,
             causal=is_causal,
         )
-    # re-order the tensor back to (batch, n_heads, seq_length, head_dim)
-    return attn_output.permute(0, 2, 1, 3).contiguous().to(dtype)
+    return attn_output.reshape(batch_size, query_length, -1)
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
@@ -176,10 +168,9 @@ class BertSelfFlashAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
+    def split_heads(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
+        return x.view(new_x_shape)
 
     def forward(
         self,
@@ -204,26 +195,25 @@ class BertSelfFlashAttention(nn.Module):
             value_layer = past_key_value[1]
             attention_mask = encoder_attention_mask
         elif is_cross_attention:
-            key_layer = self.transpose_for_scores(self.key(encoder_hidden_states))
-            value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
+            key_layer = self.split_heads(self.key(encoder_hidden_states))
+            value_layer = self.split_heads(self.value(encoder_hidden_states))
             attention_mask = encoder_attention_mask
         elif past_key_value is not None:
-            key_layer = self.transpose_for_scores(self.key(hidden_states))
-            value_layer = self.transpose_for_scores(self.value(hidden_states))
+            key_layer = self.split_heads(self.key(hidden_states))
+            value_layer = self.split_heads(self.value(hidden_states))
             key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
             value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
         else:
-            key_layer = self.transpose_for_scores(self.key(hidden_states))
-            value_layer = self.transpose_for_scores(self.value(hidden_states))
+            key_layer = self.split_heads(self.key(hidden_states))
+            value_layer = self.split_heads(self.value(hidden_states))
 
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        query_layer = self.split_heads(mixed_query_layer)
         # Flash Attention forward pass
         attn_output = flash_attention_forward(
             query_layer,
             key_layer,
             value_layer,
             attention_mask,
-            query_layer.size(-2),
             self.dropout.p,
             softmax_scale=None,
             is_causal=False,
