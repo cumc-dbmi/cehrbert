@@ -600,6 +600,9 @@ class HFTokenizationMapping(DatasetMapping):
             concept_value_masks = concept_value_masks.copy()
             concept_value_masks[concept_value_is_nan] = 0
             record["concept_value_masks"] = concept_value_masks
+            concept_values = record["concept_values"].copy()
+            concept_values[concept_value_is_nan] = 0.0
+            record["concept_values"] = concept_values
 
         assert len(input_ids) == len(
             record["concept_ids"]
