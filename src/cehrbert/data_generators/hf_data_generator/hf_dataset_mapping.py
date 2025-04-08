@@ -17,7 +17,7 @@ from dateutil.relativedelta import relativedelta
 from meds.schema import birth_code, death_code
 from pandas import Series
 
-from cehrbert.med_extension.schema_extension import Event, Visit
+from cehrbert.med_extension.schema_extension import Event
 from cehrbert.models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments
 
@@ -573,11 +573,23 @@ class HFTokenizationMapping(DatasetMapping):
         self._is_pretraining = is_pretraining
         self._lab_token_ids = self._concept_tokenizer.lab_token_ids
 
+    @staticmethod
+    def fill_na_value(values, value_to_fill):
+        none_values = np.array([x is None for x in values])
+        if none_values.any():
+            values = values.copy()
+            values[none_values] = value_to_fill
+        return values
+
     def transform(self, record: Dict[str, Any]) -> Dict[str, Any]:
 
         input_ids = self._concept_tokenizer.encode(record["concept_ids"])
         record["input_ids"] = input_ids
         concept_value_masks = record["concept_value_masks"]
+
+        record["units"] = self.fill_na_value(record["units"], NA)
+        record["concept_as_values"] = self.fill_na_value(record["concept_as_values"], NA)
+
         # Backward compatibility
         if "concept_values" not in record:
             record["concept_values"] = record["number_as_values"]
