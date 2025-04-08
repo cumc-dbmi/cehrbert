@@ -468,8 +468,8 @@ class CehrBert(CehrBertPreTrainedModel):
 class CehrBertForPreTraining(CehrBertPreTrainedModel):
     _tied_weights_keys = ["predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
-    def __init__(self, config: CehrBertConfig, **kwargs):
-        super().__init__(config, **kwargs)
+    def __init__(self, config: CehrBertConfig):
+        super().__init__(config)
 
         self.bert = CehrBert(config)
         if self.config.include_value_prediction:
@@ -549,8 +549,8 @@ class CehrBertForPreTraining(CehrBertPreTrainedModel):
 
 class CehrBertForClassification(CehrBertPreTrainedModel):
 
-    def __init__(self, config: CehrBertConfig, **kwargs):
-        super().__init__(config, **kwargs)
+    def __init__(self, config: CehrBertConfig):
+        super().__init__(config)
 
         self.bert = CehrBert(config)
         self.age_batch_norm = torch.nn.BatchNorm1d(1)
