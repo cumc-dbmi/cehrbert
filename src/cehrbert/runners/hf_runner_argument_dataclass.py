@@ -310,6 +310,13 @@ class ModelArguments:
     time_to_visit_loss_weight: Optional[float] = dataclasses.field(
         default=1.0, metadata={"help": "The weight of the time to visit loss"}
     )
+    attn_implementation: Literal["eager", "sdpa"] = dataclasses.field(
+        default="eager",
+        metadata={
+            "help": "The type of attention implementation to use",
+            "choices": f"choices={['eager', 'sdpa']}",
+        },
+    )
 
     def as_dict(self) -> Dict[str, Any]:
         return dataclasses.asdict(self)
