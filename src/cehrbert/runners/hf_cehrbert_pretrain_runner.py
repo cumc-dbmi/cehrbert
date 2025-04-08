@@ -2,6 +2,7 @@ import json
 import os
 from typing import Optional, Union
 
+import torch
 from datasets import Dataset, DatasetDict, IterableDatasetDict, load_from_disk
 from transformers import Trainer, set_seed
 from transformers.utils import logging
@@ -20,6 +21,7 @@ from cehrbert.runners.runner_util import (
     generate_prepared_ds_path,
     get_last_hf_checkpoint,
     get_meds_extension_path,
+    get_torch_dtype,
     load_parquet_as_dataset,
     parse_runner_args,
 )
@@ -105,7 +107,8 @@ def load_and_create_model(model_args: ModelArguments, tokenizer: CehrBertTokeniz
             lab_token_ids=tokenizer.lab_token_ids,
             **model_args.as_dict(),
         )
-    return CehrBertForPreTraining(model_config)
+    torch_dtype = get_torch_dtype(model_args.torch_dtype)
+    return CehrBertForPreTraining(model_config, torch_dtype=torch_dtype, use_bfloat16=torch_dtype == torch.bfloat16)
 
 
 def main():

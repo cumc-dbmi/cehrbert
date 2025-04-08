@@ -33,6 +33,7 @@ from cehrbert.runners.runner_util import (
     generate_prepared_ds_path,
     get_last_hf_checkpoint,
     get_meds_extension_path,
+    get_torch_dtype,
     load_parquet_as_dataset,
     parse_runner_args,
 )
@@ -91,7 +92,10 @@ def load_finetuned_model(model_args: ModelArguments, model_name_or_path: str) ->
     # Try to create a new model based on the base model
     model_name_or_path = os.path.expanduser(model_name_or_path)
     try:
-        return finetune_model_cls.from_pretrained(model_name_or_path)
+        torch_dtype = get_torch_dtype(model_args.torch_dtype)
+        return finetune_model_cls.from_pretrained(
+            model_name_or_path, torch_dtype=torch_dtype, use_bfloat16=torch_dtype == torch.bfloat16
+        )
     except ValueError:
         raise ValueError(f"Can not load the finetuned model from {model_name_or_path}")
 

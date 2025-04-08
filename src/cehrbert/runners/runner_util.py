@@ -19,6 +19,18 @@ from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments,
 LOG = logging.get_logger("transformers")
 
 
+def get_torch_dtype(torch_dtype: str) -> Union[torch.dtype, str]:
+    if torch_dtype == "float16":
+        return torch.float16
+    elif torch_dtype == "float32":
+        return torch.float32
+    elif torch_dtype == "bfloat16":
+        return torch.bfloat16
+    elif torch_dtype == "float":
+        return torch.float
+    return "auto"
+
+
 def load_parquet_as_dataset(data_folder, split="train", streaming=False) -> Union[Dataset, IterableDataset]:
     """
     Loads a dataset from Parquet files located within a specified folder into a Hugging Face `datasets.Dataset`.

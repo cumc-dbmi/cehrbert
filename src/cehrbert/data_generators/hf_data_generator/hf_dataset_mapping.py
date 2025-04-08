@@ -587,8 +587,11 @@ class HFTokenizationMapping(DatasetMapping):
         record["input_ids"] = input_ids
         concept_value_masks = record["concept_value_masks"]
 
-        record["units"] = self.fill_na_value(record["units"], NA)
-        record["concept_as_values"] = self.fill_na_value(record["concept_as_values"], NA)
+        # These fields may not exist in the old version of the datasets
+        if "units" in record:
+            record["units"] = self.fill_na_value(record["units"], NA)
+        if "concept_as_values" in record:
+            record["concept_as_values"] = self.fill_na_value(record["concept_as_values"], NA)
 
         # Backward compatibility
         if "concept_values" not in record:
