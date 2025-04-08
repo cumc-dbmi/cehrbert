@@ -108,7 +108,12 @@ def load_and_create_model(model_args: ModelArguments, tokenizer: CehrBertTokeniz
             **model_args.as_dict(),
         )
     torch_dtype = get_torch_dtype(model_args.torch_dtype)
-    return CehrBertForPreTraining(model_config, torch_dtype=torch_dtype, use_bfloat16=torch_dtype == torch.bfloat16)
+    model = CehrBertForPreTraining(model_config, torch_dtype=torch_dtype, use_bfloat16=torch_dtype == torch.bfloat16)
+    if model.config.torch_dtype == torch.bfloat16:
+        return model.bfloat16()
+    elif model.config.torch_dtype == torch.float16:
+        return model.half()
+    return model
 
 
 def main():
