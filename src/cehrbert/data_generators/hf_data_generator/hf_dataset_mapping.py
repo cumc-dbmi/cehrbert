@@ -582,8 +582,12 @@ class HFTokenizationMapping(DatasetMapping):
         if "concept_values" not in record:
             record["concept_values"] = record["number_as_values"]
 
-        if np.isnan(record["concept_values"]).any():
-            record["concept_values"] = [v if not pd.isna(v) else 0.0 for v in record["concept_values"]]
+        concept_value_is_nan = np.isnan(record["concept_values"])
+        if concept_value_is_nan.any():
+            # Create a writeable copy
+            concept_value_masks = concept_value_masks.copy()
+            concept_value_masks[concept_value_is_nan] = 0
+            record["concept_value_masks"] = concept_value_masks
 
         assert len(input_ids) == len(
             record["concept_ids"]
