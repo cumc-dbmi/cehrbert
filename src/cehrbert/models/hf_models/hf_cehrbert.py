@@ -208,7 +208,7 @@ class BertSelfFlashAttention(nn.Module):
             value_layer = self.split_heads(value)
 
         query_layer = self.split_heads(query)
-        attn_dropout = self.attn_dropout.p if self.training else 0.0
+        attn_dropout = self.dropout.p if self.training else 0.0
         # Flash Attention forward pass
         attn_output = flash_attention_forward(
             query_layer,
