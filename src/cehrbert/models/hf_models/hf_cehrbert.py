@@ -8,6 +8,7 @@ from transformers import PreTrainedModel
 from transformers.activations import gelu_new
 from transformers.models.bert import modeling_bert
 from transformers.models.bert.modeling_bert import BertEncoder, BertOnlyMLMHead, BertPooler
+from transformers.pytorch_utils import Conv1D
 from transformers.utils import is_flash_attn_2_available, logging
 
 if is_flash_attn_2_available():
@@ -50,7 +51,7 @@ def flash_attention_forward(
             The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
         is_causal (`bool`, *optional*):
     """
-    batch_size, query_length = query_states.shape[:2]
+    batch_size, query_length, n_heads, head_dim = query_states.shape
     query_states = query_states.to(torch.bfloat16)
     key_states = key_states.to(torch.bfloat16)
     value_states = value_states.to(torch.bfloat16)
@@ -91,7 +92,7 @@ def flash_attention_forward(
             softmax_scale=softmax_scale,
             causal=is_causal,
         )
-    return attn_output.reshape(batch_size, query_length, -1)
+    return attn_output.reshape(batch_size, query_length, n_heads * head_dim)
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
@@ -161,11 +162,10 @@ class BertSelfFlashAttention(nn.Module):
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
-
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
-
+        self.split_size = config.hidden_size
+        self.embed_dim = config.hidden_size
+        self.c_attn = Conv1D(3 * self.embed_dim, self.embed_dim)
+        self.c_proj = Conv1D(self.embed_dim, self.embed_dim)
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
     def split_heads(self, x: torch.Tensor) -> torch.Tensor:
@@ -182,8 +182,8 @@ class BertSelfFlashAttention(nn.Module):
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
-        mixed_query_layer = self.query(hidden_states)
 
+        query, key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
         # such that the encoder's padding tokens are not attended to.
@@ -195,29 +195,32 @@ class BertSelfFlashAttention(nn.Module):
             value_layer = past_key_value[1]
             attention_mask = encoder_attention_mask
         elif is_cross_attention:
-            key_layer = self.split_heads(self.key(encoder_hidden_states))
-            value_layer = self.split_heads(self.value(encoder_hidden_states))
+            key_layer = self.split_heads(key)
+            value_layer = self.split_heads(value)
             attention_mask = encoder_attention_mask
         elif past_key_value is not None:
-            key_layer = self.split_heads(self.key(hidden_states))
-            value_layer = self.split_heads(self.value(hidden_states))
+            key_layer = self.split_heads(key)
+            value_layer = self.split_heads(value)
             key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
             value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
         else:
-            key_layer = self.split_heads(self.key(hidden_states))
-            value_layer = self.split_heads(self.value(hidden_states))
+            key_layer = self.split_heads(key)
+            value_layer = self.split_heads(value)
 
-        query_layer = self.split_heads(mixed_query_layer)
+        query_layer = self.split_heads(query)
+        attn_dropout = self.attn_dropout.p if self.training else 0.0
         # Flash Attention forward pass
         attn_output = flash_attention_forward(
             query_layer,
             key_layer,
             value_layer,
             attention_mask,
-            self.dropout.p,
+            attn_dropout,
             softmax_scale=None,
             is_causal=False,
         )
+        attn_output = self.c_proj(attn_output)
+        attn_output = self.dropout(attn_output)
         # The BertLayer expects a tuple
         return (attn_output,)
 
