@@ -228,7 +228,7 @@ class ModelArguments:
         },
     )
     torch_dtype: Optional[str] = dataclasses.field(
-        default=None,
+        default="auto",
         metadata={
             "help": (
                 "Override the default `torch.dtype` and load the model under this dtype. If `auto` is passed, the "
