@@ -616,8 +616,6 @@ class CehrBertForClassification(CehrBertPreTrainedModel):
         classifier_label: Optional[torch.FloatTensor] = None,
     ) -> CehrBertSequenceClassifierOutput:
 
-        normalized_age = self._apply_age_norm(age_at_index)
-
         cehrbert_output = self.bert(
             input_ids,
             attention_mask,
@@ -630,6 +628,14 @@ class CehrBertForClassification(CehrBertPreTrainedModel):
             output_attentions,
             output_hidden_states,
         )
+
+        # Disable autocasting for precision-sensitive operations
+        with torch.autocast(device_type="cuda", enabled=False):
+            normalized_age = self._apply_age_norm(age_at_index)
+
+        # In case the model is in bfloat16
+        if cehrbert_output.last_hidden_state.dtype != normalized_age.dtype:
+            normalized_age = normalized_age.to(cehrbert_output.last_hidden_state.dtype)
 
         next_input = self.dropout(cehrbert_output.pooler_output)
         next_input = torch.cat([next_input, normalized_age], dim=1)
@@ -722,7 +728,6 @@ class CehrBertLstmForClassification(CehrBertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         classifier_label: Optional[torch.FloatTensor] = None,
     ) -> CehrBertSequenceClassifierOutput:
-        normalized_age = self._apply_age_norm(age_at_index)
 
         cehrbert_output = self.bert(
             input_ids,
@@ -736,6 +741,15 @@ class CehrBertLstmForClassification(CehrBertPreTrainedModel):
             output_attentions,
             output_hidden_states,
         )
+
+        # Disable autocasting for precision-sensitive operations
+        with torch.autocast(device_type="cuda", enabled=False):
+            normalized_age = self._apply_age_norm(age_at_index)
+
+        # In case the model is in bfloat16
+        if cehrbert_output.last_hidden_state.dtype != normalized_age.dtype:
+            normalized_age = normalized_age.to(cehrbert_output.last_hidden_state.dtype)
+
         lengths = torch.sum(attention_mask, dim=-1)
         packed_input = pack_padded_sequence(
             cehrbert_output.last_hidden_state,
