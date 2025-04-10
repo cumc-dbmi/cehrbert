@@ -90,8 +90,19 @@ def load_finetuned_model(model_args: ModelArguments, model_name_or_path: str) ->
         )
     # Try to create a new model based on the base model
     model_name_or_path = os.path.expanduser(model_name_or_path)
+    torch_dtype = "auto"
+    if hasattr(torch, model_args.torch_dtype):
+        torch_dtype = getattr(torch, model_args.torch_dtype)
     try:
-        return finetune_model_cls.from_pretrained(model_name_or_path)
+        model = finetune_model_cls.from_pretrained(
+            model_name_or_path, torch_dtype=torch_dtype, attn_implementation=model_args.attn_implementation
+        )
+        if torch_dtype == torch.bfloat16:
+            return model.bfloat16()
+        elif torch_dtype == torch.float16:
+            return model.half()
+        else:
+            return model.float()
     except ValueError:
         raise ValueError(f"Can not load the finetuned model from {model_name_or_path}")
 
