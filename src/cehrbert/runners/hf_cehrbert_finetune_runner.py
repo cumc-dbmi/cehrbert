@@ -1,3 +1,4 @@
+import functools
 import json
 import os
 from datetime import datetime
@@ -69,6 +70,12 @@ def compute_metrics(references: Union[List[float], pd.Series], probs: Union[List
         return {"roc_auc": None, "pr_auc": None}
 
 
+def get_torch_dtype(torch_dtype: str) -> Union[torch.dtype, str]:
+    if hasattr(torch, torch_dtype):
+        return getattr(torch, torch_dtype)
+    return torch.float
+
+
 def load_pretrained_tokenizer(
     model_args,
 ) -> CehrBertTokenizer:
@@ -90,9 +97,7 @@ def load_finetuned_model(model_args: ModelArguments, model_name_or_path: str) ->
         )
     # Try to create a new model based on the base model
     model_name_or_path = os.path.expanduser(model_name_or_path)
-    torch_dtype = "auto"
-    if hasattr(torch, model_args.torch_dtype):
-        torch_dtype = getattr(torch, model_args.torch_dtype)
+    torch_dtype = get_torch_dtype(model_args.torch_dtype)
     try:
         model = finetune_model_cls.from_pretrained(
             model_name_or_path, torch_dtype=torch_dtype, attn_implementation=model_args.attn_implementation
@@ -105,6 +110,16 @@ def load_finetuned_model(model_args: ModelArguments, model_name_or_path: str) ->
             return model.float()
     except ValueError:
         raise ValueError(f"Can not load the finetuned model from {model_name_or_path}")
+
+
+def data_collate_fn(features, model_type: torch.dtype, collator: CehrBertDataCollator):
+    batch = collator(features)
+    if model_type != torch.float32:
+        for key, value in batch.items():
+            # Only convert float32 tensors to bfloat16
+            if isinstance(value, torch.Tensor) and value.dtype == torch.float32:
+                batch[key] = value.to(model_type)
+    return batch
 
 
 def main():
@@ -297,7 +312,12 @@ def main():
 
     # Remove all the cached files collected during the data transformation if there are any
     cache_file_collector.remove_cache_files()
-    collator = CehrBertDataCollator(tokenizer, model_args.max_position_embeddings, is_pretraining=False)
+
+    collator = functools.partial(
+        data_collate_fn,
+        model_type=get_torch_dtype(model_args.torch_dtype),
+        collator=CehrBertDataCollator(tokenizer, model_args.max_position_embeddings, is_pretraining=False),
+    )
 
     # Set seed before initializing model.
     set_seed(training_args.seed)
@@ -307,6 +327,7 @@ def main():
 
     if training_args.do_train:
         model = load_finetuned_model(model_args, model_args.model_name_or_path)
+
         # If lora is enabled, we add LORA adapters to the model
         if model_args.use_lora:
             # When LORA is used, the trainer could not automatically find this label,
