@@ -49,6 +49,8 @@ class HfCehrBertRunnerIntegrationTest(unittest.TestCase):
             self.dataset_prepared_path,
             "--max_steps",
             "10",
+            "--report_to",
+            "none",
         ]
         main()
         sys.argv = [
@@ -75,6 +77,8 @@ class HfCehrBertRunnerIntegrationTest(unittest.TestCase):
             "true",
             "--load_best_model_at_end",
             "true",
+            "--report_to",
+            "none",
         ]
         finetune_main()
 

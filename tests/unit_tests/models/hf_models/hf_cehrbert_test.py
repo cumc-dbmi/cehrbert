@@ -57,8 +57,7 @@ class TestCehrBert(unittest.TestCase):
         dates = torch.randint(3000, 3500, (1, 10))
         visit_concept_orders = torch.randint(0, 10, (1, 10))
         concept_values = torch.rand(1, 10)
-        concept_value_masks = torch.randint(0, 2, (1, 10))
-        mlm_skip_values = torch.randint(0, 2, (1, 10)).to(torch.bool)
+        concept_value_masks = torch.randint(0, 2, (1, 10)).to(torch.bool)
         visit_segments = torch.randint(0, self.config.n_visit_segments, (1, 10))
 
         output = self.model(
@@ -71,7 +70,6 @@ class TestCehrBert(unittest.TestCase):
             concept_value_masks=concept_value_masks,
             visit_segments=visit_segments,
             labels=input_ids,
-            mlm_skip_values=mlm_skip_values,
         )
 
         self.assertTrue(hasattr(output, "loss"))

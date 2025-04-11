@@ -41,6 +41,8 @@ class HfCehrBertRunnerIntegrationTest(unittest.TestCase):
             "--max_steps",
             "10",
             "--is_data_in_meds",
+            "--report_to",
+            "none",
         ]
 
     def tearDown(self):
