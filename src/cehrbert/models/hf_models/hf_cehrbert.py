@@ -528,7 +528,7 @@ class CehrBertForPreTraining(CehrBertPreTrainedModel):
         if labels is not None:
             # Skip the MLM predictions for label concepts if include_value_prediction is disabled
             if not self.config.include_value_prediction:
-                labels = torch.where(concept_value_masks, -100, labels)
+                labels = torch.where(concept_value_masks.to(torch.bool), -100, labels)
             loss_fct = nn.CrossEntropyLoss()
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
             total_loss = masked_lm_loss
