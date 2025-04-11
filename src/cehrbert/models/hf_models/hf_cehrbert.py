@@ -51,6 +51,7 @@ def flash_attention_forward(
             The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
         is_causal (`bool`, *optional*):
     """
+    dtype = query_states.dtype
     batch_size, query_length, n_heads, head_dim = query_states.shape
     query_states = query_states.to(torch.bfloat16)
     key_states = key_states.to(torch.bfloat16)
@@ -92,7 +93,7 @@ def flash_attention_forward(
             softmax_scale=softmax_scale,
             causal=is_causal,
         )
-    return attn_output.reshape(batch_size, query_length, n_heads * head_dim)
+    return attn_output.reshape(batch_size, query_length, n_heads * head_dim).to(dtype)
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
