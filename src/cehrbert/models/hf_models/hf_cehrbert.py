@@ -1,19 +1,232 @@
 import math
-from typing import Optional
+from typing import Optional, Tuple
 
 import torch
 from torch import nn
 from torch.nn.utils.rnn import pack_padded_sequence
 from transformers import PreTrainedModel
 from transformers.activations import gelu_new
+from transformers.models.bert import modeling_bert
 from transformers.models.bert.modeling_bert import BertEncoder, BertOnlyMLMHead, BertPooler
-from transformers.utils import logging
+from transformers.pytorch_utils import Conv1D
+from transformers.utils import is_flash_attn_2_available, logging
+
+if is_flash_attn_2_available():
+    from flash_attn import flash_attn_func, flash_attn_varlen_func
+    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
 from cehrbert.models.hf_models.config import CehrBertConfig
 from cehrbert.models.hf_models.hf_modeling_outputs import CehrBertModelOutput, CehrBertSequenceClassifierOutput
 
 logger = logging.get_logger("transformers")
 LARGE_POSITION_VALUE = 1000000
+
+
+def flash_attention_forward(
+    query_states,
+    key_states,
+    value_states,
+    attention_mask,
+    dropout=0.0,
+    softmax_scale=None,
+    is_causal=False,
+):
+    """
+    Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token.
+
+    first unpad the input, then computes the attention scores and pad the final attention scores.
+    Args:
+        query_states (`torch.Tensor`):
+            Input query states to be passed to Flash Attention API
+        key_states (`torch.Tensor`):
+            Input key states to be passed to Flash Attention API
+        value_states (`torch.Tensor`):
+            Input value states to be passed to Flash Attention API
+        attention_mask (`torch.Tensor`):
+            The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
+            position of padding tokens and 1 for the position of non-padding tokens.
+        dropout (`int`, *optional*):
+            Attention dropout
+        softmax_scale (`float`, *optional*):
+            The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
+        is_causal (`bool`, *optional*):
+    """
+    dtype = query_states.dtype
+    batch_size, query_length, n_heads, head_dim = query_states.shape
+    query_states = query_states.to(torch.bfloat16)
+    key_states = key_states.to(torch.bfloat16)
+    value_states = value_states.to(torch.bfloat16)
+    # Contains at least one padding token in the sequence
+    if attention_mask is not None:
+        (
+            query_states,
+            key_states,
+            value_states,
+            indices_q,
+            cu_seq_lens,
+            max_seq_lens,
+        ) = upad_input(query_states, key_states, value_states, attention_mask, query_length)
+
+        cu_seqlens_q, cu_seqlens_k = cu_seq_lens
+        max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
+
+        attn_output_unpad = flash_attn_varlen_func(
+            query_states,
+            key_states,
+            value_states,
+            cu_seqlens_q=cu_seqlens_q,
+            cu_seqlens_k=cu_seqlens_k,
+            max_seqlen_q=max_seqlen_in_batch_q,
+            max_seqlen_k=max_seqlen_in_batch_k,
+            dropout_p=dropout,
+            softmax_scale=softmax_scale,
+            causal=is_causal,
+        )
+        # (batch, seq_length, n_heads, head_dim)
+        attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
+    else:
+        attn_output = flash_attn_func(
+            query_states,
+            key_states,
+            value_states,
+            dropout,
+            softmax_scale=softmax_scale,
+            causal=is_causal,
+        )
+    return attn_output.reshape(batch_size, query_length, n_heads * head_dim).to(dtype)
+
+
+# Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
+def get_unpad_data(attention_mask):
+    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
+    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
+    max_seqlen_in_batch = seqlens_in_batch.max().item()
+    cu_seqlens = torch.nn.functional.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
+    return (
+        indices,
+        cu_seqlens,
+        max_seqlen_in_batch,
+    )
+
+
+def upad_input(query_layer, key_layer, value_layer, attention_mask, query_length):
+    indices_k, cu_seqlens_k, max_seqlen_in_batch_k = get_unpad_data(attention_mask)
+    batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
+
+    key_layer = index_first_axis(
+        key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
+        indices_k,
+    )
+    value_layer = index_first_axis(
+        value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
+        indices_k,
+    )
+    if query_length == kv_seq_len:
+        query_layer = index_first_axis(
+            query_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
+            indices_k,
+        )
+        cu_seqlens_q = cu_seqlens_k
+        max_seqlen_in_batch_q = max_seqlen_in_batch_k
+        indices_q = indices_k
+    elif query_length == 1:
+        max_seqlen_in_batch_q = 1
+        cu_seqlens_q = torch.arange(
+            batch_size + 1, dtype=torch.int32, device=query_layer.device
+        )  # There is a memcpy here, that is very bad.
+        indices_q = cu_seqlens_q[:-1]
+        query_layer = query_layer.squeeze(1)
+    else:
+        # The -q_len: slice assumes left padding.
+        attention_mask = attention_mask[:, -query_length:]
+        query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
+
+    return (
+        query_layer,
+        key_layer,
+        value_layer,
+        indices_q,
+        (cu_seqlens_q, cu_seqlens_k),
+        (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
+    )
+
+
+class BertSelfFlashAttention(nn.Module):
+    def __init__(self, config, position_embedding_type=None):
+        super().__init__()
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+            raise ValueError(
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
+            )
+
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.split_size = config.hidden_size
+        self.embed_dim = config.hidden_size
+        self.c_attn = Conv1D(3 * self.embed_dim, self.embed_dim)
+        self.c_proj = Conv1D(self.embed_dim, self.embed_dim)
+        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+
+    def split_heads(self, x: torch.Tensor) -> torch.Tensor:
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        return x.view(new_x_shape)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor]:
+
+        query, key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
+        # If this is instantiated as a cross-attention module, the keys
+        # and values come from an encoder; the attention mask needs to be
+        # such that the encoder's padding tokens are not attended to.
+        is_cross_attention = encoder_hidden_states is not None
+
+        if is_cross_attention and past_key_value is not None:
+            # reuse k,v, cross_attentions
+            key_layer = past_key_value[0]
+            value_layer = past_key_value[1]
+            attention_mask = encoder_attention_mask
+        elif is_cross_attention:
+            key_layer = self.split_heads(key)
+            value_layer = self.split_heads(value)
+            attention_mask = encoder_attention_mask
+        elif past_key_value is not None:
+            key_layer = self.split_heads(key)
+            value_layer = self.split_heads(value)
+            key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
+            value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
+        else:
+            key_layer = self.split_heads(key)
+            value_layer = self.split_heads(value)
+
+        query_layer = self.split_heads(query)
+        attn_dropout = self.dropout.p if self.training else 0.0
+        # Flash Attention forward pass
+        attn_output = flash_attention_forward(
+            query_layer,
+            key_layer,
+            value_layer,
+            attention_mask,
+            attn_dropout,
+            softmax_scale=None,
+            is_causal=False,
+        )
+        attn_output = self.c_proj(attn_output)
+        attn_output = self.dropout(attn_output)
+        # The BertLayer expects a tuple
+        return (attn_output,)
+
+
+modeling_bert.BERT_SELF_ATTENTION_CLASSES.update({"flash_attention_2": BertSelfFlashAttention})
 
 
 class PositionalEncodingLayer(nn.Module):
@@ -171,6 +384,8 @@ class CehrBertPreTrainedModel(PreTrainedModel):
     is_parallelizable = False
     supports_gradient_checkpointing = True
     _no_split_modules = ["BertLayer"]
+    _supports_sdpa = True
+    _supports_flash_attn_2 = True
 
     def _init_weights(self, module):
         """Initialize the weights."""
@@ -225,7 +440,9 @@ class CehrBert(CehrBertPreTrainedModel):
         # We can provide a self-attention mask of dimensions
         # [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
+        # The flash attention requires the original attention_mask
+        if not getattr(self.config, "_attn_implementation", "eager") == "flash_attention_2":
+            attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
 
         embedding_output = self.cehr_bert_embeddings(
             input_ids=input_ids,
@@ -238,7 +455,7 @@ class CehrBert(CehrBertPreTrainedModel):
         )
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=True,
@@ -289,7 +506,6 @@ class CehrBertForPreTraining(CehrBertPreTrainedModel):
         concept_values: Optional[torch.FloatTensor] = None,
         concept_value_masks: Optional[torch.FloatTensor] = None,
         visit_segments: Optional[torch.LongTensor] = None,
-        mlm_skip_values: Optional[torch.BoolTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -313,7 +529,7 @@ class CehrBertForPreTraining(CehrBertPreTrainedModel):
         if labels is not None:
             # Skip the MLM predictions for label concepts if include_value_prediction is disabled
             if not self.config.include_value_prediction:
-                labels = torch.where(mlm_skip_values, -100, labels)
+                labels = torch.where(concept_value_masks.to(torch.bool), -100, labels)
             loss_fct = nn.CrossEntropyLoss()
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
             total_loss = masked_lm_loss
@@ -400,8 +616,6 @@ class CehrBertForClassification(CehrBertPreTrainedModel):
         classifier_label: Optional[torch.FloatTensor] = None,
     ) -> CehrBertSequenceClassifierOutput:
 
-        normalized_age = self._apply_age_norm(age_at_index)
-
         cehrbert_output = self.bert(
             input_ids,
             attention_mask,
@@ -414,6 +628,14 @@ class CehrBertForClassification(CehrBertPreTrainedModel):
             output_attentions,
             output_hidden_states,
         )
+
+        # Disable autocasting for precision-sensitive operations
+        with torch.autocast(device_type="cuda", enabled=False):
+            normalized_age = self._apply_age_norm(age_at_index)
+
+        # In case the model is in bfloat16
+        if cehrbert_output.last_hidden_state.dtype != normalized_age.dtype:
+            normalized_age = normalized_age.to(cehrbert_output.last_hidden_state.dtype)
 
         next_input = self.dropout(cehrbert_output.pooler_output)
         next_input = torch.cat([next_input, normalized_age], dim=1)
@@ -506,7 +728,6 @@ class CehrBertLstmForClassification(CehrBertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         classifier_label: Optional[torch.FloatTensor] = None,
     ) -> CehrBertSequenceClassifierOutput:
-        normalized_age = self._apply_age_norm(age_at_index)
 
         cehrbert_output = self.bert(
             input_ids,
@@ -520,6 +741,15 @@ class CehrBertLstmForClassification(CehrBertPreTrainedModel):
             output_attentions,
             output_hidden_states,
         )
+
+        # Disable autocasting for precision-sensitive operations
+        with torch.autocast(device_type="cuda", enabled=False):
+            normalized_age = self._apply_age_norm(age_at_index)
+
+        # In case the model is in bfloat16
+        if cehrbert_output.last_hidden_state.dtype != normalized_age.dtype:
+            normalized_age = normalized_age.to(cehrbert_output.last_hidden_state.dtype)
+
         lengths = torch.sum(attention_mask, dim=-1)
         packed_input = pack_padded_sequence(
             cehrbert_output.last_hidden_state,

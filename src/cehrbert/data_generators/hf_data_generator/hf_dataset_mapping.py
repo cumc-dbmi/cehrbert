@@ -17,7 +17,7 @@ from dateutil.relativedelta import relativedelta
 from meds.schema import birth_code, death_code
 from pandas import Series
 
-from cehrbert.med_extension.schema_extension import Event, Visit
+from cehrbert.med_extension.schema_extension import Event
 from cehrbert.models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments
 
@@ -573,17 +573,39 @@ class HFTokenizationMapping(DatasetMapping):
         self._is_pretraining = is_pretraining
         self._lab_token_ids = self._concept_tokenizer.lab_token_ids
 
+    @staticmethod
+    def fill_na_value(values, value_to_fill):
+        none_values = np.array([x is None for x in values])
+        if none_values.any():
+            values = values.copy()
+            values[none_values] = value_to_fill
+        return values
+
     def transform(self, record: Dict[str, Any]) -> Dict[str, Any]:
 
         input_ids = self._concept_tokenizer.encode(record["concept_ids"])
         record["input_ids"] = input_ids
         concept_value_masks = record["concept_value_masks"]
+
+        # These fields may not exist in the old version of the datasets
+        if "units" in record:
+            record["units"] = self.fill_na_value(record["units"], NA)
+        if "concept_as_values" in record:
+            record["concept_as_values"] = self.fill_na_value(record["concept_as_values"], NA)
+
         # Backward compatibility
         if "concept_values" not in record:
             record["concept_values"] = record["number_as_values"]
 
-        if np.isnan(record["concept_values"]).any():
-            record["concept_values"] = [v if not pd.isna(v) else 0.0 for v in record["concept_values"]]
+        concept_value_is_nan = np.isnan(record["concept_values"])
+        if concept_value_is_nan.any():
+            # Create a writeable copy
+            concept_value_masks = concept_value_masks.copy()
+            concept_value_masks[concept_value_is_nan] = 0
+            record["concept_value_masks"] = concept_value_masks
+            concept_values = record["concept_values"].copy()
+            concept_values[concept_value_is_nan] = 0.0
+            record["concept_values"] = concept_values
 
         assert len(input_ids) == len(
             record["concept_ids"]

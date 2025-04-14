@@ -2,6 +2,7 @@ import json
 import os
 from typing import Optional, Union
 
+import torch
 from datasets import Dataset, DatasetDict, IterableDatasetDict, load_from_disk
 from transformers import Trainer, set_seed
 from transformers.utils import logging
@@ -105,7 +106,12 @@ def load_and_create_model(model_args: ModelArguments, tokenizer: CehrBertTokeniz
             lab_token_ids=tokenizer.lab_token_ids,
             **model_args.as_dict(),
         )
-    return CehrBertForPreTraining(model_config)
+    model = CehrBertForPreTraining(model_config)
+    if model.config.torch_dtype == torch.bfloat16:
+        return model.bfloat16()
+    elif model.config.torch_dtype == torch.float16:
+        return model.half()
+    return model
 
 
 def main():
