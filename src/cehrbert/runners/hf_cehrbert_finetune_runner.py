@@ -3,7 +3,7 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -70,8 +70,8 @@ def compute_metrics(references: Union[List[float], pd.Series], probs: Union[List
         return {"roc_auc": None, "pr_auc": None}
 
 
-def get_torch_dtype(torch_dtype: str) -> Union[torch.dtype, str]:
-    if hasattr(torch, torch_dtype):
+def get_torch_dtype(torch_dtype: Optional[str] = None) -> Union[torch.dtype, str]:
+    if torch_dtype and hasattr(torch, torch_dtype):
         return getattr(torch, torch_dtype)
     return torch.float
 
