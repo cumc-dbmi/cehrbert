@@ -14,7 +14,7 @@ from transformers import EvalPrediction, HfArgumentParser, TrainingArguments
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import logging
 
-from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments, ModelArguments
+from cehrbert.runners.hf_runner_argument_dataclass import CehrBertArguments, DataTrainingArguments, ModelArguments
 
 LOG = logging.get_logger("transformers")
 
@@ -273,7 +273,7 @@ def parse_dynamic_arguments(
     return tuple(args)
 
 
-def parse_runner_args() -> Tuple[DataTrainingArguments, ModelArguments, TrainingArguments]:
+def parse_runner_args() -> Tuple[CehrBertArguments, DataTrainingArguments, ModelArguments, TrainingArguments]:
     """
     Parses command line arguments provided to a script for training a model using the Hugging Face.
 
@@ -311,10 +311,10 @@ def parse_runner_args() -> Tuple[DataTrainingArguments, ModelArguments, Training
         Or using a YAML configuration file:
         $ python training_script.py config.yaml
     """
-    data_args, model_args, training_args = parse_dynamic_arguments(
-        (DataTrainingArguments, ModelArguments, TrainingArguments)
+    cehrbert_args, data_args, model_args, training_args = parse_dynamic_arguments(
+        (CehrBertArguments, DataTrainingArguments, ModelArguments, TrainingArguments)
     )
-    return data_args, model_args, training_args
+    return cehrbert_args, data_args, model_args, training_args
 
 
 def compute_metrics(eval_pred: EvalPrediction):

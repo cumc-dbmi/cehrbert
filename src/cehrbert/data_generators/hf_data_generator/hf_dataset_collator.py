@@ -1,6 +1,6 @@
 import collections
 import random
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 import torch
@@ -52,7 +52,12 @@ class CehrBertDataCollator:
         # Assume that each example in the batch is a dictionary with 'input_ids' and 'attention_mask'
         batch_input_ids = [self._convert_to_tensor(example["input_ids"]) for example in examples]
         batch_attention_mask = [
-            torch.ones_like(self._convert_to_tensor(example["input_ids"]), dtype=torch.float) for example in examples
+            (
+                self._convert_to_tensor(example["attention_mask"]).to(torch.float)
+                if "attention_mask" in example
+                else torch.ones_like(self._convert_to_tensor(example["input_ids"]), dtype=torch.float)
+            )
+            for example in examples
         ]
         batch_ages = [self._convert_to_tensor(example["ages"]) for example in examples]
         batch_dates = [self._convert_to_tensor(example["dates"]) for example in examples]
@@ -79,35 +84,38 @@ class CehrBertDataCollator:
         batch["concept_value_masks"] = pad_sequence(batch_concept_value_masks, batch_first=True, padding_value=0.0)
         batch["visit_segments"] = pad_sequence(batch_visit_segments, batch_first=True, padding_value=0)
 
-        # Prepend the CLS token and their associated values to the corresponding time series features
-        batch["input_ids"] = torch.cat(
-            [
-                torch.full((batch_size, 1), self.tokenizer.cls_token_index),
-                batch["input_ids"],
-            ],
-            dim=1,
-        )
-        # The attention_mask is set to 1 to enable attention for the CLS token
-        batch["attention_mask"] = torch.cat([torch.full((batch_size, 1), 1.0), batch["attention_mask"]], dim=1)
-        # Set the age of the CLS token to the starting age
-        batch["ages"] = torch.cat([batch["ages"][:, 0:1], batch["ages"]], dim=1)
-        # Set the age of the CLS token to the starting date
-        batch["dates"] = torch.cat([batch["dates"][:, 0:1], batch["dates"]], dim=1)
-        # Set the visit_concept_order of the CLS token to the first visit_concept_order in the sequence subtract by 1
-        visit_concept_orders_first = batch["visit_concept_orders"][:, 0:1] - 1
-        visit_concept_orders_first = torch.maximum(
-            visit_concept_orders_first, torch.zeros_like(visit_concept_orders_first)
-        )
-        batch["visit_concept_orders"] = torch.cat([visit_concept_orders_first, batch["visit_concept_orders"]], dim=1)
-        # Set the concept_value of the CLS token to a default value -1.0.
-        batch["concept_values"] = torch.cat([torch.full((batch_size, 1), -1.0), batch["concept_values"]], dim=1)
-        # Set the concept_value of the CLS token to a default value 0.0 indicating that
-        # there is no value associated with this token
-        batch["concept_value_masks"] = torch.cat(
-            [torch.full((batch_size, 1), 0.0), batch["concept_value_masks"]], dim=1
-        )
-        # Set the visit_segments of the CLS token to a default value 0 because this doesn't belong to a visit
-        batch["visit_segments"] = torch.cat([torch.full((batch_size, 1), 0), batch["visit_segments"]], dim=1)
+        if not getattr(self, "sample_packing", False):
+            # Prepend the CLS token and their associated values to the corresponding time series features
+            batch["input_ids"] = torch.cat(
+                [
+                    torch.full((batch_size, 1), self.tokenizer.cls_token_index),
+                    batch["input_ids"],
+                ],
+                dim=1,
+            )
+            # The attention_mask is set to 1 to enable attention for the CLS token
+            batch["attention_mask"] = torch.cat([torch.full((batch_size, 1), 1.0), batch["attention_mask"]], dim=1)
+            # Set the age of the CLS token to the starting age
+            batch["ages"] = torch.cat([batch["ages"][:, 0:1], batch["ages"]], dim=1)
+            # Set the age of the CLS token to the starting date
+            batch["dates"] = torch.cat([batch["dates"][:, 0:1], batch["dates"]], dim=1)
+            # Set the visit_concept_order of the CLS token to the first visit_concept_order in the sequence subtract by 1
+            visit_concept_orders_first = batch["visit_concept_orders"][:, 0:1] - 1
+            visit_concept_orders_first = torch.maximum(
+                visit_concept_orders_first, torch.zeros_like(visit_concept_orders_first)
+            )
+            batch["visit_concept_orders"] = torch.cat(
+                [visit_concept_orders_first, batch["visit_concept_orders"]], dim=1
+            )
+            # Set the concept_value of the CLS token to a default value -1.0.
+            batch["concept_values"] = torch.cat([torch.full((batch_size, 1), -1.0), batch["concept_values"]], dim=1)
+            # Set the concept_value of the CLS token to a default value 0.0 indicating that
+            # there is no value associated with this token
+            batch["concept_value_masks"] = torch.cat(
+                [torch.full((batch_size, 1), 0.0), batch["concept_value_masks"]], dim=1
+            )
+            # Set the visit_segments of the CLS token to a default value 0 because this doesn't belong to a visit
+            batch["visit_segments"] = torch.cat([torch.full((batch_size, 1), 0), batch["visit_segments"]], dim=1)
 
         # This is the most crucial logic for generating the training labels
         if self.is_pretraining:
@@ -125,29 +133,46 @@ class CehrBertDataCollator:
 
             batch["input_ids"], batch["labels"] = self.torch_mask_tokens(batch["input_ids"], batch["labels"])
 
+        bz = len(examples)
         if "person_id" in examples[0]:
-            batch["person_id"] = torch.cat(
-                [self._convert_to_tensor(example["person_id"]).reshape(-1, 1) for example in examples],
-                dim=0,
-            ).to(torch.float)
+            batch["person_id"] = (
+                torch.cat(
+                    [self._convert_to_tensor(example["person_id"]).reshape(-1, 1) for example in examples],
+                    dim=0,
+                )
+                .to(torch.float)
+                .reshape(bz, -1)
+            )
 
         if "index_date" in examples[0]:
-            batch["index_date"] = torch.cat(
-                [self._convert_to_tensor(example["index_date"]).reshape(-1, 1) for example in examples],
-                dim=0,
-            ).to(torch.float32)
+            batch["index_date"] = (
+                torch.cat(
+                    [self._convert_to_tensor(example["index_date"]).reshape(-1, 1) for example in examples],
+                    dim=0,
+                )
+                .to(torch.float32)
+                .reshape(bz, -1)
+            )
 
         if "age_at_index" in examples[0]:
-            batch["age_at_index"] = torch.cat(
-                [self._convert_to_tensor(example["age_at_index"]).reshape(-1, 1) for example in examples],
-                dim=0,
-            ).to(torch.float)
+            batch["age_at_index"] = (
+                torch.cat(
+                    [self._convert_to_tensor(example["age_at_index"]).reshape(-1, 1) for example in examples],
+                    dim=0,
+                )
+                .to(torch.float)
+                .reshape(bz, -1)
+            )
 
         if "classifier_label" in examples[0]:
-            batch["classifier_label"] = torch.cat(
-                [self._convert_to_tensor(example["classifier_label"]).reshape(-1, 1) for example in examples],
-                dim=0,
-            ).to(torch.float)
+            batch["classifier_label"] = (
+                torch.cat(
+                    [self._convert_to_tensor(example["classifier_label"]).reshape(-1, 1) for example in examples],
+                    dim=0,
+                )
+                .to(torch.float)
+                .reshape(bz, -1)
+            )
 
         return batch
 
@@ -173,14 +198,19 @@ class CehrBertDataCollator:
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
         return inputs, labels
 
-    def generate_start_end_index(self, record: Dict[str, Any]) -> Dict[str, Any]:
+    def generate_start_end_index(
+        self, record: Dict[str, Any], max_length_allowed: Optional[int] = None
+    ) -> Dict[str, Any]:
         """
         Adapted from https://github.com/OHDSI/Apollo/blob/main/data_loading/data_transformer.py.
 
         Adding the start and end indices to extract a portion of the patient sequence
         """
+        sample_packing = getattr(self, "sample_packing", False)
+        max_length_allowed = self.max_length if max_length_allowed is None else max_length_allowed
         seq_length = len(record["input_ids"])
-        new_max_length = self.max_length - 1  # Subtract one for the [CLS] token
+        # Subtract one for the [CLS] token
+        new_max_length = max_length_allowed if sample_packing else max_length_allowed - 1
 
         # Return the record directly if the actual sequence length is less than the max sequence
         if seq_length <= new_max_length:
@@ -229,3 +259,134 @@ class CehrBertDataCollator:
             else:
                 new_record[k] = v
         return new_record
+
+
+class SamplePackingCehrBertDataCollator(CehrBertDataCollator):
+    def __init__(self, max_tokens, max_position_embeddings, *args, **kwargs):
+        self.max_tokens_per_batch = max_tokens
+        self.max_position_embeddings = max_position_embeddings
+        self.sample_packing = True
+        super(SamplePackingCehrBertDataCollator, self).__init__(*args, **kwargs)
+
+    def __call__(self, examples):
+        flattened_examples = []
+
+        # Main inputs
+        current_input_ids = []
+        current_attention_mask = []
+        current_concept_values = []
+        current_concept_value_masks = []
+        current_ages = []
+        current_dates = []
+        current_visit_concept_orders = []
+        current_visit_segments = []
+
+        # Demographics
+        current_person_ids = []
+        current_index_dates = []
+
+        # Binary classification inputs
+        current_age_at_indexes = []
+        current_labels = []
+
+        for idx, example in enumerate(examples):
+            # If the sample length exceeds the model's capacity, truncate this example
+            if len(example["input_ids"]) > self.max_position_embeddings:
+                example = self.generate_start_end_index(example, self.max_position_embeddings)
+
+            input_ids = example["input_ids"]
+            # We add the flattened example to the list either when the example exceeds the total max tokens
+            # we add the length by two because we need to add two more tokens [CLS] .... [PAD]
+            if len(current_input_ids) + len(input_ids) + 2 > self.max_tokens_per_batch and current_input_ids:
+                packed_example = {
+                    "input_ids": current_input_ids,
+                    "attention_mask": current_attention_mask,
+                    "ages": current_ages,
+                    "dates": current_dates,
+                    "visit_concept_orders": current_visit_concept_orders,
+                    "concept_values": current_concept_values,
+                    "concept_value_masks": current_concept_value_masks,
+                    "visit_segments": current_visit_segments,
+                }
+
+                if current_labels:
+                    packed_example.update(
+                        {
+                            "person_id": current_person_ids,
+                            "index_date": current_index_dates,
+                            "age_at_index": current_age_at_indexes,
+                            "classifier_label": current_labels,
+                        }
+                    )
+
+                flattened_examples.append(packed_example)
+
+                # Main inputs
+                current_input_ids = []
+                current_attention_mask = []
+                current_concept_values = []
+                current_concept_value_masks = []
+                current_ages = []
+                current_dates = []
+                current_visit_concept_orders = []
+                current_visit_segments = []
+
+                # Demographics
+                current_person_ids = []
+                current_index_dates = []
+
+                # Binary classification inputs
+                current_age_at_indexes = []
+                current_labels = []
+
+            current_input_ids.extend([self.tokenizer.cls_token_index] + input_ids + [self.tokenizer.pad_token_index])
+            current_attention_mask.extend([1] + np.ones_like(input_ids).tolist() + [0])
+            current_concept_values.extend([-1] + example["concept_values"] + [-1])
+            current_concept_value_masks.extend([0] + example["concept_value_masks"] + [0])
+            current_ages.extend([example["ages"][0]] + example["ages"] + [0])
+            current_dates.extend([example["dates"][0]] + example["dates"] + [0])
+            current_visit_concept_orders.extend(
+                [max(0, example["visit_concept_orders"][0] - 1)]
+                + example["visit_concept_orders"]
+                + [example["visit_concept_orders"][-1]]
+            )
+            current_visit_segments.extend([0] + example["visit_segments"] + [0])
+
+            if "person_id" in example:
+                current_person_ids.append(example["person_id"])
+
+            if "index_date" in example:
+                current_index_dates.append(example["index_date"])
+
+            if "age_at_index" in example:
+                current_age_at_indexes.append(example["age_at_index"])
+
+            if "classifier_label" in example:
+                current_labels.append(example["classifier_label"])
+
+        # The final batch needs to be added
+        if current_input_ids:
+            packed_example = {
+                "input_ids": current_input_ids,
+                "attention_mask": current_attention_mask,
+                "ages": current_ages,
+                "dates": current_dates,
+                "visit_concept_orders": current_visit_concept_orders,
+                "concept_values": current_concept_values,
+                "concept_value_masks": current_concept_value_masks,
+                "visit_segments": current_visit_segments,
+            }
+
+            if current_labels:
+                packed_example.update(
+                    {
+                        "person_id": current_person_ids,
+                        "index_date": current_index_dates,
+                        "age_at_index": current_age_at_indexes,
+                        "classifier_label": current_labels,
+                    }
+                )
+
+            flattened_examples.append(packed_example)
+
+        return super().__call__(flattened_examples)

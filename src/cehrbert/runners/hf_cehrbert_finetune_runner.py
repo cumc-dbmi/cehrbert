@@ -124,7 +124,7 @@ def data_collate_fn(features, model_type: torch.dtype, collator: CehrBertDataCol
 
 def main():
 
-    data_args, model_args, training_args = parse_runner_args()
+    _, data_args, model_args, training_args = parse_runner_args()
 
     if data_args.streaming:
         # This happens only when streaming is enabled. This is for disabling the warning message

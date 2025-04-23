@@ -3,6 +3,7 @@ from typing import Optional, Tuple
 
 import torch
 from torch import nn
+from torch.nn import functional as F
 from torch.nn.utils.rnn import pack_padded_sequence
 from transformers import PreTrainedModel
 from transformers.activations import gelu_new
@@ -20,6 +21,53 @@ from cehrbert.models.hf_models.hf_modeling_outputs import CehrBertModelOutput, C
 
 logger = logging.get_logger("transformers")
 LARGE_POSITION_VALUE = 1000000
+
+
+def create_sample_packing_attention_mask(attention_mask: torch.Tensor) -> torch.Tensor:
+    """
+    Create a block-diagonal attention mask for packed sequences within a batch.
+
+    Args:
+        attention_mask (torch.Tensor): (batch_size, seq_len) binary mask where 1 = token, 0 = padding
+
+    Returns:
+        torch.Tensor: (batch_size, seq_len, seq_len) attention mask where entries are 1 if tokens
+                      can attend to each other (within same packed segment), 0 otherwise.
+    """
+    # Step 1: Identify segments within each sample
+    cumsum_mask = (attention_mask == 0).cumsum(dim=-1)
+    segment_ids = cumsum_mask * attention_mask  # zeros remain zero
+
+    # Step 2: Compare segment IDs pairwise per batch element
+    # Shape: (batch_size, seq_len, seq_len)
+    attn_matrix = (segment_ids.unsqueeze(2) == segment_ids.unsqueeze(1)).int()
+
+    # Step 3: Mask out padding tokens
+    mask = attention_mask.unsqueeze(1) * attention_mask.unsqueeze(2)
+    attn_matrix = attn_matrix * mask
+
+    return attn_matrix
+
+
+def is_sample_pack(attention_mask: torch.Tensor) -> bool:
+    """
+    Determines whether any sequence in the batch is likely sample-packed.
+
+    A sample-packed sequence is one where there are non-padding (1) tokens
+    after a padding (0) token, indicating multiple sequences packed together
+    with padding as a separator.
+
+    Args:
+        attention_mask (torch.Tensor): A tensor of shape (batch_size, seq_len)
+            where 1 indicates a real token and 0 indicates padding.
+
+    Returns:
+        bool: True if any sample in the batch is sample-packed, False otherwise.
+    """
+    nonzero_counts = attention_mask.sum(dim=1)
+    max_token_positions = torch.argmax(attention_mask.flip(dims=[1]), dim=1)
+    max_indices = attention_mask.shape[1] - 1 - max_token_positions
+    return torch.any(nonzero_counts < (max_indices + 1)).item()
 
 
 def flash_attention_forward(
@@ -98,10 +146,36 @@ def flash_attention_forward(
 
 # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
 def get_unpad_data(attention_mask):
-    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = torch.nn.functional.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
+    # This infers sample packing
+    if is_sample_pack(attention_mask):
+        # Assume input: attention_mask shape = (batch, seq_len)
+        attention_mask = attention_mask.flatten()  # shape: (seq_len,)
+
+        # Compute max_index of the last non-zero element
+        nonzero = torch.nonzero(attention_mask, as_tuple=False).flatten()
+        max_index = nonzero[-1].item()
+
+        # Pad the truncated attention mask
+        padded_attention_mask = F.pad(attention_mask[: max_index + 1], (0, 1), value=0)
+
+        # Indices of all tokens
+        indices = torch.nonzero(attention_mask, as_tuple=False).flatten()
+
+        # Find where 0s occur (segment boundaries)
+        cumsum_seqlens_in_batch = torch.cumsum(padded_attention_mask, dim=0)[padded_attention_mask == 0]
+
+        # Compute seqlens per segment
+        seqlens_in_batch = (cumsum_seqlens_in_batch - F.pad(cumsum_seqlens_in_batch, (1, 0), value=0)[:-1]).to(
+            torch.int
+        )
+
+        max_seqlen_in_batch = seqlens_in_batch.max().item() if seqlens_in_batch.numel() > 0 else 0
+        cu_seqlens = F.pad(cumsum_seqlens_in_batch, (1, 0)).to(torch.int)
+    else:
+        seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
+        indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
+        max_seqlen_in_batch = seqlens_in_batch.max().item()
+        cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
     return (
         indices,
         cu_seqlens,
@@ -345,7 +419,10 @@ class CehrBertEmbeddings(nn.Module):
         self.age_embedding_layer = TimeEmbeddingLayer(
             config.n_time_embd, scaling_factor=config.age_embedding_scaling_factor
         )
-        self.positional_embedding_layer = PositionalEncodingLayer(config.n_time_embd, config.max_position_embeddings)
+        max_position_embeddings = config.max_position_embeddings
+        if config.max_position_embeddings < config.sample_packing_max_positions:
+            max_position_embeddings = config.sample_packing_max_positions
+        self.positional_embedding_layer = PositionalEncodingLayer(config.n_time_embd, max_position_embeddings)
         self.concept_value_transformation_layer = ConceptValueTransformationLayer(config.hidden_size)
         self.linear_proj = nn.Linear(config.hidden_size + 3 * config.n_time_embd, config.hidden_size)
 
@@ -442,7 +519,17 @@ class CehrBert(CehrBertPreTrainedModel):
         # ourselves in which case we just need to make it broadcastable to all heads.
         # The flash attention requires the original attention_mask
         if not getattr(self.config, "_attn_implementation", "eager") == "flash_attention_2":
-            attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
+            if is_sample_pack(attention_mask):
+                attention_mask = create_sample_packing_attention_mask(attention_mask)[:, None, :, :]
+                # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
+                # masked positions, this operation will create a tensor which is 0.0 for
+                # positions we want to attend and the dtype's smallest value for masked positions.
+                # Since we are adding it to the raw scores before the softmax, this is
+                # effectively the same as removing these entirely.
+                attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+                attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
+            else:
+                attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
 
         embedding_output = self.cehr_bert_embeddings(
             input_ids=input_ids,
