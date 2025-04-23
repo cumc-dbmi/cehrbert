@@ -373,7 +373,7 @@ class ConceptValueTransformationLayer(nn.Module):
             return concept_embeddings
 
         # (batch_size, seq_length, 1)
-        concept_values = concept_values.unsqueeze(-1)
+        concept_values = torch.clamp(concept_values.unsqueeze(-1), min=-10, max=10)
         # (batch_size, seq_length, 1)
         concept_value_masks = concept_value_masks.unsqueeze(-1)
         # (batch_size, seq_length, 1 + embedding_size)
@@ -441,7 +441,7 @@ class CehrBertEmbeddings(nn.Module):
         # Combine values with the concept embeddings
         x = self.concept_value_transformation_layer(x, concept_values, concept_value_masks)
         age_embeddings = self.age_embedding_layer(ages)
-        time_embeddings = self.age_embedding_layer(dates)
+        time_embeddings = self.time_embedding_layer(dates)
         positional_embeddings = self.positional_embedding_layer(visit_concept_orders)
         x = self.linear_proj(torch.cat([x, time_embeddings, age_embeddings, positional_embeddings], dim=-1))
         x = gelu_new(x)
