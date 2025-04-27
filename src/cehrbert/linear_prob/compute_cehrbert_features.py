@@ -36,6 +36,32 @@ from cehrbert.runners.runner_util import (
 LOG = logging.get_logger("transformers")
 
 
+def extract_averaged_embeddings_from_packed_sequence(
+    hidden_states: torch.Tensor, attention_mask: torch.Tensor
+) -> torch.Tensor:
+
+    # Step 1: Find boundaries (where padding is 0)
+    mask = attention_mask[0]  # remove batch dimension for easier processing
+    boundary_indices = (mask == 0).nonzero(as_tuple=False).flatten()
+
+    # Add start and end manually
+    start_indices = torch.cat([torch.tensor([-1]), boundary_indices])
+    end_indices = torch.cat([boundary_indices, torch.tensor([mask.size(0)])])
+
+    # Step 2: Extract embeddings between boundaries and average
+    sample_embeddings = []
+    for start, end in zip(start_indices, end_indices):
+        # Select embeddings between (start, end)
+        # Skip if no valid tokens
+        if end - start > 1:
+            sample = hidden_states[0, start + 1 : end, :]  # slice (start+1) to (end-1)
+            avg_embedding = sample.mean(dim=0)  # average over sequence length
+            sample_embeddings.append(avg_embedding)
+    # Stack results
+    sample_embeddings = torch.stack(sample_embeddings, dim=0)
+    return sample_embeddings
+
+
 def prepare_finetune_dataset(
     data_args: DataTrainingArguments,
     training_args: TrainingArguments,
@@ -286,10 +312,28 @@ def main():
 
                 cls_token_indices = batch["input_ids"] == cehrgpt_tokenizer.cls_token_index
                 if cehrbert_args.sample_packing:
-                    features = cehrbert_output.last_hidden_state[cls_token_indices].cpu().float().detach().numpy()
+                    if cehrbert_args.average_over_sequence:
+                        features = extract_averaged_embeddings_from_packed_sequence(
+                            cehrbert_output.last_hidden_state, batch["attention_mask"]
+                        )
+                    else:
+                        features = cehrbert_output.last_hidden_state[cls_token_indices]
+                    features = features.cpu().float().detach().numpy()
                 else:
-                    cls_token_index = torch.argmax((cls_token_indices).to(torch.int), dim=-1)
-                    features = cehrbert_output.last_hidden_state[..., cls_token_index, :].cpu().float().detach().numpy()
+                    if cehrbert_args.average_over_sequence:
+                        features = torch.where(
+                            batch["attention_mask"].unsqueeze(dim=-1).to(torch.bool),
+                            cehrbert_output.last_hidden_state,
+                            0,
+                        )
+                        # Average across the sequence
+                        features = features.mean(dim=1)
+                    else:
+                        cls_token_index = torch.argmax((cls_token_indices).to(torch.int), dim=-1)
+                        features = (
+                            cehrbert_output.last_hidden_state[..., cls_token_index, :].cpu().float().detach().numpy()
+                        )
+                    features = features.cpu().float().detach().numpy()
                 assert len(features) == len(labels), "the number of features must match the number of labels"
                 # Flatten features or handle them as a list of arrays (one array per row)
                 features_list = [feature for feature in features]
