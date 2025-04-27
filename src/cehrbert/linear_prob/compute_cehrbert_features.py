@@ -282,21 +282,14 @@ def main():
 
                 batch = {k: v.to(device) for k, v in batch.items()}
                 # Forward pass
-                cehrgpt_output = cehrbert_model(**batch, output_attentions=False, output_hidden_states=False)
+                cehrbert_output = cehrbert_model(**batch, output_attentions=False, output_hidden_states=False)
 
                 cls_token_indices = batch["input_ids"] == cehrgpt_tokenizer.cls_token_index
                 if cehrbert_args.sample_packing:
-                    features = (
-                        cehrgpt_output.last_hidden_state[cls_token_indices]
-                        .cpu()
-                        .float()
-                        .detach()
-                        .numpy()
-                        .squeeze(axis=0)
-                    )
+                    features = cehrbert_output.last_hidden_state[cls_token_indices].cpu().float().detach().numpy()
                 else:
                     cls_token_index = torch.argmax((cls_token_indices).to(torch.int), dim=-1)
-                    features = cehrgpt_output.last_hidden_state[..., cls_token_index, :].cpu().float().detach().numpy()
+                    features = cehrbert_output.last_hidden_state[..., cls_token_index, :].cpu().float().detach().numpy()
                 assert len(features) == len(labels), "the number of features must match the number of labels"
                 # Flatten features or handle them as a list of arrays (one array per row)
                 features_list = [feature for feature in features]
