@@ -39,26 +39,32 @@ LOG = logging.get_logger("transformers")
 def extract_averaged_embeddings_from_packed_sequence(
     hidden_states: torch.Tensor, attention_mask: torch.Tensor
 ) -> torch.Tensor:
+    # Step 1: Create segment IDs
+    mask = attention_mask[0]  # (seq_len,)
+    segment_ids = (mask == 0).cumsum(dim=0) + 1
+    segment_ids = (segment_ids * mask).to(torch.int32)  # set PAD positions back to 0
 
-    # Step 1: Find boundaries (where padding is 0)
-    mask = attention_mask[0]  # remove batch dimension for easier processing
-    boundary_indices = (mask == 0).nonzero(as_tuple=False).flatten()
+    # Now segment_ids looks like:
+    # tensor([1, 1, 0, 2, 2, 2, 2, 0, 3, 3, 0])
 
-    # Add start and end manually
-    start_indices = torch.cat([torch.tensor([-1], device=boundary_indices.device), boundary_indices])
-    end_indices = torch.cat([boundary_indices, torch.tensor([mask.size(0)], device=boundary_indices.device)])
+    # Step 2: Only keep valid tokens (nonzero segment ids)
+    valid = segment_ids > 0
+    valid_embeddings = hidden_states[0, valid].to(torch.float32)  # (num_valid_tokens, hidden_dim)
+    valid_segments = segment_ids[valid]  # (num_valid_tokens,)
 
-    # Step 2: Extract embeddings between boundaries and average
-    sample_embeddings = []
-    for start, end in zip(start_indices, end_indices):
-        # Select embeddings between (start, end)
-        # Skip if no valid tokens
-        if end - start > 1:
-            sample = hidden_states[0, start + 1 : end, :]  # slice (start+1) to (end-1)
-            avg_embedding = sample.mean(dim=0)  # average over sequence length
-            sample_embeddings.append(avg_embedding)
-    # Stack results
-    sample_embeddings = torch.stack(sample_embeddings, dim=0)
+    # Step 3: Group by segment id and average
+    num_segments = segment_ids.max().item()
+
+    # Initialize
+    sample_embeddings = torch.zeros(num_segments, hidden_states.size(-1), device=hidden_states.device)
+    counts = torch.zeros(num_segments, device=hidden_states.device)
+
+    # Scatter add embeddings and counts
+    sample_embeddings.index_add_(0, valid_segments - 1, valid_embeddings)  # segment id starts from 1
+    counts.index_add_(0, valid_segments - 1, torch.ones_like(valid_segments, dtype=counts.dtype))
+
+    # Final averaging
+    sample_embeddings = sample_embeddings / counts.unsqueeze(-1)
     return sample_embeddings
 
 
@@ -317,7 +323,8 @@ def main():
                             cehrbert_output.last_hidden_state, batch["attention_mask"]
                         )
                     else:
-                        features = cehrbert_output.last_hidden_state[cls_token_indices]
+                        cls_token_index = torch.argmax((cls_token_indices).to(torch.int), dim=-1)
+                        features = cehrbert_output.last_hidden_state[..., cls_token_index, :].squeeze(axis=0)
                     features = features.cpu().float().detach().numpy()
                 else:
                     if cehrbert_args.average_over_sequence:
@@ -330,9 +337,7 @@ def main():
                         features = features.mean(dim=1)
                     else:
                         cls_token_index = torch.argmax((cls_token_indices).to(torch.int), dim=-1)
-                        features = (
-                            cehrbert_output.last_hidden_state[..., cls_token_index, :].cpu().float().detach().numpy()
-                        )
+                        features = cehrbert_output.last_hidden_state[..., cls_token_index, :].squeeze(axis=0)
                     features = features.cpu().float().detach().numpy()
                 assert len(features) == len(labels), "the number of features must match the number of labels"
                 # Flatten features or handle them as a list of arrays (one array per row)
