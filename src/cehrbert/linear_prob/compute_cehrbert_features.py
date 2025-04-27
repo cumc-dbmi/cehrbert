@@ -22,7 +22,7 @@ from cehrbert.data_generators.hf_data_generator.hf_dataset_collator import (
 from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import MedToCehrBertDatasetMapping
 from cehrbert.data_generators.hf_data_generator.meds_utils import CacheFileCollector, create_dataset_from_meds_reader
 from cehrbert.data_generators.hf_data_generator.sample_packing_sampler import SamplePackingBatchSampler
-from cehrbert.models.hf_models.hf_cehrbert import CehrBert
+from cehrbert.models.hf_models.hf_cehrbert import CehrBertForPreTraining
 from cehrbert.models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments
 from cehrbert.runners.runner_util import (
@@ -103,7 +103,7 @@ def main():
 
     cehrgpt_tokenizer = CehrBertTokenizer.from_pretrained(model_args.tokenizer_name_or_path)
     cehrbert_model = (
-        CehrBert.from_pretrained(
+        CehrBertForPreTraining.from_pretrained(
             model_args.model_name_or_path,
             attn_implementation=("flash_attention_2" if is_flash_attn_2_available() else "eager"),
         )
