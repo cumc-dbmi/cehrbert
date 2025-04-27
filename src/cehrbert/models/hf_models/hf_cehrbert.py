@@ -8,8 +8,7 @@ from torch.nn.utils.rnn import pack_padded_sequence
 from transformers import PreTrainedModel
 from transformers.activations import gelu_new
 from transformers.models.bert import modeling_bert
-from transformers.models.bert.modeling_bert import BertEncoder, BertOnlyMLMHead, BertPooler
-from transformers.pytorch_utils import Conv1D
+from transformers.models.bert.modeling_bert import BertEncoder, BertOnlyMLMHead, BertPooler, BertSelfAttention
 from transformers.utils import is_flash_attn_2_available, logging
 
 if is_flash_attn_2_available():
@@ -183,69 +182,12 @@ def get_unpad_data(attention_mask):
     )
 
 
-def upad_input(query_layer, key_layer, value_layer, attention_mask, query_length):
-    indices_k, cu_seqlens_k, max_seqlen_in_batch_k = get_unpad_data(attention_mask)
-    batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
-
-    key_layer = index_first_axis(
-        key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
-        indices_k,
-    )
-    value_layer = index_first_axis(
-        value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
-        indices_k,
-    )
-    if query_length == kv_seq_len:
-        query_layer = index_first_axis(
-            query_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
-            indices_k,
-        )
-        cu_seqlens_q = cu_seqlens_k
-        max_seqlen_in_batch_q = max_seqlen_in_batch_k
-        indices_q = indices_k
-    elif query_length == 1:
-        max_seqlen_in_batch_q = 1
-        cu_seqlens_q = torch.arange(
-            batch_size + 1, dtype=torch.int32, device=query_layer.device
-        )  # There is a memcpy here, that is very bad.
-        indices_q = cu_seqlens_q[:-1]
-        query_layer = query_layer.squeeze(1)
-    else:
-        # The -q_len: slice assumes left padding.
-        attention_mask = attention_mask[:, -query_length:]
-        query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
-
-    return (
-        query_layer,
-        key_layer,
-        value_layer,
-        indices_q,
-        (cu_seqlens_q, cu_seqlens_k),
-        (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
-    )
-
-
-class BertSelfFlashAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
-        super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({config.num_attention_heads})"
-            )
-
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.split_size = config.hidden_size
-        self.embed_dim = config.hidden_size
-        self.c_attn = Conv1D(3 * self.embed_dim, self.embed_dim)
-        self.c_proj = Conv1D(self.embed_dim, self.embed_dim)
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+class BertSelfFlashAttention(BertSelfAttention):
 
     def split_heads(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        return x.view(new_x_shape)
+        x = x.view(new_x_shape)
+        return x
 
     def forward(
         self,
@@ -258,7 +200,10 @@ class BertSelfFlashAttention(nn.Module):
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
 
-        query, key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
+        dtype = hidden_states.dtype
+        query = self.query(hidden_states).to(torch.bfloat16)
+        key = self.key(hidden_states).to(torch.bfloat16)
+        value = self.value(hidden_states).to(torch.bfloat16)
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
         # such that the encoder's padding tokens are not attended to.
@@ -294,8 +239,7 @@ class BertSelfFlashAttention(nn.Module):
             softmax_scale=None,
             is_causal=False,
         )
-        attn_output = self.c_proj(attn_output)
-        attn_output = self.dropout(attn_output)
+        attn_output = attn_output.to(dtype)
         # The BertLayer expects a tuple
         return (attn_output,)
 
