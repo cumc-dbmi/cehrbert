@@ -140,7 +140,7 @@ class CehrBertDataCollator:
                     [self._convert_to_tensor(example["person_id"]).reshape(-1, 1) for example in examples],
                     dim=0,
                 )
-                .to(torch.float)
+                .to(torch.int32)
                 .reshape(bz, -1)
             )
 
@@ -150,7 +150,7 @@ class CehrBertDataCollator:
                     [self._convert_to_tensor(example["index_date"]).reshape(-1, 1) for example in examples],
                     dim=0,
                 )
-                .to(torch.float32)
+                .to(torch.float64)
                 .reshape(bz, -1)
             )
 
@@ -160,7 +160,7 @@ class CehrBertDataCollator:
                     [self._convert_to_tensor(example["age_at_index"]).reshape(-1, 1) for example in examples],
                     dim=0,
                 )
-                .to(torch.float)
+                .to(torch.float32)
                 .reshape(bz, -1)
             )
 
