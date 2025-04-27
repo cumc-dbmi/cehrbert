@@ -14,7 +14,6 @@ from tqdm import tqdm
 from transformers import TrainingArguments
 from transformers.utils import is_flash_attn_2_available, logging
 
-from cehrbert.data_generators.hf_data_generator.cache_util import CacheFileCollector
 from cehrbert.data_generators.hf_data_generator.hf_dataset import create_cehrbert_finetuning_dataset
 from cehrbert.data_generators.hf_data_generator.hf_dataset_collator import (
     CehrBertDataCollator,
@@ -29,7 +28,6 @@ from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments
 from cehrbert.runners.runner_util import (
     convert_dataset_to_iterable_dataset,
     generate_prepared_ds_path,
-    get_last_hf_checkpoint,
     get_meds_extension_path,
     load_parquet_as_dataset,
     parse_runner_args,
@@ -108,7 +106,6 @@ def main():
         CehrBert.from_pretrained(
             model_args.model_name_or_path,
             attn_implementation=("flash_attention_2" if is_flash_attn_2_available() else "eager"),
-            torch_dtype=(torch.bfloat16 if is_flash_attn_2_available() else torch.float32),
         )
         .eval()
         .to(device)
@@ -290,7 +287,7 @@ def main():
                 cls_token_indices = batch["input_ids"] == cehrgpt_tokenizer.cls_token_index
                 if cehrbert_args.sample_packing:
                     features = (
-                        cehrgpt_output.last_hidden_state[..., cls_token_indices, :]
+                        cehrgpt_output.last_hidden_state[cls_token_indices]
                         .cpu()
                         .float()
                         .detach()
