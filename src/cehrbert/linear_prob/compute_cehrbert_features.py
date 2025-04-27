@@ -45,8 +45,8 @@ def extract_averaged_embeddings_from_packed_sequence(
     boundary_indices = (mask == 0).nonzero(as_tuple=False).flatten()
 
     # Add start and end manually
-    start_indices = torch.cat([torch.tensor([-1]), boundary_indices])
-    end_indices = torch.cat([boundary_indices, torch.tensor([mask.size(0)])])
+    start_indices = torch.cat([torch.tensor([-1], device=boundary_indices.device), boundary_indices])
+    end_indices = torch.cat([boundary_indices, torch.tensor([mask.size(0)], device=boundary_indices.device)])
 
     # Step 2: Extract embeddings between boundaries and average
     sample_embeddings = []
