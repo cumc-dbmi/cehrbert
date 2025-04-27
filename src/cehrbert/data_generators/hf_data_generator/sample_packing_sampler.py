@@ -96,7 +96,8 @@ class SamplePackingBatchSampler(Sampler[List[int]]):
             # the context window of the model
             sample_length = min(self.lengths[idx], self.max_position_embeddings)
             # If adding this sample would exceed max_tokens_per_batch, yield the current batch
-            if current_batch_tokens + sample_length + 1 > self.max_tokens_per_batch and batch:
+            # Plus 2 for [CLS] and [PAD]
+            if current_batch_tokens + sample_length + 2 > self.max_tokens_per_batch and batch:
                 yield batch
                 batch = []
                 current_batch_tokens = 0
@@ -104,7 +105,7 @@ class SamplePackingBatchSampler(Sampler[List[int]]):
             # Add the sample to the current batch
             batch.append(idx)
             # plus extract one for the PAD token to separate samples
-            current_batch_tokens += sample_length + 1
+            current_batch_tokens += sample_length + 2
 
         # Yield the last batch if it's not empty and we're not dropping it
         if batch and not self.drop_last:
@@ -117,8 +118,13 @@ class SamplePackingBatchSampler(Sampler[List[int]]):
         This is an approximation since the exact number depends on the specific
         sequence lengths and their order.
         """
+        if len(self.lengths) == 0:
+            return 0
+
+        # We need to truncate the lengths due to the context window limit imposed by the model
+        truncated_lengths = [min(self.max_position_embeddings, length) for length in self.lengths]
         # Calculate average sequence length
-        avg_seq_length = sum(self.lengths) // len(self.lengths)
+        avg_seq_length = sum(truncated_lengths) // len(truncated_lengths)
 
         # Estimate average number of sequences per batch
         seqs_per_batch = self.max_tokens_per_batch // avg_seq_length
@@ -126,7 +132,7 @@ class SamplePackingBatchSampler(Sampler[List[int]]):
         # Estimate total number of batches
         if self.drop_last:
             # If dropping last incomplete batch
-            return len(self.lengths) // seqs_per_batch * self.num_replicas
+            return len(truncated_lengths) // seqs_per_batch * self.num_replicas
         else:
             # If keeping last incomplete batch, ensure at least 1 batch
-            return max(1, len(self.lengths) // seqs_per_batch) * self.num_replicas
+            return max(1, len(truncated_lengths) // seqs_per_batch) * self.num_replicas
