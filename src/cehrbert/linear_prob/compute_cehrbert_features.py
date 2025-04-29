@@ -323,8 +323,7 @@ def main():
                             cehrbert_output.last_hidden_state, batch["attention_mask"]
                         )
                     else:
-                        cls_token_index = torch.argmax((cls_token_indices).to(torch.int), dim=-1)
-                        features = cehrbert_output.last_hidden_state[..., cls_token_index, :].squeeze(axis=0)
+                        features = cehrbert_output.last_hidden_state[cls_token_indices, :].squeeze(axis=0)
                     features = features.cpu().float().detach().numpy()
                 else:
                     if cehrbert_args.average_over_sequence:
