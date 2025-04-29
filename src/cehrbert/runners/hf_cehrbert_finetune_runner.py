@@ -330,7 +330,12 @@ def main():
             dataset=processed_dataset["test"],
             batch_size=per_device_eval_batch_size,
             num_workers=training_args.dataloader_num_workers,
-            collate_fn=data_collator,
+            collate_fn=CehrBertDataCollator(
+                tokenizer=tokenizer,
+                max_length=config.max_position_embeddings,
+                is_pretraining=False,
+                mlm_probability=config.mlm_probability,
+            ),
             pin_memory=training_args.dataloader_pin_memory,
         )
         do_predict(test_dataloader, model_args, training_args)

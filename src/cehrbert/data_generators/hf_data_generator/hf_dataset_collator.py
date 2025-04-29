@@ -116,6 +116,10 @@ class CehrBertDataCollator:
             )
             # Set the visit_segments of the CLS token to a default value 0 because this doesn't belong to a visit
             batch["visit_segments"] = torch.cat([torch.full((batch_size, 1), 0), batch["visit_segments"]], dim=1)
+        else:
+            assert (
+                    batch["attention_mask"].shape[0] == 1
+            ), f"batch['attention_mask'].shape[0] must be 0 in sample packing"
 
         # This is the most crucial logic for generating the training labels
         if self.is_pretraining:
