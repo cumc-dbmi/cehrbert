@@ -15,7 +15,7 @@ from scipy.special import expit as sigmoid
 from sklearn.metrics import auc, precision_recall_curve, roc_auc_score
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import EarlyStoppingCallback, PreTrainedModel, Trainer, TrainingArguments, set_seed
+from transformers import EarlyStoppingCallback, Trainer, TrainingArguments, set_seed
 from transformers.trainer_utils import is_main_process
 from transformers.utils import logging
 
@@ -281,6 +281,8 @@ def main():
 
     if training_args.do_train:
         model = load_finetuned_model(model_args, model_args.model_name_or_path)
+        if getattr(model.config, "cls_token_id") is None:
+            model.config.cls_token_id = tokenizer.cls_token_index
         # If lora is enabled, we add LORA adapters to the model
         if model_args.use_lora:
             # When LORA is used, the trainer could not automatically find this label,

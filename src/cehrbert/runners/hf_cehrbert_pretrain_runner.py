@@ -128,6 +128,7 @@ def load_and_create_model(
         model_config = CehrBertConfig(
             vocab_size=tokenizer.vocab_size,
             lab_token_ids=tokenizer.lab_token_ids,
+            cls_token_id=tokenizer.cls_token_index,
             sample_packing_max_positions=cehrbert_args.max_tokens_per_batch,
             **model_args.as_dict(),
         )

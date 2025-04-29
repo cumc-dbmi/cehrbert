@@ -21,6 +21,7 @@ class CehrBertConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
+        cls_token_id=None,
         lab_token_ids=None,
         tie_word_embeddings=True,
         num_labels=2,
@@ -59,6 +60,7 @@ class CehrBertConfig(PretrainedConfig):
         self.time_embedding_scaling_factor = time_embedding_scaling_factor
         self.age_embedding_scaling_factor = age_embedding_scaling_factor
 
+        self.cls_token_id = cls_token_id
         self.lab_token_ids = lab_token_ids
 
         super().__init__(pad_token_id=pad_token_id, **kwargs)

@@ -687,6 +687,7 @@ class CehrBertForClassification(CehrBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         classifier_label: Optional[torch.FloatTensor] = None,
+        **kwargs,
     ) -> CehrBertSequenceClassifierOutput:
 
         cehrbert_output = self.bert(
@@ -701,16 +702,34 @@ class CehrBertForClassification(CehrBertPreTrainedModel):
             output_attentions,
             output_hidden_states,
         )
-
-        # Disable autocasting for precision-sensitive operations
-        with torch.autocast(device_type="cuda", enabled=False):
-            normalized_age = self._apply_age_norm(age_at_index)
+        if is_sample_pack(attention_mask):
+            features = cehrbert_output.last_hidden_state[:, (input_ids == self.config.cls_token_id).squeeze(0), :]
+            assert features.shape[1] == classifier_label.shape[1], (
+                "the length of the features need to be the same as the length of classifier_label. "
+                f"features.shape[1]: {features.shape[1]}, "
+                f"classifier_label.shape[1]: {classifier_label.shape[1]}"
+            )
+            assert features.shape[1] == age_at_index.shape[1], (
+                "the length of the features need to be the same as the length of age_at_index. "
+                f"features.shape[1]: {features.shape[1]}, "
+                f"age_at_index.shape[1]: {age_at_index.shape[1]}"
+            )
+            num_samples = age_at_index.shape[1]
+            features = features.view((num_samples, -1))
+            classifier_label = classifier_label.view((num_samples, -1))
+            with torch.autocast(device_type="cuda", enabled=False):
+                normalized_age = self._apply_age_norm(age_at_index.view((num_samples, 1)))
+        else:
+            features = cehrbert_output.pooler_output
+            # Disable autocasting for precision-sensitive operations
+            with torch.autocast(device_type="cuda", enabled=False):
+                normalized_age = self._apply_age_norm(age_at_index)
 
         # In case the model is in bfloat16
-        if cehrbert_output.last_hidden_state.dtype != normalized_age.dtype:
+        if features.dtype != normalized_age.dtype:
             normalized_age = normalized_age.to(cehrbert_output.last_hidden_state.dtype)
 
-        next_input = self.dropout(cehrbert_output.pooler_output)
+        next_input = self.dropout(features)
         next_input = torch.cat([next_input, normalized_age], dim=1)
         next_input = self.dense_layer(next_input)
         next_input = nn.functional.relu(next_input)
@@ -800,6 +819,7 @@ class CehrBertLstmForClassification(CehrBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         classifier_label: Optional[torch.FloatTensor] = None,
+        **kwargs,
     ) -> CehrBertSequenceClassifierOutput:
 
         cehrbert_output = self.bert(
