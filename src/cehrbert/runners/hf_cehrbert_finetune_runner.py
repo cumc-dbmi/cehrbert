@@ -27,9 +27,12 @@ from cehrbert.data_generators.hf_data_generator.hf_dataset_collator import (
 )
 from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import MedToCehrBertDatasetMapping
 from cehrbert.data_generators.hf_data_generator.meds_utils import create_dataset_from_meds_reader
-from cehrbert.data_generators.hf_data_generator.sample_packing_sampler import SamplePackingBatchSampler
 from cehrbert.models.hf_models.config import CehrBertConfig
-from cehrbert.models.hf_models.hf_cehrbert import CehrBertForClassification, CehrBertLstmForClassification
+from cehrbert.models.hf_models.hf_cehrbert import (
+    CehrBertForClassification,
+    CehrBertLstmForClassification,
+    CehrBertPreTrainedModel,
+)
 from cehrbert.models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments, FineTuneModelType, ModelArguments
 from cehrbert.runners.runner_util import (
@@ -148,7 +151,7 @@ def load_pretrained_tokenizer(
         raise ValueError(f"Can not load the pretrained tokenizer from {tokenizer_name_or_path}")
 
 
-def load_finetuned_model(model_args: ModelArguments, model_name_or_path: str) -> PreTrainedModel:
+def load_finetuned_model(model_args: ModelArguments, model_name_or_path: str) -> CehrBertPreTrainedModel:
     if model_args.finetune_model_type == FineTuneModelType.POOLING.value:
         finetune_model_cls = CehrBertForClassification
     elif model_args.finetune_model_type == FineTuneModelType.LSTM.value:
@@ -203,6 +206,12 @@ def main():
         if is_main_process(training_args.local_rank):
             # Organize them into a single DatasetDict
             final_splits = prepare_finetune_dataset(data_args, training_args, cache_file_collector)
+
+            # TODO: temp solution, this column is mixed typed and causes an issue when transforming the data
+            if not data_args.streaming:
+                all_columns = final_splits["train"].column_names
+                if "visit_concept_ids" in all_columns:
+                    final_splits = final_splits.remove_columns(["visit_concept_ids"])
 
             processed_dataset = create_cehrbert_finetuning_dataset(
                 dataset=final_splits,
