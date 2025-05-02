@@ -41,6 +41,8 @@ class HfCehrBertRunnerIntegrationTest(unittest.TestCase):
             "--max_steps",
             "10",
             "--is_data_in_meds",
+            "--use_early_stopping",
+            "false",
             "--report_to",
             "none",
         ]
