@@ -320,3 +320,28 @@ class ModelArguments:
 
     def as_dict(self) -> Dict[str, Any]:
         return dataclasses.asdict(self)
+
+
+@dataclasses.dataclass
+class CehrBertArguments:
+    use_early_stopping: Optional[bool] = dataclasses.field(
+        default=True,
+        metadata={"help": "A flag to indicate whether we want to use early stopping."},
+    )
+    early_stopping_threshold: Optional[float] = dataclasses.field(
+        default=0.01,
+        metadata={
+            "help": "A threshold to denote how much the specified metric must improve to satisfy early stopping conditions."
+        },
+    )
+    sample_packing: Optional[bool] = dataclasses.field(
+        default=False,
+        metadata={"help": "A flag to indicate whether we want to use sample packing for efficient training."},
+    )
+    max_tokens_per_batch: int = dataclasses.field(
+        default=16384, metadata={"help": "Maximum number of tokens in each batch"}
+    )
+    average_over_sequence: bool = dataclasses.field(
+        default=False,
+        metadata={"help": "Whether or not to average tokens per sequence"},
+    )

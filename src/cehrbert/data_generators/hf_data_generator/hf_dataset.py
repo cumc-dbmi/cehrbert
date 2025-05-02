@@ -48,7 +48,7 @@ def create_cehrbert_pretraining_dataset(
         mapping_functions = [HFTokenizationMapping(concept_tokenizer, True)]
     else:
         mapping_functions = [
-            SortPatientSequenceMapping(),
+            # SortPatientSequenceMapping(),
             HFTokenizationMapping(concept_tokenizer, True),
         ]
 
@@ -91,7 +91,7 @@ def create_cehrbert_finetuning_dataset(
     else:
         mapping_functions = [
             HFFineTuningMapping(),
-            SortPatientSequenceMapping(),
+            # SortPatientSequenceMapping(),
             HFTokenizationMapping(concept_tokenizer, False),
         ]
 
@@ -166,6 +166,8 @@ def apply_cehrbert_dataset_mapping(
         )
         if mapping_function.remove_columns():
             dataset = dataset.remove_columns(mapping_function.remove_columns())
-    if cache_file_collector:
-        cache_file_collector.add_cache_files(dataset)
+
+        if cache_file_collector:
+            cache_file_collector.add_cache_files(dataset)
+
     return dataset

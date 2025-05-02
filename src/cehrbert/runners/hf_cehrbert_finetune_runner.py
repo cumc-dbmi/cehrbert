@@ -1,13 +1,14 @@
-import functools
 import json
 import os
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
 import torch
+import torch.distributed as dist
 from datasets import DatasetDict, load_from_disk
 from peft import LoraConfig, PeftModel, get_peft_model
 from scipy.special import expit as sigmoid
@@ -15,20 +16,25 @@ from sklearn.metrics import auc, precision_recall_curve, roc_auc_score
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import EarlyStoppingCallback, Trainer, TrainingArguments, set_seed
+from transformers.trainer_utils import is_main_process
 from transformers.utils import logging
 
 from cehrbert.data_generators.hf_data_generator.cache_util import CacheFileCollector
 from cehrbert.data_generators.hf_data_generator.hf_dataset import create_cehrbert_finetuning_dataset
-from cehrbert.data_generators.hf_data_generator.hf_dataset_collator import CehrBertDataCollator
+from cehrbert.data_generators.hf_data_generator.hf_dataset_collator import (
+    CehrBertDataCollator,
+    SamplePackingCehrBertDataCollator,
+)
 from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import MedToCehrBertDatasetMapping
 from cehrbert.data_generators.hf_data_generator.meds_utils import create_dataset_from_meds_reader
+from cehrbert.models.hf_models.config import CehrBertConfig
 from cehrbert.models.hf_models.hf_cehrbert import (
     CehrBertForClassification,
     CehrBertLstmForClassification,
     CehrBertPreTrainedModel,
 )
 from cehrbert.models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
-from cehrbert.runners.hf_runner_argument_dataclass import FineTuneModelType, ModelArguments
+from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments, FineTuneModelType, ModelArguments
 from cehrbert.runners.runner_util import (
     convert_dataset_to_iterable_dataset,
     generate_prepared_ds_path,
@@ -37,6 +43,7 @@ from cehrbert.runners.runner_util import (
     load_parquet_as_dataset,
     parse_runner_args,
 )
+from cehrbert.runners.sample_packing_trainer import SamplePackingTrainer
 
 LOG = logging.get_logger("transformers")
 
@@ -76,6 +83,64 @@ def get_torch_dtype(torch_dtype: Optional[str] = None) -> Union[torch.dtype, str
     return torch.float
 
 
+def prepare_finetune_dataset(
+    data_args: DataTrainingArguments,
+    training_args: TrainingArguments,
+    cache_file_collector: CacheFileCollector,
+):
+    # If the data is in the MEDS format, we need to convert it to the CEHR-BERT format
+    if data_args.is_data_in_meds:
+        meds_extension_path = get_meds_extension_path(
+            data_folder=os.path.expanduser(data_args.cohort_folder),
+            dataset_prepared_path=os.path.expanduser(data_args.dataset_prepared_path),
+        )
+        try:
+            LOG.info(f"Trying to load the MEDS extension from disk at {meds_extension_path}...")
+            dataset = load_from_disk(meds_extension_path)
+            if data_args.streaming:
+                dataset = convert_dataset_to_iterable_dataset(dataset, num_shards=training_args.dataloader_num_workers)
+        except Exception as e:
+            LOG.exception(e)
+            dataset = create_dataset_from_meds_reader(
+                data_args,
+                dataset_mappings=[MedToCehrBertDatasetMapping(data_args=data_args, is_pretraining=False)],
+                cache_file_collector=cache_file_collector,
+            )
+            if not data_args.streaming:
+                dataset.save_to_disk(str(meds_extension_path))
+                stats = dataset.cleanup_cache_files()
+                LOG.info(
+                    "Clean up the cached files for the cehrbert dataset transformed from the MEDS: %s",
+                    stats,
+                )
+                # Clean up the files created from the data generator
+                cache_file_collector.remove_cache_files()
+                dataset = load_from_disk(str(meds_extension_path))
+
+        train_set = dataset["train"]
+        validation_set = dataset["validation"]
+        test_set = dataset["test"]
+    else:
+        dataset = load_parquet_as_dataset(os.path.expanduser(data_args.data_folder))
+        test_set = None
+        if data_args.test_data_folder:
+            test_set = load_parquet_as_dataset(data_args.test_data_folder)
+        # Split the dataset into train/val
+        train_val = dataset.train_test_split(
+            test_size=data_args.validation_split_percentage,
+            seed=training_args.seed,
+        )
+        train_set = train_val["train"]
+        validation_set = train_val["test"]
+        if not test_set:
+            test_valid = validation_set.train_test_split(test_size=data_args.test_eval_ratio, seed=training_args.seed)
+            validation_set = test_valid["train"]
+            test_set = test_valid["test"]
+
+    # Organize them into a single DatasetDict
+    return DatasetDict({"train": train_set, "validation": validation_set, "test": test_set})
+
+
 def load_pretrained_tokenizer(
     model_args,
 ) -> CehrBertTokenizer:
@@ -112,19 +177,9 @@ def load_finetuned_model(model_args: ModelArguments, model_name_or_path: str) ->
         raise ValueError(f"Can not load the finetuned model from {model_name_or_path}")
 
 
-def data_collate_fn(features, model_type: torch.dtype, collator: CehrBertDataCollator):
-    batch = collator(features)
-    if model_type != torch.float32:
-        for key, value in batch.items():
-            # Only convert float32 tensors to bfloat16
-            if isinstance(value, torch.Tensor) and value.dtype == torch.float32:
-                batch[key] = value.to(model_type)
-    return batch
-
-
 def main():
 
-    data_args, model_args, training_args = parse_runner_args()
+    cehrbert_args, data_args, model_args, training_args = parse_runner_args()
 
     if data_args.streaming:
         # This happens only when streaming is enabled. This is for disabling the warning message
@@ -136,6 +191,7 @@ def main():
 
     tokenizer = load_pretrained_tokenizer(model_args)
     cache_file_collector = CacheFileCollector()
+    processed_dataset = None
     prepared_ds_path = generate_prepared_ds_path(data_args, model_args, data_folder=data_args.cohort_folder)
     if any(prepared_ds_path.glob("*")):
         LOG.info(f"Loading prepared dataset from disk at {prepared_ds_path}...")
@@ -145,189 +201,88 @@ def main():
                 processed_dataset, num_shards=training_args.dataloader_num_workers
             )
         LOG.info("Prepared dataset loaded from disk...")
-    else:
-        # If the data is in the MEDS format, we need to convert it to the CEHR-BERT format
-        if data_args.is_data_in_meds:
-            meds_extension_path = get_meds_extension_path(
-                data_folder=os.path.expanduser(data_args.cohort_folder),
-                dataset_prepared_path=os.path.expanduser(data_args.dataset_prepared_path),
+
+    if processed_dataset is None:
+        if is_main_process(training_args.local_rank):
+            # Organize them into a single DatasetDict
+            final_splits = prepare_finetune_dataset(data_args, training_args, cache_file_collector)
+
+            # TODO: temp solution, this column is mixed typed and causes an issue when transforming the data
+            if not data_args.streaming:
+                all_columns = final_splits["train"].column_names
+                if "visit_concept_ids" in all_columns:
+                    final_splits = final_splits.remove_columns(["visit_concept_ids"])
+
+            processed_dataset = create_cehrbert_finetuning_dataset(
+                dataset=final_splits,
+                concept_tokenizer=tokenizer,
+                data_args=data_args,
+                cache_file_collector=cache_file_collector,
             )
-            try:
-                LOG.info(f"Trying to load the MEDS extension from disk at {meds_extension_path}...")
-                dataset = load_from_disk(meds_extension_path)
-                if data_args.streaming:
-                    dataset = convert_dataset_to_iterable_dataset(
-                        dataset, num_shards=training_args.dataloader_num_workers
-                    )
-            except Exception as e:
-                LOG.exception(e)
-                dataset = create_dataset_from_meds_reader(
-                    data_args,
-                    dataset_mappings=[MedToCehrBertDatasetMapping(data_args=data_args, is_pretraining=False)],
-                    cache_file_collector=cache_file_collector,
+
+            if not data_args.streaming:
+                processed_dataset.save_to_disk(str(prepared_ds_path))
+                stats = processed_dataset.cleanup_cache_files()
+                LOG.info(
+                    "Clean up the cached files for the cehrbert fine-tuning dataset: %s",
+                    stats,
                 )
-                if not data_args.streaming:
-                    dataset.save_to_disk(str(meds_extension_path))
-                    stats = dataset.cleanup_cache_files()
-                    LOG.info(
-                        "Clean up the cached files for the cehrbert dataset transformed from the MEDS: %s",
-                        stats,
-                    )
-                    # Clean up the files created from the data generator
-                    cache_file_collector.remove_cache_files()
-                    dataset = load_from_disk(str(meds_extension_path))
+                processed_dataset = load_from_disk(str(prepared_ds_path))
 
-            train_set = dataset["train"]
-            validation_set = dataset["validation"]
-            test_set = dataset["test"]
-        else:
-            dataset = load_parquet_as_dataset(os.path.expanduser(data_args.data_folder))
-            test_set = None
-            if data_args.test_data_folder:
-                test_set = load_parquet_as_dataset(data_args.test_data_folder)
+            # Remove all the cached files collected during the data transformation if there are any
+            cache_file_collector.remove_cache_files()
 
-            if data_args.chronological_split:
-                dataset = dataset.sort("index_date")
-                # Determine the split index
-                total_size = len(dataset)
-                train_end = int((1 - data_args.validation_split_percentage) * total_size)
-                # Perform the chronological split, use the historical data for training and future data
-                # for validation/testing
-                train_set = dataset.select(range(0, train_end))
-                validation_set = dataset.select(range(train_end, total_size))
-                if not test_set:
-                    test_valid = validation_set.train_test_split(
-                        test_size=data_args.test_eval_ratio, seed=training_args.seed
-                    )
-                    validation_set = test_valid["train"]
-                    test_set = test_valid["test"]
+        # After main-process-only operations, synchronize all processes to ensure consistency
+        if dist.is_available() and dist.is_initialized():
+            dist.barrier()
 
-            elif data_args.split_by_patient:
-                LOG.info(f"Using the split_by_patient strategy")
-                unique_patient_ids = np.unique(dataset["person_id"])
-                LOG.info(f"There are {len(unique_patient_ids)} num of patients in total")
-                np.random.seed(training_args.seed)
-                np.random.shuffle(unique_patient_ids)
-
-                train_end = int(len(unique_patient_ids) * (1 - data_args.validation_split_percentage))
-                train_patient_ids = set(unique_patient_ids[:train_end])
-                if not test_set:
-                    # Calculate split indices
-                    validation_end = (
-                        int(len(unique_patient_ids) * data_args.validation_split_percentage * data_args.test_eval_ratio)
-                        + train_end
-                    )
-
-                    # Split patient IDs
-                    val_patient_ids = set(unique_patient_ids[train_end:validation_end])
-                    test_patient_ids = set(unique_patient_ids[validation_end:])
-
-                    def assign_split(example):
-                        pid = example["person_id"]
-                        if pid in train_patient_ids:
-                            return "train"
-                        elif pid in val_patient_ids:
-                            return "validation"
-                        elif pid in test_patient_ids:
-                            return "test"
-                        else:
-                            raise ValueError(f"Unknown patient {pid}")
-
-                    # Apply the function to assign splits
-                    dataset = dataset.map(
-                        lambda example: {"split": assign_split(example)},
-                        num_proc=data_args.preprocessing_num_workers,
-                    )
-                    train_set = dataset.filter(
-                        lambda example: example["split"] == "train",
-                        num_proc=data_args.preprocessing_num_workers,
-                    )
-                    validation_set = dataset.filter(
-                        lambda example: example["split"] == "validation",
-                        num_proc=data_args.preprocessing_num_workers,
-                    )
-                    test_set = dataset.filter(
-                        lambda example: example["split"] == "test",
-                        num_proc=data_args.preprocessing_num_workers,
-                    )
-                else:
-                    # Split patient IDs
-                    val_patient_ids = set(unique_patient_ids[train_end:])
-
-                    def assign_split(example):
-                        pid = example["person_id"]
-                        if pid in train_patient_ids:
-                            return "train"
-                        elif pid in val_patient_ids:
-                            return "validation"
-                        else:
-                            raise ValueError(f"Unknown patient {pid}")
-
-                    # Apply the function to assign splits
-                    dataset = dataset.map(
-                        lambda example: {"split": assign_split(example)},
-                        num_proc=data_args.preprocessing_num_workers,
-                    )
-                    train_set = dataset.filter(
-                        lambda example: example["split"] == "train",
-                        num_proc=data_args.preprocessing_num_workers,
-                    )
-                    validation_set = dataset.filter(
-                        lambda example: example["split"] == "validation",
-                        num_proc=data_args.preprocessing_num_workers,
-                    )
-            else:
-                # Split the dataset into train/val
-                train_val = dataset.train_test_split(
-                    test_size=data_args.validation_split_percentage,
-                    seed=training_args.seed,
-                )
-                train_set = train_val["train"]
-                validation_set = train_val["test"]
-                if not test_set:
-                    test_valid = validation_set.train_test_split(
-                        test_size=data_args.test_eval_ratio, seed=training_args.seed
-                    )
-                    validation_set = test_valid["train"]
-                    test_set = test_valid["test"]
-
-        # Organize them into a single DatasetDict
-        final_splits = DatasetDict({"train": train_set, "validation": validation_set, "test": test_set})
-
-        processed_dataset = create_cehrbert_finetuning_dataset(
-            dataset=final_splits,
-            concept_tokenizer=tokenizer,
-            data_args=data_args,
-            cache_file_collector=cache_file_collector,
-        )
-
-        if not data_args.streaming:
-            processed_dataset.save_to_disk(str(prepared_ds_path))
-            stats = processed_dataset.cleanup_cache_files()
-            LOG.info(
-                "Clean up the cached files for the cehrbert fine-tuning dataset: %s",
-                stats,
-            )
+            # Loading tokenizer in all processes in torch distributed training
+            tokenizer_name_or_path = os.path.expanduser(model_args.tokenizer_name_or_path)
+            tokenizer = CehrBertTokenizer.from_pretrained(tokenizer_name_or_path)
+            # Load the dataset from disk again to in torch distributed training
             processed_dataset = load_from_disk(str(prepared_ds_path))
-
-    # Remove all the cached files collected during the data transformation if there are any
-    cache_file_collector.remove_cache_files()
-
-    collator = functools.partial(
-        data_collate_fn,
-        model_type=get_torch_dtype(model_args.torch_dtype),
-        collator=CehrBertDataCollator(tokenizer, model_args.max_position_embeddings, is_pretraining=False),
-    )
 
     # Set seed before initializing model.
     set_seed(training_args.seed)
 
-    if not data_args.streaming:
+    if not data_args.streaming and not cehrbert_args.sample_packing:
         processed_dataset.set_format("pt")
+
+    config = CehrBertConfig.from_pretrained(model_args.model_name_or_path)
+    # persist this parameter in case this is overwritten by sample packing
+    per_device_eval_batch_size = training_args.per_device_eval_batch_size
+    if cehrbert_args.sample_packing:
+        trainer_class = partial(
+            SamplePackingTrainer,
+            max_tokens_per_batch=cehrbert_args.max_tokens_per_batch,
+            max_position_embeddings=config.max_position_embeddings,
+            train_lengths=processed_dataset["train"]["num_of_concepts"],
+            validation_lengths=processed_dataset["validation"]["num_of_concepts"],
+        )
+        training_args.per_device_train_batch_size = 1
+        training_args.per_device_eval_batch_size = 1
+        data_collator_fn = partial(
+            SamplePackingCehrBertDataCollator,
+            cehrbert_args.max_tokens_per_batch,
+            config.max_position_embeddings,
+        )
+    else:
+        data_collator_fn = CehrBertDataCollator
+        trainer_class = Trainer
+
+    data_collator = data_collator_fn(
+        tokenizer=tokenizer,
+        max_length=(
+            cehrbert_args.max_tokens_per_batch if cehrbert_args.sample_packing else config.max_position_embeddings
+        ),
+        is_pretraining=False,
+        mlm_probability=config.mlm_probability,
+    )
 
     if training_args.do_train:
         model = load_finetuned_model(model_args, model_args.model_name_or_path)
-
+        if getattr(model.config, "cls_token_id") is None:
+            model.config.cls_token_id = tokenizer.cls_token_index
         # If lora is enabled, we add LORA adapters to the model
         if model_args.use_lora:
             # When LORA is used, the trainer could not automatically find this label,
@@ -351,13 +306,13 @@ def main():
             else:
                 raise ValueError(f"The LORA adapter is not supported for {model_args.finetune_model_type}")
 
-        trainer = Trainer(
+        trainer = trainer_class(
             model=model,
-            data_collator=collator,
+            data_collator=data_collator,
             train_dataset=processed_dataset["train"],
             eval_dataset=processed_dataset["validation"],
-            callbacks=[EarlyStoppingCallback(early_stopping_patience=model_args.early_stopping_patience)],
             args=training_args,
+            callbacks=[EarlyStoppingCallback(early_stopping_patience=model_args.early_stopping_patience)],
         )
 
         checkpoint = get_last_hf_checkpoint(training_args)
@@ -373,9 +328,14 @@ def main():
     if training_args.do_predict:
         test_dataloader = DataLoader(
             dataset=processed_dataset["test"],
-            batch_size=training_args.per_device_eval_batch_size,
+            batch_size=per_device_eval_batch_size,
             num_workers=training_args.dataloader_num_workers,
-            collate_fn=collator,
+            collate_fn=CehrBertDataCollator(
+                tokenizer=tokenizer,
+                max_length=config.max_position_embeddings,
+                is_pretraining=False,
+                mlm_probability=config.mlm_probability,
+            ),
             pin_memory=training_args.dataloader_pin_memory,
         )
         do_predict(test_dataloader, model_args, training_args)
