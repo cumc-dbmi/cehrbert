@@ -166,6 +166,8 @@ def apply_cehrbert_dataset_mapping(
         )
         if mapping_function.remove_columns():
             dataset = dataset.remove_columns(mapping_function.remove_columns())
-    if cache_file_collector:
-        cache_file_collector.add_cache_files(dataset)
+
+        if cache_file_collector:
+            cache_file_collector.add_cache_files(dataset)
+
     return dataset

@@ -38,13 +38,17 @@ class HfCehrBertRunnerIntegrationTest(unittest.TestCase):
             data_folder,
             "--dataset_prepared_path",
             self.dataset_prepared_path,
+            "--save_strategy",
+            "steps",
+            "--eval_strategy",
+            "steps",
             "--max_steps",
             "10",
             "--streaming",
+            "--load_best_model_at_end",
+            "true",
             "--report_to",
             "none",
-            "--use_early_stopping",
-            "false",
         ]
 
     def tearDown(self):

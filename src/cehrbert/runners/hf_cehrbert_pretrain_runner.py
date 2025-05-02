@@ -6,7 +6,7 @@ from typing import Optional, Union
 import numpy as np
 import torch
 import torch.distributed as dist
-from datasets import Dataset, DatasetDict, IterableDatasetDict, load_from_disk
+from datasets import Dataset, DatasetDict, IterableDataset, IterableDatasetDict, load_from_disk
 from transformers import EarlyStoppingCallback, Trainer, set_seed
 from transformers.trainer_utils import is_main_process
 from transformers.utils import logging
@@ -189,6 +189,7 @@ def main():
         # be set to 0. Otherwise the trainer will throw an error
         training_args.dataloader_num_workers = 0
 
+    processed_dataset: Optional[Union[DatasetDict, IterableDataset, Dataset]] = None
     cache_file_collector = CacheFileCollector()
     prepared_ds_path = generate_prepared_ds_path(data_args, model_args)
     if any(prepared_ds_path.glob("*")):
@@ -280,17 +281,19 @@ def main():
                     "Clean up the cached files for the cehrbert pretraining dataset: %s",
                     stats,
                 )
-
-            # Remove all the cached files collected during the data transformation if there are any
-            cache_file_collector.remove_cache_files()
+                # Remove all the cached files collected during the data transformation if there are any
+                cache_file_collector.remove_cache_files()
 
         # After main-process-only operations, synchronize all processes to ensure consistency
         if dist.is_available() and dist.is_initialized():
             dist.barrier()
 
         tokenizer = CehrBertTokenizer.from_pretrained(model_args.tokenizer_name_or_path)
-        # Load the dataset from disk again to in torch distributed training
-        processed_dataset = load_from_disk(str(prepared_ds_path))
+        # If it's not in the streaming mode, we need to load the dataset again so all processes
+        # can receive a copy of that
+        if not data_args.streaming:
+            # Load the dataset from disk again to in torch distributed training
+            processed_dataset = load_from_disk(str(prepared_ds_path))
 
     def filter_func(examples):
         return [_ >= data_args.min_num_tokens for _ in examples["num_of_concepts"]]
