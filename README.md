@@ -146,7 +146,11 @@ export SPARK_EXECUTOR_MEMORY="12g"
 ```
 Download the OMOP tables as parquet files
 ```console
-python -u -m cehrbert.tools.download_omop_tables-c db_properties.ini -tc person visit_occurrence condition_occurrence procedure_occurrence drug_exposure measurement observation_period concept concept_relationship concept_ancestor -o ~/Documents/omop_test/
+python -u -m cehrbert.tools.download_omop_tables -c db_properties.ini \
+   -tc person visit_occurrence condition_occurrence procedure_occurrence \
+   drug_exposure measurement observation_period \
+   concept concept_relationship concept_ancestor \
+   -o ~/Documents/omop_test/
 ```
 
 We have prepared a synthea dataset with 1M patients for you to test, you could download it
