@@ -55,15 +55,9 @@ Build the project
 pip install -e .[dev]
 ```
 
-Download [jtds-1.3.1.jar](jtds-1.3.1.jar) into the spark jars folder in the python environment
-```console
-cp jtds-1.3.1.jar .venv/lib/python3.10/site-packages/pyspark/jars/
-```
-
 ## Instructions for Use with [MEDS](https://github.com/Medical-Event-Data-Standard/meds)
-
-### 1. Convert MEDS to the [meds_reader](https://github.com/som-shahlab/meds_reader) database
-
+Step 1. Convert MEDS to the [meds_reader](https://github.com/som-shahlab/meds_reader) database
+---------------------------
 If you don't have the MEDS dataset, you could convert the OMOP dataset to the MEDS
 using [meds_etl](https://github.com/Medical-Event-Data-Standard/meds_etl).
 We have prepared a synthea dataset with 1M patients for you to test, you could download it
@@ -123,7 +117,8 @@ Convert MEDS to the meds_reader database to get the patient level data
 meds_reader_convert synthea_meds synthea_meds_reader --num_threads 4
 ```
 
-### 2. Pretrain CEHR-BERT using the meds_reader database
+Step 2. Pretrain CEHR-BERT using the meds_reader database
+---------------------------
 ```console
 mkdir test_dataset_prepared;
 mkdir test_synthea_results;
@@ -132,13 +127,26 @@ python -m cehrbert.runners.hf_cehrbert_pretrain_runner sample_configs/hf_cehrber
 
 ## Instructions for Use with OMOP
 
-### 1. Download OMOP tables as parquet files
-
+Step 1. Download OMOP tables as parquet files
+---------------------------
 We created a spark app to download OMOP tables from SQL Server as parquet files. You need adjust the properties
-in `db_properties.ini` to match with your database setup.
-
+in `db_properties.ini` to match with your database setup. Download [jtds-1.3.1.jar](https://mvnrepository.com/artifact/net.sourceforge.jtds/jtds/1.3.1) into the spark jars folder in the python environment.
 ```console
-PYTHONPATH=./: spark-submit tools/download_omop_tables.py -c db_properties.ini -tc person visit_occurrence condition_occurrence procedure_occurrence drug_exposure measurement observation_period concept concept_relationship concept_ancestor -o ~/Documents/omop_test/
+cp jtds-1.3.1.jar .venv/lib/python3.10/site-packages/pyspark/jars/
+```
+We use spark as the data processing engine to generate the pretraining data.
+For that, we need to set up the relevant SPARK environment variables.
+```bash
+# the omop derived tables need to be built using pyspark
+export SPARK_WORKER_INSTANCES="1"
+export SPARK_WORKER_CORES="16"
+export SPARK_EXECUTOR_CORES="2"
+export SPARK_DRIVER_MEMORY="12g"
+export SPARK_EXECUTOR_MEMORY="12g"
+```
+Download the OMOP tables as parquet files
+```console
+python -u -m cehrbert.tools.download_omop_tables-c db_properties.ini -tc person visit_occurrence condition_occurrence procedure_occurrence drug_exposure measurement observation_period concept concept_relationship concept_ancestor -o ~/Documents/omop_test/
 ```
 
 We have prepared a synthea dataset with 1M patients for you to test, you could download it
@@ -148,8 +156,8 @@ at [omop_synthea.tar.gz](https://drive.google.com/file/d/1k7-cZACaDNw8A1JRI37mfM
 tar -xvf omop_synthea.tar ~/Document/omop_test/
 ```
 
-### 2. Generate training data for CEHR-BERT
-
+Step 2. Generate training data for CEHR-BERT using cehrbert_data
+---------------------------
 We order the patient events in chronological order and put all data points in a sequence. We insert artificial tokens
 VS (visit start) and VE (visit end) to the start and the end of the visit. In addition, we insert artificial time
 tokens (ATT) between visits to indicate the time interval between visits. This approach allows us to apply BERT to
@@ -157,11 +165,25 @@ structured EHR as-is.
 The sequence can be seen conceptually as [VS] [V1] [VE] [ATT] [VS] [V2] [VE], where [V1] and [V2] represent a list of
 concepts associated with those visits.
 
-```console
-PYTHONPATH=./: spark-submit spark_apps/generate_training_data.py -i ~/Documents/omop_test/ -o ~/Documents/omop_test/cehr-bert -tc condition_occurrence procedure_occurrence drug_exposure -d 1985-01-01 --is_new_patient_representation -iv
+Set up the pyspark environment variables if you haven't done so.
+```bash
+# the omop derived tables need to be built using pyspark
+export SPARK_WORKER_INSTANCES="1"
+export SPARK_WORKER_CORES="16"
+export SPARK_EXECUTOR_CORES="2"
+export SPARK_DRIVER_MEMORY="12g"
+export SPARK_EXECUTOR_MEMORY="12g"
+```
+Generate the pretraining data using the following command
+```bash
+sh src/cehrbert/scripts/create_cehrbert_pretraining_data.sh \
+  --input_folder $OMOP_DIR \
+  --output_folde $CEHR_BERT_DATA_DIR \
+  --start_date "1985-01-01"
 ```
 
-### 3. Pre-train CEHR-BERT
+Step 3. Pre-train CEHR-BERT
+---------------------------
 If you don't have your own OMOP instance, we have provided a sample of patient sequence data generated using Synthea
 at `sample/patient_sequence` in the repo. CEHR-BERT expects the data folder to be named as `patient_sequence`
 
@@ -173,16 +195,29 @@ python -m cehrbert.runners.hf_cehrbert_pretrain_runner sample_configs/hf_cehrber
 
 If your dataset is large, you could add ```--use_dask``` in the command above
 
-### 4. Generate hf readmission prediction task
+Step 4. Generate hf readmission prediction task
+---------------------------
 If you don't have your own OMOP instance, we have provided a sample of patient sequence data generated using Synthea
-at `sample/hf_readmissioon` in the repo
-
+at `sample/hf_readmissioon` in the repo. Set up the pyspark environment variables if you haven't done so.
+```bash
+# the omop derived tables need to be built using pyspark
+export SPARK_WORKER_INSTANCES="1"
+export SPARK_WORKER_CORES="16"
+export SPARK_EXECUTOR_CORES="2"
+export SPARK_DRIVER_MEMORY="12g"
+export SPARK_EXECUTOR_MEMORY="12g"
+```
+Generate the HF readmission prediction task
 ```console
-PYTHONPATH=./:$PYTHONPATH spark-submit spark_apps/prediction_cohorts/hf_readmission.py -c hf_readmission -i ~/Documents/omop_test/ -o ~/Documents/omop_test/cehr-bert -dl 1985-01-01 -du 2020-12-31 -l 18 -u 100 -ow 360 -ps 0 -pw 30 --is_new_patient_representation
+python -u -m cehrbert.prediction_cohorts.hf_readmission \
+   -c hf_readmission -i ~/Documents/omop_test/ -o ~/Documents/omop_test/cehr-bert \
+   -dl 1985-01-01 -du 2020-12-31 \
+   -l 18 -u 100 -ow 360 -ps 0 -pw 30 \
+   --is_new_patient_representation
 ```
 
-### 5. Fine-tune CEHR-BERT
-
+Step 5. Fine-tune CEHR-BERT
+---------------------------
 ```console
 mkdir test_finetune_results;
 python -m cehrbert.runners.hf_cehrbert_finetune_runner sample_configs/hf_cehrbert_finetuning_runner_config.yaml
