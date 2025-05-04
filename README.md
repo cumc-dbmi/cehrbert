@@ -222,7 +222,7 @@ export SPARK_EXECUTOR_MEMORY="12g"
 ```
 Generate the HF readmission prediction task
 ```console
-python -u -m cehrbert.prediction_cohorts.hf_readmission \
+python -u -m cehrbert_data.prediction_cohorts.hf_readmission \
    -c hf_readmission -i ~/Documents/omop_test/ -o ~/Documents/omop_test/cehr-bert \
    -dl 1985-01-01 -du 2020-12-31 \
    -l 18 -u 100 -ow 360 -ps 0 -pw 30 \
