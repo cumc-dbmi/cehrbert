@@ -129,7 +129,8 @@ Step 2. Pretrain CEHR-BERT using the meds_reader database
 ```console
 mkdir test_dataset_prepared;
 mkdir test_synthea_results;
-python -m cehrbert.runners.hf_cehrbert_pretrain_runner sample_configs/hf_cehrbert_pretrain_runner_meds_config.yaml
+python -m cehrbert.runners.hf_cehrbert_pretrain_runner \
+   sample_configs/hf_cehrbert_pretrain_runner_meds_config.yaml
 ```
 
 ## Instructions for Use with OMOP
@@ -201,7 +202,8 @@ at `sample/patient_sequence` in the repo. CEHR-BERT expects the data folder to b
 ```console
 mkdir test_dataset_prepared;
 mkdir test_results;
-python -m cehrbert.runners.hf_cehrbert_pretrain_runner sample_configs/hf_cehrbert_pretrain_runner_config.yaml
+python -m cehrbert.runners.hf_cehrbert_pretrain_runner \
+   sample_configs/hf_cehrbert_pretrain_runner_config.yaml
 ```
 
 If your dataset is large, you could add ```--use_dask``` in the command above
@@ -231,7 +233,8 @@ Step 5. Fine-tune CEHR-BERT
 ---------------------------
 ```console
 mkdir test_finetune_results;
-python -m cehrbert.runners.hf_cehrbert_finetune_runner sample_configs/hf_cehrbert_finetuning_runner_config.yaml
+python -m cehrbert.runners.hf_cehrbert_finetune_runner \
+   sample_configs/hf_cehrbert_finetuning_runner_config.yaml
 ```
 
 ## Contact us
