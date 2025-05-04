@@ -1,6 +1,9 @@
+# Please point this to your model folder
 model_name_or_path: "test_synthea_results"
+# Please point this to your model folder
 tokenizer_name_or_path: "test_synthea_results"
 
+# Please point this to the MEDS_READER because the MEDS data is used as the input
 data_folder: "synthea_meds_reader"
 dataset_prepared_path: "test_dataset_prepared"
 validation_split_percentage: 0.05
@@ -32,6 +35,7 @@ max_position_embeddings: 512
 dataloader_num_workers: 4
 dataloader_prefetch_factor: 4
 
+# Please point this to your model folder
 output_dir: "test_synthea_results"
 evaluation_strategy: "epoch"
 save_strategy: "epoch"

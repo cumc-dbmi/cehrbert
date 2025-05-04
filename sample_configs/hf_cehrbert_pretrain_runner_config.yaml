@@ -1,4 +1,6 @@
+# Please point this to your output model folder
 model_name_or_path: "test_results"
+# Please point this to your output model folder
 tokenizer_name_or_path: "test_results"
 
 data_folder: "sample_data/pretrain"
@@ -32,7 +34,9 @@ max_position_embeddings: 512
 dataloader_num_workers: 4
 dataloader_prefetch_factor: 4
 
+# Please point this to your output model folder
 output_dir: "test_results"
+
 evaluation_strategy: "epoch"
 save_strategy: "epoch"
 learning_rate: 0.00005
