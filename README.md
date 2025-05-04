@@ -1,5 +1,12 @@
 # CEHR-BERT
 
+[![PyPI - Version](https://img.shields.io/pypi/v/cehrbert)](https://pypi.org/project/cehrbert/)
+![Python](https://img.shields.io/badge/-Python_3.10-blue?logo=python&logoColor=white)
+[![tests](https://github.com/cumc-dbmi/cehrbert/actions/workflows/tests.yml/badge.svg)](https://github.com/cumc-dbmi/cehrbert/actions/workflows/tests.yml)
+[![license](https://img.shields.io/badge/License-MIT-green.svg?labelColor=gray)](https://github.com/cumc-dbmi/cehrbert/blob/main/LICENSE)
+[![contributors](https://img.shields.io/github/contributors/cumc-dbmi/cehrbert.svg)](https://github.com/cumc-dbmi/cehrbert/graphs/contributors)
+
+
 CEHR-BERT is a large language model developed for the structured EHR data, the work has been published
 at https://proceedings.mlr.press/v158/pang21a.html. CEHR-BERT currently only supports the structured EHR data in the
 OMOP format, which is a common data model used to support observational studies and managed by the Observational Health
