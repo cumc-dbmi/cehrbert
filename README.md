@@ -62,6 +62,12 @@ Build the project
 pip install -e .[dev]
 ```
 
+## OMOP vs. MEDS Format Considerations
+CEHR-BERT can be trained using either the OMOP or MEDS data formats; however, models trained on one format are not compatible with those trained on the other.
+This incompatibility arises because CEHR-BERT uses different concept identifiers depending on the format: standard concept IDs (e.g., SNOMED for conditions) in OMOP,
+and source concept IDs (e.g., ICD-9/10) in MEDS. The mappings between these terminologies are many-to-many, making direct alignment between formats unreliable.
+It is therefore crucial to use a consistent data format across pretraining, fine-tuning, and downstream tasks such as linear probing.
+
 ## Instructions for Use with [MEDS](https://github.com/Medical-Event-Data-Standard/meds)
 Step 1. Convert MEDS to the [meds_reader](https://github.com/som-shahlab/meds_reader) database
 ---------------------------
@@ -222,7 +228,7 @@ export SPARK_EXECUTOR_MEMORY="12g"
 ```
 Generate the HF readmission prediction task
 ```console
-python -u -m cehrbert.prediction_cohorts.hf_readmission \
+python -u -m cehrbert_data.prediction_cohorts.hf_readmission \
    -c hf_readmission -i ~/Documents/omop_test/ -o ~/Documents/omop_test/cehr-bert \
    -dl 1985-01-01 -du 2020-12-31 \
    -l 18 -u 100 -ow 360 -ps 0 -pw 30 \
