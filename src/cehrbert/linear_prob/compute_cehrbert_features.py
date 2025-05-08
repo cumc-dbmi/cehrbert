@@ -224,7 +224,7 @@ def main():
     for split, data_loader in data_loaders:
 
         # Ensure prediction folder exists
-        feature_output_folder = Path(training_args.output_dir) / split / "features"
+        feature_output_folder = Path(training_args.output_dir) / "features_with_label" / f"{split}_features"
         feature_output_folder.mkdir(parents=True, exist_ok=True)
 
         LOG.info("Generating features for %s set at %s", split, feature_output_folder)

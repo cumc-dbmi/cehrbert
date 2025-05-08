@@ -31,8 +31,8 @@ def main(args):
         print("The models have been trained, and skip ...")
         exit(0)
 
-    feature_train = pd.read_parquet(features_data_dir / "train" / "features")
-    feature_test = pd.read_parquet(features_data_dir / "test" / "features")
+    feature_train = pd.read_parquet(features_data_dir / "features_with_label" / "train_features")
+    feature_test = pd.read_parquet(features_data_dir / "features_with_label" / "test_features")
 
     if logistic_test_result_file.exists():
         print(f"The results for logistic regression already exist at {logistic_test_result_file}")
