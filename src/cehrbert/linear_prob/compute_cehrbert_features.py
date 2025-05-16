@@ -1,5 +1,4 @@
 import glob
-import json
 import os
 import uuid
 from datetime import datetime
@@ -10,7 +9,6 @@ import numpy as np
 import pandas as pd
 import torch
 from datasets import concatenate_datasets, load_from_disk
-from torch.profiler import ProfilerActivity, profile
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers.utils import is_flash_attn_2_available, logging
@@ -222,9 +220,7 @@ def main():
     }
 
     data_loaders = [("train", train_loader), ("test", test_dataloader)]
-    training_metrics_file = Path(training_args.output_dir) / "training_metrics.json"
-    start_time: datetime = datetime.now()
-    total_gflops = 0
+
     for split, data_loader in data_loaders:
 
         # Ensure prediction folder exists
@@ -251,17 +247,8 @@ def main():
                     labels = np.asarray([labels])
 
                 batch = {k: v.to(device) for k, v in batch.items()}
-                with profile(
-                    activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-                    with_flops=True,
-                ) as prof:
-                    # Forward pass
-                    cehrbert_output = cehrbert_model(**batch, output_attentions=False, output_hidden_states=False)
-
-                for event in prof.key_averages():
-                    if hasattr(event, "flops") and event.flops > 0:
-                        # Convert to GFLOPs
-                        total_gflops += event.flops / 1e9
+                # Forward pass
+                cehrbert_output = cehrbert_model(**batch, output_attentions=False, output_hidden_states=False)
 
                 cls_token_indices = batch["input_ids"] == cehrgpt_tokenizer.cls_token_index
                 if cehrbert_args.sample_packing:
@@ -314,14 +301,6 @@ def main():
                 features_pd["race_concept_id"] = race_concept_ids
                 features_pd["gender_concept_id"] = gender_concept_ids
                 features_pd.to_parquet(feature_output_folder / f"{uuid.uuid4()}.parquet")
-
-    # Save the training metrics to the output file
-    with open(training_metrics_file, "w") as output_file:
-        training_metrics = {
-            "duration_in_seconds": (datetime.now() - start_time).total_seconds(),
-            "total_flops": total_gflops,
-        }
-        json.dump(training_metrics, output_file)
 
 
 if __name__ == "__main__":
