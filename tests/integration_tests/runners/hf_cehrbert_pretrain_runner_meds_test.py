@@ -7,7 +7,11 @@ from pathlib import Path
 
 from datasets import disable_caching
 
+from cehrbert.data_generators.hf_data_generator.meds_to_cehrbert_conversion_rules.meds_to_cehrbert_omop import (
+    MedsToCehrbertOMOP,
+)
 from cehrbert.runners.hf_cehrbert_pretrain_runner import main
+from cehrbert.runners.hf_runner_argument_dataclass import MedsToCehrBertConversionType
 
 disable_caching()
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -49,6 +53,12 @@ class HfCehrBertRunnerIntegrationTest(unittest.TestCase):
             "true",
             "--report_to",
             "none",
+            "--disconnect_problem_list_events",
+            "true",
+            "--meds_exclude_tables",
+            "condition",
+            "--meds_to_cehrbert_conversion_type",
+            "MedsToCehrBertConversionType.MedsToCehrbertOMOP",
         ]
 
     def tearDown(self):
