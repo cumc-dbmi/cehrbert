@@ -181,6 +181,7 @@ def create_dataset_from_meds_reader(
     dataset_mappings: Optional[List[DatasetMapping]] = None,
     cache_file_collector: Optional[CacheFileCollector] = None,
 ) -> DatasetDict:
+
     LOG.info("The meds_to_cehrbert_conversion_type: %s", data_args.meds_to_cehrbert_conversion_type)
     LOG.info("The att_function_type: %s", data_args.att_function_type)
     LOG.info("The inpatient_att_function_type: %s", data_args.inpatient_att_function_type)
@@ -307,6 +308,7 @@ def _create_cehrbert_data_from_meds(
         path_to_db=os.path.expanduser(data_args.data_folder),
         default_visit_id=default_visit_id,
         meds_to_cehrbert_conversion_type=data_args.meds_to_cehrbert_conversion_type,
+        meds_exclude_tables=data_args.meds_exclude_tables,
         disconnect_problem_list_events=data_args.disconnect_problem_list_events,
     )
     dataset = Dataset.from_generator(
