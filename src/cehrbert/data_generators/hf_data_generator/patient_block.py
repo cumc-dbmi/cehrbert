@@ -259,6 +259,7 @@ class PatientBlock:
         text_value = getattr(event, "text_value", None)
         numeric_value = getattr(event, "numeric_value", None)
         unit = getattr(event, "unit", None)
+        table = getattr(event, "table", "meds")
 
         if numeric_value is None and text_value is not None:
             conversion_rule = self.conversion.get_text_event_to_numeric_events_rule(code)
@@ -272,7 +273,7 @@ class PatientBlock:
                                 time=time,
                                 numeric_value=float(value),
                                 unit=unit,
-                                properties={"visit_id": self.visit_id, "table": "meds"},
+                                properties={"visit_id": self.visit_id, "table": table},
                             )
                             for label, value in zip(conversion_rule.mapped_event_labels, match.groups())
                             if value.isnumeric()

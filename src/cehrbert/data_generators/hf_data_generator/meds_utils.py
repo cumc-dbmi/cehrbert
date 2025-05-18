@@ -169,7 +169,7 @@ def convert_one_patient(
         race=demographics.race if demographics.race else UNKNOWN_VALUE,
         gender=demographics.gender if demographics.gender else UNKNOWN_VALUE,
         ethnicity=demographics.ethnicity if demographics.ethnicity else UNKNOWN_VALUE,
-        index_date=prediction_time if prediction_time else demographics.birth_datetime,
+        index_date=prediction_time,
         age_at_index=age_at_index,
         label=label,
     )
