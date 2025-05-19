@@ -58,7 +58,7 @@ class HfCehrBertRunnerIntegrationTest(unittest.TestCase):
             "--meds_exclude_tables",
             "condition",
             "--meds_to_cehrbert_conversion_type",
-            "MedsToCehrBertConversionType.MedsToCehrbertOMOP",
+            "MedsToCehrbertOMOP",
         ]
 
     def tearDown(self):
