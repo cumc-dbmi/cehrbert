@@ -166,8 +166,16 @@ class DatasetMapping(ABC):
 
     def batch_transform(self, records: Union[LazyBatch, Dict[str, Any]]) -> List[Dict[str, Any]]:
         if isinstance(records, LazyBatch):
-            dataframe = records.pa_table.to_pandas()
+            table = records.pa_table
+            if "index_date" in table.column_names:
+                index_col = table.column("index_date")
+                if index_col.null_count > 0:
+                    table = table.drop(["index_date"])
+            dataframe = table.to_pandas()
         else:
+            if "index_date" in records:
+                if pd.isna(records["index_date"][0]):
+                    del records["index_date"]
             dataframe = pd.DataFrame(records)
         applied_dataframe = dataframe.apply(self.transform_pandas_series, axis=1)
         return applied_dataframe.to_dict(orient="list")
