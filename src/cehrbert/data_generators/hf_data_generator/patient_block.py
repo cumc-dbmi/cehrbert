@@ -287,7 +287,7 @@ class PatientBlock:
                 numeric_value=numeric_value,
                 unit=unit,
                 text_value=text_value,
-                properties={"visit_id": self.visit_id, "table": "meds"},
+                properties={"visit_id": self.visit_id, "table": table},
             )
         ]
 
