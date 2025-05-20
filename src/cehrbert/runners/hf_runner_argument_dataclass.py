@@ -153,7 +153,8 @@ class DataTrainingArguments:
     observation_window: Optional[int] = dataclasses.field(
         default=None,
         metadata={
-            "help": "The observation window to use in the preprocessing.",
+            "help": "The observation window in days to use in the preprocessing. The observation window start date "
+            "is calculated as prediction time subtracted by observation_window",
         },
     )
     streaming: Optional[bool] = dataclasses.field(
