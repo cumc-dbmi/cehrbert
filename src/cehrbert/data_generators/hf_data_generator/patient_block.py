@@ -373,9 +373,9 @@ def omop_meds_generate_demographics_and_patient_blocks(
             # Skip out of the loop if the events' time stamps are beyond the prediction time
             if prediction_time is not None and e.time > prediction_time:
                 break
-            # Skip out of the loop if the events' time stamps are before the observation start window
+            # Skip the events that occurred before observation start window
             if observation_start_window is not None and e.time < observation_start_window:
-                break
+                continue
             if getattr(e, "visit_id", None):
                 visit_id = e.visit_id
                 visit_events[visit_id].append(e)
@@ -567,10 +567,10 @@ def mimic_meds_generate_demographics_and_patient_blocks(
             if e.time > prediction_time:
                 break
 
-        # Skip out of the loop if the events' time stamps are before observation start window
+        # Skip the events that occurred before observation start window
         if observation_start_window is not None and e.time is not None:
             if e.time < observation_start_window:
-                break
+                continue
 
         # This indicates demographics features
         event_code_uppercase = e.code.upper()
