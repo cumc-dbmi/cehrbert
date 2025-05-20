@@ -150,6 +150,13 @@ class DataTrainingArguments:
             "This depends on how the EHR records are generated, default to False"
         },
     )
+    observation_window: Optional[int] = dataclasses.field(
+        default=None,
+        metadata={
+            "help": "The observation window in days to use in the preprocessing. The observation window start date "
+            "is calculated as prediction time subtracted by observation_window",
+        },
+    )
     streaming: Optional[bool] = dataclasses.field(
         default=False,
         metadata={"help": "The boolean indicator to indicate whether the data should be streamed"},
