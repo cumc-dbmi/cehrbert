@@ -54,6 +54,7 @@ def convert_one_patient(
     patient: meds_reader.Subject,
     conversion: MedsToCehrBertConversion,
     prediction_time: datetime = None,
+    observation_window: int = None,
     label: Union[int, float] = None,
 ) -> CehrBertPatient:
     """
@@ -79,6 +80,9 @@ def convert_one_patient(
     prediction_time : datetime, optional (default=None)
         The cutoff time for processing events. Events occurring after this time are
         ignored.
+
+    observation_window: int, optional (default=None)
+        The observation window for extracting features
 
     label : Union[int, float], optional (default=None)
         The prediction label associated with this patient, which could represent a
@@ -122,9 +126,7 @@ def convert_one_patient(
     )
     """
     demographics, patient_blocks = generate_demographics_and_patient_blocks(
-        conversion=conversion,
-        patient=patient,
-        prediction_time=prediction_time,
+        conversion=conversion, patient=patient, prediction_time=prediction_time, observation_window=observation_window
     )
 
     patient_block_dict = collections.defaultdict(list)
@@ -230,9 +232,9 @@ def _meds_to_cehrbert_generator(
     )
     with meds_reader.SubjectDatabase(path_to_db) as patient_database:
         for shard in shards:
-            for patient_id, prediction_time, label in shard:
+            for patient_id, prediction_time, observation_window, label in shard:
                 patient = patient_database[patient_id]
-                converted_patient = convert_one_patient(patient, conversion, prediction_time, label)
+                converted_patient = convert_one_patient(patient, conversion, prediction_time, observation_window, label)
                 # there are patients whose birthdate is none
                 visits = converted_patient["visits"]
                 if converted_patient["birth_datetime"] is None:
@@ -262,11 +264,11 @@ def _create_cehrbert_data_from_meds(
             subject_id = cohort_row.subject_id
             prediction_time = cohort_row.prediction_time
             label = int(cohort_row.boolean_value)
-            batches.append((subject_id, prediction_time, label))
+            batches.append((subject_id, prediction_time, data_args.observation_window, label))
     else:
         patient_split = get_subject_split(os.path.expanduser(data_args.data_folder))
         for subject_id in patient_split[split]:
-            batches.append((subject_id, None, None))
+            batches.append((subject_id, None, None, None))
 
     features = Features(
         {

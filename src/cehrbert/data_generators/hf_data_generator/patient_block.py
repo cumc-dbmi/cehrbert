@@ -1,7 +1,7 @@
 import re
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Iterable, List, Optional, Tuple
 
 import meds_reader
@@ -321,19 +321,32 @@ def generate_demographics_and_patient_blocks(
     conversion: MedsToCehrBertConversion,
     patient: meds_reader.Subject,
     prediction_time: datetime = None,
+    observation_window: int = None,
 ) -> Tuple[PatientDemographics, List[PatientBlock]]:
     if isinstance(conversion, MedsToBertMimic4):
         return mimic_meds_generate_demographics_and_patient_blocks(
-            patient, conversion, prediction_time, conversion.default_visit_id
+            patient=patient,
+            conversion=conversion,
+            prediction_time=prediction_time,
+            observation_window=observation_window,
+            default_visit_id=conversion.default_visit_id,
         )
     elif isinstance(conversion, MedsToCehrbertOMOP):
-        return omop_meds_generate_demographics_and_patient_blocks(patient, conversion, prediction_time)
+        return omop_meds_generate_demographics_and_patient_blocks(
+            patient=patient,
+            conversion=conversion,
+            prediction_time=prediction_time,
+            observation_window=observation_window,
+        )
     else:
         raise RuntimeError(f"Unrecognized conversion: {conversion}")
 
 
 def omop_meds_generate_demographics_and_patient_blocks(
-    patient: meds_reader.Subject, conversion: MedsToCehrBertConversion, prediction_time: datetime = None
+    patient: meds_reader.Subject,
+    conversion: MedsToCehrBertConversion,
+    prediction_time: datetime = None,
+    observation_window: int = None,
 ) -> Tuple[PatientDemographics, List[PatientBlock]]:
     disconnect_problem_list_events = getattr(conversion, "disconnect_problem_list_events", False)
     birth_datetime = None
@@ -342,6 +355,9 @@ def omop_meds_generate_demographics_and_patient_blocks(
     ethnicity = None
     visit_events = defaultdict(list)
     unlinked_event_mapping = defaultdict(list)
+    observation_start_window: Optional[datetime] = None
+    if prediction_time and observation_window:
+        observation_start_window = prediction_time - timedelta(days=observation_window)
     for e in patient.events:
         # This indicates demographics features
         event_code_uppercase = e.code.upper()
@@ -355,10 +371,11 @@ def omop_meds_generate_demographics_and_patient_blocks(
             ethnicity = e.code
         elif e.time is not None:
             # Skip out of the loop if the events' time stamps are beyond the prediction time
-            if prediction_time is not None:
-                if e.time > prediction_time:
-                    break
-
+            if prediction_time is not None and e.time > prediction_time:
+                break
+            # Skip out of the loop if the events' time stamps are before the observation start window
+            if observation_start_window is not None and e.time < observation_start_window:
+                break
             if getattr(e, "visit_id", None):
                 visit_id = e.visit_id
                 visit_events[visit_id].append(e)
@@ -528,6 +545,7 @@ def mimic_meds_generate_demographics_and_patient_blocks(
     patient: meds_reader.Subject,
     conversion: MedsToCehrBertConversion,
     prediction_time: datetime = None,
+    observation_window: int = None,
     default_visit_id: int = 1,
 ) -> Tuple[PatientDemographics, List[PatientBlock]]:
     birth_datetime = None
@@ -539,11 +557,19 @@ def mimic_meds_generate_demographics_and_patient_blocks(
     current_date = None
     events_for_current_date = []
     patient_blocks = []
-    for e in patient.events:
+    observation_start_window: Optional[datetime] = None
+    if prediction_time and observation_window:
+        observation_start_window = prediction_time - timedelta(days=observation_window)
 
+    for e in patient.events:
         # Skip out of the loop if the events' time stamps are beyond the prediction time
         if prediction_time is not None and e.time is not None:
             if e.time > prediction_time:
+                break
+
+        # Skip out of the loop if the events' time stamps are before observation start window
+        if observation_start_window is not None and e.time is not None:
+            if e.time < observation_start_window:
                 break
 
         # This indicates demographics features
