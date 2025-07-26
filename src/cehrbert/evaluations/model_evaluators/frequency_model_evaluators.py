@@ -132,8 +132,8 @@ class LogisticRegressionModelEvaluator(BaselineModelEvaluator):
                 "classifier": [LogisticRegression()],
                 "classifier__penalty": ["l1", "l2"],
                 "classifier__C": np.logspace(-4, 4, 20),
-                "classifier__solver": ["liblinear"],
-                "classifier__max_iter": [500],
+                "classifier__solver": ["lbfgs"],
+                "classifier__max_iter": [2000],
             }
         ]
         # Create grid search object
