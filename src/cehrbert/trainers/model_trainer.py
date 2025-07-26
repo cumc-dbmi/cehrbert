@@ -40,7 +40,7 @@ class AbstractModel(ABC):
         return create_folder_if_not_exist(self.get_model_folder(), "test_metrics")
 
     def get_model_test_prediction_folder(self):
-        return create_folder_if_not_exist(self.get_model_folder(), "test_prediction")
+        return create_folder_if_not_exist(self.get_model_folder(), "test_predictions")
 
     def get_model_history_folder(self):
         return create_folder_if_not_exist(self.get_model_folder(), "history")

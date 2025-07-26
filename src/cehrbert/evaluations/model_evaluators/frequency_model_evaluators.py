@@ -40,7 +40,13 @@ class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
                 self._model = self._model.fit(x, y)
             else:
                 self._model.fit(x, y)
-            compute_binary_metrics(self._model, test_data, self.get_model_metrics_folder())
+
+            compute_binary_metrics(
+                self._model,
+                test_data,
+                self.get_model_metrics_folder(),
+                evaluation_model_folder=self.get_model_test_prediction_folder(),
+            )
         else:
             for train, test in self.k_fold(features=(inputs, age, person_ids), labels=labels):
                 x, y = train
@@ -50,7 +56,12 @@ class BaselineModelEvaluator(AbstractModelEvaluator, ABC):
                 else:
                     self._model.fit(x, y)
 
-                compute_binary_metrics(self._model, test, self.get_model_metrics_folder())
+                compute_binary_metrics(
+                    self._model,
+                    test,
+                    self.get_model_metrics_folder(),
+                    evaluation_model_folder=self.get_model_test_prediction_folder(),
+                )
 
     def get_model_name(self):
         return type(self._model).__name__
@@ -130,7 +141,7 @@ class LogisticRegressionModelEvaluator(BaselineModelEvaluator):
         param_grid = [
             {
                 "classifier": [LogisticRegression()],
-                "classifier__penalty": ["l1", "l2"],
+                "classifier__penalty": ["l2"],
                 "classifier__C": np.logspace(-4, 4, 20),
                 "classifier__solver": ["lbfgs"],
                 "classifier__max_iter": [2000],
