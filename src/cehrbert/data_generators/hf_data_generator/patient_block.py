@@ -272,6 +272,7 @@ class PatientBlock:
                                 code=label,
                                 time=time,
                                 numeric_value=float(value),
+                                text_value=text_value,
                                 unit=unit,
                                 properties={"visit_id": self.visit_id, "table": table},
                             )
