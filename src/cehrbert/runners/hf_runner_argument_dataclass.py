@@ -352,3 +352,41 @@ class CehrBertArguments:
         default=False,
         metadata={"help": "Whether or not to average tokens per sequence"},
     )
+    retrain_with_full: Optional[bool] = dataclasses.field(
+        default=False,
+        metadata={
+            "help": "A flag to indicate whether we want to retrain the model on the full set after early stopping"
+        },
+    )
+    hyperparameter_tuning: Optional[bool] = dataclasses.field(
+        default=False,
+        metadata={"help": "A flag to indicate if we want to do hyperparameter tuning."},
+    )
+    hyperparameter_tuning_is_grid: Optional[bool] = dataclasses.field(
+        default=True,
+        metadata={"help": "A flag to indicate if we want to do hyperparameter tuning."},
+    )
+    hyperparameter_tuning_percentage: Optional[float] = dataclasses.field(
+        default=0.1,
+        metadata={"help": "The percentage of the train/val will be use for hyperparameter tuning."},
+    )
+    n_trials: Optional[int] = dataclasses.field(
+        default=10,
+        metadata={"help": "The number of trails will be use for hyperparameter tuning."},
+    )
+    hyperparameter_batch_sizes: Optional[List[int]] = dataclasses.field(
+        default_factory=lambda: [4, 8, 16],
+        metadata={"help": "Hyperparameter search batch sizes"},
+    )
+    hyperparameter_num_train_epochs: Optional[List[int]] = dataclasses.field(
+        default_factory=lambda: [10],
+        metadata={"help": "Hyperparameter search num_train_epochs"},
+    )
+    hyperparameter_learning_rates: Optional[List[int]] = dataclasses.field(
+        default_factory=lambda: [1e-5],
+        metadata={"help": "Hyperparameter search learning rates"},
+    )
+    hyperparameter_weight_decays: Optional[List[int]] = dataclasses.field(
+        default_factory=lambda: [1e-2],
+        metadata={"help": "Hyperparameter search learning rates"},
+    )
