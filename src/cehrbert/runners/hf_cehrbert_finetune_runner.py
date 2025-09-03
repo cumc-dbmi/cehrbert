@@ -1,5 +1,7 @@
+import glob
 import json
 import os
+import shutil
 from datetime import datetime
 from functools import partial
 from pathlib import Path
@@ -35,6 +37,7 @@ from cehrbert.models.hf_models.hf_cehrbert import (
 )
 from cehrbert.models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments, FineTuneModelType, ModelArguments
+from cehrbert.runners.hyperparameter_search_util import perform_hyperparameter_search
 from cehrbert.runners.runner_util import (
     convert_dataset_to_iterable_dataset,
     generate_prepared_ds_path,
@@ -280,50 +283,53 @@ def main():
     )
 
     if training_args.do_train:
-        model = load_finetuned_model(model_args, model_args.model_name_or_path)
-        if getattr(model.config, "cls_token_id") is None:
-            model.config.cls_token_id = tokenizer.cls_token_index
-        # If lora is enabled, we add LORA adapters to the model
-        if model_args.use_lora:
-            # When LORA is used, the trainer could not automatically find this label,
-            # therefore we need to manually set label_names to "classifier_label" so the model
-            # can compute the loss during the evaluation
-            if training_args.label_names:
-                training_args.label_names.append("classifier_label")
-            else:
-                training_args.label_names = ["classifier_label"]
+        output_dir = training_args.output_dir
+        if cehrbert_args.hyperparameter_tuning:
+            training_args, run_id = perform_hyperparameter_search(
+                trainer_class,
+                partial(model_init, model_args, training_args, tokenizer),
+                processed_dataset,
+                data_collator,
+                training_args,
+                model_args,
+                cehrbert_args,
+            )
+            # We enforce retraining if cehrgpt_args.hyperparameter_tuning_percentage < 1.0
+            cehrbert_args.retrain_with_full |= cehrbert_args.hyperparameter_tuning_percentage < 1.0
+            output_dir = os.path.join(training_args.output_dir, f"run-{run_id}")
 
-            if model_args.finetune_model_type == FineTuneModelType.POOLING.value:
-                config = LoraConfig(
-                    r=model_args.lora_rank,
-                    lora_alpha=model_args.lora_alpha,
-                    target_modules=model_args.target_modules,
-                    lora_dropout=model_args.lora_dropout,
-                    bias="none",
-                    modules_to_save=["classifier", "age_batch_norm", "dense_layer"],
-                )
-                model = get_peft_model(model, config)
-            else:
-                raise ValueError(f"The LORA adapter is not supported for {model_args.finetune_model_type}")
+        if cehrbert_args.hyperparameter_tuning and not cehrbert_args.retrain_with_full:
+            folders = glob.glob(os.path.join(output_dir, "checkpoint-*"))
+            if len(folders) == 0:
+                raise RuntimeError(f"There must be a checkpoint folder under {output_dir}")
+            checkpoint_dir = folders[0]
+            LOG.info("Best trial checkpoint folder: %s", checkpoint_dir)
+            for file_name in os.listdir(checkpoint_dir):
+                try:
+                    full_file_name = os.path.join(checkpoint_dir, file_name)
+                    destination = os.path.join(training_args.output_dir, file_name)
+                    if os.path.isfile(full_file_name):
+                        shutil.copy2(full_file_name, destination)
+                except Exception as e:
+                    LOG.error("Failed to copy %s: %s", file_name, str(e))
+        else:
+            trainer = trainer_class(
+                model=model_init(model_args, training_args, tokenizer),
+                data_collator=data_collator,
+                train_dataset=processed_dataset["train"],
+                eval_dataset=processed_dataset["validation"],
+                args=training_args,
+                callbacks=[EarlyStoppingCallback(early_stopping_patience=model_args.early_stopping_patience)],
+            )
 
-        trainer = trainer_class(
-            model=model,
-            data_collator=data_collator,
-            train_dataset=processed_dataset["train"],
-            eval_dataset=processed_dataset["validation"],
-            args=training_args,
-            callbacks=[EarlyStoppingCallback(early_stopping_patience=model_args.early_stopping_patience)],
-        )
+            checkpoint = get_last_hf_checkpoint(training_args)
+            train_result = trainer.train(resume_from_checkpoint=checkpoint)
+            trainer.save_model()  # Saves the tokenizer too for easy upload
+            metrics = train_result.metrics
 
-        checkpoint = get_last_hf_checkpoint(training_args)
-
-        train_result = trainer.train(resume_from_checkpoint=checkpoint)
-        trainer.save_model()  # Saves the tokenizer too for easy upload
-        metrics = train_result.metrics
-
-        trainer.log_metrics("train", metrics)
-        trainer.save_metrics("train", metrics)
-        trainer.save_state()
+            trainer.log_metrics("train", metrics)
+            trainer.save_metrics("train", metrics)
+            trainer.save_state()
 
     if training_args.do_predict:
         test_dataloader = DataLoader(
@@ -339,6 +345,35 @@ def main():
             pin_memory=training_args.dataloader_pin_memory,
         )
         do_predict(test_dataloader, model_args, training_args)
+
+
+def model_init(model_args, training_args, tokenizer):
+    model = load_finetuned_model(model_args, model_args.model_name_or_path)
+    if getattr(model.config, "cls_token_id") is None:
+        model.config.cls_token_id = tokenizer.cls_token_index
+    # If lora is enabled, we add LORA adapters to the model
+    if model_args.use_lora:
+        # When LORA is used, the trainer could not automatically find this label,
+        # therefore we need to manually set label_names to "classifier_label" so the model
+        # can compute the loss during the evaluation
+        if training_args.label_names:
+            training_args.label_names.append("classifier_label")
+        else:
+            training_args.label_names = ["classifier_label"]
+
+        if model_args.finetune_model_type == FineTuneModelType.POOLING.value:
+            config = LoraConfig(
+                r=model_args.lora_rank,
+                lora_alpha=model_args.lora_alpha,
+                target_modules=model_args.target_modules,
+                lora_dropout=model_args.lora_dropout,
+                bias="none",
+                modules_to_save=["classifier", "age_batch_norm", "dense_layer"],
+            )
+            model = get_peft_model(model, config)
+        else:
+            raise ValueError(f"The LORA adapter is not supported for {model_args.finetune_model_type}")
+    return model
 
 
 def do_predict(test_dataloader: DataLoader, model_args: ModelArguments, training_args: TrainingArguments):
