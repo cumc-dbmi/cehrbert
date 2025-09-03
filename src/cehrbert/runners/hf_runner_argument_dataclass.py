@@ -362,6 +362,10 @@ class CehrBertArguments:
         default=False,
         metadata={"help": "A flag to indicate if we want to do hyperparameter tuning."},
     )
+    hyperparameter_tuning_is_grid: Optional[bool] = dataclasses.field(
+        default=True,
+        metadata={"help": "A flag to indicate if we want to do hyperparameter tuning."},
+    )
     hyperparameter_tuning_percentage: Optional[float] = dataclasses.field(
         default=0.1,
         metadata={"help": "The percentage of the train/val will be use for hyperparameter tuning."},
