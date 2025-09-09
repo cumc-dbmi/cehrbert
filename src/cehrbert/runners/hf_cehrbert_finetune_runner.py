@@ -19,7 +19,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import EarlyStoppingCallback, Trainer, TrainingArguments, set_seed
 from transformers.trainer_utils import is_main_process
-from transformers.utils import logging
+from transformers.utils import is_flash_attn_2_available, logging
 
 from cehrbert.data_generators.hf_data_generator.cache_util import CacheFileCollector
 from cehrbert.data_generators.hf_data_generator.hf_dataset import create_cehrbert_finetuning_dataset
@@ -29,6 +29,7 @@ from cehrbert.data_generators.hf_data_generator.hf_dataset_collator import (
 )
 from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import MedToCehrBertDatasetMapping
 from cehrbert.data_generators.hf_data_generator.meds_utils import create_dataset_from_meds_reader
+from cehrbert.data_generators.hf_data_generator.sample_packing_sampler import SamplePackingBatchSampler
 from cehrbert.models.hf_models.config import CehrBertConfig
 from cehrbert.models.hf_models.hf_cehrbert import (
     CehrBertForClassification,
@@ -168,7 +169,9 @@ def load_finetuned_model(model_args: ModelArguments, model_name_or_path: str) ->
     torch_dtype = get_torch_dtype(model_args.torch_dtype)
     try:
         model = finetune_model_cls.from_pretrained(
-            model_name_or_path, torch_dtype=torch_dtype, attn_implementation=model_args.attn_implementation
+            model_name_or_path,
+            torch_dtype=torch_dtype,
+            attn_implementation=("flash_attention_2" if is_flash_attn_2_available() else "eager"),
         )
         if torch_dtype == torch.bfloat16:
             return model.bfloat16()
@@ -332,17 +335,24 @@ def main():
             trainer.save_state()
 
     if training_args.do_predict:
+        if cehrbert_args.sample_packing:
+            batch_sampler = SamplePackingBatchSampler(
+                lengths=processed_dataset["test"]["num_of_concepts"],
+                max_tokens_per_batch=cehrbert_args.max_tokens_per_batch,
+                max_position_embeddings=config.max_position_embeddings,
+                drop_last=training_args.dataloader_drop_last,
+                seed=training_args.seed,
+            )
+            per_device_eval_batch_size = 1
+        else:
+            batch_sampler = None
         test_dataloader = DataLoader(
             dataset=processed_dataset["test"],
             batch_size=per_device_eval_batch_size,
             num_workers=training_args.dataloader_num_workers,
-            collate_fn=CehrBertDataCollator(
-                tokenizer=tokenizer,
-                max_length=config.max_position_embeddings,
-                is_pretraining=False,
-                mlm_probability=config.mlm_probability,
-            ),
+            collate_fn=data_collator,
             pin_memory=training_args.dataloader_pin_memory,
+            batch_sampler=batch_sampler,
         )
         do_predict(test_dataloader, model_args, training_args)
 
