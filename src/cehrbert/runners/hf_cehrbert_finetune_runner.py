@@ -261,8 +261,8 @@ def main():
             SamplePackingTrainer,
             max_tokens_per_batch=cehrbert_args.max_tokens_per_batch,
             max_position_embeddings=config.max_position_embeddings,
-            train_lengths=processed_dataset["train"]["num_of_concepts"],
-            validation_lengths=processed_dataset["validation"]["num_of_concepts"],
+            # train_lengths=processed_dataset["train"]["num_of_concepts"],
+            # validation_lengths=processed_dataset["validation"]["num_of_concepts"],
         )
         training_args.per_device_train_batch_size = 1
         training_args.per_device_eval_batch_size = 1

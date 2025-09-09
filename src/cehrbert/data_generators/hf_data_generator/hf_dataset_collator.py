@@ -118,7 +118,7 @@ class CehrBertDataCollator:
             batch["visit_segments"] = torch.cat([torch.full((batch_size, 1), 0), batch["visit_segments"]], dim=1)
         else:
             assert (
-                    batch["attention_mask"].shape[0] == 1
+                batch["attention_mask"].shape[0] == 1
             ), f"batch['attention_mask'].shape[0] must be 0 in sample packing"
 
         # This is the most crucial logic for generating the training labels
@@ -273,8 +273,6 @@ class SamplePackingCehrBertDataCollator(CehrBertDataCollator):
         super(SamplePackingCehrBertDataCollator, self).__init__(*args, **kwargs)
 
     def __call__(self, examples):
-        flattened_examples = []
-
         # Main inputs
         current_input_ids = []
         current_attention_mask = []
@@ -299,50 +297,6 @@ class SamplePackingCehrBertDataCollator(CehrBertDataCollator):
                 example = self.generate_start_end_index(example, self.max_position_embeddings)
 
             input_ids = example["input_ids"]
-            # We add the flattened example to the list either when the example exceeds the total max tokens
-            # we add the length by two because we need to add two more tokens [CLS] .... [PAD]
-            if len(current_input_ids) + len(input_ids) + 2 > self.max_tokens_per_batch and current_input_ids:
-                packed_example = {
-                    "input_ids": current_input_ids,
-                    "attention_mask": current_attention_mask,
-                    "ages": current_ages,
-                    "dates": current_dates,
-                    "visit_concept_orders": current_visit_concept_orders,
-                    "concept_values": current_concept_values,
-                    "concept_value_masks": current_concept_value_masks,
-                    "visit_segments": current_visit_segments,
-                }
-
-                if current_labels:
-                    packed_example.update(
-                        {
-                            "person_id": current_person_ids,
-                            "index_date": current_index_dates,
-                            "age_at_index": current_age_at_indexes,
-                            "classifier_label": current_labels,
-                        }
-                    )
-
-                flattened_examples.append(packed_example)
-
-                # Main inputs
-                current_input_ids = []
-                current_attention_mask = []
-                current_concept_values = []
-                current_concept_value_masks = []
-                current_ages = []
-                current_dates = []
-                current_visit_concept_orders = []
-                current_visit_segments = []
-
-                # Demographics
-                current_person_ids = []
-                current_index_dates = []
-
-                # Binary classification inputs
-                current_age_at_indexes = []
-                current_labels = []
-
             current_input_ids.extend([self.tokenizer.cls_token_index] + input_ids + [self.tokenizer.pad_token_index])
             current_attention_mask.extend([1] + np.ones_like(input_ids).tolist() + [0])
             current_concept_values.extend([-1] + example["concept_values"] + [-1])
@@ -368,29 +322,30 @@ class SamplePackingCehrBertDataCollator(CehrBertDataCollator):
             if "classifier_label" in example:
                 current_labels.append(example["classifier_label"])
 
-        # The final batch needs to be added
-        if current_input_ids:
-            packed_example = {
-                "input_ids": current_input_ids,
-                "attention_mask": current_attention_mask,
-                "ages": current_ages,
-                "dates": current_dates,
-                "visit_concept_orders": current_visit_concept_orders,
-                "concept_values": current_concept_values,
-                "concept_value_masks": current_concept_value_masks,
-                "visit_segments": current_visit_segments,
-            }
+        assert len(current_input_ids) <= self.max_tokens_per_batch, (
+            "len(current_input_ids) must be less than and equal to self.max_tokens_per_batch, "
+            f"but received {len(current_input_ids)} instead"
+        )
 
-            if current_labels:
-                packed_example.update(
-                    {
-                        "person_id": current_person_ids,
-                        "index_date": current_index_dates,
-                        "age_at_index": current_age_at_indexes,
-                        "classifier_label": current_labels,
-                    }
-                )
+        packed_example = {
+            "input_ids": current_input_ids,
+            "attention_mask": current_attention_mask,
+            "ages": current_ages,
+            "dates": current_dates,
+            "visit_concept_orders": current_visit_concept_orders,
+            "concept_values": current_concept_values,
+            "concept_value_masks": current_concept_value_masks,
+            "visit_segments": current_visit_segments,
+        }
 
-            flattened_examples.append(packed_example)
+        if current_labels:
+            packed_example.update(
+                {
+                    "person_id": current_person_ids,
+                    "index_date": current_index_dates,
+                    "age_at_index": current_age_at_indexes,
+                    "classifier_label": current_labels,
+                }
+            )
 
-        return super().__call__(flattened_examples)
+        return super().__call__([packed_example])
