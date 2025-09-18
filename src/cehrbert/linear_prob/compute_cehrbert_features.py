@@ -276,6 +276,11 @@ def main():
                         cls_token_index = torch.argmax((cls_token_indices).to(torch.int), dim=-1)
                         features = cehrbert_output.last_hidden_state[..., cls_token_index, :].squeeze(axis=0)
                     features = features.cpu().float().detach().numpy()
+
+                # This might happen sometimes
+                if len(features) == cehrbert_model.config.hidden_size:
+                    features = [features]
+
                 assert len(features) == len(labels), "the number of features must match the number of labels"
                 # Flatten features or handle them as a list of arrays (one array per row)
                 features_list = [feature for feature in features]
