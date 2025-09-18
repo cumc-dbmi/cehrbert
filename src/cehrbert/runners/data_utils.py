@@ -99,5 +99,4 @@ def extract_cohort_sequences(
     )
     if cache_file_collector:
         cache_file_collector.add_cache_files(filtered_tokenized_dataset)
-        cache_file_collector.add_cache_files(processed_dataset)
     return processed_dataset

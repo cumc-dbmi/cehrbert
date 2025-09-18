@@ -199,30 +199,30 @@ def main():
     )
 
     # Loading demographics
-    print("Loading demographics as a dictionary")
-    demographics_df = pd.concat(
-        [
-            pd.read_parquet(
-                data_dir,
-                columns=[
-                    "person_id",
-                    "index_date",
-                    "gender_concept_id",
-                    "race_concept_id",
-                ],
-            )
-            for data_dir in [data_args.data_folder, data_args.test_data_folder]
-        ]
-    )
-    demographics_df["index_date"] = demographics_df.index_date.dt.date
-    demographics_dict = {
-        (row["person_id"], row["index_date"]): {
-            "gender_concept_id": row["gender_concept_id"],
-            "race_concept_id": row["race_concept_id"],
-        }
-        for _, row in demographics_df.iterrows()
-    }
-
+    # print("Loading demographics as a dictionary")
+    # demographics_df = pd.concat(
+    #     [
+    #         pd.read_parquet(
+    #             data_dir,
+    #             columns=[
+    #                 "person_id",
+    #                 "index_date",
+    #                 "gender_concept_id",
+    #                 "race_concept_id",
+    #             ],
+    #         )
+    #         for data_dir in [data_args.data_folder, data_args.test_data_folder]
+    #     ]
+    # )
+    # demographics_df["index_date"] = demographics_df.index_date.dt.date
+    # demographics_dict = {
+    #     (row["person_id"], row["index_date"]): {
+    #         "gender_concept_id": row["gender_concept_id"],
+    #         "race_concept_id": row["race_concept_id"],
+    #     }
+    #     for _, row in demographics_df.iterrows()
+    # }
+    demographics_dict = {}
     data_loaders = [("train", train_loader), ("test", test_dataloader)]
 
     for split, data_loader in data_loaders:
