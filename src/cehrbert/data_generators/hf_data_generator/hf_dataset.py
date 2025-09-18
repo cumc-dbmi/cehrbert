@@ -26,6 +26,7 @@ CEHRBERT_COLUMNS = [
     "num_of_visits",
     "number_as_values",
     "concept_as_values",
+    "epoch_times",
 ]
 
 TRANSFORMER_COLUMNS = ["input_ids", "labels"]

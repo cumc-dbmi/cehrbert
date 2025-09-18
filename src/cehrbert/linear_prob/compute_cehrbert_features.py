@@ -22,6 +22,7 @@ from cehrbert.data_generators.hf_data_generator.meds_utils import CacheFileColle
 from cehrbert.data_generators.hf_data_generator.sample_packing_sampler import SamplePackingBatchSampler
 from cehrbert.models.hf_models.hf_cehrbert import CehrBertForPreTraining
 from cehrbert.models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
+from cehrbert.runners.data_utils import extract_cohort_sequences
 from cehrbert.runners.hf_cehrbert_finetune_runner import prepare_finetune_dataset
 from cehrbert.runners.runner_util import generate_prepared_ds_path, parse_runner_args
 
@@ -85,21 +86,24 @@ def main():
         LOG.info("Prepared dataset loaded from disk...")
 
     if processed_dataset is None:
-        # Organize them into a single DatasetDict
-        final_splits = prepare_finetune_dataset(data_args, training_args, cache_file_collector)
+        if cehrbert_args.tokenized_full_dataset_path is not None:
+            processed_dataset = extract_cohort_sequences(data_args, cehrbert_args, cache_file_collector)
+        else:
+            # Organize them into a single DatasetDict
+            final_splits = prepare_finetune_dataset(data_args, training_args, cache_file_collector)
 
-        # TODO: temp solution, this column is mixed typed and causes an issue when transforming the data
-        if not data_args.streaming:
-            all_columns = final_splits["train"].column_names
-            if "visit_concept_ids" in all_columns:
-                final_splits = final_splits.remove_columns(["visit_concept_ids"])
+            # TODO: temp solution, this column is mixed typed and causes an issue when transforming the data
+            if not data_args.streaming:
+                all_columns = final_splits["train"].column_names
+                if "visit_concept_ids" in all_columns:
+                    final_splits = final_splits.remove_columns(["visit_concept_ids"])
 
-        processed_dataset = create_cehrbert_finetuning_dataset(
-            dataset=final_splits,
-            concept_tokenizer=cehrgpt_tokenizer,
-            data_args=data_args,
-            cache_file_collector=cache_file_collector,
-        )
+            processed_dataset = create_cehrbert_finetuning_dataset(
+                dataset=final_splits,
+                concept_tokenizer=cehrgpt_tokenizer,
+                data_args=data_args,
+                cache_file_collector=cache_file_collector,
+            )
         if not data_args.streaming:
             processed_dataset.save_to_disk(prepared_ds_path)
             processed_dataset.cleanup_cache_files()

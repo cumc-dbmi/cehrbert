@@ -4,6 +4,7 @@ import datetime
 import itertools
 import re
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, Generator, List, Optional, Union
@@ -17,6 +18,7 @@ from dateutil.relativedelta import relativedelta
 from meds.schema import birth_code, death_code
 from pandas import Series
 
+from cehrbert.cehrbert_utils import construct_time_sequence
 from cehrbert.med_extension.schema_extension import Event
 from cehrbert.models.hf_models.tokenization_hf_cehrbert import CehrBertTokenizer
 from cehrbert.runners.hf_runner_argument_dataclass import DataTrainingArguments
@@ -284,6 +286,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
     def _update_cehrbert_record(
         cehrbert_record: Dict[str, Any],
         code: str,
+        time: datetime.datetime,
         visit_segment: int = 0,
         date: int = 0,
         age: int = -1,
@@ -304,6 +307,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
         cehrbert_record["concept_values"].append(concept_value)
         cehrbert_record["units"].append(unit)
         cehrbert_record["mlm_skip_values"].append(mlm_skip_value)
+        cehrbert_record["epoch_times"].append(time.replace(tzinfo=datetime.timezone.utc).timestamp())
 
     def transform(self, record: Dict[str, Any]) -> Dict[str, Any]:
 
@@ -320,6 +324,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
             "units": [],
             "mlm_skip_values": [],
             "visit_concept_ids": [],
+            "epoch_times": [],
         }
         # Extract the demographic information
         birth_datetime = record["birth_datetime"]
@@ -340,7 +345,10 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
             year_str = f"year:{str(first_visit_start_datetime.year)}"
             age_str = f"age:{str(relativedelta(first_visit_start_datetime, birth_datetime).years)}"
 
-            self._update_cehrbert_record(cehrbert_record, year_str)
+            self._update_cehrbert_record(
+                cehrbert_record,
+                year_str,
+            )
             self._update_cehrbert_record(cehrbert_record, age_str)
             self._update_cehrbert_record(cehrbert_record, gender)
             self._update_cehrbert_record(cehrbert_record, race)
@@ -377,6 +385,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                     cehrbert_record,
                     code=self._time_token_function(time_delta),
                     visit_concept_order=i + 1,
+                    time=visit_start_datetime,
                 )
 
             # Add the VS token to the patient timeline to mark the start of a visit
@@ -393,6 +402,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                 date=date,
                 visit_segment=visit_segment,
                 visit_concept_id=visit_type,
+                time=date_cursor,
             )
 
             if self._include_auxiliary_token:
@@ -404,6 +414,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                     date=date,
                     visit_segment=visit_segment,
                     visit_concept_id=visit_type,
+                    time=date_cursor,
                 )
             # Keep track of the existing outpatient events, we don't want to add them again
             existing_outpatient_events = list()
@@ -450,6 +461,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                                 visit_concept_order=i + 1,
                                 visit_segment=visit_segment,
                                 visit_concept_id=visit_type,
+                                time=date_cursor,
                             )
                 else:
                     # For outpatient visits, we use the visit time stamp to calculate age and time because we assume
@@ -471,6 +483,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                     concept_value=concept_value,
                     unit=unit,
                     mlm_skip_value=concept_value_mask,
+                    time=date_cursor,
                 )
                 existing_outpatient_events.append((date, code, concept_value))
 
@@ -496,6 +509,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                         visit_concept_order=i + 1,
                         visit_segment=visit_segment,
                         visit_concept_id=visit_type,
+                        time=date_cursor,
                     )
 
             # Reuse the age and date calculated for the last event in the patient timeline
@@ -507,6 +521,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
                 visit_concept_order=i + 1,
                 visit_segment=visit_segment,
                 visit_concept_id=visit_type,
+                time=date_cursor,
             )
 
             # Toggle visit_segment_indicator
@@ -519,10 +534,16 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
         cehrbert_record["num_of_concepts"] = len(cehrbert_record["concept_ids"])
         cehrbert_record["num_of_visits"] = len(visits)
 
+        if record.get("index_date", None) is not None:
+            cehrbert_record["index_date"] = record["index_date"].replace(tzinfo=datetime.timezone.utc).timestamp()
         if "label" in record:
             cehrbert_record["label"] = record["label"]
         if "age_at_index" in record:
             cehrbert_record["age_at_index"] = record["age_at_index"]
+
+        assert len(cehrbert_record["epoch_times"]) == len(
+            cehrbert_record["concept_ids"]
+        ), "The number of time stamps must match with the number of concepts in the sequence"
 
         return cehrbert_record
 
@@ -594,6 +615,7 @@ class HFTokenizationMapping(DatasetMapping):
         input_ids = self._concept_tokenizer.encode(record["concept_ids"])
         record["input_ids"] = input_ids
         concept_value_masks = record["concept_value_masks"]
+        record["epoch_times"] = construct_time_sequence(record["concept_ids"], record.get("epoch_times", None))
 
         # These fields may not exist in the old version of the datasets
         if "units" in record:
@@ -649,6 +671,86 @@ class HFTokenizationMapping(DatasetMapping):
             record.update({"labels": copy.deepcopy(input_ids)})
 
         return record
+
+
+class ExtractTokenizedSequenceDataMapping:
+    def __init__(
+        self,
+        person_index_date_map: Dict[int, List[Dict[str, Any]]],
+        observation_window: int = 0,
+    ):
+        self.person_index_date_map = person_index_date_map
+        self.observation_window = observation_window
+
+    def _calculate_prediction_start_time(self, prediction_time: float):
+        if self.observation_window and self.observation_window > 0:
+            return max(prediction_time - self.observation_window * 24 * 3600, 0)
+        return 0
+
+    def transform(self, record: Dict[str, Any]) -> Dict[str, Any]:
+        person_id = record["person_id"]
+        prediction_times = self.person_index_date_map[person_id]
+        prediction_start_end_times = [
+            (
+                self._calculate_prediction_start_time(
+                    prediction_time_label_map["index_date"].replace(tzinfo=datetime.timezone.utc).timestamp()
+                ),
+                prediction_time_label_map["index_date"].replace(tzinfo=datetime.timezone.utc).timestamp(),
+                prediction_time_label_map["label"],
+            )
+            for prediction_time_label_map in prediction_times
+        ]
+        observation_window_indices = np.zeros((len(prediction_times), len(record["epoch_times"])), dtype=bool)
+        for i, epoch_time in enumerate(record["epoch_times"]):
+            for sample_n, (
+                feature_extraction_time_start,
+                feature_extraction_end_end,
+                _,
+            ) in enumerate(prediction_start_end_times):
+                if feature_extraction_time_start <= epoch_time <= feature_extraction_end_end:
+                    observation_window_indices[sample_n][i] = True
+
+        seq_length = len(record["epoch_times"])
+        time_series_columns = ["concept_ids", "input_ids"]
+        static_inputs = dict()
+        for k, v in record.items():
+            if k in ["concept_ids", "input_ids"]:
+                continue
+            if isinstance(v, (list, np.ndarray)) and len(v) == seq_length:
+                time_series_columns.append(k)
+            else:
+                static_inputs[k] = v
+
+        batched_samples = defaultdict(list)
+        for (_, index_date, label), observation_window_index in zip(
+            prediction_start_end_times, observation_window_indices
+        ):
+            for k, v in static_inputs.items():
+                batched_samples[k].append(v)
+            batched_samples["classifier_label"].append(label)
+            batched_samples["index_date"].append(index_date)
+            try:
+                start_age = int(record["concept_ids"][1].split(":")[1])
+            except Exception:
+                start_age = -1
+            batched_samples["age_at_index"].append(start_age)
+            for time_series_column in time_series_columns:
+                batched_samples[time_series_column].append(
+                    np.asarray(record[time_series_column])[observation_window_index]
+                )
+        return batched_samples
+
+    def batch_transform(self, record: Dict[str, Any]) -> Dict[str, Any]:
+        all_batched_record = defaultdict(list)
+        all_columns = record.keys()
+        for i in range(len(record["concept_ids"])):
+            one_record = {}
+            for column in all_columns:
+                one_record[column] = record[column][i]
+            new_batched_record = self.transform(one_record)
+            for k, v in new_batched_record.items():
+                all_batched_record[k].extend(v)
+        return all_batched_record
 
 
 class HFFineTuningMapping(DatasetMapping):

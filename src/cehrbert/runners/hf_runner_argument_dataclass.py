@@ -331,6 +331,10 @@ class ModelArguments:
 
 @dataclasses.dataclass
 class CehrBertArguments:
+    tokenized_full_dataset_path: Optional[str] = dataclasses.field(
+        default=None,
+        metadata={"help": "The path to the tokenized dataset created for the full population"},
+    )
     use_early_stopping: Optional[bool] = dataclasses.field(
         default=True,
         metadata={"help": "A flag to indicate whether we want to use early stopping."},
