@@ -97,6 +97,4 @@ def extract_cohort_sequences(
         num_proc=data_args.preprocessing_num_workers,
         remove_columns=filtered_tokenized_dataset["train"].column_names,
     )
-    if cache_file_collector:
-        cache_file_collector.add_cache_files(filtered_tokenized_dataset)
     return processed_dataset
