@@ -301,13 +301,26 @@ class SamplePackingCehrBertDataCollator(CehrBertDataCollator):
             current_attention_mask.extend([1] + np.ones_like(input_ids).tolist() + [0])
             current_concept_values.extend([-1] + example["concept_values"] + [-1])
             current_concept_value_masks.extend([0] + example["concept_value_masks"] + [0])
-            current_ages.extend([example["ages"][0]] + example["ages"] + [0])
-            current_dates.extend([example["dates"][0]] + example["dates"] + [0])
-            current_visit_concept_orders.extend(
-                [max(0, example["visit_concept_orders"][0] - 1)]
-                + example["visit_concept_orders"]
-                + [example["visit_concept_orders"][-1]]
-            )
+
+            if len(example["ages"]) > 0:
+                current_ages.extend([example["ages"][0]] + example["ages"] + [0])
+            else:
+                current_ages.extend([0, 0])
+
+            if len(example["dates"]) > 0:
+                current_dates.extend([example["dates"][0]] + example["dates"] + [0])
+            else:
+                current_dates.extend([0, 0])
+
+            if len(example["visit_concept_orders"]) > 0:
+                current_visit_concept_orders.extend(
+                    [max(0, example["visit_concept_orders"][0] - 1)]
+                    + example["visit_concept_orders"]
+                    + [example["visit_concept_orders"][-1]]
+                )
+            else:
+                current_visit_concept_orders.extend([0, 0])
+
             current_visit_segments.extend([0] + example["visit_segments"] + [0])
 
             if "person_id" in example:
