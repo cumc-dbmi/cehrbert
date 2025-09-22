@@ -60,6 +60,7 @@ dependencies = [
     "xgboost==2.0.3",
     "cehrbert_data>=0.0.5",
     "optuna>=4.0.0",
+    "polars",
 ]
 
 [tool.setuptools_scm]
