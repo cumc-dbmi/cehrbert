@@ -345,13 +345,10 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
             year_str = f"year:{str(first_visit_start_datetime.year)}"
             age_str = f"age:{str(relativedelta(first_visit_start_datetime, birth_datetime).years)}"
 
-            self._update_cehrbert_record(
-                cehrbert_record,
-                year_str,
-            )
-            self._update_cehrbert_record(cehrbert_record, age_str)
-            self._update_cehrbert_record(cehrbert_record, gender)
-            self._update_cehrbert_record(cehrbert_record, race)
+            self._update_cehrbert_record(cehrbert_record, year_str, first_visit_start_datetime)
+            self._update_cehrbert_record(cehrbert_record, age_str, first_visit_start_datetime)
+            self._update_cehrbert_record(cehrbert_record, gender, first_visit_start_datetime)
+            self._update_cehrbert_record(cehrbert_record, race, first_visit_start_datetime)
 
         # A bool indicator to toggle between 1 and 2
         visit_segment_indicator = False

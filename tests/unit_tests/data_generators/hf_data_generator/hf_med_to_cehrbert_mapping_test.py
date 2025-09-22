@@ -36,6 +36,7 @@ class TestMedToCehrBertDatasetMapping(unittest.TestCase):
             birth_datetime=datetime(1980, 4, 14, 0, 0),
             gender="Gender/F",
             race="Race/unknown",
+            ethnicity="Ethnicity/unknown",
             visits=[inpatient_visit, outpatient_visit],
         )
 
