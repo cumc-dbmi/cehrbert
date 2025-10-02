@@ -22,7 +22,7 @@ def construct_time_sequence(
     else:
         year_str = "1985"
 
-    datetime_cursor = datetime(int(year_str), month=1, day=1, hour=0, minute=0, second=0).replace(tzinfo=timezone.utc)
+    datetime_cursor = datetime(int(year_str), month=1, day=1, hour=0, minute=0, second=0)
     epoch_times = []
     for concept_id in concept_ids:
         if is_att_token(concept_id):
