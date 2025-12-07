@@ -10,7 +10,7 @@ from sklearn.preprocessing import StandardScaler, normalize
 from tensorflow.keras.preprocessing.text import Tokenizer
 from xgboost import XGBClassifier
 
-from cehrbert.evaluations.model_evaluators.model_evaluators import AbstractModelEvaluator
+from .model_evaluators import AbstractModelEvaluator
 from cehrbert.utils.model_utils import compute_binary_metrics
 
 

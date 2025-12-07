@@ -1,43 +1,62 @@
 import copy
 import os
 import pathlib
-from abc import abstractmethod
-
-import tensorflow as tf
-
-from cehrbert.trainers.model_trainer import AbstractModel
+import logging
+from abc import ABC, abstractmethod
+from cehrbert.utils.model_utils import create_folder_if_not_exist
 
 
-def get_metrics():
-    """
-    Standard metrics used for compiling the models.
+class AbstractModel(ABC):
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+        self._model = self._create_model(*args, **kwargs)
 
-    :return:
-    """
+    @abstractmethod
+    def _create_model(self, *args, **kwargs):
+        pass
 
-    return [
-        "binary_accuracy",
-        tf.keras.metrics.Recall(name="recall"),
-        tf.keras.metrics.Precision(name="precision"),
-        tf.keras.metrics.AUC(curve="PR", name="pr_auc"),
-        tf.keras.metrics.AUC(name="auc"),
-    ]
+    @abstractmethod
+    def train_model(self, *args, **kwargs):
+        pass
+
+    @abstractmethod
+    def get_model_folder(self):
+        pass
+
+    def get_model_metrics_folder(self):
+        return create_folder_if_not_exist(self.get_model_folder(), "metrics")
+
+    def get_model_test_metrics_folder(self):
+        return create_folder_if_not_exist(self.get_model_folder(), "test_metrics")
+
+    def get_model_test_prediction_folder(self):
+        return create_folder_if_not_exist(self.get_model_folder(), "test_prediction")
+
+    def get_model_history_folder(self):
+        return create_folder_if_not_exist(self.get_model_folder(), "history")
+
+    @classmethod
+    def get_logger(cls):
+        return logging.getLogger(cls.__name__)
+
+    def __str__(self):
+        return str(self.__class__.__name__)
 
 
 class AbstractModelEvaluator(AbstractModel):
     def __init__(
-        self,
-        dataset,
-        evaluation_folder,
-        num_of_folds,
-        is_transfer_learning: bool = False,
-        training_percentage: float = 1.0,
-        learning_rate: float = 1e-4,
-        is_chronological_test: bool = False,
-        k_fold_test: bool = False,
-        test_person_ids=None,
-        *args,
-        **kwargs,
+            self,
+            dataset,
+            evaluation_folder,
+            num_of_folds,
+            is_transfer_learning: bool = False,
+            training_percentage: float = 1.0,
+            learning_rate: float = 1e-4,
+            is_chronological_test: bool = False,
+            k_fold_test: bool = False,
+            test_person_ids=None,
+            *args,
+            **kwargs,
     ):
         self._dataset = copy.copy(dataset)
         self._evaluation_folder = evaluation_folder

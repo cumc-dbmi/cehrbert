@@ -2,28 +2,22 @@ import datetime
 import inspect
 import logging
 import os
-import pickle
 import random
 import re
 from collections import Counter
 from itertools import chain
 from pathlib import Path
-from typing import Dict, List, Tuple, Union
+from typing import Dict, Tuple, Union
 
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-from dask.dataframe import DataFrame as DaskDataFrame
-from pandas import DataFrame as PandasDataFrame
 from sklearn import metrics
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GridSearchCV
 from tensorflow.data import Dataset
 from tensorflow.keras.models import Model
 from xgboost import XGBClassifier
-
-from cehrbert.data_generators.data_classes import TokenizeFieldInfo
-from cehrbert.data_generators.tokenizer import ConceptTokenizer
 
 DEFAULT_OOV_TOKEN = "-1"
 DECIMAL_PLACE = 4
@@ -72,98 +66,14 @@ def log_function_decorator(function):
     return wrapper
 
 
-@log_function_decorator
-def tokenize_one_field(
-    training_data: Union[PandasDataFrame, DaskDataFrame],
-    column_name,
-    tokenized_column_name,
-    tokenizer_path,
-    oov_token=DEFAULT_OOV_TOKEN,
-    encode=True,
-    recreate=False,
-):
-    """
-    Tokenize the concept sequence and save the tokenizer as a pickle file.
-
-    :return:
-    """
-    tokenize_fields_info = [TokenizeFieldInfo(column_name=column_name, tokenized_column_name=tokenized_column_name)]
-    return tokenize_multiple_fields(training_data, tokenize_fields_info, tokenizer_path, oov_token, encode, recreate)
-
-
-@log_function_decorator
-def tokenize_multiple_fields(
-    training_data: Union[PandasDataFrame, DaskDataFrame],
-    tokenize_fields_info: List[TokenizeFieldInfo],
-    tokenizer_path,
-    oov_token=DEFAULT_OOV_TOKEN,
-    encode=True,
-    recreate=False,
-):
-    """
-    Tokenize a list of fields.
-
-    :param training_data:
-    :param tokenize_fields_info:
-    :param tokenizer_path:
-    :param oov_token:
-    :param encode:
-    :param recreate:
-    :return:
-    """
-
-    def tokenize_one_column(_tokenize_field_info: TokenizeFieldInfo):
-        """
-        Tokenize a field.
-
-        :param _tokenize_field_info:
-        :return:
-        """
-        if isinstance(training_data, DaskDataFrame):
-            training_data[_tokenize_field_info.tokenized_column_name] = training_data[
-                _tokenize_field_info.column_name
-            ].map_partitions(
-                lambda ds: pd.Series(
-                    tokenizer.encode(map(lambda t: list(t[1]), ds.iteritems()), is_generator=True),
-                    name=_tokenize_field_info.tokenized_column_name,
-                ),
-                meta="iterable",
-            )
-        else:
-            training_data[_tokenize_field_info.column_name] = training_data[_tokenize_field_info.column_name].apply(
-                list
-            )
-            training_data[_tokenize_field_info.tokenized_column_name] = tokenizer.encode(
-                training_data[_tokenize_field_info.column_name]
-            )
-
-    if not os.path.exists(tokenizer_path) or recreate:
-        tokenizer = ConceptTokenizer(oov_token=oov_token)
-        for tokenize_field_info in tokenize_fields_info:
-            tokenizer.fit_on_concept_sequences(training_data[tokenize_field_info.column_name])
-    else:
-        logging.getLogger(__name__).info("Loading the existing tokenizer from %s", tokenizer_path)
-        with open(tokenizer_path, "rb") as f:
-            tokenizer = pickle.load(f)
-
-    if encode:
-        for tokenize_field_info in tokenize_fields_info:
-            tokenize_one_column(tokenize_field_info)
-
-    if not os.path.exists(tokenizer_path) or recreate:
-        with open(tokenizer_path, "wb") as f:
-            pickle.dump(tokenizer, f)
-    return tokenizer
-
-
 def convert_to_list_of_lists(concept_lists):
     return list(map(lambda sub_arrays: sub_arrays.tolist(), concept_lists))
 
 
 @log_function_decorator
 def run_model(
-    model,
-    dataset: Union[Dataset, Tuple[np.ndarray, np.ndarray]],
+        model,
+        dataset: Union[Dataset, Tuple[np.ndarray, np.ndarray]],
 ):
     if isinstance(dataset, Dataset):
         x = dataset.map(lambda _x, _y: _x)
@@ -199,13 +109,13 @@ def calculate_pr_auc(labels, probabilities):
 
 @log_function_decorator
 def compute_binary_metrics(
-    model,
-    test_data: Union[Dataset, Tuple[np.ndarray, np.ndarray]],
-    metrics_folder,
-    evaluation_model_folder: str = None,
-    model_name: str = None,
-    extra_info: dict = None,
-    calculate_ci: bool = True,
+        model,
+        test_data: Union[Dataset, Tuple[np.ndarray, np.ndarray]],
+        metrics_folder,
+        evaluation_model_folder: str = None,
+        model_name: str = None,
+        extra_info: dict = None,
+        calculate_ci: bool = True,
 ):
     """
     Compute Recall, Precision, F1-score and PR-AUC for the test data.
