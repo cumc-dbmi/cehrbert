@@ -307,7 +307,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
         cehrbert_record["concept_values"].append(concept_value)
         cehrbert_record["units"].append(unit)
         cehrbert_record["mlm_skip_values"].append(mlm_skip_value)
-        cehrbert_record["epoch_times"].append(time.replace(tzinfo=datetime.timezone.utc).timestamp())
+        cehrbert_record["epoch_times"].append(time.timestamp())
 
     def transform(self, record: Dict[str, Any]) -> Dict[str, Any]:
 
@@ -532,7 +532,7 @@ class MedToCehrBertDatasetMapping(DatasetMapping):
         cehrbert_record["num_of_visits"] = len(visits)
 
         if record.get("index_date", None) is not None:
-            cehrbert_record["index_date"] = record["index_date"].replace(tzinfo=datetime.timezone.utc).timestamp()
+            cehrbert_record["index_date"] = record["index_date"].timestamp()
         if "label" in record:
             cehrbert_record["label"] = record["label"]
         if "age_at_index" in record:
@@ -690,9 +690,9 @@ class ExtractTokenizedSequenceDataMapping:
         prediction_start_end_times = [
             (
                 self._calculate_prediction_start_time(
-                    prediction_time_label_map["index_date"].replace(tzinfo=datetime.timezone.utc).timestamp()
+                    prediction_time_label_map["index_date"].timestamp()
                 ),
-                prediction_time_label_map["index_date"].replace(tzinfo=datetime.timezone.utc).timestamp(),
+                prediction_time_label_map["index_date"].timestamp(),
                 prediction_time_label_map["label"],
             )
             for prediction_time_label_map in prediction_times
