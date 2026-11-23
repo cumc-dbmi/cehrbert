@@ -19,19 +19,20 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Set up Python 3.10.0
-      uses: actions/setup-python@v3
-      with:
-        python-version: "3.10"
-
     - name: Free up disk space
       run: |
         sudo rm -rf /usr/share/dotnet
         sudo rm -rf /opt/ghc
         sudo rm -rf "/usr/local/share/boost"
+        # Runs before setup-python: this wipes the tool cache it installs into
         sudo rm -rf "$AGENT_TOOLSDIRECTORY"
         sudo docker image prune --all --force
         df -h
+
+    - name: Set up Python 3.10.0
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.10"
 
     - name: Install dependencies
       run: |
