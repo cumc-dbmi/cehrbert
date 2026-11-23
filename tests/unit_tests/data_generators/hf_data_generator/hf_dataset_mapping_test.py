@@ -1,7 +1,28 @@
 import datetime
 import unittest
 
-from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import VisitObject, has_events_and_get_events
+import pytest
+
+from cehrbert.data_generators.hf_data_generator.hf_dataset_mapping import (
+    VisitObject,
+    convert_date_to_posix_time,
+    has_events_and_get_events,
+)
+
+
+def test_convert_date_to_posix_time():
+    dt = datetime.datetime(2024, 10, 25, 12, 30)
+    assert convert_date_to_posix_time(dt) == dt.timestamp()
+    d = datetime.date(2024, 10, 25)
+    assert convert_date_to_posix_time(d) == datetime.datetime(2024, 10, 25).timestamp()
+    # MedToCehrBertDatasetMapping already stores index_date as a POSIX timestamp,
+    # so HFFineTuningMapping must accept it unchanged.
+    assert convert_date_to_posix_time(1729859400.0) == 1729859400.0
+    assert convert_date_to_posix_time(1729859400) == 1729859400.0
+    with pytest.raises(ValueError):
+        convert_date_to_posix_time("2024-10-25")
+    with pytest.raises(ValueError):
+        convert_date_to_posix_time(True)
 
 
 def test_visit_object_sorting():
