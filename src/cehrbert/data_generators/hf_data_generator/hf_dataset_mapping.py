@@ -118,14 +118,17 @@ def has_events_and_get_events(events_iterable):
         return False, None
 
 
-def convert_date_to_posix_time(index_date: Union[datetime.date, datetime.datetime]) -> float:
+def convert_date_to_posix_time(index_date: Union[datetime.date, datetime.datetime, int, float]) -> float:
     """
     Convert a date or datetime object to POSIX (Unix) time in seconds.
 
+    Values that are already POSIX timestamps (int or float) are returned unchanged as a float;
+    ``MedToCehrBertDatasetMapping`` stores ``index_date`` this way before the fine-tuning mapping runs.
+
     Parameters
     ----------
-    index_date : Union[datetime.date, datetime.datetime]
-        The date or datetime object to be converted to POSIX time.
+    index_date : Union[datetime.date, datetime.datetime, int, float]
+        The date or datetime object to be converted to POSIX time, or an existing POSIX timestamp.
 
     Returns
     -------
@@ -135,7 +138,7 @@ def convert_date_to_posix_time(index_date: Union[datetime.date, datetime.datetim
     Raises
     ------
     ValueError
-        If `index_date` is not an instance of `datetime.date` or `datetime.datetime`.
+        If `index_date` is not a `datetime.date`, `datetime.datetime`, or numeric POSIX timestamp.
 
     Examples
     --------
@@ -149,8 +152,10 @@ def convert_date_to_posix_time(index_date: Union[datetime.date, datetime.datetim
         return index_date.timestamp()
     elif isinstance(index_date, datetime.date):
         return datetime.datetime.combine(index_date, datetime.datetime.min.time()).timestamp()
+    elif isinstance(index_date, (int, float)) and not isinstance(index_date, bool):
+        return float(index_date)
     else:
-        raise ValueError("index_date must be datetime or datetime.datetime")
+        raise ValueError("index_date must be datetime, datetime.date, or a POSIX timestamp")
 
 
 def replace_escape_chars(text: str) -> str:
