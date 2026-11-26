@@ -66,7 +66,7 @@ Homepage = "https://github.com/cumc-dbmi/cehr-bert"
 
 [project.scripts]
 cehrbert-pretraining = "cehrbert.runners.hf_cehrbert_pretrain_runner:main"
-cehrbert-finetuning = "cehrbert.runners.hf_cehrbert_finetuning_runner:main"
+cehrbert-finetuning = "cehrbert.runners.hf_cehrbert_finetune_runner:main"
 
 [project.optional-dependencies]
 dev = [
